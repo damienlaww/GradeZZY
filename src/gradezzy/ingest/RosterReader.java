@@ -18,7 +18,7 @@ import gradezzy.model.Student;
 /**
  * Reads the provided score sheet CSV into Student objects.
  *
- * <p>Tier: MUST. Owner: Damien.
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class RosterReader {
 
@@ -43,7 +43,7 @@ public class RosterReader {
      */
     public List<Student> readRoster(
             Path scoreSheetFile) throws IngestException {
-        // TODO(Damien): implement: reading the CSV (columns OrgDefinedId,
+        // TODO(Seth): implement: reading the CSV (columns OrgDefinedId,
         //     Username, Last Name, First Name, Email, ...) and removing the id
         //     prefix
         return new ArrayList<>();
@@ -57,7 +57,7 @@ public class RosterReader {
      * @return the student, or null if not on the roster
      */
     public Student findByUsername(List<Student> roster, String username) {
-        // TODO(Damien): implement: a search of the roster by username
+        // TODO(Seth): implement: a search of the roster by username
         return null;
     }
 }

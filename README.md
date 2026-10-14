@@ -168,8 +168,8 @@ ui (JavaFX)        app.ConsoleMain
 
 | Order | Stage | What it does | Owner |
 |---|---|---|---|
-| 1 | `ExtractStage` | Creates the working copy and matches the student on the roster. | Damien |
-| 2 | `ValidateStage` | Runs every `Validator`. | Damien |
+| 1 | `ExtractStage` | Creates the working copy and matches the student on the roster. | Seth |
+| 2 | `ValidateStage` | Runs every `Validator`. | Seth |
 | 3 | `FixStage` | Applies automatic corrections. | Jun Sheng |
 | 4 | `DetectStage` | Runs every `Detector`. | Jun Sheng |
 | 5 | `InstallTestersStage` | Copies testers and data files into the working copy. | Zach |
@@ -197,12 +197,12 @@ detail.
 
 | Owner | Packages | TODOs |
 |---|---|---|
-| Damien | `ingest`, `validation`, two stages | 17 |
+| Seth | `util`, `ingest`, `validation`, two stages | 31 |
 | Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 23 |
 | Zach | `exec`, `testcase`, three stages, the score parser | 14 |
 | Jing Yuan | `app`, `config`, `model`, `service`, scoring | 39 |
 | Huxley | `report`, `stats`, `persistence`, one stage | 28 |
-| Seth | `util`, `ui` | 63 |
+| Damien | `ui` | 49 |
 
 ### What is already real code
 
@@ -324,13 +324,50 @@ show me the output. Explain your approach before you write code.
 Ask for one class at a time, read what comes back, and ask "explain this
 method line by line" for anything you could not have written yourself.
 
-### 1. Damien: reading and checking submissions
+### 1. Seth: helpers, then reading and checking submissions
 
-**Packages:** `ingest`, `validation`, plus `ExtractStage` and
-`ValidateStage` in `grading`. 17 TODOs. Everyone else is blocked until
-`SubmissionLoader` and `WorkingCopyManager` work, so start there.
+**Packages:** `util`, `ingest`, `validation`, plus `ExtractStage` and
+`ValidateStage` in `grading`. 31 TODOs. Everyone else is blocked until
+`SubmissionLoader` and `WorkingCopyManager` work, so do the three helper
+classes quickly and move on to those two.
 
-What to build, in order:
+Helpers first (`util`, 14 TODOs). Huxley needs `TextUtils` and `FileUtils`
+and Damien needs `InputValidator`:
+
+1. `FileUtils`: copy and delete folders, read and write text, list files.
+2. `TextUtils`: `isBlank`, `splitCsvLine`, `joinCsvLine`,
+   `normaliseLineEndings`.
+3. `InputValidator`: section code, username, readable file, readable
+   folder, positive whole number. The brief takes up to 10% off for
+   missing input validation, so every form in the app calls these.
+
+You are done with `util` when the methods give the right answers for the
+cases below.
+
+| Method | Input | Expected |
+|---|---|---|
+| `splitCsvLine` | `#01400001,#ping.lee.2023,_,PING LEE,x@y.sg,,20,#` | 8 values, the sixth empty |
+| `splitCsvLine` | `a,"b,c",d` | 3 values: `a`, `b,c`, `d` |
+| `isValidSectionCode` | `G1`, `G12`, `g1`, `G`, `1`, empty | true, true, decide with the team, false, false, false |
+| `isPositiveInteger` | `10`, `0`, `-3`, `abc`, empty | true, false, false, false, false |
+
+Example prompts for the helpers:
+
+```text
+Implement gradezzy.util.TextUtils.splitCsvLine and joinCsvLine without a
+library and without String.split, so quoted values that contain commas
+work. Show the result for these lines: [paste the table above]. An empty
+value between two commas must come back as an empty string, not be
+dropped.
+```
+
+```text
+Implement gradezzy.util.InputValidator. No method may throw an exception
+for any input, including null. List the edge cases you considered for
+each method before writing code.
+```
+
+Then the submissions. What to build, in order:
 
 1. `SubmissionLoader.loadSubmissions`: accept a list of paths, each a zip
    file or a folder that holds zip files. Create one `Submission` per zip
@@ -416,7 +453,7 @@ through createAnomaly. It must never throw for a badly formed submission.
 
 **Packages:** `fix`, `detection`, `plagiarism`, plus `FixStage` and
 `DetectStage` in `grading` and the TODO in
-`PipelineFactory.createDetectors`. 23 TODOs. You need Damien's validators
+`PipelineFactory.createDetectors`. 23 TODOs. You need Seth's validators
 to produce anomalies before your fixers have anything to fix; until then,
 build and test against a working copy you unzip by hand.
 
@@ -696,30 +733,24 @@ dividing by zero. Show the results for the scores 12, 10, 10, 0, 20, 15
 out of 20 and check them by hand.
 ```
 
-### 6. Seth: helpers first, then the screens
+### 6. Damien: the screens
 
-**Packages:** `util` and `ui`. 63 TODOs, most of them one-line button
-handlers. Do `util` first: Damien and Huxley both need `TextUtils` and
-`FileUtils` this week.
+**Package:** `ui`. 49 TODOs, most of them one-line button handlers. Every
+form calls Seth's `InputValidator`; until it is ready, build the layouts
+and leave the checks for last.
 
 What to build, in order:
 
-1. `FileUtils`: copy and delete folders, read and write text, list files.
-2. `TextUtils`: `isBlank`, `splitCsvLine`, `joinCsvLine`,
-   `normaliseLineEndings`.
-3. `InputValidator`: section code, username, readable file, readable
-   folder, positive whole number. The brief takes up to 10% off for
-   missing input validation, so every form in the app calls these.
-4. Open `design/gradezzy-design.html` in a browser. It is the design to
+1. Open `design/gradezzy-design.html` in a browser. It is the design to
    build: every screen is clickable, and its Design Notes screen lists the
    colours, type sizes and the JavaFX or AtlantaFX control for each part.
-5. Then, per screen: lay out the FXML, add `fx:id` fields and connect the
+2. Then, per screen: lay out the FXML, add `fx:id` fields and connect the
    handlers in its controller. Suggested order: Upload, Progress, Results,
    Anomaly log, Settings, Statistics, Student report, Test cases, Audit
    log, History, Plagiarism.
-6. `MainController`: Next, Back, Cancel and the light and dark switch.
-7. `FileTreeBuilder` and `DragDropHandler` for the Upload screen.
-8. `BaseController.showError` and `showInfo`, used by every screen.
+3. `MainController`: Next, Back, Cancel and the light and dark switch.
+4. `FileTreeBuilder` and `DragDropHandler` for the Upload screen.
+5. `BaseController.showError` and `showInfo`, used by every screen.
 
 Rules that matter here:
 
@@ -734,34 +765,12 @@ Rules that matter here:
   Undo all, say what went wrong and what to do next, and never show a
   stack trace.
 
-You are done with `util` when the methods give the right answers for the
-cases below, and with a screen when `sh run.sh --check` loads it, the
+You are done with a screen when `sh run.sh --check` loads it, the
 instructor can complete its task with the six samples, and bad input
 (nothing selected, a file that is not a zip, a blank section) produces a
 clear message instead of an error.
 
-| Method | Input | Expected |
-|---|---|---|
-| `splitCsvLine` | `#01400001,#ping.lee.2023,_,PING LEE,x@y.sg,,20,#` | 8 values, the sixth empty |
-| `splitCsvLine` | `a,"b,c",d` | 3 values: `a`, `b,c`, `d` |
-| `isValidSectionCode` | `G1`, `G12`, `g1`, `G`, `1`, empty | true, true, decide with the team, false, false, false |
-| `isPositiveInteger` | `10`, `0`, `-3`, `abc`, empty | true, false, false, false, false |
-
-Example prompts:
-
-```text
-Implement gradezzy.util.TextUtils.splitCsvLine and joinCsvLine without a
-library and without String.split, so quoted values that contain commas
-work. Show the result for these lines: [paste the table above]. An empty
-value between two commas must come back as an empty string, not be
-dropped.
-```
-
-```text
-Implement gradezzy.util.InputValidator. No method may throw an exception
-for any input, including null. List the edge cases you considered for
-each method before writing code.
-```
+Example prompt:
 
 ```text
 Read design/gradezzy-design.html, including its Design Notes screen.
@@ -778,12 +787,11 @@ running "sh run.sh --check".
 
 | If you are | You need first | From |
 |---|---|---|
-| Damien | `TextUtils.splitCsvLine`, `FileUtils` | Seth |
-| Jun Sheng | Anomalies from the validators, the student on the submission | Damien |
-| Zach | A working copy to compile in | Damien |
+| Jun Sheng | Anomalies from the validators, the student on the submission | Seth |
+| Zach | A working copy to compile in | Seth |
 | Jing Yuan | Question results from `ExecuteStage` | Zach |
 | Huxley | Nothing to start; real runs later | Jing Yuan |
-| Seth (screens) | The chosen design; working services | Team, Jing Yuan |
+| Damien | The chosen design; working services; `InputValidator` | Team, Jing Yuan, Seth |
 
 Nobody has to sit idle: every class can be written and tried against a
 folder unzipped by hand or a `GradingRun` filled in by hand.

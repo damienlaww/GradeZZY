@@ -20,7 +20,7 @@ import gradezzy.service.ServiceRegistry;
 /**
  * Loads screens from their FXML files.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class ScreenNavigator {
 

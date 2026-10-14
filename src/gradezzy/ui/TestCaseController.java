@@ -12,7 +12,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the test case screen.
  *
- * <p>Tier: SHOULD. Owner: Seth.
+ * <p>Tier: SHOULD. Owner: Damien.
  */
 public class TestCaseController extends BaseController {
 
@@ -28,7 +28,7 @@ public class TestCaseController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -39,7 +39,7 @@ public class TestCaseController extends BaseController {
      */
     @FXML
     public void handleUploadTesters() {
-        // TODO(Seth): implement: a file picker for tester files
+        // TODO(Damien): implement: a file picker for tester files
     }
 
     /**
@@ -47,7 +47,7 @@ public class TestCaseController extends BaseController {
      */
     @FXML
     public void handleAddTestCase() {
-        // TODO(Seth): implement: validating the form and adding a TestCase
+        // TODO(Damien): implement: validating the form and adding a TestCase
     }
 
     /**
@@ -55,6 +55,6 @@ public class TestCaseController extends BaseController {
      */
     @FXML
     public void handleRemoveTestCase() {
-        // TODO(Seth): implement: removing the selected rows
+        // TODO(Damien): implement: removing the selected rows
     }
 }

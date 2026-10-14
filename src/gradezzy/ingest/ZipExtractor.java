@@ -15,7 +15,7 @@ import gradezzy.config.AppConfig;
 /**
  * Unzips one submission into a folder.
  *
- * <p>Tier: MUST. Owner: Damien.
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class ZipExtractor {
 
@@ -41,7 +41,7 @@ public class ZipExtractor {
      */
     public Path extract(Path zipFile,
             Path targetDirectory) throws IngestException {
-        // TODO(Damien): implement: unzipping with java.util.zip, enforcing the
+        // TODO(Seth): implement: unzipping with java.util.zip, enforcing the
         //     size and entry limits from config
         return null;
     }
@@ -54,7 +54,7 @@ public class ZipExtractor {
      * @return true if the entry is safe to write
      */
     public boolean isSafeEntry(String entryName, Path targetDirectory) {
-        // TODO(Damien): implement: a check that rejects entry names such as
+        // TODO(Seth): implement: a check that rejects entry names such as
         //     ../../x which would write outside the target folder
         return false;
     }

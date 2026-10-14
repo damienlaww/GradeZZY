@@ -13,7 +13,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the grading progress screen.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class ProgressController extends BaseController {
 
@@ -29,7 +29,7 @@ public class ProgressController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -40,7 +40,7 @@ public class ProgressController extends BaseController {
      */
     @FXML
     public void handleCancel() {
-        // TODO(Seth): implement: calling GradingService.cancel after a
+        // TODO(Damien): implement: calling GradingService.cancel after a
         //     confirmation
     }
 
@@ -51,7 +51,7 @@ public class ProgressController extends BaseController {
      */
     @FXML
     public void handleRetry() {
-        // TODO(Seth): implement: calling GradingService.retryFailed
+        // TODO(Damien): implement: calling GradingService.retryFailed
     }
 
     /**
@@ -61,6 +61,6 @@ public class ProgressController extends BaseController {
      */
     @FXML
     public void handleResume() {
-        // TODO(Seth): implement: calling GradingService.resume
+        // TODO(Damien): implement: calling GradingService.resume
     }
 }

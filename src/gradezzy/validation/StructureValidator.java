@@ -20,7 +20,7 @@ import gradezzy.model.Submission;
  * Checks the folder layout: a username folder holding one folder per question
  * group.
  *
- * <p>Tier: MUST. Owner: Damien.
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class StructureValidator extends AbstractValidator {
 
@@ -47,7 +47,7 @@ public class StructureValidator extends AbstractValidator {
     @Override
     public List<Anomaly> validate(Submission submission,
             Assessment assessment) {
-        // TODO(Damien): implement: checks for the wrapper folder, its name and
+        // TODO(Seth): implement: checks for the wrapper folder, its name and
         //     each question folder; report with the matching AnomalyType
         return new ArrayList<>();
     }

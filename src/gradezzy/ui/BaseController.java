@@ -15,7 +15,7 @@ import gradezzy.service.ServiceRegistry;
 /**
  * The parent of every screen controller.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public abstract class BaseController {
 
@@ -55,7 +55,7 @@ public abstract class BaseController {
      * @param message what went wrong and how to recover
      */
     protected void showError(String message) {
-        // TODO(Seth): implement: an error dialog or inline message, once
+        // TODO(Damien): implement: an error dialog or inline message, once
         //     the team has chosen the design
     }
 
@@ -65,6 +65,6 @@ public abstract class BaseController {
      * @param message what was done
      */
     protected void showInfo(String message) {
-        // TODO(Seth): implement: a confirmation message or notification
+        // TODO(Damien): implement: a confirmation message or notification
     }
 }

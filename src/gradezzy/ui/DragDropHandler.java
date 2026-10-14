@@ -15,7 +15,7 @@ import javafx.scene.Node;
 /**
  * Lets the instructor drop files onto the window.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class DragDropHandler {
 
@@ -32,7 +32,7 @@ public class DragDropHandler {
      * @param target the target
      */
     public void install(Node target) {
-        // TODO(Seth): implement: setOnDragOver and setOnDragDropped handlers
+        // TODO(Damien): implement: setOnDragOver and setOnDragDropped handlers
         //     that accept zip files and folders only
     }
 
@@ -42,7 +42,7 @@ public class DragDropHandler {
      * @return the dropped paths
      */
     public List<Path> getDroppedPaths() {
-        // TODO(Seth): implement: returning the paths from the last drop
+        // TODO(Damien): implement: returning the paths from the last drop
         return new ArrayList<>();
     }
 }

@@ -13,7 +13,7 @@ package gradezzy.ui;
 /**
  * The screens of the application.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public enum Screen {
 

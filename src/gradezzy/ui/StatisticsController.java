@@ -12,7 +12,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the statistics dashboard.
  *
- * <p>Tier: SHOULD. Owner: Seth.
+ * <p>Tier: SHOULD. Owner: Damien.
  */
 public class StatisticsController extends BaseController {
 
@@ -28,7 +28,7 @@ public class StatisticsController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -37,7 +37,7 @@ public class StatisticsController extends BaseController {
      */
     @FXML
     public void handleFilterChanged() {
-        // TODO(Seth): implement: calling StatisticsService.summarise and
+        // TODO(Damien): implement: calling StatisticsService.summarise and
         //     redrawing
     }
 }

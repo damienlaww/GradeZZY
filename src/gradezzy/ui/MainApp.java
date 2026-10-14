@@ -26,7 +26,7 @@ import gradezzy.config.ConfigKeys;
 /**
  * The JavaFX application class and graphical entry point.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class MainApp extends Application {
 
@@ -118,7 +118,7 @@ public class MainApp extends Application {
 
     // Reports a start-up failure and closes the application.
     private void failToStart(String message) {
-        // TODO(Seth): implement: show this in an error dialog as well
+        // TODO(Damien): implement: show this in an error dialog as well
         System.err.println("GradeZZY could not start: " + message);
         Platform.exit();
     }

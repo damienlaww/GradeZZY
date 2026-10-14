@@ -16,7 +16,7 @@ import gradezzy.model.Submission;
  * Creates the working copy of a submission and matches it to a student on the
  * roster.
  *
- * <p>Tier: MUST. Owner: Damien.
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class ExtractStage implements GradingStage {
 
@@ -64,7 +64,7 @@ public class ExtractStage implements GradingStage {
     @Override
     public void process(Submission submission,
             GradingContext context) throws GradingException {
-        // TODO(Damien): implement: calling
+        // TODO(Seth): implement: calling
         //     workingCopyManager.createWorkingCopy, removing student class
         //     files and setting the student from the roster
     }

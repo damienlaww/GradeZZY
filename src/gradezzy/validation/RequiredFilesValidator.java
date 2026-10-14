@@ -18,7 +18,7 @@ import gradezzy.model.Submission;
 /**
  * Checks that every required Java source file is present.
  *
- * <p>Tier: MUST. Owner: Damien.
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class RequiredFilesValidator extends AbstractValidator {
 
@@ -44,7 +44,7 @@ public class RequiredFilesValidator extends AbstractValidator {
     @Override
     public List<Anomaly> validate(Submission submission,
             Assessment assessment) {
-        // TODO(Damien): implement: a check that each Question file exists in
+        // TODO(Seth): implement: a check that each Question file exists in
         //     its folder
         return new ArrayList<>();
     }

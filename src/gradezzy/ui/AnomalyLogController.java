@@ -13,7 +13,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the anomaly log screen.
  *
- * <p>Tier: SHOULD. Owner: Seth.
+ * <p>Tier: SHOULD. Owner: Damien.
  */
 public class AnomalyLogController extends BaseController {
 
@@ -29,7 +29,7 @@ public class AnomalyLogController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -38,7 +38,7 @@ public class AnomalyLogController extends BaseController {
      */
     @FXML
     public void handleApprove() {
-        // TODO(Seth): implement: calling AnomalyService.approveAll for the
+        // TODO(Damien): implement: calling AnomalyService.approveAll for the
         //     selection
     }
 
@@ -47,7 +47,7 @@ public class AnomalyLogController extends BaseController {
      */
     @FXML
     public void handleUndo() {
-        // TODO(Seth): implement: calling AnomalyService.undoAll for the
+        // TODO(Damien): implement: calling AnomalyService.undoAll for the
         //     selection
     }
 
@@ -56,7 +56,7 @@ public class AnomalyLogController extends BaseController {
      */
     @FXML
     public void handleSelectAll() {
-        // TODO(Seth): implement: selecting all rows of the table
+        // TODO(Damien): implement: selecting all rows of the table
     }
 
     /**
@@ -64,6 +64,6 @@ public class AnomalyLogController extends BaseController {
      */
     @FXML
     public void handleFilterChanged() {
-        // TODO(Seth): implement: refreshing the table from SearchService
+        // TODO(Damien): implement: refreshing the table from SearchService
     }
 }

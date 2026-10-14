@@ -13,7 +13,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the plagiarism screen.
  *
- * <p>Tier: COULD. Owner: Seth.
+ * <p>Tier: COULD. Owner: Damien.
  */
 public class PlagiarismController extends BaseController {
 
@@ -29,7 +29,7 @@ public class PlagiarismController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -38,7 +38,7 @@ public class PlagiarismController extends BaseController {
      */
     @FXML
     public void handleRunCheck() {
-        // TODO(Seth): implement: calling PlagiarismService.check in the
+        // TODO(Damien): implement: calling PlagiarismService.check in the
         //     background
     }
 }

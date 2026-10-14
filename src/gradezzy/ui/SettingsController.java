@@ -12,7 +12,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the settings page.
  *
- * <p>Tier: SHOULD. Owner: Seth.
+ * <p>Tier: SHOULD. Owner: Damien.
  */
 public class SettingsController extends BaseController {
 
@@ -28,7 +28,7 @@ public class SettingsController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -37,7 +37,7 @@ public class SettingsController extends BaseController {
      */
     @FXML
     public void handleSave() {
-        // TODO(Seth): implement: validating each value, then
+        // TODO(Damien): implement: validating each value, then
         //     SettingsService.save
     }
 
@@ -46,6 +46,6 @@ public class SettingsController extends BaseController {
      */
     @FXML
     public void handleReset() {
-        // TODO(Seth): implement: reloading the values from SettingsService
+        // TODO(Damien): implement: reloading the values from SettingsService
     }
 }

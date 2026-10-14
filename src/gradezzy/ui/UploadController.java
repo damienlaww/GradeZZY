@@ -13,7 +13,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the upload screen.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class UploadController extends BaseController {
 
@@ -29,7 +29,7 @@ public class UploadController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -38,7 +38,7 @@ public class UploadController extends BaseController {
      */
     @FXML
     public void handleChooseFiles() {
-        // TODO(Seth): implement: a FileChooser for zip files, with input
+        // TODO(Damien): implement: a FileChooser for zip files, with input
         //     validation
     }
 
@@ -47,7 +47,7 @@ public class UploadController extends BaseController {
      */
     @FXML
     public void handleChooseFolder() {
-        // TODO(Seth): implement: a DirectoryChooser, with input validation
+        // TODO(Damien): implement: a DirectoryChooser, with input validation
     }
 
     /**
@@ -55,7 +55,7 @@ public class UploadController extends BaseController {
      */
     @FXML
     public void handleSectionChosen() {
-        // TODO(Seth): implement: storing the chosen section for this upload
+        // TODO(Damien): implement: storing the chosen section for this upload
         //     batch
     }
 
@@ -64,7 +64,7 @@ public class UploadController extends BaseController {
      */
     @FXML
     public void handleStartGrading() {
-        // TODO(Seth): implement: starting a GradingTask and moving to the
+        // TODO(Damien): implement: starting a GradingTask and moving to the
         //     progress screen
     }
 }

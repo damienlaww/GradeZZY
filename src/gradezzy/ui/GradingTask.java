@@ -27,7 +27,7 @@ import gradezzy.testcase.TestCaseSource;
 /**
  * A background task that grades one batch.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class GradingTask extends Task<GradingRun> {
 

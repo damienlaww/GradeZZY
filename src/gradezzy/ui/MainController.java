@@ -12,7 +12,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the main window that hosts every other screen.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class MainController extends BaseController {
 
@@ -28,7 +28,7 @@ public class MainController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -39,7 +39,7 @@ public class MainController extends BaseController {
      */
     @FXML
     public void handleNext() {
-        // TODO(Seth): implement: navigation to the next screen
+        // TODO(Damien): implement: navigation to the next screen
     }
 
     /**
@@ -49,7 +49,7 @@ public class MainController extends BaseController {
      */
     @FXML
     public void handleBack() {
-        // TODO(Seth): implement: navigation to the previous screen
+        // TODO(Damien): implement: navigation to the previous screen
     }
 
     /**
@@ -59,7 +59,7 @@ public class MainController extends BaseController {
      */
     @FXML
     public void handleCancel() {
-        // TODO(Seth): implement: a confirmation and a return to the start
+        // TODO(Damien): implement: a confirmation and a return to the start
         //     screen
     }
 
@@ -70,6 +70,6 @@ public class MainController extends BaseController {
      */
     @FXML
     public void handleToggleTheme() {
-        // TODO(Seth): implement: calling ThemeManager and saving the choice
+        // TODO(Damien): implement: calling ThemeManager and saving the choice
     }
 }

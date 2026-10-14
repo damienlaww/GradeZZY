@@ -13,7 +13,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the results screen.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class ResultsController extends BaseController {
 
@@ -29,7 +29,7 @@ public class ResultsController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -38,7 +38,7 @@ public class ResultsController extends BaseController {
      */
     @FXML
     public void handleExportCsv() {
-        // TODO(Seth): implement: calling ExportService.export for the CSV
+        // TODO(Damien): implement: calling ExportService.export for the CSV
         //     format
     }
 
@@ -49,7 +49,7 @@ public class ResultsController extends BaseController {
      */
     @FXML
     public void handleExportJson() {
-        // TODO(Seth): implement: calling ExportService.export for the JSON
+        // TODO(Damien): implement: calling ExportService.export for the JSON
         //     format
     }
 
@@ -60,7 +60,7 @@ public class ResultsController extends BaseController {
      */
     @FXML
     public void handleSearch() {
-        // TODO(Seth): implement: refreshing the table from SearchService
+        // TODO(Damien): implement: refreshing the table from SearchService
     }
 
     /**
@@ -70,6 +70,6 @@ public class ResultsController extends BaseController {
      */
     @FXML
     public void handleOpenStudent() {
-        // TODO(Seth): implement: navigating to the student report screen
+        // TODO(Damien): implement: navigating to the student report screen
     }
 }

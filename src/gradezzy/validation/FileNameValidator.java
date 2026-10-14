@@ -18,7 +18,7 @@ import gradezzy.model.Submission;
 /**
  * Checks that source files follow the naming convention.
  *
- * <p>Tier: MUST. Owner: Damien.
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class FileNameValidator extends AbstractValidator {
 
@@ -44,7 +44,7 @@ public class FileNameValidator extends AbstractValidator {
     @Override
     public List<Anomaly> validate(Submission submission,
             Assessment assessment) {
-        // TODO(Damien): implement: a comparison of the files present with the
+        // TODO(Seth): implement: a comparison of the files present with the
         //     expected names
         return new ArrayList<>();
     }

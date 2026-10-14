@@ -12,7 +12,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the history screen.
  *
- * <p>Tier: COULD. Owner: Seth.
+ * <p>Tier: COULD. Owner: Damien.
  */
 public class HistoryController extends BaseController {
 
@@ -28,7 +28,7 @@ public class HistoryController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -39,7 +39,7 @@ public class HistoryController extends BaseController {
      */
     @FXML
     public void handleOpenRun() {
-        // TODO(Seth): implement: loading the run and showing its results
+        // TODO(Damien): implement: loading the run and showing its results
     }
 
     /**
@@ -47,7 +47,7 @@ public class HistoryController extends BaseController {
      */
     @FXML
     public void handleBackup() {
-        // TODO(Seth): implement: calling HistoryService.backupNow
+        // TODO(Damien): implement: calling HistoryService.backupNow
     }
 
     /**
@@ -55,7 +55,7 @@ public class HistoryController extends BaseController {
      */
     @FXML
     public void handleRestore() {
-        // TODO(Seth): implement: calling HistoryService.restore after a
+        // TODO(Damien): implement: calling HistoryService.restore after a
         //     confirmation
     }
 }

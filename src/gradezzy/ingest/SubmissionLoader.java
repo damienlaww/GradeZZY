@@ -20,7 +20,7 @@ import gradezzy.model.Submission;
 /**
  * Turns the files and folders the instructor uploaded into Submission objects.
  *
- * <p>Tier: MUST. Owner: Damien.
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class SubmissionLoader {
 
@@ -46,7 +46,7 @@ public class SubmissionLoader {
      */
     public List<Submission> loadSubmissions(List<Path> inputPaths,
             Section section) throws IngestException {
-        // TODO(Damien): implement: walking the input paths, creating a
+        // TODO(Seth): implement: walking the input paths, creating a
         //     Submission for each zip or folder, and skipping ignored file
         //     names
         return new ArrayList<>();
@@ -60,7 +60,7 @@ public class SubmissionLoader {
      * @return the username, or an empty string if none is found
      */
     public String extractUsername(String zipFileName) {
-        // TODO(Damien): implement: prefix removal using ZIP_NAME_PREFIX_PATTERN
+        // TODO(Seth): implement: prefix removal using ZIP_NAME_PREFIX_PATTERN
         return "";
     }
 }

@@ -12,7 +12,7 @@ import javafx.fxml.FXML;
 /**
  * Controller of the individual student report screen.
  *
- * <p>Tier: SHOULD. Owner: Seth.
+ * <p>Tier: SHOULD. Owner: Damien.
  */
 public class StudentReportController extends BaseController {
 
@@ -28,7 +28,7 @@ public class StudentReportController extends BaseController {
      */
     @FXML
     public void initialize() {
-        // TODO(Seth): implement: setting up this screen once its design is
+        // TODO(Damien): implement: setting up this screen once its design is
         //     chosen
     }
 
@@ -37,7 +37,7 @@ public class StudentReportController extends BaseController {
      */
     @FXML
     public void handleExport() {
-        // TODO(Seth): implement: calling ExportService with
+        // TODO(Damien): implement: calling ExportService with
         //     StudentReportExporter
     }
 }

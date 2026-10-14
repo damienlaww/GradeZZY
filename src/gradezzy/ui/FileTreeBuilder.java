@@ -13,7 +13,7 @@ import javafx.scene.control.TreeItem;
 /**
  * Builds the tree view of a submission's folders and files.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class FileTreeBuilder {
 
@@ -31,7 +31,7 @@ public class FileTreeBuilder {
      * @return the root item, or null until this is implemented
      */
     public TreeItem<String> build(Path rootDirectory) {
-        // TODO(Seth): implement: a recursive walk that adds one TreeItem per
+        // TODO(Damien): implement: a recursive walk that adds one TreeItem per
         //     folder and file, folders first
         return null;
     }

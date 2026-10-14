@@ -17,7 +17,7 @@ import javafx.application.Application;
 /**
  * Applies the light or dark theme.
  *
- * <p>Tier: SHOULD. Owner: Seth.
+ * <p>Tier: SHOULD. Owner: Damien.
  */
 public class ThemeManager {
 
