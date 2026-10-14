@@ -57,3 +57,15 @@ Desktop.ini
 .env.*
 !.env.example
 /config/local.properties
+
+# GradeZZY: files created while grading (working copies, exports, database)
+/workspace/
+
+# GradeZZY: course documents and sample submissions (restricted, student names)
+/docs/
+/samples/
+
+# Assistant settings kept on each machine only
+CLAUDE.md
+.claude/
+.vscode/

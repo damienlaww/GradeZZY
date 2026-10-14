@@ -1,0 +1,91 @@
+/*
+ * File: TypedTestCaseSource.java
+ *
+ * Purpose: Supplies tester files built from test cases typed into the app.
+ *
+ * Where it fits: The in-app alternative to uploading testers.
+ */
+package gradezzy.testcase;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+import gradezzy.model.Assessment;
+
+/**
+ * Supplies tester files built from test cases typed into the app.
+ *
+ * <p>Tier: SHOULD. Owner: Zach.
+ */
+public class TypedTestCaseSource implements TestCaseSource {
+
+    /**
+     * The name shown in the app.
+     */
+    public static final String NAME = "Test cases typed in the app";
+
+    // The helper that writes tester source code
+    private final TesterGenerator testerGenerator;
+
+    // The folder generated testers are written to
+    private final Path outputDirectory;
+
+    // The cases typed so far
+    private final List<TestCase> testCases = new ArrayList<>();
+
+    /**
+     * Creates a new typed test case source.
+     *
+     * @param testerGenerator the helper that writes tester source code
+     * @param outputDirectory the folder generated testers are written to
+     */
+    public TypedTestCaseSource(TesterGenerator testerGenerator,
+            Path outputDirectory) {
+        this.testerGenerator = testerGenerator;
+        this.outputDirectory = outputDirectory;
+    }
+
+    /**
+     * Returns the cases typed so far.
+     *
+     * @return the cases typed so far
+     */
+    public List<TestCase> getTestCases() {
+        return testCases;
+    }
+
+    /**
+     * Adds a typed test case.
+     *
+     * @param testCase the test case
+     */
+    public void addTestCase(TestCase testCase) {
+        testCases.add(testCase);
+    }
+
+    /**
+     * Returns the name of this source.
+     *
+     * @return the name shown in the app
+     */
+    @Override
+    public String getName() {
+        return NAME;
+    }
+
+    /**
+     * Generates one tester per question from the typed cases.
+     *
+     * @param assessment the assessment
+     * @return one tester file per question that has tests
+     * @throws TestCaseException if the operation fails
+     */
+    @Override
+    public List<TesterFile> prepareTesters(
+            Assessment assessment) throws TestCaseException {
+        // TODO(Zach): implement: grouping testCases by question and calling
+        //     testerGenerator.writeTester for each group
+        return new ArrayList<>();
+    }
+}

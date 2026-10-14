@@ -1,1 +1,1022 @@
 # GradeZZY
+
+CS102 group project (Singapore Management University): an Auto Grading
+System for Java lab tests.
+
+> **Status: skeleton.** The project compiles and runs, but the grading
+> logic and the screens are not written yet. Every unfinished method holds
+> a `// TODO(owner): implement: ...` comment. See
+> [Where to add your code](#where-to-add-your-code).
+
+## What the application does
+
+GradeZZY grades a whole section's lab test submissions in one go. The
+instructor chooses a section (G1, G2, ...), uploads the students' zip
+files and the tester files, and presses one button. For every submission
+the application:
+
+1. unzips it into a working copy (the original upload is never changed);
+2. checks the folder structure, file names, required files and the name
+   in each file header;
+3. corrects common mistakes on the working copy and records each
+   correction so the instructor can approve or undo it;
+4. flags suspicious answers (untouched starter file, empty answer,
+   hard-coded answer) for review, without changing any mark;
+5. compiles the code and runs each tester with a time limit, stopping
+   programs that hang;
+6. works out the score per question and per student;
+7. exports the results in the provided score sheet CSV format, and as
+   JSON.
+
+A problem with one submission is written to the anomaly log and grading
+carries on with the next submission.
+
+## Prerequisites
+
+- **JDK 25**, with `java` and `javac` on the PATH. Check with
+  `java -version`.
+- Nothing else to install. JavaFX 25 and the other libraries are already
+  in `lib/` (about 40 MB). See [Libraries](#libraries).
+- Windows (64-bit Intel or AMD) or macOS (Intel or Apple Silicon). Linux
+  is not supported because its JavaFX jars are not included.
+
+## How to compile and run
+
+Run every command from the `GradeZZY` folder.
+
+### macOS (Terminal)
+
+```sh
+sh compile.sh            # compile everything into classes/
+sh run.sh                # open the window
+sh run.sh --check        # load every screen once and exit, no window
+sh run.sh console        # grade from the terminal, without JavaFX
+sh run.sh console G2     # the same, for section G2
+sh compile.sh core       # compile only the grading core, without JavaFX
+sh clean.sh              # empty classes/ before submission
+```
+
+### Windows (Command Prompt)
+
+```bat
+compile.bat
+run.bat
+run.bat --check
+run.bat console
+run.bat console G2
+compile.bat core
+clean.bat
+```
+
+The `.sh` scripts are also written to work in Git Bash on Windows.
+
+### What has been tested
+
+| Check | macOS Apple Silicon, JDK 25.0.4 | macOS Intel | Windows |
+|---|---|---|---|
+| `compile.sh`, zero errors and warnings | Passed | Not tested | Not tested |
+| `compile.sh core` (no JavaFX) | Passed | Not tested | Not tested |
+| `run.sh console` | Passed | Not tested | Not tested |
+| `run.sh --check` (12 screens load) | Passed | Not tested | Not tested |
+| `run.sh` (window opens) | Passed | Not tested | Not tested |
+| `.bat` scripts | Not applicable | Not applicable | Not tested |
+
+**A teammate on Windows and one on an Intel Mac must run the scripts and
+report back.** The brief takes up to 50% off if the code does not compile
+or run on the instructor's laptop.
+
+## Folder structure
+
+| Folder or file | What it holds |
+|---|---|
+| `compile.sh`, `compile.bat` | Compile all sources into `classes/` and copy the `.fxml` and `.css` files. |
+| `run.sh`, `run.bat` | Run the window, the screen check or the console. |
+| `clean.sh`, `clean.bat` | Empty `classes/` and remove `workspace/`. |
+| `config.properties` | Every setting of the application. |
+| `src/` | All Java source files, plus the FXML and CSS files of the `ui` package. |
+| `classes/` | Compiled classes. Created by the compile script, not in git, and must be empty at submission. |
+| `lib/` | The library jars. `lib/javafx/<platform>/` holds JavaFX for each platform. |
+| `media/` | Images and audio used by the application. Empty for now. |
+| `design/` | The interface design as one clickable HTML page. Open it in a browser. |
+| `README.md` | This file. |
+| `docs/` | The project brief and coding style PDFs. Not in git. |
+| `samples/` | The provided testers, score sheet, starter folder and six sample submissions. Not in git. |
+| `workspace/` | Created while grading: working copies, exports, database. Not in git. |
+
+Two things to know:
+
+- The brief calls the media folder `media files`. The team chose `media`.
+  Rename it before submission if the instructors insist on the brief's
+  name.
+- `docs/` and `samples/` are kept out of git because the documents are
+  marked restricted and the samples hold student names. Each teammate
+  copies them in from eLearn: `samples/` must contain `Tester-Files/`,
+  `student-submission/`, `RenameToYourUsername/` and
+  `IS442-ScoreSheet.csv`, as `config.properties` expects.
+
+## Packages
+
+The base package is `gradezzy`. Each package has one job.
+
+| Package | Responsibility | Main classes |
+|---|---|---|
+| `app` | Entry points and wiring. | `ConsoleMain`, `ApplicationContext`, `ConsoleProgressListener` |
+| `config` | Loads `config.properties`. | `AppConfig`, `ConfigKeys`, `ConfigException` |
+| `model` | Plain data classes with no logic. | `Submission`, `Student`, `Section`, `Assessment`, `Question`, `QuestionResult`, `TestCaseResult`, `Anomaly`, `GradingRun`, `AuditEntry`, and the enums `AnomalyType`, `Severity`, `FixStatus`, `SubmissionStatus` |
+| `ingest` | Accepts uploads, unzips them into a working copy, reads the roster. | `SubmissionLoader`, `ZipExtractor`, `WorkingCopyManager`, `RosterReader` |
+| `validation` | One class per structural check. | `Validator` (interface), `AbstractValidator`, `StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`, `HeaderNameValidator`, `ValidationRunner` |
+| `fix` | One class per automatic correction, each with apply and undo. | `Fixer` (interface), `AbstractFixer`, `FolderNameFixer`, `FolderHierarchyFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
+| `exec` | Runs `javac` and `java` in a separate process with a time limit. | `ProcessRunner`, `ProcessResult`, `SourceCompiler`, `TesterRunner` |
+| `testcase` | Where tester files come from. | `TestCaseSource` (interface), `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TestCase`, `TesterFile` |
+| `grading` | The pipeline, its stages and scoring. | `GradingStage` (interface), `GradingPipeline`, `GradingContext`, the nine `...Stage` classes, `ScoreParser` (interface), `TesterOutputScoreParser`, `ScoreCalculator`, `ProgressListener`, `CancellationToken` |
+| `detection` | Flags answers for review. Never changes a mark. | `Detector` (interface), `UntouchedStarterDetector`, `EmptyAnswerDetector`, `HardCodedAnswerDetector` |
+| `plagiarism` | Compares submissions for copied code. | `SimilarityDetector` (interface), `TokenSimilarityDetector`, `SimilarityPair` |
+| `report` | One class per export format. | `Exporter` (interface), `CsvScoreSheetExporter`, `JsonExporter`, `StudentReportExporter`, `AnomalyReportExporter`, `AuditLogExporter`, `JsonWriter` |
+| `stats` | Statistics for the dashboard. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
+| `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
+| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ProgressEstimator`, `ServiceRegistry` |
+| `ui` | JavaFX only: FXML files and controllers. | `MainApp`, `Screen`, `ScreenNavigator`, `BaseController`, `ThemeManager`, `GradingTask`, twelve `...Controller` classes, `FileTreeBuilder`, `DragDropHandler` |
+| `util` | Small shared helpers. | `FileUtils`, `TextUtils`, `InputValidator` |
+
+### How the pieces fit
+
+```
+ui (JavaFX)        app.ConsoleMain
+      \                 /
+       service.GradingService
+               |
+       grading.GradingPipeline
+               |
+  ExtractStage -> ValidateStage -> FixStage -> DetectStage
+     -> InstallTestersStage -> CompileStage -> ExecuteStage
+     -> ScoreStage -> PersistStage
+```
+
+- **Every `javafx` import is in the `ui` package.** The console entry
+  point and `compile.sh core` prove that the rest compiles and runs
+  without JavaFX.
+- **One failing submission never stops the batch.** `GradingPipeline`
+  catches the failure of any stage, records it as an `INTERNAL_ERROR`
+  anomaly on that submission, marks the submission `FAILED` and moves on
+  (brief section 4.2).
+- **Originals are never modified.** All changes happen in the working copy
+  under `workspace/working/`.
+- **Storage is behind `ResultRepository`.** Only `SqliteResultRepository`
+  contains SQL.
+
+### The pipeline stages
+
+| Order | Stage | What it does | Owner |
+|---|---|---|---|
+| 1 | `ExtractStage` | Creates the working copy and matches the student on the roster. | Damien |
+| 2 | `ValidateStage` | Runs every `Validator`. | Damien |
+| 3 | `FixStage` | Applies automatic corrections. | Jun Sheng |
+| 4 | `DetectStage` | Runs every `Detector`. | Jun Sheng |
+| 5 | `InstallTestersStage` | Copies testers and data files into the working copy. | Zach |
+| 6 | `CompileStage` | Compiles each question folder. | Zach |
+| 7 | `ExecuteStage` | Runs each tester with a time limit and parses its output. | Zach |
+| 8 | `ScoreStage` | Sets per-question and per-student scores. | Jing Yuan |
+| 9 | `PersistStage` | Saves the result so a run can be resumed. | Huxley |
+
+## Where to add your code
+
+Search for your name to find your work:
+
+```sh
+grep -rn "TODO(Zach)" src
+```
+
+Each TODO sits inside a method that already has its signature, Javadoc and
+a harmless return value, so the project keeps compiling while you work.
+Replace the TODO comment and the placeholder return with real code. Do not
+change a method signature without telling whoever calls it.
+
+Owners and TODO counts (184 in total). The split is a starting point;
+the team can swap areas. The next section explains each person's work in
+detail.
+
+| Owner | Packages | TODOs |
+|---|---|---|
+| Damien | `ingest`, `validation`, two stages | 17 |
+| Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 23 |
+| Zach | `exec`, `testcase`, three stages, the score parser | 14 |
+| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 39 |
+| Huxley | `report`, `stats`, `persistence`, one stage | 28 |
+| Seth | `util`, `ui` | 63 |
+
+### What is already real code
+
+These parts are written, not stubs, because the skeleton cannot run
+without them: `AppConfig`, `GradingPipeline`, `CancellationToken`,
+`AssessmentFactory`, `PipelineFactory`, `GradingService.startGrading`,
+`ApplicationContext`, `ConsoleMain`, `ConsoleProgressListener`, `MainApp`,
+`ScreenNavigator`, `Screen`, `ThemeManager`, `GradingTask`, the getters
+and setters of the model classes, and the two constructors of each
+exception class. Read them before the presentation; they are short.
+
+### How to add a new validator
+
+1. Create a class in `gradezzy.validation` that extends
+   `AbstractValidator`.
+2. Pass its name to `super(...)` and write `validate(...)`. Return the
+   anomalies you find; return an empty list when there are none. Do not
+   throw for bad student input.
+3. Register it in `PipelineFactory.createValidationRunner()`:
+   `runner.addValidator(new MyValidator());`
+
+### How to add a new fixer
+
+1. Create a class in `gradezzy.fix` that extends `AbstractFixer`.
+2. Write `canFix`, `apply` and `undo`. `apply` must call `backup(...)`
+   before changing anything and may only touch the working copy.
+3. Register it in `ApplicationContext.createFixManager()`:
+   `fixManager.addFixer(new MyFixer());`
+
+### How to add a new exporter
+
+1. Create a class in `gradezzy.report` that implements `Exporter`.
+2. Write `getFormatName`, `getFileExtension` and `export`.
+3. Register it in `ApplicationContext.createExportService()`:
+   `exportService.registerExporter(new MyExporter());`
+
+### How to add a new test-case source
+
+1. Create a class in `gradezzy.testcase` that implements `TestCaseSource`.
+2. `prepareTesters(...)` must return one `TesterFile` per question. The
+   tester it points to must print in the same format as the provided
+   testers, so `TesterOutputScoreParser` can read it.
+3. Pass an instance to `GradingService.startGrading(...)`. The console
+   uses `UploadedTesterSource`; the test case screen will choose between
+   that and `TypedTestCaseSource`.
+
+### How to add a detector, a stage or a screen
+
+- **Detector:** implement `Detector`, add it in
+  `PipelineFactory.createDetectors()`.
+- **Stage:** implement `GradingStage`, add it at the right position in
+  `PipelineFactory.createPipeline(...)`.
+- **Screen:** add a constant to `Screen`, an FXML file in
+  `src/gradezzy/ui/fxml/` and a controller that extends `BaseController`.
+  `run.sh --check` then confirms that it loads.
+- **Package:** add its folder to `CORE_SOURCES` in both `compile.sh` and
+  `compile.bat`.
+
+### The tester output format
+
+Checked against the five provided tester files. Each tester extends the
+student's class, has no package and must be compiled and run inside the
+student's `Qx` folder. For each test case it prints `Passed`, or a line
+starting with `Failed`. The last line of its output is the total score as
+a decimal number, for example `3.0`.
+
+## What each teammate needs to do
+
+Each person owns a slice of the pipeline. The slices are listed in the
+order the data flows, which is also the order they unblock each other.
+For every slice you get: what to build, the facts you need from the
+provided files, how to know you are done, and prompts you can paste into
+an AI coding assistant.
+
+### Ground rules for everyone
+
+- Work only in your own packages. If you need a change in someone else's
+  class or in a method signature, ask that person first.
+- After every change run `sh compile.sh` and `sh run.sh console`. Both
+  must finish with no error.
+- The final target for the whole team: `sh run.sh console` prints these
+  totals for the six sample submissions (from `samples/groundtruth.txt`):
+
+  | Student | Q1a | Q1b | Q2a | Q2b | Q3 | Total |
+  |---|---|---|---|---|---|---|
+  | chee.teo.2022 | 3 | 3 | 5 | 1 | 0 | 12 |
+  | david.2024 | 3 | 3 | 4 | 0 | 0 | 10 |
+  | fen.lai.2022 | 1 | 0 | 5 | 4 | 0 | 10 |
+  | jing.lim.2021 | 0 | 0 | 0 | 0 | 0 | 0 |
+  | ping.lee.2023 | 3 | 3 | 5 | 5 | 4 | 20 |
+  | xing.yan.2023 | 0 | 1 | 5 | 5 | 4 | 15 |
+
+  The ground truth file prints 1.0 as the total for xing.yan.2023; the
+  team treats that as a typing mistake for 15.0.
+- You must be able to explain every line you submit. The brief says so,
+  and the instructors may interview anyone.
+
+### How to prompt an AI assistant on this project
+
+A good prompt names the files, states the rules, limits the scope and
+says how to check the result. Start every session with this, then add one
+of the task prompts from your section:
+
+```text
+You are helping me with GradeZZY, a CS102 (SMU) Java group project.
+Before writing anything, read README.md,
+docs/CS102_Coding_Style.pdf and docs/CS102-Project-Auto_Grading_System.pdf.
+Rules: follow the CS102 coding style exactly (80 columns, 4 spaces, K&R
+braces on every block, no magic numbers, early returns). Use only Java
+taught in CS102 where possible and tell me if you need anything else.
+Read settings through AppConfig and ConfigKeys, never hard-code a value.
+Keep the header comment and Javadoc on everything, no emojis, no em
+dashes. Do not change any method signature or any file outside the
+package I name. Do not guess a file format: open the file in samples/ and
+check. When you finish, run "sh compile.sh" and "sh run.sh console" and
+show me the output. Explain your approach before you write code.
+```
+
+Ask for one class at a time, read what comes back, and ask "explain this
+method line by line" for anything you could not have written yourself.
+
+### 1. Damien: reading and checking submissions
+
+**Packages:** `ingest`, `validation`, plus `ExtractStage` and
+`ValidateStage` in `grading`. 17 TODOs. Everyone else is blocked until
+`SubmissionLoader` and `WorkingCopyManager` work, so start there.
+
+What to build, in order:
+
+1. `SubmissionLoader.loadSubmissions`: accept a list of paths, each a zip
+   file or a folder that holds zip files. Create one `Submission` per zip
+   with the section it was uploaded for. Skip the names in
+   `ingest.ignored.file.names`.
+2. `SubmissionLoader.extractUsername`: remove the prefix matched by
+   `ingest.zip.name.prefix.pattern` and the `.zip` ending, so
+   `2023-2024-ping.lee.2023.zip` gives `ping.lee.2023`.
+3. `ZipExtractor.extract` and `isSafeEntry`: unzip with `java.util.zip`.
+   Refuse entries that would land outside the target folder (names with
+   `..`), and stop at the size and entry limits from the configuration.
+4. `WorkingCopyManager`: unzip into `workspace/working/<username>`. Never
+   write to the original zip. `removeStudentClassFiles` deletes `.class`
+   files except those in `assessment.provided.class.files`.
+5. `RosterReader`: read `samples/IS442-ScoreSheet.csv` into `Student`
+   objects and remove the `#` in front of the id and username.
+6. The four validators, `AbstractValidator.createAnomaly` and
+   `ValidationRunner.runAll`. Each validator returns anomalies and never
+   throws for bad student input.
+7. `ExtractStage` and `ValidateStage`, which call the classes above.
+
+Facts from the provided files:
+
+- Zip names look like `2023-2024-<username>.zip`.
+- The score sheet header is `OrgDefinedId,Username,Last Name,First
+  Name,Email,Calculated Final Grade Numerator,Calculated Final Grade
+  Denominator,End-of-Line Indicator`, with Windows line endings.
+- A correct zip holds one folder named after the username, with `Q1`,
+  `Q2` and `Q3` inside. The required files are in `config.properties`
+  (`Q1/Q1a.java`, `Q1/Q1b.java`, `Q2/Q2a.java`, `Q2/Q2b.java`,
+  `Q3/Q3.java`).
+- Each Java file starts with a comment holding `Name:` and `Email ID:`.
+  Some students wrote only the username after `Email ID:`, others the
+  full address.
+
+You are done when `sh run.sh console` lists all six students and reports
+at least these anomalies:
+
+| Student | Expected anomaly |
+|---|---|
+| chee.teo.2022 | `MISSING_WRAPPER_FOLDER`; `MISSING_HEADER_NAME` in `Q3.java` |
+| david.2024 | `WRONG_FOLDER_NAME` (folder is `01400003`); `MISSING_HEADER_NAME` in `Q3.java` |
+| fen.lai.2022 | `WRONG_FOLDER_NAME` (folder is `RenameToYourStudentID`) |
+| jing.lim.2021 | `MISSING_WRAPPER_FOLDER`; `MISSING_HEADER_NAME` in all five required files |
+| ping.lee.2023 | none |
+| xing.yan.2023 | none |
+
+The table covers the five required files only. Some zips also hold
+extra files with no name in the header (`ShapeComparator.java`,
+`ShapeComparators.java`); decide with the team whether those are checked.
+
+Also make dummy zips for the cases the samples do not cover: a missing
+`Q2` folder, a missing `Q1b.java`, a file named `q1a.java`, an empty zip
+and a file that is not a zip at all. None may stop the batch.
+
+Example prompts:
+
+```text
+Implement gradezzy.ingest.SubmissionLoader (both TODO methods). List the
+zips in samples/student-submission first and show me their names, then
+write the code. A path may be one zip or a folder of zips. Use
+ZIP_NAME_PREFIX_PATTERN and IGNORED_FILE_NAMES from ConfigKeys. Only edit
+files in gradezzy.ingest.
+```
+
+```text
+Implement gradezzy.ingest.ZipExtractor using java.util.zip. Explain what
+a "zip slip" attack is and how isSafeEntry prevents it. Enforce
+MAX_ZIP_SIZE_MB and MAX_ZIP_ENTRIES. Throw IngestException with a message
+an instructor can act on. Then write a small dummy zip that should be
+rejected and show me that it is.
+```
+
+```text
+Implement gradezzy.validation.StructureValidator. Unzip each sample in
+samples/student-submission into a temporary folder and show me the top
+level of each, so we agree on the cases, before you write code. Report
+MISSING_WRAPPER_FOLDER, WRONG_FOLDER_NAME and MISSING_QUESTION_FOLDER
+through createAnomaly. It must never throw for a badly formed submission.
+```
+
+### 2. Jun Sheng: corrections, flags and plagiarism
+
+**Packages:** `fix`, `detection`, `plagiarism`, plus `FixStage` and
+`DetectStage` in `grading` and the TODO in
+`PipelineFactory.createDetectors`. 23 TODOs. You need Damien's validators
+to produce anomalies before your fixers have anything to fix; until then,
+build and test against a working copy you unzip by hand.
+
+What to build, in order:
+
+1. `AbstractFixer.backup`: copy a file or folder aside before changing it.
+2. `FolderHierarchyFixer`: when the Q folders sit at the top level, create
+   a folder named after the username and move them into it. `undo` moves
+   them back.
+3. `FolderNameFixer`: rename a wrongly named top folder to the username.
+4. `HeaderNameFixer`: write the student's name and email after the header
+   labels, using the roster entry on the submission. If the student is
+   not on the roster, do not fix; leave the anomaly for the instructor.
+5. `FixManager`: `applyAll` finds a fixer for each anomaly, applies it,
+   keeps the `FixRecord` and sets the status to `APPLIED`. `approve`,
+   `undo`, `approveAll` and `undoAll` change the status.
+6. `FixStage` (skip when `fix.auto.apply.enabled` is false) and
+   `DetectStage`.
+7. The three detectors. They add an anomaly and never touch a score.
+8. `TokenSimilarityDetector` (COULD tier; leave it for last).
+
+Rules that matter here:
+
+- Every fix happens in the working copy only. The uploaded zip must be
+  byte-for-byte unchanged afterwards.
+- Every fix must be undoable. Test `apply` followed by `undo` and compare
+  the folder with what it was before.
+- Hard-coded answers are flagged for review. Never lower a mark.
+
+You are done when, after grading the samples: chee.teo and jing.lim have
+a username folder; david's and fen.lai's folders are renamed; blank
+headers are filled in; each fix shows as `APPLIED`; undoing every fix
+restores the working copy exactly; and a copy of the starter folder
+submitted as a zip is flagged `UNTOUCHED_STARTER`.
+
+For hard-coding, start simple and explainable: flag a method whose body
+contains the literal expected outputs of the sample cases in the question
+paper (`samples/IS442-ExamSample.pdf`), or a chain of `if` statements
+comparing the input with literal values. For the presentation, be ready
+to explain what your check misses.
+
+Example prompts:
+
+```text
+Implement gradezzy.fix.FolderHierarchyFixer (canFix, apply, undo) and
+AbstractFixer.backup. Work only on the working copy path of the
+Submission, never the original. Show me a test where you apply the fix to
+an unzipped copy of 2023-2024-jing.lim.2021.zip, list the folder, undo
+it, and list the folder again to prove it is back to how it started.
+```
+
+```text
+Implement gradezzy.fix.FixManager. Explain the life cycle of FixStatus
+(PENDING, APPLIED, APPROVED, UNDONE) first. A fixer that throws
+FixException must not stop the other fixes for that submission; describe
+how you handle that.
+```
+
+```text
+Propose three simple ways to detect hard-coded answers in a student's
+Java method, with the advantages and disadvantages of each, using
+samples/RenameToYourUsername/Q1/Q1a.java and the sample cases in the
+question paper as the example. Do not write code yet. I need to be able
+to explain the chosen approach in a presentation.
+```
+
+### 3. Zach: compiling, running and reading scores
+
+**Packages:** `exec`, `testcase`, plus `InstallTestersStage`,
+`CompileStage`, `ExecuteStage` and `TesterOutputScoreParser` in
+`grading`. 14 TODOs. This is where "safely terminate programs that exceed
+the time limit" lives, which the brief lists as a core requirement.
+
+What to build, in order:
+
+1. `ProcessRunner.run` and `terminate`: start a command with
+   `ProcessBuilder` in a given folder, capture standard output and error,
+   wait up to the time limit, and kill the process (and its children) if
+   it is still running. Cap the captured output at
+   `exec.max.output.characters`, because a student loop can print forever.
+2. `SourceCompiler.compile` and `TesterRunner.runTester`: build the
+   `javac` and `java` commands from the configuration.
+3. `UploadedTesterSource.prepareTesters`: match `Q1aTester.java` and the
+   others in the testers folder to the questions.
+4. `TesterInstaller`: copy each tester into the question folder of the
+   working copy, plus the data files in `assessment.tester.data.files`.
+5. `InstallTestersStage`, `CompileStage`, `ExecuteStage`.
+6. `TesterOutputScoreParser.parse`.
+7. `TypedTestCaseSource` and `TesterGenerator` (SHOULD tier): turn test
+   cases typed into the app into a tester file in the same output format.
+
+Facts from the provided files:
+
+- Each tester `extends` the student's class and has no package, so it
+  must be compiled and run with the question folder as the working
+  directory (`javac Q1aTester.java`, then `java Q1aTester`, inside `Q1`).
+- The Q2 testers open `personstester.txt` and `studentstester.txt` by
+  relative name. Those files are inside the sample zips but not in
+  `Tester-Files`; ask the team where the instructor will supply them.
+- `Q2` needs the provided `DataException.class`, and `Q3` needs
+  `Shape.class`, `Circle.class` and `Rectangle.class`, in the folder.
+- For each test case a tester prints `Passed` or a line starting with
+  `Failed`. The last line of output is the total as a decimal, such as
+  `3.0`. An exception inside a test prints a stack trace to standard
+  error and the tester carries on.
+- Maximum scores are 3, 3, 5, 5 and 4.
+
+Rules that matter here:
+
+- One tester, one process. A hanging tester must not block the next one.
+- If a question does not compile, record `COMPILE_ERROR`, give that
+  question 0 and continue with the other questions.
+- On a timeout, record `TIMEOUT` and give the number of `Passed` lines
+  printed before the process was stopped.
+
+You are done when ping.lee.2023 scores 3, 3, 5, 5, 4, and a dummy
+submission whose `Q1a.java` contains `while (true) { }` ends with a
+`TIMEOUT` anomaly after about `exec.run.timeout.seconds`, with no `java`
+process left running afterwards.
+
+Example prompts:
+
+```text
+Implement gradezzy.exec.ProcessRunner.run and terminate with
+ProcessBuilder. Requirements: run in a given working directory, capture
+stdout and stderr without the process blocking when its output buffer
+fills, stop waiting after timeoutSeconds and kill the process and its
+descendants, cap output at MAX_OUTPUT_CHARACTERS. Explain how you avoid
+the deadlock that happens when nobody reads the output. Then prove it
+with a tiny Java program that loops forever.
+```
+
+```text
+Read all five files in samples/Tester-Files and tell me exactly what each
+prints for a pass, a fail, an exception and the final score. Then
+implement gradezzy.grading.TesterOutputScoreParser to match, using
+PASS_MARKER and FAIL_MARKER from ConfigKeys. Handle a run that timed out
+before the score line was printed.
+```
+
+```text
+Implement gradezzy.grading.CompileStage. A question that fails to compile
+gets a COMPILE_ERROR anomaly with the first compiler message, and the
+other questions must still be compiled. Do not throw GradingException for
+a student's compile error; explain when throwing is appropriate.
+```
+
+### 4. Jing Yuan: scoring, services and putting it together
+
+**Packages:** `app`, `config`, `model`, `service`, plus `ScoreStage` and
+`ScoreCalculator` in `grading`. 39 TODOs. You also own the wiring
+(`PipelineFactory`, `ApplicationContext`), so you are the person who
+checks that the slices fit together.
+
+What to build, in order:
+
+1. The three small model methods: `Assessment.findQuestion`,
+   `Assessment.getMaxTotal` and `Submission.getTotalScore`.
+2. `ScoreCalculator` and `ScoreStage`. A score can never exceed the
+   question's maximum.
+3. In `GradingService.startGrading`: read the roster into the context and
+   save the run before grading starts.
+4. `ProgressEstimator`: fraction done and seconds remaining.
+5. `ExportService`: find an exporter by name and write to the output
+   folder.
+6. `AnomalyService`, `SearchService`, `StatisticsService`,
+   `AuditService`, `SettingsService`, `HistoryService`,
+   `PlagiarismService`. Most of these are thin: validate the input, call
+   one class from another package, record an audit entry.
+7. `GradingService.retryFailed` and `resume` (after Huxley's repository
+   works).
+8. Grading several submissions at once using `exec.thread.count`. Do this
+   last, and only once the single-threaded run gives the right totals.
+   Threads are not taught in CS102, so keep the code small and be ready to
+   explain it.
+9. `ConsoleMain`: reject an invalid section code with a clear message.
+
+You are done when `sh run.sh console` prints the table of totals at the
+top of this section, Cancel stops a run after the current submission, and
+Retry grades only the failed submissions again.
+
+Example prompts:
+
+```text
+Implement gradezzy.grading.ScoreCalculator and ScoreStage, and the TODO
+methods in gradezzy.model.Assessment and Submission. A question score is
+never above Question.getMaxScore(). Then run "sh run.sh console" and
+compare the totals with samples/groundtruth.txt; list every difference
+and which stage you think causes it, without changing other packages.
+```
+
+```text
+Implement gradezzy.service.SettingsService. validate() returns an empty
+string for a good value and a message for a bad one. Go through every key
+in config.properties and tell me what rule each should have (positive
+whole number, existing folder, true or false, and so on) before coding.
+save() must keep the comments in config.properties.
+```
+
+```text
+I want to grade THREAD_COUNT submissions at the same time in
+GradingService. Explain two ways to do this in Java, with the risks of
+each (shared lists, progress events arriving out of order, cancelling).
+Recommend the simplest one that I can explain to an instructor. Do not
+write code until I pick.
+```
+
+### 5. Huxley: exports, statistics and saved state
+
+**Packages:** `report`, `stats`, `persistence`, plus `PersistStage` in
+`grading` and the TODO in `ApplicationContext` that opens the database.
+28 TODOs. You can start today: build against a `GradingRun` you fill in
+by hand with the ground truth scores, without waiting for the pipeline.
+
+What to build, in order:
+
+1. `CsvScoreSheetExporter`: the one export the brief requires. Copy the
+   provided score sheet and fill in `Calculated Final Grade Numerator`.
+2. `JsonWriter` and `JsonExporter`: per-question scores, test case
+   results and anomalies, with no library.
+3. `AnomalyReportExporter`, `StudentReportExporter`, `AuditLogExporter`.
+4. `StatisticsCalculator`: mean, median, pass rate, mark bands, pass rate
+   per question, most failed test, common compile errors, filtered by
+   module and section.
+5. `SqliteResultRepository`: create the tables, then save and load runs,
+   submissions, anomalies, fix status and audit entries.
+6. `PersistStage` and the `repository.open()` call in
+   `ApplicationContext`.
+7. `BackupManager` (COULD tier).
+
+Rules that matter here:
+
+- The CSV export must match the provided file exactly apart from the
+  numerator: same columns in the same order, `#` in front of the id and
+  username, `#` in the last column, Windows line endings. Compare your
+  output with the original using a diff tool.
+- Decide with the team how totals are written (`12` or `12.0`) and how a
+  student with no submission appears (blank or `0`). The provided file
+  does not say; do not guess silently.
+- Only `SqliteResultRepository` may contain SQL or import `java.sql`.
+  Always use `PreparedStatement` with `?` placeholders, never text joined
+  into SQL.
+- A failed save must not lose the grading results in memory.
+
+You are done when the exported CSV differs from
+`samples/IS442-ScoreSheet.csv` only in the numerator column; the JSON
+opens in a JSON viewer without errors; mean and median for the six sample
+totals (12, 10, 10, 0, 20, 15) are 11.17 and 11; and after closing and
+reopening the application, History lists the earlier run with the same
+scores.
+
+Example prompts:
+
+```text
+Implement gradezzy.report.CsvScoreSheetExporter. First print
+samples/IS442-ScoreSheet.csv with its invisible characters shown, and
+tell me its line ending, its columns and which values carry a # prefix.
+The export must be identical to that file except that Calculated Final
+Grade Numerator is filled in. Use CSV_LINE_ENDING, CSV_ID_PREFIX and
+CSV_END_OF_LINE_MARKER from ConfigKeys. Afterwards show me a diff between
+the original and your output.
+```
+
+```text
+Design the SQLite tables for gradezzy.persistence.SqliteResultRepository:
+runs, submissions, question results, test case results, anomalies and
+audit entries. Show me the CREATE TABLE statements and explain each
+relationship before implementing anything. JDBC is not taught in CS102,
+so explain Connection, PreparedStatement and ResultSet in two sentences
+each, and keep all SQL inside this one class.
+```
+
+```text
+Implement gradezzy.stats.StatisticsCalculator.mean, median, passRate and
+markBands with plain loops (no streams). Handle an empty list without
+dividing by zero. Show the results for the scores 12, 10, 10, 0, 20, 15
+out of 20 and check them by hand.
+```
+
+### 6. Seth: helpers first, then the screens
+
+**Packages:** `util` and `ui`. 63 TODOs, most of them one-line button
+handlers. Do `util` first: Damien and Huxley both need `TextUtils` and
+`FileUtils` this week.
+
+What to build, in order:
+
+1. `FileUtils`: copy and delete folders, read and write text, list files.
+2. `TextUtils`: `isBlank`, `splitCsvLine`, `joinCsvLine`,
+   `normaliseLineEndings`.
+3. `InputValidator`: section code, username, readable file, readable
+   folder, positive whole number. The brief takes up to 10% off for
+   missing input validation, so every form in the app calls these.
+4. Open `design/gradezzy-design.html` in a browser. It is the design to
+   build: every screen is clickable, and its Design Notes screen lists the
+   colours, type sizes and the JavaFX or AtlantaFX control for each part.
+5. Then, per screen: lay out the FXML, add `fx:id` fields and connect the
+   handlers in its controller. Suggested order: Upload, Progress, Results,
+   Anomaly log, Settings, Statistics, Student report, Test cases, Audit
+   log, History, Plagiarism.
+6. `MainController`: Next, Back, Cancel and the light and dark switch.
+7. `FileTreeBuilder` and `DragDropHandler` for the Upload screen.
+8. `BaseController.showError` and `showInfo`, used by every screen.
+
+Rules that matter here:
+
+- Controllers hold no grading logic. A handler validates the input, calls
+  one method on a service from `getServices()` and shows the result.
+- Grading runs on a background thread through `GradingTask`. A
+  `ProgressListener` is called on that thread, so it must wrap every
+  change to a control in `Platform.runLater`.
+- Every `javafx` import stays in the `ui` package.
+- Check each screen against Nielsen's ten heuristics. For this app that
+  means: always show what the grader is doing, confirm before Cancel or
+  Undo all, say what went wrong and what to do next, and never show a
+  stack trace.
+
+You are done with `util` when the methods give the right answers for the
+cases below, and with a screen when `sh run.sh --check` loads it, the
+instructor can complete its task with the six samples, and bad input
+(nothing selected, a file that is not a zip, a blank section) produces a
+clear message instead of an error.
+
+| Method | Input | Expected |
+|---|---|---|
+| `splitCsvLine` | `#01400001,#ping.lee.2023,_,PING LEE,x@y.sg,,20,#` | 8 values, the sixth empty |
+| `splitCsvLine` | `a,"b,c",d` | 3 values: `a`, `b,c`, `d` |
+| `isValidSectionCode` | `G1`, `G12`, `g1`, `G`, `1`, empty | true, true, decide with the team, false, false, false |
+| `isPositiveInteger` | `10`, `0`, `-3`, `abc`, empty | true, false, false, false, false |
+
+Example prompts:
+
+```text
+Implement gradezzy.util.TextUtils.splitCsvLine and joinCsvLine without a
+library and without String.split, so quoted values that contain commas
+work. Show the result for these lines: [paste the table above]. An empty
+value between two commas must come back as an empty string, not be
+dropped.
+```
+
+```text
+Implement gradezzy.util.InputValidator. No method may throw an exception
+for any input, including null. List the edge cases you considered for
+each method before writing code.
+```
+
+```text
+Read design/gradezzy-design.html, including its Design Notes screen.
+Build the Upload screen only, matching that design: edit src/gradezzy/ui/fxml/upload.fxml and
+UploadController.java. Use standard JavaFX controls and the AtlantaFX
+Cupertino theme; do not add another library. The controller must contain
+no grading logic: validate with InputValidator, then call
+getServices().getGradingService() through a GradingTask. Explain where a
+lambda is used and why, since lambdas are not taught in CS102. Finish by
+running "sh run.sh --check".
+```
+
+### Who is waiting on whom
+
+| If you are | You need first | From |
+|---|---|---|
+| Damien | `TextUtils.splitCsvLine`, `FileUtils` | Seth |
+| Jun Sheng | Anomalies from the validators, the student on the submission | Damien |
+| Zach | A working copy to compile in | Damien |
+| Jing Yuan | Question results from `ExecuteStage` | Zach |
+| Huxley | Nothing to start; real runs later | Jing Yuan |
+| Seth (screens) | The chosen design; working services | Team, Jing Yuan |
+
+Nobody has to sit idle: every class can be written and tried against a
+folder unzipped by hand or a `GradingRun` filled in by hand.
+
+## Configuration
+
+Every setting is in `config.properties` and is read through
+`AppConfig`, using the names in `ConfigKeys`. A missing setting stops the
+application at start-up with a message naming the setting. To use another
+file: `java -Dgradezzy.config=other.properties ...`.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `app.module.code` | `CS102` | Course code shown on every run. |
+| `app.section.codes` | `G1` to `G10` | Sections the instructor can pick from. |
+| `paths.submissions.dir` | `samples/student-submission` | Folder graded by the console entry point. |
+| `paths.testers.dir` | `samples/Tester-Files` | Folder holding the tester files. |
+| `paths.score.sheet.file` | `samples/IS442-ScoreSheet.csv` | The roster and the template for the CSV export. |
+| `paths.starter.dir` | `samples/RenameToYourUsername` | Starter files, used to spot untouched answers. |
+| `paths.working.dir` | `workspace/working` | Where working copies are created. |
+| `paths.output.dir` | `workspace/output` | Where exports are written. |
+| `paths.backup.dir` | `workspace/backup` | Where database backups are kept. |
+| `ingest.zip.name.prefix.pattern` | `^[0-9]{4}-[0-9]{4}-` | Text in front of the username in a zip file name. |
+| `ingest.ignored.file.names` | `.DS_Store,__MACOSX,Thumbs.db` | Names skipped inside a submission. |
+| `ingest.max.zip.size.mb` | `50` | Largest unzipped size accepted. |
+| `ingest.max.zip.entries` | `2000` | Largest number of entries accepted in a zip. |
+| `assessment.name` | `Lab Test` | Name of the assessment. |
+| `assessment.question.ids` | `Q1a,Q1b,Q2a,Q2b,Q3` | The questions, in order. |
+| `assessment.question.<id>.folder` | for example `Q1` | Folder the question's file must be in. |
+| `assessment.question.<id>.file` | for example `Q1a.java` | The required source file. |
+| `assessment.question.<id>.max.score` | `3`, `3`, `5`, `5`, `4` | Maximum score of the question. |
+| `assessment.placeholder.folder.names` | `RenameToYourUsername,RenameToYourStudentID` | Folder names that mean the student forgot to rename. |
+| `assessment.provided.class.files` | `DataException.class`, ... | Compiled files that are kept in the working copy. |
+| `assessment.tester.data.files` | `personstester.txt,studentstester.txt` | Data files copied next to the testers. |
+| `validation.header.name.label` | `Name:` | Label in front of the name in a file header. |
+| `validation.header.email.label` | `Email ID:` | Label in front of the email in a file header. |
+| `validation.header.scan.lines` | `10` | Lines at the top of a file searched for the header. |
+| `fix.auto.apply.enabled` | `true` | Apply fixes automatically, or only report. |
+| `exec.javac.command` | `javac` | Command used to compile. |
+| `exec.java.command` | `java` | Command used to run a tester. |
+| `exec.compile.timeout.seconds` | `30` | Time limit for compiling one question folder. |
+| `exec.run.timeout.seconds` | `10` | Time limit for one tester run. |
+| `exec.thread.count` | `4` | Submissions graded at the same time. |
+| `exec.max.output.characters` | `100000` | Longest program output kept. |
+| `grading.tester.class.suffix` | `Tester` | `Q1a` becomes `Q1aTester`. |
+| `grading.pass.marker` | `Passed` | Line a tester prints for a passed test. |
+| `grading.fail.marker` | `Failed` | Start of the line for a failed test. |
+| `detection.untouched.enabled` | `true` | Flag untouched starter files. |
+| `detection.empty.enabled` | `true` | Flag empty answers. |
+| `detection.hardcoded.enabled` | `true` | Flag hard-coded answers. |
+| `plagiarism.enabled` | `false` | Run the similarity check after grading. |
+| `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
+| `export.formats` | `csv,json` | Formats offered by default. |
+| `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
+| `export.csv.id.prefix` | `#` | Character in front of the id and username. |
+| `export.csv.end.of.line.marker` | `#` | Value of the last column. |
+| `stats.pass.mark.percent` | `50` | Percentage that counts as a pass. |
+| `stats.mark.band.width.percent` | `10` | Width of each mark band. |
+| `database.enabled` | `true` | Save grading state to SQLite. |
+| `database.file` | `workspace/gradezzy.db` | Location of the database file. |
+| `database.backup.keep.count` | `5` | Backups kept before the oldest is deleted. |
+| `audit.enabled` | `true` | Log instructor actions. |
+| `ui.theme` | `light` | `light` or `dark`. |
+| `ui.window.width`, `ui.window.height` | `1200`, `800` | Starting window size. |
+| `ui.animations.enabled` | `true` | Show subtle animations. |
+
+The time limits, size limits, pass mark, band width and similarity
+threshold are starting values chosen for the skeleton. They do not come
+from the brief; the team should agree on them.
+
+## Libraries
+
+All are free and open source, as the brief requires, and were downloaded
+from Maven Central.
+
+| Library | Version | Licence | Why it was chosen |
+|---|---|---|---|
+| JavaFX (`javafx-base`, `-graphics`, `-controls`, `-fxml`) | 25.0.4 | GPL v2 with Classpath Exception | The desktop window. It matches JDK 25, separates layout (FXML) from logic (controllers), and has built-in charts, tables, tree views, file pickers and drag and drop. |
+| AtlantaFX (`atlantafx-base`) | 3.0.0 | MIT | Modern themes for JavaFX. Its Cupertino Light and Dark themes give light and dark mode with one line of code. |
+| ControlsFX (`controlsfx`) | 11.2.5 | BSD 3-Clause | Extra controls JavaFX lacks, such as notifications and auto-completing search fields. Not used by any class yet. |
+| SQLite JDBC (`sqlite-jdbc`) | 3.53.4.0 | Apache 2.0 | A database in a single file with no server to install, for saved state, history, resume and backup. |
+
+Notes:
+
+- The JavaFX jars differ per platform, so there are three copies, in
+  `lib/javafx/mac`, `lib/javafx/mac-aarch64` and `lib/javafx/win`. The
+  scripts choose one.
+- JSON export uses a small hand-written `JsonWriter` instead of a library,
+  so there is one jar fewer and every line can be explained.
+- No Excel library is included. Exports are CSV and JSON only.
+- The run scripts pass the five `--add-exports` and `--add-opens` flags
+  that the ControlsFX documentation lists for its controls, and
+  `--enable-native-access` for JavaFX and the SQLite driver.
+
+### Java beyond the CS102 syllabus
+
+Kept to a minimum and confined to the classes named here:
+
+| Construct | Where | Why |
+|---|---|---|
+| JavaFX, FXML | `ui` package only | The window. |
+| `javafx.concurrent.Task` (a background thread) | `ui.GradingTask` | Keeps the window responsive while grading. |
+| `synchronized` | `grading.CancellationToken` | The Cancel button and the grading thread share one flag. |
+| `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. |
+| `enum` | `model`, `ui.Screen` | Fixed lists of values. |
+| JDBC (to be written) | `persistence.SqliteResultRepository` | Talks to SQLite. |
+| `ProcessBuilder` (to be written) | `exec.ProcessRunner` | Runs `javac` and `java`. |
+| `java.util.zip` (to be written) | `ingest.ZipExtractor` | Unzips submissions. |
+
+No lambdas or streams are used in the skeleton. JavaFX event handlers will
+need lambdas (or anonymous classes) in the `ui` package.
+
+## Coding rules
+
+Follow `docs/CS102_Coding_Style.pdf` and the Oracle Java Code Conventions.
+In short:
+
+- **Lines:** at most 80 characters. Break after a comma or before an
+  operator, and align the next line or indent it 8 spaces.
+- **Indentation:** 4 spaces, never tabs. K&R braces. Braces on every
+  block, even a single statement.
+- **Statements:** one per line. One declaration per line, always
+  initialised, declared close to where it is first used.
+- **Names:** `lowerCamelCase` for variables and methods, `UpperCamelCase`
+  for classes, `UPPER_SNAKE_CASE` for constants, lowercase package names.
+  Meaningful names; no one-character names except loop counters; no
+  unclear abbreviations.
+- **No magic numbers:** use a named constant or a setting from
+  `config.properties`.
+- **Spacing:** spaces around binary operators, none after a unary
+  operator. Write `if (condition) {` with those spaces.
+- **Conditions:** use `if` / `else if` / `else` instead of nested ifs. Do
+  not write `== true` or `== false`. No empty branches and no code that
+  does nothing.
+- **Loops:** no `break` or `continue` inside an infinite loop, no
+  unrelated statements in a `for` header, and no `if` inside a loop just
+  to treat the first or last round differently.
+- **Methods:** return a boolean expression directly. Check for invalid
+  values first and return early.
+- **Blank lines:** one between logical chunks of code.
+
+Team rules on top of that:
+
+- A header comment at the top of every file, Javadoc on every public
+  class, interface and method, and a short comment wherever the intent is
+  not obvious.
+- No emojis and no em dashes anywhere, including commit messages.
+- Keep `javafx` imports inside the `ui` package.
+- Read settings through `AppConfig`; do not hard-code a value in logic.
+
+## Feature checklist
+
+`[ ]` means a place exists in the skeleton but the feature is not
+implemented. `[x]` means it works now.
+
+### MUST (brief section 4)
+
+- [ ] Batch upload of zips or many files (`ingest.SubmissionLoader`,
+  `ui.UploadController`)
+- [x] Batch grading loop with no per-submission clicking
+  (`grading.GradingPipeline`, `service.GradingService`)
+- [ ] Unzip submissions (`ingest.ZipExtractor`,
+  `ingest.WorkingCopyManager`)
+- [ ] Validate structure, file names and required files
+  (`validation.StructureValidator`, `FileNameValidator`,
+  `RequiredFilesValidator`)
+- [ ] Check student names in file headers
+  (`validation.HeaderNameValidator`)
+- [x] A failing submission is recorded as an anomaly and does not stop
+  the batch (`grading.GradingPipeline`)
+- [ ] Auto-correct folder names, folder hierarchy and missing header
+  names on a working copy (`fix.FolderNameFixer`,
+  `FolderHierarchyFixer`, `HeaderNameFixer`, `FixManager`)
+- [ ] Compile and run with testers (`exec.SourceCompiler`,
+  `exec.TesterRunner`, `testcase.TesterInstaller`)
+- [ ] Stop programs that exceed the time limit (`exec.ProcessRunner`)
+- [ ] Per-question and per-student scores
+  (`grading.TesterOutputScoreParser`, `ScoreCalculator`)
+- [ ] Export in the provided CSV format (`report.CsvScoreSheetExporter`)
+- [x] Separate classes for validation, compilation, execution, grading
+  and reporting (the package structure)
+- [x] Configuration in an external file (`config.properties`,
+  `config.AppConfig`)
+- [ ] Screens that show progress, errors and results
+  (`ui.ProgressController`, `AnomalyLogController`, `ResultsController`)
+- [ ] Input validation everywhere (`util.InputValidator`)
+
+### SHOULD
+
+- [ ] Anomaly log with action buttons; approve and undo, singly and in
+  bulk (`service.AnomalyService`, `ui.AnomalyLogController`)
+- [ ] Flag untouched starter files, empty answers and hard-coded answers
+  (`detection` package)
+- [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
+  `TesterGenerator`, `ui.TestCaseController`)
+- [ ] Progress bar and estimated time of completion
+  (`service.ProgressEstimator`)
+- [ ] Statistics dashboard filtered by module and section (`stats`
+  package, `ui.StatisticsController`)
+- [ ] Search, filter and sort (`service.SearchService`)
+- [ ] Select one, several or all (`ui.AnomalyLogController`,
+  `ResultsController`)
+- [ ] Collapse and expand panels (`ui`, once the design is chosen)
+- [ ] Next, Back and Cancel (`ui.MainController`)
+- [ ] Cancel, retry and resume grading (`service.GradingService`,
+  `grading.CancellationToken`; cancel already works in the pipeline)
+- [x] Light and dark theme switch (`ui.ThemeManager`, `ui.theme`)
+- [ ] Settings page backed by `config.properties`
+  (`service.SettingsService`, `ui.SettingsController`)
+- [ ] SQLite persistence behind `ResultRepository`
+  (`persistence.SqliteResultRepository`)
+- [ ] Audit log, exportable (`service.AuditService`,
+  `report.AuditLogExporter`)
+- [ ] Individual student report, exportable
+  (`report.StudentReportExporter`, `ui.StudentReportController`)
+- [ ] JSON export (`report.JsonExporter`, `JsonWriter`)
+- [ ] Nielsen's 10 usability heuristics, reviewed screen by screen:
+  https://www.nngroup.com/articles/ten-usability-heuristics/
+
+### COULD
+
+- [ ] Backup and recovery of a previous grading state
+  (`persistence.BackupManager`, `service.HistoryService`)
+- [ ] Subtle animations (`ui`, `ui.animations.enabled`)
+- [ ] Plagiarism detection (`plagiarism` package,
+  `service.PlagiarismService`)
+
+## Before submission
+
+1. Run `sh clean.sh` (or `clean.bat`) so `classes/` is empty.
+2. Remove `docs/`, `samples/`, `workspace/` and `.git/` from the copy you
+   zip, unless the instructors want them.
+3. Point the `paths.*` settings in `config.properties` at folders that
+   exist in the submitted copy.
+4. Add the slides (`GX-TY.pptx` or `.pdf`).
+5. Test `compile` and `run` on a clean copy, on Windows and on macOS.

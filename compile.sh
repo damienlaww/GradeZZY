@@ -1,0 +1,77 @@
+#!/bin/sh
+# ----------------------------------------------------------------------
+# compile.sh: compiles every Java source file in src/ into classes/.
+#
+# Usage (macOS Terminal, or Git Bash on Windows):
+#   sh compile.sh         compile the whole application
+#   sh compile.sh core    compile only the grading core, without JavaFX
+#
+# javac does not copy resource files, so this script also copies the
+# .fxml and .css files of the ui package into classes/.
+#
+# When you add a new package, add its folder to CORE_SOURCES below and
+# to compile.bat.
+# ----------------------------------------------------------------------
+
+cd "$(dirname "$0")" || exit 1
+
+# Pick the JavaFX jars that match this computer.
+case "$(uname -s)" in
+    Darwin)
+        if [ "$(uname -m)" = "arm64" ]; then
+            JAVAFX_DIR="lib/javafx/mac-aarch64"
+        else
+            JAVAFX_DIR="lib/javafx/mac"
+        fi
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        JAVAFX_DIR="lib/javafx/win"
+        ;;
+    *)
+        echo "Unsupported system: $(uname -s). Use Windows or macOS."
+        exit 1
+        ;;
+esac
+
+# Every package except ui. None of these may import javafx.
+CORE_SOURCES="src/gradezzy/app/*.java
+    src/gradezzy/config/*.java
+    src/gradezzy/detection/*.java
+    src/gradezzy/exec/*.java
+    src/gradezzy/fix/*.java
+    src/gradezzy/grading/*.java
+    src/gradezzy/ingest/*.java
+    src/gradezzy/model/*.java
+    src/gradezzy/persistence/*.java
+    src/gradezzy/plagiarism/*.java
+    src/gradezzy/report/*.java
+    src/gradezzy/service/*.java
+    src/gradezzy/stats/*.java
+    src/gradezzy/testcase/*.java
+    src/gradezzy/util/*.java
+    src/gradezzy/validation/*.java"
+UI_SOURCES="src/gradezzy/ui/*.java"
+
+# Start from an empty classes folder so no old class file is left behind.
+rm -rf classes
+mkdir -p classes
+
+if [ "$1" = "core" ]; then
+    # No JavaFX and no jar on the classpath: proves the core stands alone.
+    javac -encoding UTF-8 -d classes $CORE_SOURCES || exit 1
+    echo "Compiled the grading core into classes/ (no JavaFX)."
+    exit 0
+fi
+
+javac -encoding UTF-8 -d classes \
+    --module-path "$JAVAFX_DIR" \
+    --add-modules javafx.controls,javafx.fxml \
+    -cp "lib/*" \
+    $CORE_SOURCES $UI_SOURCES || exit 1
+
+# Copy the resources javac leaves behind.
+mkdir -p classes/gradezzy/ui/fxml classes/gradezzy/ui/css
+cp src/gradezzy/ui/fxml/*.fxml classes/gradezzy/ui/fxml/ || exit 1
+cp src/gradezzy/ui/css/*.css classes/gradezzy/ui/css/ || exit 1
+
+echo "Compiled GradeZZY into classes/ using $JAVAFX_DIR."

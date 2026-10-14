@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>GradeZZY Final Design</title>
+<style>
+/* Layout: one macOS window. Sidebar holds the steps of a run, the content
+   pane holds a toolbar and one table or view, the inspector on the right
+   explains the selected student. Colour is used only for grade status. */
+:root {
+  --canvas: #e9ebef;        /* desk behind the window */
+  --window: #ffffff;        /* content surface */
+  --sidebar: #f3f4f7;       /* sidebar and inspector surface */
+  --raised: #ffffff;        /* sheets, popovers */
+  --line: #dcdfe5;          /* hairlines */
+  --line-strong: #c3c8d1;
+  --ink: #1b1d22;           /* primary text and primary buttons */
+  --ink-2: #555b66;         /* secondary text */
+  --ink-3: #6f7682;         /* tertiary text, placeholders */
+  --fill: #eceef2;          /* quiet control fill, selected row */
+  --fill-strong: #dfe2e8;
+  --on-ink: #ffffff;        /* text on an ink button */
+  --pass: #1f7a45;  --pass-bg: #e2f3e8;   /* passed, approved */
+  --review: #8a5a00; --review-bg: #fbeed0; /* needs the instructor */
+  --fail: #b3261e;  --fail-bg: #fbe4e2;   /* failed, error */
+  --pip-off: #d5d9e0;
+  --shadow: 0 18px 50px rgba(20, 24, 33, .16), 0 2px 6px rgba(20, 24, 33, .08);
+  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --r-control: 7px; --r-window: 12px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --canvas: #101216; --window: #1c1e23; --sidebar: #24262c; --raised: #2a2d34;
+  --line: #34373f; --line-strong: #4a4e58; --ink: #f1f2f4; --ink-2: #b4b9c2;
+  --ink-3: #9299a5; --fill: #2e3138; --fill-strong: #3a3e47; --on-ink: #15171b;
+  --pass: #6fd198; --pass-bg: #173524; --review: #f0c263; --review-bg: #3b2f12;
+  --fail: #ff8f86; --fail-bg: #40201e; --pip-off: #454a54;
+  --shadow: 0 18px 50px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .4);
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --canvas: #101216; --window: #1c1e23; --sidebar: #24262c; --raised: #2a2d34;
+  --line: #34373f; --line-strong: #4a4e58; --ink: #f1f2f4; --ink-2: #b4b9c2;
+  --ink-3: #9299a5; --fill: #2e3138; --fill-strong: #3a3e47; --on-ink: #15171b;
+  --pass: #6fd198; --pass-bg: #173524; --review: #f0c263; --review-bg: #3b2f12;
+  --fail: #ff8f86; --fail-bg: #40201e; --pip-off: #454a54;
+  --shadow: 0 18px 50px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .4);
+  color-scheme: dark }
+
+* { box-sizing: border-box }
+html, body { height: 100% }
+body { background: var(--canvas); color: var(--ink); font: 13px/1.45 var(--ui);
+  padding-block: 16px; padding-inline: 16px; display: flex; flex-direction: column;
+  gap: 10px; -webkit-font-smoothing: antialiased }
+button, input, select { font: inherit; color: inherit }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px }
+.num { font-variant-numeric: tabular-nums }
+.mono { font-family: var(--mono); font-size: 12px }
+.muted { color: var(--ink-2) }
+
+/* ---------- window ---------- */
+.window { flex: 1; min-height: 620px; max-width: 1280px; width: 100%; margin-inline: auto;
+  background: var(--window); border: 1px solid var(--line-strong);
+  border-radius: var(--r-window); box-shadow: var(--shadow); overflow: hidden;
+  display: grid; grid-template-columns: 208px minmax(0, 1fr); position: relative }
+.sidebar { background: var(--sidebar); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; min-width: 0 }
+.lights { display: flex; gap: 8px; padding: 14px 14px 10px }
+.lights i { width: 12px; height: 12px; border-radius: 50%; background: var(--fill-strong);
+  border: 1px solid var(--line-strong) }
+.side-title { padding: 6px 16px 2px; font-size: 11px; font-weight: 600; color: var(--ink-3) }
+.nav { display: flex; flex-direction: column; gap: 1px; padding: 4px 8px }
+.nav button { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 9px;
+  min-height: 30px; padding: 4px 8px; border-radius: 6px; cursor: default; width: 100% }
+.nav button:hover { background: var(--fill) }
+.nav button[aria-current="page"] { background: var(--fill-strong); font-weight: 600 }
+.nav button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px }
+.nav svg { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
+  stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round }
+.nav .count { margin-left: auto; min-width: 20px; text-align: center; font-size: 11px;
+  font-weight: 600; padding: 1px 6px; border-radius: 9px; background: var(--review-bg);
+  color: var(--review) }
+.nav .done { margin-left: auto; color: var(--ink-3); font-size: 11px }
+.side-foot { margin-top: auto; padding: 12px 16px 14px; border-top: 1px solid var(--line);
+  font-size: 12px; color: var(--ink-2); display: flex; flex-direction: column; gap: 2px }
+.side-foot b { color: var(--ink); font-weight: 600 }
+
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0 }
+.toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); min-height: 52px }
+.toolbar h1 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: -.005em }
+.toolbar .sub { font-size: 12px; color: var(--ink-2) }
+.toolbar .titles { display: flex; flex-direction: column; min-width: 0; margin-right: auto }
+.body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) }
+.body.with-inspector { grid-template-columns: minmax(0, 1fr) 300px }
+.pane { min-width: 0; min-height: 0; overflow: auto; padding: 16px }
+.pane.flush { padding: 0 }
+.inspector { background: var(--sidebar); border-left: 1px solid var(--line); overflow: auto;
+  padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0 }
+
+/* ---------- controls ---------- */
+.btn { border: 1px solid var(--line-strong); background: var(--window); border-radius: var(--r-control);
+  min-height: 28px; padding: 3px 12px; cursor: default; white-space: nowrap }
+.btn:hover { background: var(--fill) }
+.btn.primary { background: var(--ink); color: var(--on-ink); border-color: var(--ink); font-weight: 600 }
+.btn.primary:hover { opacity: .88 }
+.btn.small { min-height: 24px; padding: 1px 9px; font-size: 12px }
+.btn[disabled] { opacity: .45 }
+.field { border: 1px solid var(--line-strong); background: var(--window); border-radius: var(--r-control);
+  min-height: 28px; padding: 3px 9px; min-width: 0 }
+input.field::placeholder { color: var(--ink-3) }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-control); overflow: hidden }
+.seg button { all: unset; padding: 4px 11px; min-height: 20px; cursor: default; font-size: 12px }
+.seg button + button { border-left: 1px solid var(--line-strong) }
+.seg button[aria-pressed="true"] { background: var(--fill-strong); font-weight: 600 }
+.seg button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px }
+label.inline { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2) }
+
+.tag { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 10px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap; background: var(--fill); color: var(--ink-2) }
+.tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor }
+.tag.pass { background: var(--pass-bg); color: var(--pass) }
+.tag.review { background: var(--review-bg); color: var(--review) }
+.tag.fail { background: var(--fail-bg); color: var(--fail) }
+
+/* ---------- tables ---------- */
+.scroll-x { overflow-x: auto }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font: inherit }
+th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--ink-2);
+  padding: 7px 12px; border-bottom: 1px solid var(--line); background: var(--window);
+  position: sticky; top: 0; white-space: nowrap; z-index: 1 }
+th button { all: unset; cursor: default; font-weight: 600 }
+th button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px }
+td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: middle }
+tbody tr:hover { background: var(--sidebar) }
+tbody tr[aria-selected="true"] { background: var(--fill) }
+td.r, th.r { text-align: right }
+.who { font-weight: 600 }
+.who small { display: block; font-weight: 400; color: var(--ink-2); font-size: 12px }
+
+/* signature: one square per test case, filled when it passed */
+.pips { display: inline-flex; gap: 2px; vertical-align: middle }
+.pips i { width: 9px; height: 9px; border-radius: 2px; background: var(--pip-off) }
+.pips i.on { background: var(--ink) }
+.pipcell { display: flex; flex-direction: column; gap: 3px; align-items: flex-start }
+.pipcell small { font-size: 11px; color: var(--ink-2) }
+.pipcell small.flag { color: var(--fail); font-weight: 600 }
+.total { font-size: 14px; font-weight: 650; white-space: nowrap }
+.total small { font-weight: 400; color: var(--ink-3); font-size: 12px }
+
+/* ---------- cards used sparingly ---------- */
+.group { border: 1px solid var(--line); border-radius: 10px; background: var(--window) }
+.group > header { padding: 10px 14px; border-bottom: 1px solid var(--line); font-weight: 600;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap }
+.group > .in { padding: 14px }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px }
+.stack { display: flex; flex-direction: column; gap: 16px }
+h2 { font-size: 13px; font-weight: 650; margin: 0 }
+h3 { font-size: 11.5px; font-weight: 600; color: var(--ink-2); margin: 0 0 6px }
+p { margin: 0 }
+
+.drop { border: 1.5px dashed var(--line-strong); border-radius: 10px; padding: 26px 16px;
+  text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  background: var(--sidebar) }
+.drop strong { font-size: 14px }
+.filelist { list-style: none; margin: 0; padding: 0 }
+.filelist li { display: flex; align-items: center; gap: 10px; padding: 7px 14px;
+  border-bottom: 1px solid var(--line) }
+.filelist li:last-child { border-bottom: 0 }
+.filelist li button { all: unset; flex: 1; min-width: 0; overflow-wrap: anywhere; cursor: default }
+.filelist li[aria-selected="true"] { background: var(--fill) }
+.tree { font-family: var(--mono); font-size: 12px; line-height: 1.7; white-space: pre; overflow-x: auto;
+  margin: 0; color: var(--ink) }
+.tree .warn { color: var(--review); font-weight: 600 }
+
+.progress { height: 8px; border-radius: 4px; background: var(--fill-strong); overflow: hidden }
+.progress i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 4px;
+  transition: width .25s ease-out }
+.stages { list-style: none; margin: 0; padding: 0; display: grid; gap: 0;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) }
+.stages li { padding: 8px 10px; border-left: 2px solid var(--line); color: var(--ink-3); font-size: 12px }
+.stages li.done { border-color: var(--ink); color: var(--ink-2) }
+.stages li.now { border-color: var(--ink); color: var(--ink); font-weight: 650 }
+.big { font-size: 26px; font-weight: 650; letter-spacing: -.01em; line-height: 1.1 }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0 }
+.kv dt { color: var(--ink-2) } .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere }
+
+.bars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-items: end; height: 150px }
+.bars .col { display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+  gap: 4px; height: 100% }
+.bars .bar { width: 100%; max-width: 54px; background: var(--ink); border-radius: 3px 3px 0 0; min-height: 2px }
+.bars .bar.zero { background: var(--pip-off) }
+.axis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; text-align: center;
+  font-size: 11.5px; color: var(--ink-2); border-top: 1px solid var(--line-strong); padding-top: 4px }
+.hbar { display: grid; grid-template-columns: 40px 1fr 44px; gap: 10px; align-items: center; padding: 4px 0 }
+.hbar .track { height: 8px; background: var(--fill-strong); border-radius: 4px; overflow: hidden }
+.hbar .track i { display: block; height: 100%; background: var(--ink) }
+
+.note { border-left: 3px solid var(--line-strong); padding: 6px 12px; color: var(--ink-2); font-size: 12.5px }
+.note.review { border-color: var(--review); color: var(--ink) }
+.bulk { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px;
+  border-bottom: 1px solid var(--line); background: var(--sidebar); min-height: 44px }
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px;
+  background: var(--review-bg); color: var(--ink); border-bottom: 1px solid var(--line) }
+.empty { text-align: center; padding: 40px 16px; color: var(--ink-2); display: flex;
+  flex-direction: column; gap: 8px; align-items: center }
+
+.sheet-back { position: absolute; inset: 0; background: rgba(15, 17, 22, .32); display: grid;
+  place-items: start center; padding: 56px 16px 16px; z-index: 5; overflow: auto }
+.sheet { background: var(--raised); border: 1px solid var(--line-strong); border-radius: 12px;
+  box-shadow: var(--shadow); width: min(460px, 100%); padding: 18px; display: flex;
+  flex-direction: column; gap: 14px }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap }
+.toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+  background: var(--ink); color: var(--on-ink); padding: 8px 14px; border-radius: 9px;
+  font-weight: 600; box-shadow: var(--shadow); z-index: 6; max-width: calc(100% - 32px) }
+.caption { max-width: 1280px; width: 100%; margin-inline: auto; font-size: 12px; color: var(--ink-2);
+  display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap }
+.spec td, .spec th { font-size: 12.5px }
+.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px;
+  border: 1px solid var(--line-strong); vertical-align: -2px; margin-right: 6px }
+
+@media (max-width: 860px) {
+  html, body { height: auto }
+  .window { grid-template-columns: minmax(0, 1fr); min-height: 0 }
+  .sidebar { border-right: 0; border-bottom: 1px solid var(--line) }
+  .lights, .side-title, .side-foot { display: none }
+  .nav { flex-direction: row; overflow-x: auto; padding: 8px }
+  .nav button { width: auto; white-space: nowrap }
+  .body.with-inspector { grid-template-columns: minmax(0, 1fr) }
+  .inspector { border-left: 0; border-top: 1px solid var(--line) }
+  .pane, .inspector { overflow: visible }
+}
+@media (prefers-reduced-motion: reduce) { .progress i { transition: none } }
+</style>
+
+<div class="window" id="win">
+  <aside class="sidebar">
+    <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="side-title">This Run</div>
+    <nav class="nav" id="nav" aria-label="Steps of this run"></nav>
+    <div class="side-title">Records</div>
+    <nav class="nav" id="nav2" aria-label="Records"></nav>
+    <div class="side-foot"><b>Lab Test</b><span>CS102, section G1</span><span id="runState"></span></div>
+  </aside>
+  <section class="main">
+    <header class="toolbar" id="toolbar"></header>
+    <div class="body" id="body"></div>
+  </section>
+</div>
+<div class="caption"><span>GradeZZY final design. Sample data from the six provided submissions; some anomalies are illustrative.</span><span>Light and dark follow the system setting, or choose one in Settings.</span></div>
+
+<script>
+/* ------------------------------------------------------------------ data */
+const MAX = { Q1a: 3, Q1b: 3, Q2a: 5, Q2b: 5, Q3: 4 };
+const QS = Object.keys(MAX);
+const TOTAL_MAX = 20, PASS_MARK = 10;
+const STUDENTS = [
+  { u: "chee.teo.2022", n: "Teo Chee", s: [3, 3, 5, 1, 0] },
+  { u: "david.2024", n: "David Kong", s: [3, 3, 4, 0, 0] },
+  { u: "fen.lai.2022", n: "Fen Lai", s: [1, 0, 5, 4, 0], flag: { Q3: "Does not compile" } },
+  { u: "jing.lim.2021", n: "Jing Lim", s: [0, 0, 0, 0, 0] },
+  { u: "ping.lee.2023", n: "Ping Lee", s: [3, 3, 5, 5, 4] },
+  { u: "xing.yan.2023", n: "Xing Yan", s: [0, 1, 5, 5, 4], flag: { Q1a: "Stopped at 10 s" } }
+];
+let nextId = 1;
+const A = (u, type, sev, msg, fix, action) =>
+  ({ id: nextId++, u, type, sev, msg, fix, action, status: fix ? "applied" : "none" });
+const ANOMALIES = [
+  A("chee.teo.2022", "Missing username folder", "warn", "Q1, Q2 and Q3 sat at the top of the zip.", "Added folder chee.teo.2022 and moved them in"),
+  A("chee.teo.2022", "Blank name in header", "info", "Q3.java has no name or email.", "Filled in from the score sheet"),
+  A("david.2024", "Wrong folder name", "warn", "Folder was named 01400003.", "Renamed to david.2024"),
+  A("david.2024", "Blank name in header", "info", "Q3.java has no name or email.", "Filled in from the score sheet"),
+  A("fen.lai.2022", "Wrong folder name", "warn", "Folder was named RenameToYourStudentID.", "Renamed to fen.lai.2022"),
+  A("fen.lai.2022", "Does not compile", "error", "Q3.java failed to compile, so Q3 scored 0.", null, "View Compiler Output"),
+  A("jing.lim.2021", "Missing username folder", "warn", "Q1, Q2 and Q3 sat at the top of the zip.", "Added folder jing.lim.2021 and moved them in"),
+  A("jing.lim.2021", "Blank name in header", "info", "All five files have no name or email.", "Filled in from the score sheet"),
+  A("jing.lim.2021", "Untouched starter file", "warn", "Q3.java is identical to the starter file. Marks are not changed.", null, "Compare with Starter"),
+  A("xing.yan.2023", "Time limit reached", "error", "Q1aTester was stopped after 10 seconds. Tests passed before that are counted.", null, "View Tester Output")
+];
+const STAGES = ["Unpacking", "Checking structure", "Correcting common errors", "Compiling", "Running testers", "Scoring"];
+const total = st => st.s.reduce((a, b) => a + b, 0);
+const byUser = u => STUDENTS.find(x => x.u === u);
+const anomaliesOf = u => ANOMALIES.filter(a => a.u === u);
+const needsReview = () => ANOMALIES.filter(a => a.status === "applied" || (a.status === "none" && !a.seen)).length;
+
+/* ----------------------------------------------------------------- state */
+const S = { view: "results", selected: "fen.lai.2022", picked: new Set(), query: "", sortDesc: null,
+  onlyOpen: false, sheet: null, confirm: null, toast: null, section: "G1", upSel: "jing.lim.2021",
+  grading: { pct: 100, i: 6, stage: 5, running: false, cancelled: false } };
+const ICON = {
+  upload: '<path d="M8 11V3M5 6l3-3 3 3M3 12.5h10"/>',
+  grading: '<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/>',
+  review: '<path d="M8 2.5l6 10.5H2z"/><path d="M8 7v2.5M8 11.4v.1"/>',
+  results: '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M6.5 6.5V13"/>',
+  stats: '<path d="M3 13V8M6.5 13V4M10 13V9.5M13.5 13V6"/>',
+  history: '<path d="M3 8a5 5 0 1 0 1.6-3.7M3 3.5v3h3M8 5.5V8l1.8 1.2"/>',
+  audit: '<path d="M4 2.5h6l2.5 2.5v8.5H4zM6 7h4.5M6 9.5h4.5"/>',
+  design: '<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11M2.5 8h11"/>'
+};
+const NAV = [["upload", "Upload"], ["grading", "Grading"], ["review", "Review Anomalies"], ["results", "Results"], ["stats", "Statistics"]];
+const NAV2 = [["history", "History"], ["audit", "Audit Log"], ["design", "Design Notes"]];
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ---------------------------------------------------------------- pieces */
+function pips(score, max, flag) {
+  let h = '<span class="pips" aria-hidden="true">';
+  for (let i = 0; i < max; i++) h += '<i class="' + (i < score ? "on" : "") + '"></i>';
+  h += "</span>";
+  const label = flag ? '<small class="flag">' + esc(flag) + "</small>" : '<small class="num">' + score + " of " + max + "</small>";
+  return '<div class="pipcell" aria-label="' + score + " of " + max + (flag ? ", " + flag : "") + '">' + h + label + "</div>";
+}
+function statusTag(a) {
+  if (a.status === "applied") return '<span class="tag review">Fixed, needs review</span>';
+  if (a.status === "approved") return '<span class="tag pass">Fix approved</span>';
+  if (a.status === "undone") return '<span class="tag">Fix undone</span>';
+  return a.sev === "error" ? '<span class="tag fail">No automatic fix</span>' : '<span class="tag review">Flagged for review</span>';
+}
+function sevWord(s) { return s === "error" ? "Error" : s === "warn" ? "Warning" : "Note"; }
+function overall(st) {
+  const an = anomaliesOf(st.u);
+  if (an.some(a => a.sev === "error")) return '<span class="tag fail">Graded with errors</span>';
+  if (an.some(a => a.status === "applied" || a.status === "none")) return '<span class="tag review">Needs review</span>';
+  return '<span class="tag pass">Graded</span>';
+}
+function toast(msg) { S.toast = msg; render(); clearTimeout(toast.t); toast.t = setTimeout(() => { S.toast = null; render(); }, 2600); }
+
+/* ----------------------------------------------------------------- views */
+function toolbarFor() {
+  const sec = '<label class="inline">Section <select class="field" id="section"><option>G1</option><option>G2</option><option>G3</option></select></label>';
+  const gear = '<button class="btn" data-act="settings">Settings</button>';
+  const T = {
+    upload: ["Upload Submissions", "6 zip files added for CS102 " + S.section, sec + gear + '<button class="btn primary" data-act="start">Start Grading</button>'],
+    grading: ["Grading", S.grading.running ? "In progress" : S.grading.cancelled ? "Stopped by you" : "Finished, 6 of 6 graded", gear + '<button class="btn primary" data-go="review">Review ' + needsReview() + " Anomalies</button>"],
+    review: ["Review Anomalies", needsReview() + " need your decision, " + ANOMALIES.length + " in total", '<input class="field" id="q" type="search" placeholder="Search student or problem" aria-label="Search anomalies" value="' + esc(S.query) + '">' + gear + '<button class="btn primary" data-go="results">View Results</button>'],
+    results: ["Results", "6 students, maximum 20 marks", '<input class="field" id="q" type="search" placeholder="Search students" aria-label="Search students" value="' + esc(S.query) + '">' + gear + '<button class="btn" data-act="json">Export JSON</button><button class="btn primary" data-act="csv">Export Score Sheet</button>'],
+    stats: ["Statistics", "CS102 " + S.section + ", Lab Test", '<label class="inline">Module <select class="field" id="module"><option>CS102</option></select></label>' + sec + gear],
+    history: ["History", "Earlier runs saved on this computer", gear + '<button class="btn" data-act="backup">Back Up Now</button>'],
+    audit: ["Audit Log", "Every decision made by hand in this run", gear + '<button class="btn" data-act="auditx">Export Audit Log</button>'],
+    design: ["Design Notes", "For the team building this in JavaFX", gear]
+  }[S.view];
+  return '<div class="titles"><h1>' + T[0] + '</h1><span class="sub">' + T[1] + "</span></div>" + T[2];
+}
+
+function vUpload() {
+  const files = STUDENTS.map(st => '<li aria-selected="' + (S.upSel === st.u) + '"><button data-up="' + st.u + '" class="mono">2023-2024-' + st.u + '.zip</button><span class="tag pass">Readable</span></li>').join("");
+  const flat = S.upSel === "jing.lim.2021" || S.upSel === "chee.teo.2022";
+  const top = S.upSel === "david.2024" ? "01400003" : S.upSel === "fen.lai.2022" ? "RenameToYourStudentID" : S.upSel;
+  const body = "Q1\n  Q1a.java\n  Q1b.java\nQ2\n  Q2a.java\n  Q2b.java\n  DataException.class\nQ3\n  Q3.java\n  ShapeComparator.java";
+  const tree = flat ? '<span class="warn">(no username folder)</span>\n' + body
+    : (top !== S.upSel ? '<span class="warn">' + top + "  (expected " + S.upSel + ")</span>" : top) + "\n" + body.split("\n").map(l => "  " + l).join("\n");
+  return '<div class="pane"><div class="stack">' +
+    '<div class="drop"><strong>Drop zip files or a folder here</strong><span class="muted">One zip per student. Originals are never changed.</span><div><button class="btn" data-act="choose">Choose Files</button> <button class="btn" data-act="choose">Choose Folder</button></div></div>' +
+    '<div class="grid2"><div class="group"><header>Submissions <span class="muted num" style="font-weight:400">6 added</span></header><ul class="filelist">' + files + "</ul></div>" +
+    '<div class="group"><header>Inside <span class="mono" style="font-weight:400">' + S.upSel + '.zip</span></header><div class="in"><pre class="tree">' + tree + "</pre></div></div></div>" +
+    '<div class="group"><header>Testers</header><div class="in row"><span><span class="mono">samples/Tester-Files</span><span class="muted">, 5 tester files and 2 data files found</span></span><button class="btn" data-act="choose">Change Folder</button></div></div>' +
+    "</div></div>";
+}
+
+function vGrading() {
+  const g = S.grading, cur = STUDENTS[Math.min(g.i, 5)];
+  const stages = STAGES.map((s, i) => '<li class="' + (!g.running && !g.cancelled ? "done" : i < g.stage ? "done" : i === g.stage ? "now" : "") + '">' + s + "</li>").join("");
+  const head = g.running ? "Grading " + cur.u : g.cancelled ? "Stopped after " + g.i + " of 6" : "All 6 submissions graded";
+  const left = g.running ? "About " + Math.max(1, Math.round((100 - g.pct) / 12)) + " seconds left" : g.cancelled ? "Nothing was lost. Resume to grade the rest." : "Took 41 seconds";
+  const buttons = g.running ? '<button class="btn" data-act="askcancel">Cancel Grading</button>'
+    : g.cancelled ? '<button class="btn primary" data-act="resume">Resume Grading</button>'
+    : '<button class="btn" data-act="start">Grade Again</button><button class="btn" data-act="retry">Retry 2 With Errors</button>';
+  const rows = STUDENTS.map((st, i) => {
+    const done = !g.running && !g.cancelled || i < g.i;
+    const state = done ? overall(st) : i === g.i && g.running ? '<span class="tag">Grading now</span>' : '<span class="tag">Waiting</span>';
+    return '<tr><td class="who">' + st.u + "</td><td>" + state + '</td><td class="r num">' + (done ? anomaliesOf(st.u).length : "") + '</td><td class="r num">' + (done ? total(st) + " / 20" : "") + "</td></tr>";
+  }).join("");
+  return '<div class="pane"><div class="stack">' +
+    (S.confirm === "cancel" ? '<div class="confirm" role="alertdialog" aria-label="Cancel grading"><strong>Stop grading?</strong><span>Finished submissions are kept. You can resume later.</span><button class="btn small" data-act="docancel">Stop Grading</button><button class="btn small" data-act="noconfirm">Keep Going</button></div>' : "") +
+    '<div class="group"><div class="in stack" style="gap:12px"><div class="row"><div><div class="big">' + head + '</div><div class="muted" aria-live="polite">' + left + '</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">' + buttons + "</div></div>" +
+    '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(g.pct) + '"><i style="width:' + g.pct + '%"></i></div>' +
+    '<div class="row muted num"><span>' + Math.min(g.i + (g.running ? 0 : 0), 6) + " of 6 submissions</span><span>" + Math.round(g.pct) + '%</span></div><ol class="stages">' + stages + "</ol></div></div>" +
+    '<div class="group"><div class="scroll-x"><table><thead><tr><th>Student</th><th>Status</th><th class="r">Anomalies</th><th class="r">Total</th></tr></thead><tbody>' + rows + "</tbody></table></div></div>" +
+    "</div></div>";
+}
+
+function vReview() {
+  const q = S.query.toLowerCase();
+  const list = ANOMALIES.filter(a => (!S.onlyOpen || a.status === "applied" || a.status === "none") && (!q || (a.u + a.type + a.msg).toLowerCase().includes(q)));
+  const fixable = list.filter(a => a.fix);
+  const allPicked = fixable.length > 0 && fixable.every(a => S.picked.has(a.id));
+  const rows = list.map(a => {
+    const act = a.fix ? (a.status === "undone" ? '<button class="btn small" data-fix="redo" data-id="' + a.id + '">Apply Fix Again</button>'
+      : '<button class="btn small" data-fix="approve" data-id="' + a.id + '"' + (a.status === "approved" ? " disabled" : "") + '>Approve</button> <button class="btn small" data-fix="undo" data-id="' + a.id + '">Undo</button>')
+      : '<button class="btn small" data-act="output" data-id="' + a.id + '">' + a.action + "</button>";
+    return '<tr aria-selected="' + (S.selected === a.u) + '" data-sel="' + a.u + '"><td>' + (a.fix ? '<input type="checkbox" id="pick' + a.id + '" data-pick="' + a.id + '" aria-label="Select ' + esc(a.type) + " for " + a.u + '"' + (S.picked.has(a.id) ? " checked" : "") + ">" : "") +
+      '</td><td class="who">' + a.u + "</td><td>" + esc(a.type) + '<small class="muted" style="display:block">' + sevWord(a.sev) + "</small></td><td>" + esc(a.msg) + (a.fix ? '<small class="muted" style="display:block">Fix: ' + esc(a.fix) + "</small>" : "") + "</td><td>" + statusTag(a) + '</td><td style="white-space:nowrap">' + act + "</td></tr>";
+  }).join("");
+  const n = S.picked.size;
+  return '<div class="pane flush">' +
+    (S.confirm === "undoall" ? '<div class="confirm" role="alertdialog" aria-label="Undo fixes"><strong>Undo ' + n + " fixes?</strong><span>The working copies go back to how the students submitted them. You can apply the fixes again.</span><button class=\"btn small\" data-act=\"doundo\">Undo " + n + ' Fixes</button><button class="btn small" data-act="noconfirm">Keep Fixes</button></div>' : "") +
+    '<div class="bulk"><label class="inline" style="color:var(--ink)"><input type="checkbox" id="pickall" data-act="pickall"' + (allPicked ? " checked" : "") + "> Select all fixes</label>" +
+    '<span class="muted num">' + (n ? n + " selected" : "None selected") + '</span><button class="btn small" data-act="approvesel"' + (n ? "" : " disabled") + '>Approve Selected</button><button class="btn small" data-act="askundo"' + (n ? "" : " disabled") + ">Undo Selected</button>" +
+    '<span style="margin-left:auto" class="seg" role="group" aria-label="Filter"><button aria-pressed="' + !S.onlyOpen + '" data-act="showall">All</button><button aria-pressed="' + S.onlyOpen + '" data-act="showopen">Needs Decision</button></span></div>' +
+    (list.length ? '<div class="scroll-x"><table><thead><tr><th></th><th>Student</th><th>Problem</th><th>What was found</th><th>Status</th><th>Action</th></tr></thead><tbody>' + rows + "</tbody></table></div>"
+      : '<div class="empty"><strong>Nothing matches.</strong><span>Clear the search or choose All to see every anomaly.</span><button class="btn" data-act="clearq">Show All Anomalies</button></div>') +
+    "</div>" + inspector();
+}
+
+function vResults() {
+  const q = S.query.toLowerCase();
+  let list = STUDENTS.filter(st => !q || (st.u + st.n).toLowerCase().includes(q));
+  if (S.sortDesc !== null) list = [...list].sort((a, b) => S.sortDesc ? total(b) - total(a) : total(a) - total(b));
+  const arrow = S.sortDesc === null ? "" : S.sortDesc ? " (high to low)" : " (low to high)";
+  const rows = list.map(st => '<tr tabindex="0" aria-selected="' + (S.selected === st.u) + '" data-sel="' + st.u + '"><td class="who">' + st.u + "<small>" + st.n + "</small></td>" +
+    QS.map((qn, i) => "<td>" + pips(st.s[i], MAX[qn], st.flag && st.flag[qn]) + "</td>").join("") +
+    '<td class="r"><span class="total num">' + total(st) + " <small>/ 20</small></span></td><td>" + overall(st) + "</td></tr>").join("");
+  return '<div class="pane flush">' + (list.length ? '<div class="scroll-x"><table><thead><tr><th>Student</th>' + QS.map(qn => "<th>" + qn + ' <span class="num" style="font-weight:400">/ ' + MAX[qn] + "</span></th>").join("") +
+    '<th class="r"><button data-act="sort" aria-label="Sort by total">Total' + arrow + "</button></th><th>Status</th></tr></thead><tbody>" + rows + "</tbody></table></div>" +
+    '<p class="muted" style="padding:10px 12px">Each square is one test case. A filled square passed.</p>'
+    : '<div class="empty"><strong>No student matches "' + esc(S.query) + '".</strong><span>Check the spelling or clear the search.</span><button class="btn" data-act="clearq">Clear Search</button></div>') + "</div>" + inspector();
+}
+
+function inspector() {
+  const st = byUser(S.selected);
+  if (!st) return '<aside class="inspector"><div class="empty"><strong>No student selected</strong><span>Choose a row to see its scores, files and anomalies.</span></div></aside>';
+  const an = anomaliesOf(st.u);
+  const qrows = QS.map((qn, i) => "<dt>" + qn + '</dt><dd class="num">' + st.s[i] + " of " + MAX[qn] + (st.flag && st.flag[qn] ? ' <span class="tag fail">' + st.flag[qn] + "</span>" : "") + "</dd>").join("");
+  const alist = an.length ? an.map(a => '<div class="note' + (a.status === "applied" || a.status === "none" ? " review" : "") + '"><strong>' + esc(a.type) + "</strong><br>" + esc(a.msg) + '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' + statusTag(a) +
+    (a.fix && a.status === "applied" ? '<button class="btn small" data-fix="approve" data-id="' + a.id + '">Approve</button><button class="btn small" data-fix="undo" data-id="' + a.id + '">Undo</button>' : "") + "</div></div>").join("")
+    : '<p class="muted">No anomalies. This submission followed every instruction.</p>';
+  return '<aside class="inspector" aria-label="Selected student"><div><h2 style="font-size:15px">' + st.n + '</h2><div class="mono muted">' + st.u + '@computing.smu.edu.sg</div></div>' +
+    '<div><div class="big num">' + total(st) + ' <span class="muted" style="font-size:14px;font-weight:400">of 20</span></div>' + overall(st) + "</div>" +
+    '<div><h3>Scores</h3><dl class="kv">' + qrows + "</dl></div>" +
+    '<div class="stack" style="gap:8px"><h3 style="margin:0">Anomalies</h3>' + alist + "</div>" +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="report">Export Student Report</button><button class="btn" data-act="files">Show Files</button></div></aside>';
+}
+
+function vStats() {
+  const t = STUDENTS.map(total).sort((a, b) => a - b);
+  const mean = t.reduce((a, b) => a + b, 0) / t.length;
+  const median = (t[2] + t[3]) / 2;
+  const passed = t.filter(x => x >= PASS_MARK).length;
+  const bands = [["0 to 4", 0, 4], ["5 to 9", 5, 9], ["10 to 14", 10, 14], ["15 to 19", 15, 19], ["20", 20, 20]].map(b => [b[0], t.filter(x => x >= b[1] && x <= b[2]).length]);
+  const peak = Math.max(...bands.map(b => b[1]));
+  const bars = bands.map(b => '<div class="col"><span class="num" style="font-weight:600">' + b[1] + '</span><div class="bar' + (b[1] ? "" : " zero") + '" style="height:' + (b[1] / peak * 100) + '%"></div></div>').join("");
+  const avg = QS.map((qn, i) => { const p = Math.round(STUDENTS.reduce((a, st) => a + st.s[i], 0) / (MAX[qn] * STUDENTS.length) * 100);
+    return '<div class="hbar"><span style="font-weight:600">' + qn + '</span><div class="track"><i style="width:' + p + '%"></i></div><span class="num r" style="text-align:right">' + p + "%</span></div>"; }).join("");
+  const tile = (label, value, sub) => '<div><h3>' + label + '</h3><div class="big num">' + value + '</div><div class="muted">' + sub + "</div></div>";
+  return '<div class="pane"><div class="stack">' +
+    '<div class="group"><div class="in grid2" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">' + tile("Mean", mean.toFixed(1), "out of 20") + tile("Median", median, "out of 20") + tile("Pass Rate", Math.round(passed / t.length * 100) + "%", passed + " of " + t.length + " scored 10 or more") + tile("Students", t.length, "all graded") + "</div></div>" +
+    '<div class="grid2"><div class="group"><header>Mark Bands <span class="muted" style="font-weight:400">students per range of total marks</span></header><div class="in"><div class="bars">' + bars + '</div><div class="axis">' + bands.map(b => "<span>" + b[0] + "</span>").join("") + "</div></div></div>" +
+    '<div class="group"><header>Average Score per Question <span class="muted" style="font-weight:400">share of the maximum</span></header><div class="in">' + avg + "</div></div></div>" +
+    '<div class="grid2"><div class="group"><header>Hardest Question</header><div class="in"><p><strong>Q3.</strong> 4 of 6 students scored 0, and the average is 33% of the maximum.</p></div></div>' +
+    '<div class="group"><header>Compile Errors</header><div class="in"><p><span class="mono">Q3.java</span> did not compile for 1 student (fen.lai.2022).</p></div></div></div>' +
+    "</div></div>";
+}
+function vHistory() {
+  return '<div class="pane flush"><div class="scroll-x"><table><thead><tr><th>Run</th><th>Section</th><th>Started</th><th class="r">Students</th><th class="r">Mean</th><th></th></tr></thead><tbody>' +
+    '<tr><td class="who">Lab Test</td><td>CS102 G1</td><td>Today, 10:42</td><td class="r num">6</td><td class="r num">11.2</td><td><span class="tag pass">Open now</span></td></tr>' +
+    '<tr><td class="who">Lab Test</td><td>CS102 G2</td><td>Yesterday, 16:05</td><td class="r num">41</td><td class="r num">12.6</td><td><button class="btn small" data-act="open">Open Run</button> <button class="btn small" data-act="open">Restore Backup</button></td></tr>' +
+    "</tbody></table></div></div>";
+}
+function vAudit() {
+  const rows = [["10:44:12", "Fix approved", "Renamed folder for david.2024"], ["10:44:03", "Fix undone", "Header filled in for chee.teo.2022 (Q3.java)"], ["10:43:20", "Score sheet exported", "CS102-G1-scores.csv"], ["10:42:01", "Grading started", "6 submissions, section G1"]];
+  return '<div class="pane flush"><div class="scroll-x"><table><thead><tr><th>Time</th><th>Action</th><th>Detail</th></tr></thead><tbody>' + rows.map(r => '<tr><td class="num">' + r[0] + '</td><td class="who">' + r[1] + "</td><td>" + r[2] + "</td></tr>").join("") + "</tbody></table></div></div>";
+}
+function vDesign() {
+  const sw = (v, name, use) => '<tr><td><span class="swatch" style="background:var(' + v + ')"></span>' + name + "</td><td>" + use + "</td></tr>";
+  const map = [["Window layout", "SplitPane: sidebar, content, inspector", "Sidebar 208 px, inspector 300 px; both can be hidden"],
+    ["Sidebar", "ListView with a custom cell", "Two groups only; badge shows anomalies that need a decision"],
+    ["Toolbar", "ToolBar in the top of a BorderPane", "Title and status on the left, search, then one primary button"],
+    ["Primary button", "Button with Styles.ACCENT", "Exactly one per screen; it is always the next step"],
+    ["Tables", "TableView with Styles.STRIPED off, Tweaks.EDGE_TO_EDGE", "Row height 44 px for results, 52 px for anomalies"],
+    ["Score squares", "Custom TableCell holding an HBox of 9 px Regions", "One square per test case; filled means passed"],
+    ["Status tags", "Label with a style class per state", "Three colours only: pass, review, fail; always with words"],
+    ["Confirmation", "Inline bar above the table (HBox), not an Alert", "Used for Cancel Grading and Undo Selected"],
+    ["Settings", "ModalPane sheet with ToggleSwitch and ChoiceBox", "Appearance: System, Light, Dark"],
+    ["Messages", "Notification at the bottom centre, 2.6 seconds", "Says what happened, in the past tense of the button"],
+    ["Folder tree", "TreeView with a monospaced font", "Problems are marked in the tree in the review colour"],
+    ["Charts", "BarChart for mark bands, ProgressBar rows per question", "Ink bars; no colour, because colour means grade status"]];
+  return '<div class="pane"><div class="stack">' +
+    '<div class="group"><header>The idea</header><div class="in stack" style="gap:8px"><p><strong>Colour only ever means a grade.</strong> Buttons, selection and charts are ink on neutral. Green, amber and red appear only on status tags, so anything coloured is something about a student\'s result.</p><p><strong>The primary button is always the next step.</strong> Upload leads to Start Grading, Grading to Review Anomalies, Review to View Results, Results to Export Score Sheet. The sidebar lets the instructor jump anywhere.</p><p><strong>One square per test case.</strong> A row of squares shows where marks were lost without opening the student.</p></div></div>' +
+    '<div class="grid2"><div class="group"><header>Colour</header><div class="scroll-x"><table class="spec" style="min-width:0"><tbody>' +
+    sw("--ink", "Ink", "Text, primary button, filled squares, chart bars") + sw("--window", "Window", "Content background") + sw("--sidebar", "Sidebar", "Sidebar, inspector, table hover") + sw("--fill-strong", "Fill", "Selected row and sidebar item") + sw("--pass", "Pass", "Graded, fix approved") + sw("--review", "Review", "Needs the instructor's decision") + sw("--fail", "Fail", "Compile error, time limit, no fix") +
+    '</tbody></table></div></div><div class="group"><header>Type and spacing</header><div class="in"><dl class="kv"><dt>Typeface</dt><dd>System font (SF Pro on macOS, Segoe UI on Windows)</dd><dt>Body</dt><dd>13 px regular</dd><dt>Screen title</dt><dd>15 px semibold</dd><dt>Key numbers</dt><dd>26 px semibold, tabular figures</dd><dt>File names, code</dt><dd>System monospace, 12 px</dd><dt>Controls</dt><dd>28 px high, 7 px corner radius</dd><dt>Spacing</dt><dd>Steps of 4 px: 8, 12, 16</dd><dt>Button text</dt><dd>Title Case verbs: Start Grading, Undo Selected</dd></dl></div></div></div>' +
+    '<div class="group"><header>How each part maps to JavaFX and AtlantaFX</header><div class="scroll-x"><table class="spec"><thead><tr><th>Part</th><th>Build it with</th><th>Rule</th></tr></thead><tbody>' + map.map(r => '<tr><td class="who">' + r[0] + "</td><td>" + r[1] + "</td><td>" + r[2] + "</td></tr>").join("") + "</tbody></table></div></div>" +
+    "</div></div>";
+}
+
+function sheet() {
+  if (S.sheet === "settings") {
+    const cur = document.documentElement.getAttribute("data-theme") || "system";
+    const b = (v, l) => '<button aria-pressed="' + (cur === v) + '" data-theme-set="' + v + '">' + l + "</button>";
+    return '<div class="sheet-back" data-act="closesheet"><div class="sheet" role="dialog" aria-label="Settings" data-stop="1"><div class="row"><h2 style="font-size:15px">Settings</h2><button class="btn" data-act="closesheet">Done</button></div>' +
+      '<div class="row"><span>Appearance</span><span class="seg" role="group" aria-label="Appearance">' + b("system", "System") + b("light", "Light") + b("dark", "Dark") + "</span></div>" +
+      '<div class="row"><label for="tlimit">Time limit per tester</label><span><input class="field num" id="tlimit" value="10" size="3" inputmode="numeric" aria-describedby="tlhelp"> seconds</span></div><p class="muted" id="tlhelp">A tester that runs longer is stopped and reported.</p>' +
+      '<div class="row"><label for="autofix">Correct common errors automatically</label><input type="checkbox" id="autofix" checked></div>' +
+      '<div class="row"><label for="hard">Flag hard-coded answers for review</label><input type="checkbox" id="hard" checked></div>' +
+      '<p class="muted">Settings are saved in config.properties.</p></div></div>';
+  }
+  if (S.sheet === "output") {
+    const a = ANOMALIES.find(x => x.id === S.sheetId);
+    const text = a.type === "Does not compile" ? "Q3.java:14: error: incompatible types\n    (illustrative compiler output)" : a.type === "Time limit reached" ? "Test 1: getIsogramWords([alice, ben, cathy])\n    (no further output before the 10 second limit)" : "Q3.java matches the starter file line for line.";
+    return '<div class="sheet-back" data-act="closesheet"><div class="sheet" role="dialog" aria-label="' + esc(a.action) + '" data-stop="1"><div class="row"><h2 style="font-size:15px">' + esc(a.type) + '</h2><button class="btn" data-act="closesheet">Done</button></div><p class="mono muted">' + a.u + '</p><pre class="tree">' + esc(text) + '</pre><p class="muted">' + esc(a.msg) + "</p></div></div>";
+  }
+  return "";
+}
+
+/* ---------------------------------------------------------------- render */
+function render() {
+  const mk = list => list.map(([id, label]) => '<button data-go="' + id + '"' + (S.view === id ? ' aria-current="page"' : "") + '><svg viewBox="0 0 16 16" aria-hidden="true">' + ICON[id] + "</svg><span>" + label + "</span>" +
+    (id === "review" && needsReview() ? '<span class="count num" aria-label="' + needsReview() + ' need a decision">' + needsReview() + "</span>" : "") + "</button>").join("");
+  $("nav").innerHTML = mk(NAV); $("nav2").innerHTML = mk(NAV2);
+  $("runState").textContent = S.grading.running ? "Grading in progress" : S.grading.cancelled ? "Grading stopped" : "Graded, " + needsReview() + " to review";
+  const focusId = document.activeElement && document.activeElement.id, pos = focusId === "q" ? document.activeElement.selectionStart : null;
+  $("toolbar").innerHTML = toolbarFor();
+  const V = { upload: vUpload, grading: vGrading, review: vReview, results: vResults, stats: vStats, history: vHistory, audit: vAudit, design: vDesign }[S.view];
+  const withInsp = S.view === "results" || S.view === "review";
+  $("body").className = "body" + (withInsp ? " with-inspector" : "");
+  $("body").innerHTML = V();
+  document.querySelectorAll(".sheet-back, .toast").forEach(n => n.remove());
+  $("win").insertAdjacentHTML("beforeend", sheet() + (S.toast ? '<div class="toast" role="status">' + esc(S.toast) + "</div>" : ""));
+  const sec = $("section"); if (sec) sec.value = S.section;
+  if (focusId && $(focusId)) { $(focusId).focus(); if (pos !== null) $(focusId).setSelectionRange(pos, pos); }
+}
+
+function startGrading(from) {
+  const g = S.grading; clearInterval(startGrading.t);
+  Object.assign(g, { running: true, cancelled: false, pct: from ? g.pct : 0, i: from ? g.i : 0, stage: 0 });
+  S.view = "grading"; render();
+  startGrading.t = setInterval(() => {
+    g.pct = Math.min(100, g.pct + 100 / 36); g.i = Math.min(5, Math.floor(g.pct / (100 / 6))); g.stage = Math.floor((g.pct % (100 / 6)) / (100 / 36));
+    if (g.pct >= 100) { clearInterval(startGrading.t); g.running = false; g.i = 6; toast("Grading finished"); }
+    else if (S.view === "grading" && !S.confirm) render();
+  }, 380);
+}
+function setFix(a, status) { a.status = status; S.picked.delete(a.id); }
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-go],[data-act],[data-fix],[data-sel],[data-up],[data-theme-set],[data-pick]");
+  if (!t) return;
+  if (e.target.closest("[data-stop]") && t.classList.contains("sheet-back")) return;
+  const d = t.dataset;
+  if (d.pick) { const id = +d.pick; S.picked.has(id) ? S.picked.delete(id) : S.picked.add(id); S.confirm = null; return render(); }
+  if (d.go) { S.view = d.go; S.query = ""; S.confirm = null; return render(); }
+  if (d.up) { S.upSel = d.up; return render(); }
+  if (d.themeSet) { d.themeSet === "system" ? document.documentElement.removeAttribute("data-theme") : document.documentElement.setAttribute("data-theme", d.themeSet); return render(); }
+  if (d.fix) { const a = ANOMALIES.find(x => x.id === +d.id);
+    if (d.fix === "approve") { setFix(a, "approved"); toast("Fix approved for " + a.u); }
+    else if (d.fix === "undo") { setFix(a, "undone"); toast("Fix undone for " + a.u); }
+    else { setFix(a, "applied"); toast("Fix applied again for " + a.u); }
+    return; }
+  if (d.sel && !e.target.closest("button,input")) { S.selected = d.sel; return render(); }
+  const sel = () => ANOMALIES.filter(a => S.picked.has(a.id));
+  switch (d.act) {
+    case "settings": S.sheet = "settings"; break;
+    case "closesheet": if (e.target.closest("[data-stop]") && !e.target.closest("button")) return; S.sheet = null; break;
+    case "output": S.sheet = "output"; S.sheetId = +d.id; ANOMALIES.find(x => x.id === +d.id).seen = true; break;
+    case "start": return startGrading(false);
+    case "resume": return startGrading(true);
+    case "retry": return toast("Retrying 2 submissions with errors");
+    case "askcancel": S.confirm = "cancel"; break;
+    case "docancel": clearInterval(startGrading.t); S.grading.running = false; S.grading.cancelled = true; S.confirm = null; break;
+    case "noconfirm": S.confirm = null; break;
+    case "pickall": { const f = ANOMALIES.filter(a => a.fix); const all = f.every(a => S.picked.has(a.id)); S.picked = new Set(all ? [] : f.map(a => a.id)); break; }
+    case "approvesel": { const n = sel().length; sel().forEach(a => setFix(a, "approved")); return toast(n + " fixes approved"); }
+    case "askundo": S.confirm = "undoall"; break;
+    case "doundo": { const n = sel().length; sel().forEach(a => setFix(a, "undone")); S.confirm = null; return toast(n + " fixes undone"); }
+    case "showall": S.onlyOpen = false; break;
+    case "showopen": S.onlyOpen = true; break;
+    case "clearq": S.query = ""; S.onlyOpen = false; break;
+    case "sort": S.sortDesc = S.sortDesc === null ? true : !S.sortDesc; break;
+    case "csv": return toast("Score sheet exported to workspace/output/CS102-G1-scores.csv");
+    case "json": return toast("JSON exported to workspace/output/CS102-G1-results.json");
+    case "report": return toast("Student report exported for " + S.selected);
+    case "files": return toast("Files open in the folder tree on the Upload screen");
+    case "backup": return toast("Backup saved to workspace/backup");
+    case "auditx": return toast("Audit log exported to workspace/output/CS102-G1-audit.csv");
+    case "choose": return toast("The file picker opens here in the real app");
+    case "open": return toast("This opens the saved run in the real app");
+  }
+  render();
+});
+document.addEventListener("input", e => { if (e.target.id === "q") { S.query = e.target.value; render(); } });
+document.addEventListener("change", e => { if (e.target.id === "section") { S.section = e.target.value; render(); } });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && (S.sheet || S.confirm)) { S.sheet = null; S.confirm = null; render(); }
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches("tr[data-sel]")) { e.preventDefault(); S.selected = e.target.dataset.sel; render(); }
+});
+render();
+</script>
+</body>
+</html>

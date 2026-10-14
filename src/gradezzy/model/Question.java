@@ -1,0 +1,81 @@
+/*
+ * File: Question.java
+ *
+ * Purpose: One gradable question of an assessment, such as Q1a.
+ *
+ * Where it fits: Built from config.properties; validators use it to know which
+ * folder and file must exist and scoring uses its maximum score.
+ */
+package gradezzy.model;
+
+/**
+ * One gradable question of an assessment, such as Q1a.
+ *
+ * <p>Tier: MUST. Owner: Jing Yuan.
+ */
+public class Question {
+
+    // The question id, for example Q1a
+    private final String id;
+
+    // The folder the file must be in, such as Q1
+    private final String folderName;
+
+    // The required source file, such as Q1a.java
+    private final String fileName;
+
+    // The most marks this question can earn
+    private final double maxScore;
+
+    /**
+     * Creates a new question.
+     *
+     * @param id the question id, for example Q1a
+     * @param folderName the folder the file must be in, such as Q1
+     * @param fileName the required source file, such as Q1a.java
+     * @param maxScore the most marks this question can earn
+     */
+    public Question(String id, String folderName, String fileName,
+            double maxScore) {
+        this.id = id;
+        this.folderName = folderName;
+        this.fileName = fileName;
+        this.maxScore = maxScore;
+    }
+
+    /**
+     * Returns the question id, for example Q1a.
+     *
+     * @return the question id, for example Q1a
+     */
+    public String getId() {
+        return id;
+    }
+
+    /**
+     * Returns the folder the file must be in, such as Q1.
+     *
+     * @return the folder the file must be in, such as Q1
+     */
+    public String getFolderName() {
+        return folderName;
+    }
+
+    /**
+     * Returns the required source file, such as Q1a.java.
+     *
+     * @return the required source file, such as Q1a.java
+     */
+    public String getFileName() {
+        return fileName;
+    }
+
+    /**
+     * Returns the most marks this question can earn.
+     *
+     * @return the most marks this question can earn
+     */
+    public double getMaxScore() {
+        return maxScore;
+    }
+}
