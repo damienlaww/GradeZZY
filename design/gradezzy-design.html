@@ -9,7 +9,8 @@
 <style>
 /* Layout: one macOS window. Sidebar holds the steps of a run, the content
    pane holds a toolbar and one table or view, the inspector on the right
-   explains the selected student. Colour is used only for grade status. */
+   explains the selected student. Colour is used only for grade status,
+   plus one blue for the primary button of each screen and for links. */
 :root {
   --canvas: #e9ebef;        /* desk behind the window */
   --window: #ffffff;        /* content surface */
@@ -17,7 +18,7 @@
   --raised: #ffffff;        /* sheets, popovers */
   --line: #dcdfe5;          /* hairlines */
   --line-strong: #c3c8d1;
-  --ink: #1b1d22;           /* primary text and primary buttons */
+  --ink: #1b1d22;           /* primary text, squares and chart bars */
   --ink-2: #555b66;         /* secondary text */
   --ink-3: #6f7682;         /* tertiary text, placeholders */
   --fill: #eceef2;          /* quiet control fill, selected row */
@@ -32,6 +33,12 @@
         "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --r-control: 7px; --r-window: 12px;
+  --accent: #0071e3;        /* the primary button of each screen */
+  --accent-hover: #0077ed;
+  --accent-soft: #e8f2fd;   /* drop area while files are dragged over it */
+  --link: #0066cc;          /* text links */
+  --panel: #f5f5f7;         /* drop area and file list surface */
+  --r-pill: 980px; --r-panel: 22px;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --canvas: #101216; --window: #1c1e23; --sidebar: #24262c; --raised: #2a2d34;
@@ -39,6 +46,7 @@
   --ink-3: #9299a5; --fill: #2e3138; --fill-strong: #3a3e47; --on-ink: #15171b;
   --pass: #6fd198; --pass-bg: #173524; --review: #f0c263; --review-bg: #3b2f12;
   --fail: #ff8f86; --fail-bg: #40201e; --pip-off: #454a54;
+  --accent-soft: #16283d; --link: #2997ff; --panel: #26282e;
   --shadow: 0 18px 50px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .4);
   color-scheme: dark } }
 :root[data-theme="dark"] {
@@ -47,6 +55,7 @@
   --ink-3: #9299a5; --fill: #2e3138; --fill-strong: #3a3e47; --on-ink: #15171b;
   --pass: #6fd198; --pass-bg: #173524; --review: #f0c263; --review-bg: #3b2f12;
   --fail: #ff8f86; --fail-bg: #40201e; --pip-off: #454a54;
+  --accent-soft: #16283d; --link: #2997ff; --panel: #26282e;
   --shadow: 0 18px 50px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .4);
   color-scheme: dark }
 
@@ -105,8 +114,9 @@ button, input, select { font: inherit; color: inherit }
 .btn { border: 1px solid var(--line-strong); background: var(--window); border-radius: var(--r-control);
   min-height: 28px; padding: 3px 12px; cursor: default; white-space: nowrap }
 .btn:hover { background: var(--fill) }
-.btn.primary { background: var(--ink); color: var(--on-ink); border-color: var(--ink); font-weight: 600 }
-.btn.primary:hover { opacity: .88 }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent);
+  border-radius: var(--r-pill); padding-inline: 16px; font-weight: 500 }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover) }
 .btn.small { min-height: 24px; padding: 1px 9px; font-size: 12px }
 .btn[disabled] { opacity: .45 }
 .field { border: 1px solid var(--line-strong); background: var(--window); border-radius: var(--r-control);
@@ -167,6 +177,59 @@ p { margin: 0 }
   background: var(--sidebar) }
 .drop strong { font-size: 14px }
 .filelist { list-style: none; margin: 0; padding: 0 }
+
+/* ---------- upload: one headline, one drop area, one action ---------- */
+.toolbar.bare { border-bottom: 0; justify-content: flex-end }
+.pane.hero { display: flex; padding: 8px 24px 56px }
+.hero-in { margin: auto; width: min(560px, 100%); display: flex; flex-direction: column;
+  align-items: center; text-align: center }
+.hero-title { font-size: clamp(30px, 4.4vw, 44px); font-weight: 600; letter-spacing: -.022em;
+  line-height: 1.08; margin: 0; text-wrap: balance }
+.hero-title.small { font-size: clamp(26px, 3.4vw, 32px) }
+.hero-sub { font-size: 17px; line-height: 1.4; color: var(--ink-2); margin-top: 12px;
+  display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap }
+.pickwrap { position: relative; display: inline-flex }
+.pickwrap::after { content: ""; position: absolute; right: 13px; top: 50%; width: 6px; height: 6px;
+  border-right: 1.5px solid var(--ink-2); border-bottom: 1.5px solid var(--ink-2);
+  transform: translateY(-70%) rotate(45deg); pointer-events: none }
+.pick { appearance: none; -webkit-appearance: none; border: 0; background: var(--panel);
+  border-radius: var(--r-pill); padding: 5px 30px 5px 14px; font-size: 15px; font-weight: 600;
+  color: var(--ink); cursor: pointer }
+.pick:focus-visible, .pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px;
+  border-radius: var(--r-pill) }
+.dropzone { margin-top: 36px; width: 100%; background: var(--panel); border-radius: var(--r-panel);
+  border: 2px solid transparent; padding: 44px 24px; display: flex; flex-direction: column;
+  align-items: center; gap: 10px; transition: background .2s ease-out, border-color .2s ease-out }
+.dropzone.over { background: var(--accent-soft); border-color: var(--accent) }
+.dropzone svg { width: 34px; height: 34px; stroke: var(--ink-3); fill: none; stroke-width: 1.1;
+  stroke-linecap: round; stroke-linejoin: round }
+.dropzone strong { font-size: 17px; font-weight: 600 }
+.links { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center }
+.link { all: unset; color: var(--link); font-size: 15px; cursor: pointer; min-height: 28px;
+  display: inline-flex; align-items: center }
+.link:hover { text-decoration: underline }
+.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px }
+.pill { margin-top: 32px; border: 0; background: var(--accent); color: #fff;
+  border-radius: var(--r-pill); min-height: 44px; padding: 0 30px; font-size: 16px;
+  font-weight: 500; cursor: pointer; transition: background .2s ease-out }
+.pill:not([disabled]):hover { background: var(--accent-hover) }
+.pill[disabled] { opacity: .35; cursor: default }
+.fine { font-size: 12px; color: var(--ink-3); margin-top: 14px }
+.card { margin-top: 28px; width: 100%; background: var(--panel); border-radius: 18px;
+  overflow: hidden; text-align: left }
+.files { list-style: none; margin: 0; padding: 0 }
+.files li + li { border-top: 1px solid var(--line) }
+.filerow { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center;
+  gap: 10px; padding: 10px 18px; min-height: 44px; cursor: pointer }
+.filerow .mono { flex: 1; min-width: 0; overflow-wrap: anywhere }
+.filerow:hover { background: var(--fill) }
+.filerow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px }
+.chev { width: 14px; height: 14px; flex: none; stroke: var(--ink-3); fill: none; stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round; transition: transform .2s ease-out }
+.filerow[aria-expanded="true"] .chev { transform: rotate(90deg) }
+.files .tree { padding: 2px 18px 14px }
+.card-foot { display: flex; justify-content: space-between; gap: 12px; padding: 6px 18px;
+  border-top: 1px solid var(--line) }
 .filelist li { display: flex; align-items: center; gap: 10px; padding: 7px 14px;
   border-bottom: 1px solid var(--line) }
 .filelist li:last-child { border-bottom: 0 }
@@ -234,7 +297,8 @@ p { margin: 0 }
   .inspector { border-left: 0; border-top: 1px solid var(--line) }
   .pane, .inspector { overflow: visible }
 }
-@media (prefers-reduced-motion: reduce) { .progress i { transition: none } }
+@media (prefers-reduced-motion: reduce) {
+  .progress i, .dropzone, .pill, .chev { transition: none } }
 </style>
 
 <div class="window" id="win">
@@ -288,8 +352,8 @@ const anomaliesOf = u => ANOMALIES.filter(a => a.u === u);
 const needsReview = () => ANOMALIES.filter(a => a.status === "applied" || (a.status === "none" && !a.seen)).length;
 
 /* ----------------------------------------------------------------- state */
-const S = { view: "results", selected: "fen.lai.2022", picked: new Set(), query: "", sortDesc: null,
-  onlyOpen: false, sheet: null, confirm: null, toast: null, section: "G1", upSel: "jing.lim.2021",
+const S = { view: "upload", selected: "fen.lai.2022", picked: new Set(), query: "", sortDesc: null,
+  onlyOpen: false, sheet: null, confirm: null, toast: null, section: "G1", upAdded: false, upSel: null,
   grading: { pct: 100, i: 6, stage: 5, running: false, cancelled: false } };
 const ICON = {
   upload: '<path d="M8 11V3M5 6l3-3 3 3M3 12.5h10"/>',
@@ -333,8 +397,8 @@ function toast(msg) { S.toast = msg; render(); clearTimeout(toast.t); toast.t = 
 function toolbarFor() {
   const sec = '<label class="inline">Section <select class="field" id="section"><option>G1</option><option>G2</option><option>G3</option></select></label>';
   const gear = '<button class="btn" data-act="settings">Settings</button>';
+  if (S.view === "upload") return gear;
   const T = {
-    upload: ["Upload Submissions", "6 zip files added for CS102 " + S.section, sec + gear + '<button class="btn primary" data-act="start">Start Grading</button>'],
     grading: ["Grading", S.grading.running ? "In progress" : S.grading.cancelled ? "Stopped by you" : "Finished, 6 of 6 graded", gear + '<button class="btn primary" data-go="review">Review ' + needsReview() + " Anomalies</button>"],
     review: ["Review Anomalies", needsReview() + " need your decision, " + ANOMALIES.length + " in total", '<input class="field" id="q" type="search" placeholder="Search student or problem" aria-label="Search anomalies" value="' + esc(S.query) + '">' + gear + '<button class="btn primary" data-go="results">View Results</button>'],
     results: ["Results", "6 students, maximum 20 marks", '<input class="field" id="q" type="search" placeholder="Search students" aria-label="Search students" value="' + esc(S.query) + '">' + gear + '<button class="btn" data-act="json">Export JSON</button><button class="btn primary" data-act="csv">Export Score Sheet</button>'],
@@ -347,18 +411,34 @@ function toolbarFor() {
 }
 
 function vUpload() {
-  const files = STUDENTS.map(st => '<li aria-selected="' + (S.upSel === st.u) + '"><button data-up="' + st.u + '" class="mono">2023-2024-' + st.u + '.zip</button><span class="tag pass">Readable</span></li>').join("");
-  const flat = S.upSel === "jing.lim.2021" || S.upSel === "chee.teo.2022";
-  const top = S.upSel === "david.2024" ? "01400003" : S.upSel === "fen.lai.2022" ? "RenameToYourStudentID" : S.upSel;
+  const pick = '<span class="pickwrap"><select class="pick" id="section" aria-label="Section"><option>G1</option><option>G2</option><option>G3</option></select></span>';
+  const fine = '<p class="fine">One zip per student. Originals are never changed.</p>';
+  if (!S.upAdded) {
+    return '<div class="pane hero"><div class="hero-in">' +
+      '<h1 class="hero-title">Upload submissions.</h1>' +
+      '<p class="hero-sub">Add the zip files for CS102 ' + pick + "</p>" +
+      '<div class="dropzone"><svg viewBox="0 0 16 16" aria-hidden="true">' + ICON.upload + "</svg><strong>Drop zip files or a folder here</strong>" +
+      '<div class="links"><button class="link" data-act="add">Choose Files</button><button class="link" data-act="add">Choose Folder</button></div></div>' +
+      '<button class="pill" disabled>Start Grading</button>' + fine + "</div></div>";
+  }
   const body = "Q1\n  Q1a.java\n  Q1b.java\nQ2\n  Q2a.java\n  Q2b.java\n  DataException.class\nQ3\n  Q3.java\n  ShapeComparator.java";
-  const tree = flat ? '<span class="warn">(no username folder)</span>\n' + body
-    : (top !== S.upSel ? '<span class="warn">' + top + "  (expected " + S.upSel + ")</span>" : top) + "\n" + body.split("\n").map(l => "  " + l).join("\n");
-  return '<div class="pane"><div class="stack">' +
-    '<div class="drop"><strong>Drop zip files or a folder here</strong><span class="muted">One zip per student. Originals are never changed.</span><div><button class="btn" data-act="choose">Choose Files</button> <button class="btn" data-act="choose">Choose Folder</button></div></div>' +
-    '<div class="grid2"><div class="group"><header>Submissions <span class="muted num" style="font-weight:400">6 added</span></header><ul class="filelist">' + files + "</ul></div>" +
-    '<div class="group"><header>Inside <span class="mono" style="font-weight:400">' + S.upSel + '.zip</span></header><div class="in"><pre class="tree">' + tree + "</pre></div></div></div>" +
-    '<div class="group"><header>Testers</header><div class="in row"><span><span class="mono">samples/Tester-Files</span><span class="muted">, 5 tester files and 2 data files found</span></span><button class="btn" data-act="choose">Change Folder</button></div></div>' +
-    "</div></div>";
+  const treeOf = u => {
+    const flat = u === "jing.lim.2021" || u === "chee.teo.2022";
+    const top = u === "david.2024" ? "01400003" : u === "fen.lai.2022" ? "RenameToYourStudentID" : u;
+    if (flat) return '<span class="warn">(no username folder)</span>\n' + body;
+    return (top !== u ? '<span class="warn">' + top + "  (expected " + u + ")</span>" : top) + "\n" + body.split("\n").map(l => "  " + l).join("\n");
+  };
+  const rows = STUDENTS.map(st => {
+    const open = S.upSel === st.u;
+    return '<li><button class="filerow" data-up="' + st.u + '" aria-expanded="' + open + '"><span class="mono">2023-2024-' + st.u + '.zip</span><span class="tag pass">Readable</span><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button>' +
+      (open ? '<pre class="tree">' + treeOf(st.u) + "</pre>" : "") + "</li>";
+  }).join("");
+  return '<div class="pane hero"><div class="hero-in">' +
+    '<h1 class="hero-title small">' + STUDENTS.length + " submissions ready.</h1>" +
+    '<p class="hero-sub">For CS102 ' + pick + "</p>" +
+    '<div class="card"><ul class="files">' + rows + '</ul><div class="card-foot"><button class="link" data-act="add">Add More</button><button class="link" data-act="clearup">Remove All</button></div></div>' +
+    '<p class="fine">Testers from <span class="mono">samples/Tester-Files</span>, 5 tester files and 2 data files. <button class="link" style="font-size:12px;min-height:0" data-act="choose">Change</button></p>' +
+    '<button class="pill" data-act="start">Start Grading</button>' + fine + "</div></div>";
 }
 
 function vGrading() {
@@ -470,6 +550,7 @@ function vDesign() {
     ["Sidebar", "ListView with a custom cell", "Two groups only; badge shows anomalies that need a decision"],
     ["Toolbar", "ToolBar in the top of a BorderPane", "Title and status on the left, search, then one primary button"],
     ["Primary button", "Button with Styles.ACCENT", "Exactly one per screen; it is always the next step"],
+    ["Upload screen", "VBox centred in a StackPane; Button with Styles.ACCENT and a full radius; Hyperlink for Choose Files", "One headline, one drop area, one blue action. The file list replaces the drop area once zips are added"],
     ["Tables", "TableView with Styles.STRIPED off, Tweaks.EDGE_TO_EDGE", "Row height 44 px for results, 52 px for anomalies"],
     ["Score squares", "Custom TableCell holding an HBox of 9 px Regions", "One square per test case; filled means passed"],
     ["Status tags", "Label with a style class per state", "Three colours only: pass, review, fail; always with words"],
@@ -479,9 +560,9 @@ function vDesign() {
     ["Folder tree", "TreeView with a monospaced font", "Problems are marked in the tree in the review colour"],
     ["Charts", "BarChart for mark bands, ProgressBar rows per question", "Ink bars; no colour, because colour means grade status"]];
   return '<div class="pane"><div class="stack">' +
-    '<div class="group"><header>The idea</header><div class="in stack" style="gap:8px"><p><strong>Colour only ever means a grade.</strong> Buttons, selection and charts are ink on neutral. Green, amber and red appear only on status tags, so anything coloured is something about a student\'s result.</p><p><strong>The primary button is always the next step.</strong> Upload leads to Start Grading, Grading to Review Anomalies, Review to View Results, Results to Export Score Sheet. The sidebar lets the instructor jump anywhere.</p><p><strong>One square per test case.</strong> A row of squares shows where marks were lost without opening the student.</p></div></div>' +
+    '<div class="group"><header>The idea</header><div class="in stack" style="gap:8px"><p><strong>Colour only ever means a grade.</strong> Selection and charts are ink on neutral. The one exception is blue, for the primary button of each screen and for text links. Green, amber and red appear only on status tags, so anything coloured is something about a student\'s result.</p><p><strong>The primary button is always the next step.</strong> Upload leads to Start Grading, Grading to Review Anomalies, Review to View Results, Results to Export Score Sheet. The sidebar lets the instructor jump anywhere.</p><p><strong>One square per test case.</strong> A row of squares shows where marks were lost without opening the student.</p></div></div>' +
     '<div class="grid2"><div class="group"><header>Colour</header><div class="scroll-x"><table class="spec" style="min-width:0"><tbody>' +
-    sw("--ink", "Ink", "Text, primary button, filled squares, chart bars") + sw("--window", "Window", "Content background") + sw("--sidebar", "Sidebar", "Sidebar, inspector, table hover") + sw("--fill-strong", "Fill", "Selected row and sidebar item") + sw("--pass", "Pass", "Graded, fix approved") + sw("--review", "Review", "Needs the instructor's decision") + sw("--fail", "Fail", "Compile error, time limit, no fix") +
+    sw("--ink", "Ink", "Text, filled squares, chart bars") + sw("--accent", "Blue", "Primary button of each screen, text links") + sw("--window", "Window", "Content background") + sw("--sidebar", "Sidebar", "Sidebar, inspector, table hover") + sw("--fill-strong", "Fill", "Selected row and sidebar item") + sw("--pass", "Pass", "Graded, fix approved") + sw("--review", "Review", "Needs the instructor's decision") + sw("--fail", "Fail", "Compile error, time limit, no fix") +
     '</tbody></table></div></div><div class="group"><header>Type and spacing</header><div class="in"><dl class="kv"><dt>Typeface</dt><dd>System font (SF Pro on macOS, Segoe UI on Windows)</dd><dt>Body</dt><dd>13 px regular</dd><dt>Screen title</dt><dd>15 px semibold</dd><dt>Key numbers</dt><dd>26 px semibold, tabular figures</dd><dt>File names, code</dt><dd>System monospace, 12 px</dd><dt>Controls</dt><dd>28 px high, 7 px corner radius</dd><dt>Spacing</dt><dd>Steps of 4 px: 8, 12, 16</dd><dt>Button text</dt><dd>Title Case verbs: Start Grading, Undo Selected</dd></dl></div></div></div>' +
     '<div class="group"><header>How each part maps to JavaFX and AtlantaFX</header><div class="scroll-x"><table class="spec"><thead><tr><th>Part</th><th>Build it with</th><th>Rule</th></tr></thead><tbody>' + map.map(r => '<tr><td class="who">' + r[0] + "</td><td>" + r[1] + "</td><td>" + r[2] + "</td></tr>").join("") + "</tbody></table></div></div>" +
     "</div></div>";
@@ -511,8 +592,9 @@ function render() {
   const mk = list => list.map(([id, label]) => '<button data-go="' + id + '"' + (S.view === id ? ' aria-current="page"' : "") + '><svg viewBox="0 0 16 16" aria-hidden="true">' + ICON[id] + "</svg><span>" + label + "</span>" +
     (id === "review" && needsReview() ? '<span class="count num" aria-label="' + needsReview() + ' need a decision">' + needsReview() + "</span>" : "") + "</button>").join("");
   $("nav").innerHTML = mk(NAV); $("nav2").innerHTML = mk(NAV2);
-  $("runState").textContent = S.grading.running ? "Grading in progress" : S.grading.cancelled ? "Grading stopped" : "Graded, " + needsReview() + " to review";
+  $("runState").textContent = S.view === "upload" && !S.upAdded ? "Waiting for submissions" : S.grading.running ? "Grading in progress" : S.grading.cancelled ? "Grading stopped" : "Graded, " + needsReview() + " to review";
   const focusId = document.activeElement && document.activeElement.id, pos = focusId === "q" ? document.activeElement.selectionStart : null;
+  $("toolbar").className = "toolbar" + (S.view === "upload" ? " bare" : "");
   $("toolbar").innerHTML = toolbarFor();
   const V = { upload: vUpload, grading: vGrading, review: vReview, results: vResults, stats: vStats, history: vHistory, audit: vAudit, design: vDesign }[S.view];
   const withInsp = S.view === "results" || S.view === "review";
@@ -543,7 +625,7 @@ document.addEventListener("click", e => {
   const d = t.dataset;
   if (d.pick) { const id = +d.pick; S.picked.has(id) ? S.picked.delete(id) : S.picked.add(id); S.confirm = null; return render(); }
   if (d.go) { S.view = d.go; S.query = ""; S.confirm = null; return render(); }
-  if (d.up) { S.upSel = d.up; return render(); }
+  if (d.up) { S.upSel = S.upSel === d.up ? null : d.up; return render(); }
   if (d.themeSet) { d.themeSet === "system" ? document.documentElement.removeAttribute("data-theme") : document.documentElement.setAttribute("data-theme", d.themeSet); return render(); }
   if (d.fix) { const a = ANOMALIES.find(x => x.id === +d.id);
     if (d.fix === "approve") { setFix(a, "approved"); toast("Fix approved for " + a.u); }
@@ -556,6 +638,8 @@ document.addEventListener("click", e => {
     case "settings": S.sheet = "settings"; break;
     case "closesheet": if (e.target.closest("[data-stop]") && !e.target.closest("button")) return; S.sheet = null; break;
     case "output": S.sheet = "output"; S.sheetId = +d.id; ANOMALIES.find(x => x.id === +d.id).seen = true; break;
+    case "add": S.upAdded = true; break;
+    case "clearup": S.upAdded = false; S.upSel = null; break;
     case "start": return startGrading(false);
     case "resume": return startGrading(true);
     case "retry": return toast("Retrying 2 submissions with errors");
@@ -581,6 +665,10 @@ document.addEventListener("click", e => {
   }
   render();
 });
+const zoneOf = e => e.target.closest ? e.target.closest(".dropzone") : null;
+document.addEventListener("dragover", e => { const z = zoneOf(e); if (z) { e.preventDefault(); z.classList.add("over"); } });
+document.addEventListener("dragleave", e => { const z = zoneOf(e); if (z && !z.contains(e.relatedTarget)) z.classList.remove("over"); });
+document.addEventListener("drop", e => { if (zoneOf(e)) { e.preventDefault(); S.upAdded = true; render(); } });
 document.addEventListener("input", e => { if (e.target.id === "q") { S.query = e.target.value; render(); } });
 document.addEventListener("change", e => { if (e.target.id === "section") { S.section = e.target.value; render(); } });
 document.addEventListener("keydown", e => {
