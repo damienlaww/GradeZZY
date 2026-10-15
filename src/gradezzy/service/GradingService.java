@@ -26,6 +26,7 @@ import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
+import gradezzy.model.SubmissionStatus;
 import gradezzy.testcase.TestCaseException;
 import gradezzy.testcase.TestCaseSource;
 
@@ -51,6 +52,12 @@ public class GradingService {
     // The flag that stops the current run
     private final CancellationToken cancellationToken =
             new CancellationToken();
+
+    // The last run started, kept so Retry can grade it again
+    private GradingRun lastRun = null;
+
+    // The shared information of the last run started, kept for Retry
+    private GradingContext lastContext = null;
 
     /**
      * Creates a new grading service.
@@ -108,6 +115,9 @@ public class GradingService {
                     + "prepared: " + exception.getMessage(), exception);
         }
 
+        lastRun = gradingRun;
+        lastContext = context;
+
         // TODO(Jing Yuan): implement: read the roster into
         //     context.getRoster() with RosterReader, and save the run with
         //     the repository before grading starts
@@ -130,19 +140,62 @@ public class GradingService {
     }
 
     /**
-     * Grades the failed and cancelled submissions of a run again.
+     * Grades the failed and cancelled submissions of a run again. GRADED
+     * and PENDING submissions are left as they are. Each retried
+     * submission starts from scratch: its status goes back to PENDING,
+     * its earlier anomalies and question results are removed and its
+     * working copy is forgotten, so every stage runs again and builds a
+     * new one. Fixes applied in the earlier attempt are therefore not
+     * carried over; the stages find and fix the problems again.
+     *
+     * <p>The listener hears about a temporary run that holds only the
+     * retried submissions. A screen should keep showing the run it
+     * passed in, which is also the run returned.
      *
      * <p>Tier: SHOULD.
      *
      * @param gradingRun the run to retry
      * @param listener the object told about progress
      * @return the same run, with updated results
-     * @throws GradingException if the retry cannot start
+     * @throws GradingException if there is no run, or if the run was not
+     *         the last one started in this session, so its testers are
+     *         not loaded
      */
     public GradingRun retryFailed(GradingRun gradingRun,
             ProgressListener listener) throws GradingException {
-        // TODO(Jing Yuan): implement: reset FAILED and CANCELLED
-        //     submissions to PENDING and run the pipeline on those only
+        if (gradingRun == null) {
+            throw new GradingException("There is no run to retry.");
+        }
+
+        if (gradingRun != lastRun) {
+            throw new GradingException("Run " + gradingRun.getId()
+                    + " was not the last run started in this session, so "
+                    + "its testers are not loaded. Start grading again "
+                    + "instead.");
+        }
+
+        // The retried submissions go through the pipeline on their own,
+        // in a run that shares the id, assessment and section.
+        GradingRun retryRun = new GradingRun(gradingRun.getId(),
+                gradingRun.getAssessment(), gradingRun.getSection(),
+                gradingRun.getStartedAt());
+
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (needsRetry(submission)) {
+                resetForRetry(submission);
+                retryRun.addSubmission(submission);
+            }
+        }
+
+        if (retryRun.getSubmissions().isEmpty()) {
+            return gradingRun;
+        }
+
+        cancellationToken.reset();
+        GradingPipeline pipeline = pipelineFactory.createPipeline(
+                cancellationToken);
+        pipeline.run(retryRun, lastContext, listener);
+
         return gradingRun;
     }
 
@@ -161,5 +214,22 @@ public class GradingService {
         // TODO(Jing Yuan): implement: load the run from the repository and
         //     run the pipeline on the submissions that are still PENDING
         return null;
+    }
+
+    // Says whether a submission stopped early and should be graded again.
+    private boolean needsRetry(Submission submission) {
+        SubmissionStatus status = submission.getStatus();
+
+        return status == SubmissionStatus.FAILED
+                || status == SubmissionStatus.CANCELLED;
+    }
+
+    // Clears what the earlier attempt left, because every stage runs
+    // again from the start and would otherwise add duplicates.
+    private void resetForRetry(Submission submission) {
+        submission.setStatus(SubmissionStatus.PENDING);
+        submission.getAnomalies().clear();
+        submission.getQuestionResults().clear();
+        submission.setWorkingCopyPath(null);
     }
 }

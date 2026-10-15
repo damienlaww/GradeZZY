@@ -46,7 +46,8 @@ public class ConsoleMain {
 
     /**
      * Grades one batch. The section code may be given as the first
-     * argument (for example G2); otherwise the first section in
+     * argument (for example G2, in any case); it must be one of the
+     * sections in app.section.codes. Otherwise the first section in
      * config.properties is used.
      *
      * @param args optional: the section code
@@ -93,14 +94,10 @@ public class ConsoleMain {
     }
 
     // Takes the section from the arguments, or the first configured one.
+    // A typed section must be one of the configured sections; any case
+    // is accepted and the configured spelling is returned.
     private static String chooseSectionCode(AppConfig config,
             String[] args) {
-        if (args.length > 0) {
-            // TODO(Jing Yuan): implement: reject the argument with a clear
-            //     message when InputValidator.isValidSectionCode is false
-            return args[0];
-        }
-
         List<String> sectionCodes = config.getList(
                 ConfigKeys.SECTION_CODES);
 
@@ -109,7 +106,21 @@ public class ConsoleMain {
                     + ConfigKeys.SECTION_CODES + "' lists no section.");
         }
 
-        return sectionCodes.get(0);
+        if (args.length == 0) {
+            return sectionCodes.get(0);
+        }
+
+        String requested = args[0].trim();
+
+        for (String sectionCode : sectionCodes) {
+            if (sectionCode.equalsIgnoreCase(requested)) {
+                return sectionCode;
+            }
+        }
+
+        throw new ConfigException("Unknown section '" + requested
+                + "'. Choose one of: " + String.join(", ", sectionCodes)
+                + " (setting '" + ConfigKeys.SECTION_CODES + "').");
     }
 
     // Prints one line per submission and the totals.
