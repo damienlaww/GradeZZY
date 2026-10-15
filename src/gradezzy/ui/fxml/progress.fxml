@@ -1,17 +1,109 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  Grading progress screen. PLACEHOLDER ONLY: no layout and no styling yet.
+  Grading progress screen: overall progress, the pipeline stage, counts,
+  timing, execution issues and one row per student, with Cancel, Resume
+  and Retry.
   Tier: MUST. Owner: Damien.
-  The team will choose a design before this file is filled in.
   Controller: gradezzy.ui.ProgressController
+  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
+<?import gradezzy.ui.component.MetricTile?>
+<?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox xmlns="http://javafx.com/javafx"
-      xmlns:fx="http://javafx.com/fxml"
-      fx:controller="gradezzy.ui.ProgressController">
-    <Label text="Grading progress (placeholder)"/>
-</VBox>
+<ScrollPane fitToWidth="true" styleClass="page-scroll"
+            xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="gradezzy.ui.ProgressController">
+    <VBox styleClass="page">
+        <VBox styleClass="page-heading">
+            <HBox styleClass="page-header">
+                <Label text="Grading Progress" styleClass="page-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button fx:id="retryButton" text="Retry Failed Submissions"
+                        onAction="#handleRetry"/>
+                <Button fx:id="resultsButton" text="View Results"
+                        onAction="#handleViewResults"/>
+                <Button fx:id="cancelButton" text="Cancel Grading"
+                        onAction="#handleCancel"/>
+                <Button fx:id="resumeButton" text="Resume Grading"
+                        styleClass="accent, primary-action"
+                        onAction="#handleResume"/>
+                <Button fx:id="reviewButton" text="Review Anomalies"
+                        styleClass="accent, primary-action"
+                        onAction="#handleReview"/>
+            </HBox>
+            <Label fx:id="statusLabel" styleClass="page-status"
+                   wrapText="true"/>
+        </VBox>
+
+        <VBox fx:id="emptyHolder"/>
+
+        <VBox fx:id="runBox" spacing="16">
+            <VBox styleClass="panel">
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Label fx:id="countLabel" styleClass="panel-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="percentLabel" styleClass="panel-title"/>
+                </HBox>
+                <ProgressBar fx:id="progressBar" maxWidth="Infinity"
+                             styleClass="large"
+                             accessibleText="Submissions processed"/>
+                <Label fx:id="nowLabel" styleClass="secondary-text"
+                       wrapText="true"/>
+                <Label text="Pipeline stages" styleClass="eyebrow"/>
+                <FlowPane fx:id="stageList" styleClass="stage-list"/>
+            </VBox>
+
+            <FlowPane fx:id="metrics" hgap="12" vgap="12">
+                <MetricTile fx:id="processedTile" name="Processed"/>
+                <MetricTile fx:id="issuesTile" name="Execution issues"/>
+                <MetricTile fx:id="elapsedTile" name="Elapsed"/>
+                <MetricTile fx:id="remainingTile" name="Time left"/>
+            </FlowPane>
+
+            <HBox styleClass="banner">
+                <Label wrapText="true">
+                    <text>
+                        One failed submission never stops the batch. It is
+                        recorded and grading carries on. If you cancel, every
+                        completed result is kept and you can resume the rest.
+                    </text>
+                </Label>
+            </HBox>
+
+            <GridPane fx:id="columns" hgap="16" vgap="16">
+                <VBox fx:id="studentsPanel" styleClass="panel, flush">
+                    <HBox styleClass="panel-header">
+                        <Label text="Students" styleClass="panel-title"/>
+                    </HBox>
+                    <TableView fx:id="rowTable" prefHeight="300"
+                               accessibleText="Progress of each student"/>
+                </VBox>
+                <VBox fx:id="issuesPanel" styleClass="panel">
+                    <Label text="Execution issues so far"
+                           styleClass="panel-title"/>
+                    <Label styleClass="secondary-text" wrapText="true">
+                        <text>
+                            Compile errors, time limits and runtime errors. Each
+                            is recorded on the student and reviewed later.
+                        </text>
+                    </Label>
+                    <ListView fx:id="issueList" prefHeight="220"
+                              accessibleText="Execution issues so far"/>
+                </VBox>
+            </GridPane>
+        </VBox>
+    </VBox>
+</ScrollPane>

@@ -1,17 +1,159 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  Anomaly log screen. PLACEHOLDER ONLY: no layout and no styling yet.
+  Review Anomalies screen: every flag of the run with search, type,
+  severity and decision filters, sort, multi-selection, bulk decisions
+  and an inspector for the focused flag. Flags request a review; they
+  never change a mark and never claim misconduct.
   Tier: SHOULD. Owner: Damien.
-  The team will choose a design before this file is filled in.
   Controller: gradezzy.ui.AnomalyLogController
+  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox xmlns="http://javafx.com/javafx"
-      xmlns:fx="http://javafx.com/fxml"
-      fx:controller="gradezzy.ui.AnomalyLogController">
-    <Label text="Anomaly log (placeholder)"/>
-</VBox>
+<ScrollPane fitToWidth="true" fitToHeight="true"
+            styleClass="page-scroll"
+            xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="gradezzy.ui.AnomalyLogController">
+    <VBox styleClass="page">
+        <VBox styleClass="page-heading">
+            <HBox styleClass="page-header">
+                <Label text="Review Anomalies" styleClass="page-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button fx:id="rejectButton" text="Reject Selected"
+                        onAction="#handleReject"/>
+                <Button fx:id="approveButton" text="Mark Selected Reviewed"
+                        styleClass="accent, primary-action"
+                        onAction="#handleApprove"/>
+            </HBox>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Label fx:id="statusLabel" styleClass="page-status"
+                       wrapText="true" maxWidth="Infinity"
+                       minHeight="-Infinity" HBox.hgrow="ALWAYS"/>
+                <Button text="Open Validation" styleClass="link-button"
+                        onAction="#handleOpenValidation"/>
+            </HBox>
+        </VBox>
+
+        <FlowPane styleClass="filter-bar" hgap="12" vgap="8">
+            <TextField fx:id="searchField" styleClass="search-field"
+                       promptText="Search flags"
+                       accessibleText="Search by username, type or message"
+                       onAction="#handleFilterChanged"/>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Label fx:id="typeLabel" text="Type" styleClass="filter-label"/>
+                <ComboBox fx:id="typeFilter" accessibleText="Type filter"/>
+            </HBox>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Label fx:id="severityLabel" text="Severity"
+                       styleClass="filter-label"/>
+                <ComboBox fx:id="severityFilter"
+                          accessibleText="Severity filter"/>
+            </HBox>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Label fx:id="decisionLabel" text="Decision"
+                       styleClass="filter-label"/>
+                <ComboBox fx:id="decisionFilter"
+                          accessibleText="Decision filter"/>
+            </HBox>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Label fx:id="sortLabel" text="Sort" styleClass="filter-label"/>
+                <ComboBox fx:id="sortBox" accessibleText="Sort order"/>
+            </HBox>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Button fx:id="selectAllButton" text="Select All"
+                        onAction="#handleSelectAll"/>
+                <Button fx:id="clearSelectionButton" text="Clear Selection"
+                        onAction="#handleClearSelection"/>
+                <Button fx:id="undoSelectedButton" text="Undo Selected"
+                        onAction="#handleUndo"/>
+                <ToggleButton fx:id="inspectorToggle" text="Inspector"
+                              accessibleText="Show the focused flag"/>
+            </HBox>
+        </FlowPane>
+
+        <HBox spacing="16" VBox.vgrow="ALWAYS">
+            <VBox styleClass="panel, flush" HBox.hgrow="ALWAYS">
+                <TableView fx:id="table" styleClass="tall-rows"
+                           VBox.vgrow="ALWAYS" minHeight="260"
+                           accessibleText="Flags, one row per flag"/>
+            </VBox>
+
+            <VBox fx:id="inspector" styleClass="inspector">
+                <ScrollPane fitToWidth="true" hbarPolicy="NEVER"
+                            VBox.vgrow="ALWAYS">
+                    <VBox spacing="12">
+                        <Label text="FLAG" styleClass="eyebrow"/>
+                        <Label fx:id="titleLabel" styleClass="panel-title"
+                               wrapText="true"/>
+                        <Label fx:id="hintLabel" styleClass="secondary-text"
+                               wrapText="true"/>
+                        <VBox fx:id="detailBox" spacing="12">
+                            <VBox spacing="0">
+                                <Label fx:id="nameLabel"
+                                       styleClass="context-value"
+                                       wrapText="true"/>
+                                <Label fx:id="usernameLabel"
+                                       styleClass="secondary-text, mono"/>
+                            </VBox>
+                            <FlowPane fx:id="badgeRow" hgap="16" vgap="8"/>
+                            <Label fx:id="messageLabel" wrapText="true"/>
+                            <VBox spacing="4">
+                                <Label text="WHAT YOU CAN DO"
+                                       styleClass="eyebrow"/>
+                                <Label fx:id="actionLabel" wrapText="true"/>
+                            </VBox>
+                            <VBox fx:id="repairBox" spacing="4">
+                                <Label text="REPAIR OF THE WORKING COPY"
+                                       styleClass="eyebrow"/>
+                                <HBox fx:id="repairHolder"/>
+                            </VBox>
+                        </VBox>
+                    </VBox>
+                </ScrollPane>
+                <VBox spacing="8">
+                    <HBox spacing="8">
+                        <Button fx:id="markButton" text="Mark Reviewed"
+                                maxWidth="Infinity"
+                                HBox.hgrow="ALWAYS"
+                                onAction="#handleMarkFocused"/>
+                        <Button fx:id="rejectFlagButton" text="Reject Flag"
+                                maxWidth="Infinity" HBox.hgrow="ALWAYS"
+                                onAction="#handleRejectFocused"/>
+                    </HBox>
+                    <Button fx:id="undoButton" text="Undo Decision"
+                            maxWidth="Infinity"
+                            onAction="#handleUndoFocused"/>
+                    <Button fx:id="openButton" text="Open Student Evidence"
+                            maxWidth="Infinity"
+                            onAction="#handleOpenStudent"/>
+                    <Button fx:id="compareButton"
+                            text="Compare in Similarity Review"
+                            maxWidth="Infinity" onAction="#handleCompare"/>
+                    <Button fx:id="validationButton" text="Open Validation"
+                            maxWidth="Infinity"
+                            onAction="#handleOpenValidation"/>
+                    <Label styleClass="secondary-text" wrapText="true"
+                           minHeight="-Infinity">
+                        <text>
+                            A flag asks for your review. It is not a finding of
+                            misconduct and changes no mark.
+                        </text>
+                    </Label>
+                </VBox>
+            </VBox>
+        </HBox>
+    </VBox>
+</ScrollPane>

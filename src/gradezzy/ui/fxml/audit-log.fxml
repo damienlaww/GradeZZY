@@ -1,17 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  Audit log screen. PLACEHOLDER ONLY: no layout and no styling yet.
+  Audit Log screen: every instructor action and automatic repair, newest
+  first, with search, an action filter and an export preview.
   Tier: SHOULD. Owner: Damien.
-  The team will choose a design before this file is filled in.
   Controller: gradezzy.ui.AuditLogController
+  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox xmlns="http://javafx.com/javafx"
-      xmlns:fx="http://javafx.com/fxml"
-      fx:controller="gradezzy.ui.AuditLogController">
-    <Label text="Audit log (placeholder)"/>
-</VBox>
+<ScrollPane fitToWidth="true" fitToHeight="true"
+            styleClass="page-scroll"
+            xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="gradezzy.ui.AuditLogController">
+    <VBox styleClass="page">
+        <VBox styleClass="page-heading">
+            <HBox styleClass="page-header">
+                <Label text="Audit Log" styleClass="page-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="Export Audit Log"
+                        styleClass="accent, primary-action"
+                        onAction="#handleExport"/>
+            </HBox>
+            <Label fx:id="statusLabel" styleClass="page-status"
+                   wrapText="true"/>
+        </VBox>
+
+        <FlowPane styleClass="filter-bar" hgap="12" vgap="8">
+            <TextField fx:id="searchField" styleClass="search-field"
+                       promptText="Search actions and details"
+                       accessibleText="Search actions and details"/>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Label fx:id="actionLabel" text="Action"
+                       styleClass="filter-label"/>
+                <ComboBox fx:id="actionFilter" accessibleText="Action filter"/>
+            </HBox>
+            <Button fx:id="clearButton" text="Clear Filters"
+                    onAction="#handleClearFilters"/>
+        </FlowPane>
+
+        <VBox styleClass="panel, flush" VBox.vgrow="ALWAYS">
+            <TableView fx:id="table" VBox.vgrow="ALWAYS" minHeight="260"
+                       accessibleText="Audit log, newest first"/>
+        </VBox>
+    </VBox>
+</ScrollPane>

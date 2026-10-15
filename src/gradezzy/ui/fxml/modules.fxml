@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  Modules screen: one panel per module with a tile for each of its
+  sections, so sections always stay grouped under their module. Choosing
+  a tile makes that section the one in the context bar.
+  Tier: SHOULD. Owner: Damien.
+  Controller: gradezzy.ui.ModulesController
+  AI use: drafted with Claude Code, reviewed by Jun Sheng.
+-->
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true" styleClass="page-scroll"
+            xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="gradezzy.ui.ModulesController">
+    <VBox styleClass="page">
+        <VBox styleClass="page-heading">
+            <HBox styleClass="page-header">
+                <Label text="Modules" styleClass="page-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="Open Assessment"
+                        styleClass="accent, primary-action"
+                        onAction="#handleOpenAssessment"/>
+            </HBox>
+            <Label fx:id="statusLabel" styleClass="page-status"
+                   wrapText="true"/>
+        </VBox>
+
+        <HBox fx:id="demoBanner" styleClass="banner">
+            <Label wrapText="true">
+                <text>
+                    The DEMO module shows how an empty module looks. More than
+                    one module is a proposed feature.
+                </text>
+            </Label>
+        </HBox>
+
+        <VBox fx:id="modulePanels" spacing="16"/>
+
+        <VBox fx:id="multiModulePanel" styleClass="panel">
+            <Label text="More than one module" styleClass="panel-title"/>
+            <Label text="config.properties holds one module today."
+                   styleClass="secondary-text" wrapText="true"/>
+        </VBox>
+    </VBox>
+</ScrollPane>

@@ -1,17 +1,110 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  Main window screen. PLACEHOLDER ONLY: no layout and no styling yet.
+  Main window: the sidebar, the context bar and the area that shows one
+  screen at a time. Messages are layered over the content; sheets are
+  layered over the whole window, with the window behind them inert.
   Tier: MUST. Owner: Damien.
-  The team will choose a design before this file is filled in.
   Controller: gradezzy.ui.MainController
+  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.MenuButton?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox xmlns="http://javafx.com/javafx"
-      xmlns:fx="http://javafx.com/fxml"
-      fx:controller="gradezzy.ui.MainController">
-    <Label text="Main window (placeholder)"/>
-</VBox>
+<StackPane fx:id="windowRoot"
+           xmlns="http://javafx.com/javafx"
+           xmlns:fx="http://javafx.com/fxml"
+           fx:controller="gradezzy.ui.MainController">
+    <BorderPane fx:id="shellRoot" styleClass="app-shell">
+        <left>
+            <VBox fx:id="sidebar" styleClass="sidebar">
+                <VBox styleClass="sidebar-brand-box">
+                    <Label text="GradeZZY" styleClass="sidebar-brand"/>
+                    <Label fx:id="brandCaption" text="Lab test grading"
+                           styleClass="sidebar-caption"/>
+                </VBox>
+                <ScrollPane fx:id="navScroll" fitToWidth="true"
+                            hbarPolicy="NEVER" VBox.vgrow="ALWAYS"
+                            styleClass="nav-scroll">
+                    <VBox fx:id="navList" styleClass="nav-list"/>
+                </ScrollPane>
+                <VBox fx:id="footerNav" styleClass="nav-list, nav-footer"/>
+            </VBox>
+        </left>
+        <center>
+            <StackPane fx:id="overlayHost">
+                <BorderPane styleClass="content-shell">
+                    <top>
+                        <VBox fx:id="contextBar" styleClass="context-bar">
+                            <HBox fx:id="contextRow" styleClass="context-row">
+                                <MenuButton fx:id="navMenu" text="Menu"
+                                            styleClass="nav-menu"/>
+                                <Label fx:id="moduleLabel" text="Module"
+                                       styleClass="context-label"/>
+                                <ComboBox fx:id="moduleBox"
+                                          accessibleText="Module"/>
+                                <Label fx:id="sectionLabel" text="Section"
+                                       styleClass="context-label"/>
+                                <ComboBox fx:id="sectionBox"
+                                          accessibleText="Section"/>
+                                <Separator fx:id="contextSeparator"
+                                           orientation="VERTICAL"/>
+                                <VBox fx:id="assessmentBox"
+                                      styleClass="context-item">
+                                    <Label fx:id="assessmentCaption"
+                                           text="Assessment"
+                                           styleClass="context-label"/>
+                                    <Label fx:id="assessmentLabel"
+                                           styleClass="context-value"/>
+                                </VBox>
+                                <VBox fx:id="runBox"
+                                      styleClass="context-item">
+                                    <Label fx:id="runCaption"
+                                           text="Grading run"
+                                           styleClass="context-label"/>
+                                    <Label fx:id="runLabel"
+                                           styleClass="context-value"/>
+                                </VBox>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="demoBadge" text="Demo data"
+                                       styleClass="demo-badge"/>
+                                <HBox styleClass="segmented">
+                                    <ToggleButton fx:id="lightButton"
+                                                  text="Light"
+                                                  styleClass="left-pill"/>
+                                    <ToggleButton fx:id="darkButton"
+                                                  text="Dark"
+                                                  styleClass="right-pill"/>
+                                </HBox>
+                            </HBox>
+                            <HBox fx:id="contextDetails"
+                                  styleClass="context-row" visible="false"
+                                  managed="false"/>
+                        </VBox>
+                    </top>
+                    <center>
+                        <StackPane fx:id="contentHost"
+                                   styleClass="content-host"/>
+                    </center>
+                </BorderPane>
+                <VBox fx:id="toastLayer" styleClass="toast-layer"
+                      pickOnBounds="false"/>
+            </StackPane>
+        </center>
+    </BorderPane>
+    <StackPane fx:id="sheetLayer" styleClass="sheet-layer" visible="false">
+        <Region fx:id="sheetScrim" styleClass="sheet-scrim"/>
+        <VBox fx:id="sheetHolder" styleClass="sheet-holder"
+              alignment="TOP_CENTER" pickOnBounds="false"/>
+    </StackPane>
+</StackPane>
