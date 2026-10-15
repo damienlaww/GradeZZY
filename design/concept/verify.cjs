@@ -1,0 +1,31 @@
+/* Design-only state checks, without a browser or production dependencies. */
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const handlers = {};
+const elements = {};
+const root = {dataset:{},innerHTML:'',addEventListener:(name,fn)=>handlers[name]=fn};
+let interval;
+const el = id => elements[id] ||= {value:'',textContent:'',open:false,showModal(){this.open=true},close(){this.open=false},addEventListener(){},focus(){}};
+const context = {document:{getElementById:id=>id==='app'?root:el(id),activeElement:null,addEventListener(){}},location:{search:'',reload(){}},URLSearchParams,setInterval:fn=>(interval=fn,1),clearInterval:()=>{interval=null}};
+vm.createContext(context);
+let source = fs.readFileSync(__dirname+'/concept.js','utf8');
+source=source.replace('render();\n})();','globalThis.test={S,students,repairs,anomalies,pages,render,resultList,navigate};\nrender();\n})();');
+vm.runInContext(source,context);
+const {S,students,repairs,anomalies,pages,render,resultList,navigate}=context.test;
+const click=(act,extra={})=>handlers.click({target:{closest:()=>({dataset:{act,...extra}})}});
+for(const page of Object.keys(pages)){S.page=page;render();assert.ok(root.innerHTML.includes('<h1>'),page);}
+S.page='Submissions';render();assert.match(root.innerHTML,/data-act="start"[^>]*disabled/);
+click('import');assert.equal(S.fixed,false);click('fixzip');for(const key of ['roster','testers','starter'])click(key);
+assert.doesNotMatch(root.innerHTML,/data-act="start"[^>]*disabled/);
+click('duplicate');assert.match(root.innerHTML,/data-act="start"[^>]*disabled/);click('dedupe');
+click('start');for(let i=0;i<12;i++)interval();assert.equal(S.done,3);click('cancel');click('confirmCancel');assert.equal(S.running,false);assert.equal(S.done,3);click('resume');for(let i=0;i<12;i++)interval();assert.equal(S.done,6);assert.equal(S.running,false);assert.equal(students[5].status,'Completed');
+S.page='Validation';click(undefined,{repairAct:'approve',id:'0'});assert.equal(repairs[0].decision,'Approved');click(undefined,{repairAct:'undo',id:'0'});assert.equal(repairs[0].decision,'Pending');
+S.page='Review Anomalies';click('rejectAnomaly');assert.equal(anomalies[0].decision,'Rejected');click('undoAnomaly');assert.equal(anomalies[0].decision,'Open');
+S.selected='learner.bravo';S.page='Student evidence';assert.equal(students[1].scores.reduce((a,b)=>a+b),19);click('retry');assert.equal(students[1].scores.reduce((a,b)=>a+b),20);assert.equal(S.retried,true);
+click('adjust');el('mark').value='2';el('reason').value='';click('saveScore');assert.match(el('adjustError').textContent,/reason/);el('reason').value='Reviewed synthetic case evidence';click('saveScore');assert.equal(students[1].scores[0],2);assert.equal(S.adjusted,true);click('undoScore');assert.equal(students[1].scores[0],3);
+S.page='Results';S.query='bravo';S.filter='All';S.picks=['learner.bravo'];click('export');assert.equal(S.exportRows.length,1);el('format').value='JSON';click('confirmExport');assert.match(el('modal').innerHTML,/learner.bravo/);click('close');
+navigate('Student evidence');navigate('Results');assert.equal(S.query,'bravo');let theme=S.theme;click('theme');assert.notEqual(theme,S.theme);assert.equal(S.query,'bravo');assert.equal(S.picks.length,1);
+S.section='G2';assert.equal(resultList().length,0);
+assert.doesNotMatch(source,/\bfetch\s*\(|XMLHttpRequest|WebSocket|require\s*\(/);
+console.log('PASS: 15 screens; input gating; cancel/resume; repair and anomaly undo; targeted retry; required score reason and undo; export scope; list context; theme state; empty section; no network or production imports.');
