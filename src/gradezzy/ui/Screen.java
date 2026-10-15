@@ -7,6 +7,9 @@
  * Where it fits: ScreenNavigator loads a screen by one of these constants,
  * so FXML file names are written in exactly one place. To add a screen,
  * add a constant here, an FXML file in the fxml folder and a controller.
+ *
+ * AI use: OVERVIEW, MODULES, VALIDATION and HELP added with Claude Code,
+ * reviewed by Jun Sheng.
  */
 package gradezzy.ui;
 
@@ -20,38 +23,50 @@ public enum Screen {
     /** The main window that hosts the other screens. Tier: MUST. */
     MAIN("main.fxml", "GradeZZY"),
 
-    /** Upload of submissions for one section. Tier: MUST. */
-    UPLOAD("upload.fxml", "Upload submissions"),
+    /** Modules, sections, runs and recent activity. Tier: SHOULD. */
+    OVERVIEW("overview.fxml", "Overview"),
 
-    /** Upload of testers and entry of test cases. Tier: SHOULD. */
-    TEST_CASES("test-cases.fxml", "Test cases"),
+    /** The sections of each module. Tier: SHOULD. */
+    MODULES("modules.fxml", "Modules"),
+
+    /** The rubric, testers and typed test cases. Tier: SHOULD. */
+    TEST_CASES("test-cases.fxml", "Assessments"),
+
+    /** Upload of submissions for one section. Tier: MUST. */
+    UPLOAD("upload.fxml", "Submissions"),
+
+    /** Working-copy repairs to approve or reject. Tier: SHOULD. */
+    VALIDATION("validation.fxml", "Validation"),
 
     /** Progress of a running batch. Tier: MUST. */
-    PROGRESS("progress.fxml", "Grading progress"),
+    PROGRESS("progress.fxml", "Grading Progress"),
 
-    /** The anomaly log with approve and undo. Tier: SHOULD. */
-    ANOMALY_LOG("anomaly-log.fxml", "Anomaly log"),
+    /** The anomaly log with review decisions. Tier: SHOULD. */
+    ANOMALY_LOG("anomaly-log.fxml", "Review Anomalies"),
 
     /** Per-question and per-student results. Tier: MUST. */
     RESULTS("results.fxml", "Results"),
 
-    /** The report of one student. Tier: SHOULD. */
-    STUDENT_REPORT("student-report.fxml", "Student report"),
+    /** The evidence behind one student's result. Tier: SHOULD. */
+    STUDENT_REPORT("student-report.fxml", "Student Evidence"),
 
     /** The statistics dashboard. Tier: SHOULD. */
     STATISTICS("statistics.fxml", "Statistics"),
 
     /** Pairs of similar submissions. Tier: COULD. */
-    PLAGIARISM("plagiarism.fxml", "Plagiarism check"),
+    PLAGIARISM("plagiarism.fxml", "Similarity Review"),
 
     /** Earlier runs, backup and recovery. Tier: COULD. */
     HISTORY("history.fxml", "History"),
 
     /** The audit log. Tier: SHOULD. */
-    AUDIT_LOG("audit-log.fxml", "Audit log"),
+    AUDIT_LOG("audit-log.fxml", "Audit Log"),
 
     /** The settings page. Tier: SHOULD. */
-    SETTINGS("settings.fxml", "Settings");
+    SETTINGS("settings.fxml", "Settings"),
+
+    /** Walkthroughs, shortcuts and backend connections. Tier: SHOULD. */
+    HELP("help.fxml", "Help");
 
     // The classpath folder that holds every FXML file
     private static final String FXML_FOLDER = "/gradezzy/ui/fxml/";

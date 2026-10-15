@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  Help screen: the demo walkthrough, keyboard shortcuts, what each result
+  state means, recovery advice, the demo data switch and the backend
+  connections of every capability.
+  Tier: SHOULD. Owner: Damien.
+  Controller: gradezzy.ui.HelpController
+  AI use: drafted with Claude Code, reviewed by Jun Sheng.
+-->
+
+<?import atlantafx.base.controls.ToggleSwitch?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true" styleClass="page-scroll"
+            xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="gradezzy.ui.HelpController">
+    <VBox styleClass="page">
+        <VBox styleClass="page-heading">
+            <HBox styleClass="page-header">
+                <Label text="Help" styleClass="page-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="Start Import Walkthrough"
+                        styleClass="accent, primary-action"
+                        onAction="#handleStartWalkthrough"/>
+            </HBox>
+            <Label fx:id="statusLabel" styleClass="page-status"
+                   wrapText="true"/>
+        </VBox>
+
+        <VBox styleClass="panel">
+            <Label text="Walkthrough" styleClass="panel-title"/>
+            <Label styleClass="secondary-text" wrapText="true">
+                <text>
+                    The seven flows of demo mode, in order. Each step names the
+                    screen it needs; the link opens it.
+                </text>
+            </Label>
+            <VBox fx:id="stepRows" spacing="12"/>
+        </VBox>
+
+        <VBox styleClass="panel">
+            <Label text="Keyboard shortcuts" styleClass="panel-title"/>
+            <Label fx:id="keysCaption" styleClass="secondary-text"
+                   wrapText="true"/>
+            <GridPane fx:id="keyColumns" hgap="24" vgap="16">
+                <VBox fx:id="screenKeysBox" spacing="8">
+                    <Label text="SCREENS" styleClass="eyebrow"/>
+                    <GridPane fx:id="screenKeys" styleClass="detail-grid">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="-Infinity"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+                    </GridPane>
+                </VBox>
+                <VBox fx:id="workKeysBox" spacing="8">
+                    <Label text="WITHIN A SCREEN" styleClass="eyebrow"/>
+                    <GridPane fx:id="workKeys" styleClass="detail-grid">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="-Infinity"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+                    </GridPane>
+                </VBox>
+            </GridPane>
+        </VBox>
+
+        <GridPane fx:id="stateColumns" hgap="16" vgap="16">
+            <VBox fx:id="statesPanel" styleClass="panel">
+                <Label text="What each result state means"
+                       styleClass="panel-title"/>
+                <Label styleClass="secondary-text" wrapText="true">
+                    <text>
+                        Every state has its own icon and words, so none depends
+                        on colour.
+                    </text>
+                </Label>
+                <GridPane fx:id="stateRows" styleClass="detail-grid">
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="-Infinity"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+                </GridPane>
+            </VBox>
+            <VBox fx:id="recoveryPanel" styleClass="panel">
+                <Label text="When something goes wrong"
+                       styleClass="panel-title"/>
+                <Label styleClass="secondary-text" wrapText="true">
+                    <text>
+                        One broken submission never stops the batch. Original
+                        ZIP files are never changed.
+                    </text>
+                </Label>
+                <VBox fx:id="adviceRows" spacing="12"/>
+            </VBox>
+        </GridPane>
+
+        <VBox fx:id="demoPanel" styleClass="panel">
+            <Label text="Demo data" styleClass="panel-title"/>
+            <Label wrapText="true"
+                   text="Demo mode never reads, grades or saves real files."/>
+            <HBox spacing="12" alignment="CENTER_LEFT">
+                <Label fx:id="cohortLabel" text="Large cohort (240 students)"
+                       wrapText="true" HBox.hgrow="ALWAYS"
+                       maxWidth="Infinity"/>
+                <ToggleSwitch fx:id="cohortSwitch"
+                              accessibleText="Large cohort of 240 students"/>
+            </HBox>
+            <Label styleClass="secondary-text" wrapText="true">
+                <text>
+                    Fills CS102 G1 with 240 generated students to try long
+                    lists. Switch it off to return to the six sample students.
+                </text>
+            </Label>
+        </VBox>
+
+        <VBox styleClass="panel, flush">
+            <VBox styleClass="panel-header" spacing="4">
+                <Label text="Backend connections" styleClass="panel-title"/>
+                <Label fx:id="connectionsCaption" styleClass="secondary-text"
+                       wrapText="true"/>
+            </VBox>
+            <TableView fx:id="capabilityTable" prefHeight="520"
+                       minHeight="300">
+                <accessibleText>
+                    Backend connections, one row per feature
+                </accessibleText>
+            </TableView>
+        </VBox>
+    </VBox>
+</ScrollPane>

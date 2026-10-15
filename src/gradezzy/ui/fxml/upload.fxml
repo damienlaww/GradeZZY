@@ -1,17 +1,169 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  Upload submissions screen. PLACEHOLDER ONLY: no layout and no styling yet.
+  Submissions screen: the four input groups of a grading run, with the
+  reasons Start Grading is unavailable until every required input is ready.
   Tier: MUST. Owner: Damien.
-  The team will choose a design before this file is filled in.
   Controller: gradezzy.ui.UploadController
+  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox xmlns="http://javafx.com/javafx"
-      xmlns:fx="http://javafx.com/fxml"
-      fx:controller="gradezzy.ui.UploadController">
-    <Label text="Upload submissions (placeholder)"/>
-</VBox>
+<ScrollPane fitToWidth="true" styleClass="page-scroll"
+            xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="gradezzy.ui.UploadController">
+    <VBox styleClass="page">
+        <VBox styleClass="page-heading">
+            <HBox styleClass="page-header">
+                <Label text="Submissions" styleClass="page-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button fx:id="validationButton" text="Open Validation"
+                        onAction="#handleOpenValidation"/>
+                <Button fx:id="startButton" text="Start Grading"
+                        styleClass="accent, primary-action"
+                        onAction="#handleStartGrading"/>
+            </HBox>
+            <Label fx:id="statusLabel" styleClass="page-status"
+                   wrapText="true"/>
+        </VBox>
+
+        <HBox fx:id="safetyBanner" styleClass="banner">
+            <Label fx:id="safetyLabel" wrapText="true">
+                <text>
+                    Original ZIP files are never changed. Validation and repairs
+                    work on copies.
+                </text>
+            </Label>
+        </HBox>
+
+        <VBox fx:id="blockingBanner" styleClass="banner, tone-warning"
+              spacing="4">
+            <Label text="Start Grading is not available yet:"
+                   styleClass="context-value"/>
+            <VBox fx:id="reasonsBox" spacing="4"/>
+        </VBox>
+
+        <GridPane fx:id="columns" hgap="16" vgap="16">
+            <VBox fx:id="submissionPanel" styleClass="panel">
+                <HBox styleClass="page-header">
+                    <Label text="1. Student ZIP submissions"
+                           styleClass="panel-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="sectionLabel" text="Section"
+                           styleClass="filter-label"/>
+                    <ComboBox fx:id="sectionBox" accessibleText="Section"
+                              onAction="#handleSectionChosen"/>
+                </HBox>
+                <VBox fx:id="dropZone" styleClass="drop-zone">
+                    <Label fx:id="dropTitle"
+                           text="Drop ZIP files or a folder here"
+                           styleClass="panel-title"/>
+                    <Label fx:id="limitsLabel" styleClass="secondary-text"
+                           wrapText="true"/>
+                    <HBox alignment="CENTER" spacing="8">
+                        <Button fx:id="chooseFilesButton" text="Choose Files"
+                                onAction="#handleChooseFiles"/>
+                        <Button fx:id="chooseFolderButton"
+                                text="Choose Folder"
+                                onAction="#handleChooseFolder"/>
+                    </HBox>
+                </VBox>
+                <Label fx:id="submissionSummary" styleClass="secondary-text"
+                       wrapText="true"/>
+                <ListView fx:id="submissionList" prefHeight="250"
+                          accessibleText="Chosen ZIP files"/>
+                <HBox styleClass="toolbar">
+                    <Button fx:id="replaceButton" text="Replace File"
+                            onAction="#handleReplace"/>
+                    <Button fx:id="removeButton" text="Remove Selected"
+                            onAction="#handleRemove"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="clearButton" text="Clear All"
+                            onAction="#handleClearAll"/>
+                </HBox>
+            </VBox>
+
+            <VBox fx:id="sideColumn" spacing="16">
+                <VBox styleClass="panel, input-group">
+                    <Label text="2. Score sheet or roster"
+                           styleClass="panel-title"/>
+                    <Label styleClass="secondary-text" wrapText="true">
+                        <text>
+                            Required. The CSV that lists every student. It is
+                            also the template for the exported score sheet.
+                        </text>
+                    </Label>
+                    <HBox fx:id="rosterStatus" styleClass="file-row"/>
+                    <HBox styleClass="toolbar">
+                        <Button text="Choose File" userData="ROSTER"
+                                onAction="#handleChooseInput"/>
+                        <Button fx:id="rosterConfigured" text="Use Configured"
+                                userData="ROSTER"
+                                onAction="#handleUseConfigured"/>
+                        <Button fx:id="rosterRemove" userData="ROSTER"
+                                onAction="#handleRemoveInput">
+                            <text>Remove</text>
+                        </Button>
+                    </HBox>
+                </VBox>
+                <VBox styleClass="panel, input-group">
+                    <Label text="3. Tester files" styleClass="panel-title"/>
+                    <Label fx:id="testersHelp" styleClass="secondary-text"
+                           wrapText="true">
+                        <text>
+                            Required. The folder with Q1aTester.java and the
+                            other testers, plus their data files.
+                        </text>
+                    </Label>
+                    <HBox fx:id="testersStatus" styleClass="file-row"/>
+                    <HBox styleClass="toolbar">
+                        <Button text="Choose Folder" userData="TESTERS"
+                                onAction="#handleChooseInput"/>
+                        <Button fx:id="testersConfigured"
+                                text="Use Configured" userData="TESTERS"
+                                onAction="#handleUseConfigured"/>
+                        <Button fx:id="testersRemove" userData="TESTERS"
+                                onAction="#handleRemoveInput">
+                            <text>Remove</text>
+                        </Button>
+                    </HBox>
+                    <Button text="Type Test Cases Instead"
+                            styleClass="link-button"
+                            onAction="#handleOpenAssessments"/>
+                </VBox>
+                <VBox styleClass="panel, input-group">
+                    <Label text="4. Starter resources"
+                           styleClass="panel-title"/>
+                    <Label styleClass="secondary-text" wrapText="true">
+                        <text>
+                            Optional. The starter folder given to students.
+                            Without it, untouched starter files are not flagged.
+                        </text>
+                    </Label>
+                    <HBox fx:id="starterStatus" styleClass="file-row"/>
+                    <HBox styleClass="toolbar">
+                        <Button text="Choose Folder" userData="STARTER"
+                                onAction="#handleChooseInput"/>
+                        <Button fx:id="starterConfigured"
+                                text="Use Configured" userData="STARTER"
+                                onAction="#handleUseConfigured"/>
+                        <Button fx:id="starterRemove" userData="STARTER"
+                                onAction="#handleRemoveInput">
+                            <text>Remove</text>
+                        </Button>
+                    </HBox>
+                </VBox>
+            </VBox>
+        </GridPane>
+    </VBox>
+</ScrollPane>

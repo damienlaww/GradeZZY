@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  Overview screen: where the instructor is, what has been graded, what
+  waits for review, the main grading journey, sections and recent activity.
+  Tier: SHOULD. Owner: Damien.
+  Controller: gradezzy.ui.OverviewController
+  AI use: drafted with Claude Code, reviewed by Jun Sheng.
+-->
+
+<?import gradezzy.ui.component.MetricTile?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true" styleClass="page-scroll"
+            xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="gradezzy.ui.OverviewController">
+    <VBox styleClass="page">
+        <VBox styleClass="page-heading">
+            <HBox styleClass="page-header">
+                <Label text="Overview" styleClass="page-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="Import Submissions"
+                        styleClass="accent, primary-action"
+                        onAction="#handleImport"/>
+            </HBox>
+            <Label fx:id="statusLabel" styleClass="page-status"
+                   wrapText="true"/>
+        </VBox>
+
+        <HBox fx:id="modeBanner" styleClass="banner">
+            <Label fx:id="modeLabel" wrapText="true" HBox.hgrow="ALWAYS"
+                   maxWidth="Infinity"/>
+            <Button text="Backend Connections" styleClass="link-button"
+                    onAction="#handleConnections"/>
+        </HBox>
+
+        <FlowPane fx:id="metrics" hgap="12" vgap="12">
+            <MetricTile fx:id="moduleTile" name="Module"/>
+            <MetricTile fx:id="runTile" name="Grading run"/>
+            <MetricTile fx:id="gradedTile" name="Graded"/>
+            <MetricTile fx:id="reviewTile" name="Waiting for review"/>
+        </FlowPane>
+
+        <VBox styleClass="panel">
+            <Label text="Main grading journey" styleClass="panel-title"/>
+            <Label styleClass="secondary-text" wrapText="true">
+                <text>
+                    Each step is a screen in the sidebar. You can go back to any
+                    step at any time.
+                </text>
+            </Label>
+            <FlowPane fx:id="journey" hgap="8" vgap="8"/>
+        </VBox>
+
+        <GridPane fx:id="columns" hgap="16" vgap="16">
+            <VBox fx:id="sectionsPanel" styleClass="panel">
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <Label text="Modules and sections"
+                           styleClass="panel-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="View Modules" styleClass="link-button"
+                            onAction="#handleModules"/>
+                </HBox>
+                <VBox fx:id="sectionRows" spacing="8"/>
+            </VBox>
+            <VBox fx:id="activityPanel" styleClass="panel">
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <Label text="Recent activity" styleClass="panel-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="View Audit Log" styleClass="link-button"
+                            onAction="#handleAuditLog"/>
+                </HBox>
+                <VBox fx:id="activityRows" spacing="12"/>
+            </VBox>
+        </GridPane>
+    </VBox>
+</ScrollPane>

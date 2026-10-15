@@ -1,0 +1,71 @@
+/*
+ * File: SystemMouse.java
+ *
+ * Purpose: Drags the real mouse with the operating system's robot, for
+ * drags between two windows.
+ *
+ * Where it fits: Used by RobotDriver. A drag between windows runs the
+ * system's own loop on the JavaFX thread, so the JavaFX robot, which
+ * must be called on that thread, cannot release the button. This robot
+ * may be called from the test's own thread.
+ *
+ * Note on untaught Java: java.awt.Robot sends operating-system mouse
+ * events, and java.awt.event.InputEvent names the mouse button.
+ *
+ * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ */
+package gradezzy.ui.check;
+
+import java.awt.AWTException;
+import java.awt.Robot;
+import java.awt.event.InputEvent;
+
+/**
+ * Drags the mouse with the operating system's robot.
+ *
+ * <p>Tier: SHOULD. Owner: Damien.
+ */
+public final class SystemMouse {
+
+    // The steps of a drag
+    private static final int DRAG_STEPS = 12;
+
+    // The pause between two steps of a drag
+    private static final int STEP_MILLIS = 100;
+
+    // The pause over the target before the button is released
+    private static final int HOVER_MILLIS = 350;
+
+    // The operating system's robot
+    private final Robot hand;
+
+    /**
+     * Creates the mouse.
+     *
+     * @throws AWTException if the system does not allow a robot
+     */
+    public SystemMouse() throws AWTException {
+        hand = new Robot();
+    }
+
+    /**
+     * Presses the left button at one point, moves in small steps to
+     * another, rests there, and releases the button.
+     *
+     * @param start the screen point pressed, as x and y
+     * @param end the screen point released on, as x and y
+     */
+    public void drag(double[] start, double[] end) {
+        hand.mouseMove((int) start[0], (int) start[1]);
+        hand.mousePress(InputEvent.BUTTON1_DOWN_MASK);
+        for (int step = 1; step <= DRAG_STEPS; step++) {
+            double share = (double) step / DRAG_STEPS;
+            int x = (int) (start[0] + (end[0] - start[0]) * share);
+            int y = (int) (start[1] + (end[1] - start[1]) * share);
+            hand.mouseMove(x, y);
+            hand.delay(STEP_MILLIS);
+        }
+        hand.delay(HOVER_MILLIS);
+        hand.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
+    }
+}
