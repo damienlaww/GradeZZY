@@ -191,7 +191,7 @@ a harmless return value, so the project keeps compiling while you work.
 Replace the TODO comment and the placeholder return with real code. Do not
 change a method signature without telling whoever calls it.
 
-Owners and TODO counts (184 in total). The split is a starting point;
+Owners and TODO counts (160 in total). The split is a starting point;
 the team can swap areas. The next section explains each person's work in
 detail.
 
@@ -200,7 +200,7 @@ detail.
 | Seth | `util`, `ingest`, `validation`, two stages | 31 |
 | Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 23 |
 | Zach | `exec`, `testcase`, three stages, the score parser | 14 |
-| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 39 |
+| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 15 |
 | Huxley | `report`, `stats`, `persistence`, one stage | 28 |
 | Damien | `ui` | 49 |
 
@@ -604,9 +604,9 @@ a student's compile error; explain when throwing is appropriate.
 ### 4. Jing Yuan: scoring, services and putting it together
 
 **Packages:** `app`, `config`, `model`, `service`, plus `ScoreStage` and
-`ScoreCalculator` in `grading`. 39 TODOs. You also own the wiring
-(`PipelineFactory`, `ApplicationContext`), so you are the person who
-checks that the slices fit together.
+`ScoreCalculator` in `grading`. 15 TODOs left (39 at the start). You
+also own the wiring (`PipelineFactory`, `ApplicationContext`), so you
+are the person who checks that the slices fit together.
 
 What to build, in order:
 
@@ -900,6 +900,8 @@ Kept to a minimum and confined to the classes named here:
 | JDBC (to be written) | `persistence.SqliteResultRepository` | Talks to SQLite. |
 | `ProcessBuilder` (to be written) | `exec.ProcessRunner` | Runs `javac` and `java`. |
 | `java.util.zip` (to be written) | `ingest.ZipExtractor` | Unzips submissions. |
+| `java.util.regex.Pattern` | `service.SettingsService` | Checks that the zip name pattern setting is a valid regular expression. |
+| `java.nio.file.Files` (`readString`, `writeString`, `move`, `isSymbolicLink`) | `service.SettingsService`, `service.SearchService` | Saves `config.properties` through a temporary copy; reads source files for the code search. |
 
 No lambdas or streams are used in the skeleton. JavaFX event handlers will
 need lambdas (or anonymous classes) in the `ui` package.
@@ -991,7 +993,7 @@ implemented. `[x]` means it works now.
   (`service.ProgressEstimator`)
 - [ ] Statistics dashboard filtered by module and section (`stats`
   package, `ui.StatisticsController`)
-- [ ] Search, filter and sort (`service.SearchService`)
+- [x] Search, filter and sort (`service.SearchService`)
 - [ ] Select one, several or all (`ui.AnomalyLogController`,
   `ResultsController`)
 - [ ] Collapse and expand panels (`ui`, once the design is chosen)

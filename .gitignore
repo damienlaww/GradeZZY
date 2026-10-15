@@ -69,3 +69,6 @@ Desktop.ini
 CLAUDE.md
 .claude/
 .vscode/
+
+# Local UI and UX design prompt
+/design/UI-UX-Mockup-Prompt.md
