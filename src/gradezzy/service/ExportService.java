@@ -52,13 +52,25 @@ public class ExportService {
     }
 
     /**
-     * Finds an exporter by its format name.
+     * Finds an exporter by its format name, ignoring case and spaces at
+     * both ends, so "csv" finds the exporter named "CSV".
      *
      * @param formatName the format name
-     * @return the exporter, or null if the format is unknown
+     * @return the exporter, or null if the format is unknown or null
      */
     public Exporter findExporter(String formatName) {
-        // TODO(Jing Yuan): implement: a search of exporters by getFormatName
+        if (formatName == null) {
+            return null;
+        }
+
+        String wanted = formatName.trim();
+
+        for (Exporter exporter : exporters) {
+            if (wanted.equalsIgnoreCase(exporter.getFormatName())) {
+                return exporter;
+            }
+        }
+
         return null;
     }
 

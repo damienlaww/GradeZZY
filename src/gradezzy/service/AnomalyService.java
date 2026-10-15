@@ -14,6 +14,7 @@ import java.util.List;
 import gradezzy.fix.FixManager;
 import gradezzy.model.Anomaly;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Submission;
 import gradezzy.persistence.ResultRepository;
 
 /**
@@ -44,12 +45,21 @@ public class AnomalyService {
      * Collects the anomalies of every submission in a run.
      *
      * @param gradingRun the grading run
-     * @return all anomalies of the run
+     * @return all anomalies of the run, in submission order, or an empty
+     *         list if there is no run
      */
     public List<Anomaly> listAnomalies(GradingRun gradingRun) {
-        // TODO(Jing Yuan): implement: gathering the anomalies of each
-        //     submission
-        return new ArrayList<>();
+        List<Anomaly> anomalies = new ArrayList<>();
+
+        if (gradingRun == null) {
+            return anomalies;
+        }
+
+        for (Submission submission : gradingRun.getSubmissions()) {
+            anomalies.addAll(submission.getAnomalies());
+        }
+
+        return anomalies;
     }
 
     /**
