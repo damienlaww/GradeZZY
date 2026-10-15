@@ -87,13 +87,23 @@ public class Assessment {
     }
 
     /**
-     * Finds a question by its id.
+     * Finds a question by its id. The id must match exactly, including
+     * case, so Q1a and Q1A are different questions.
      *
      * @param questionId the question id
      * @return the matching question, or null if there is none
      */
     public Question findQuestion(String questionId) {
-        // TODO(Jing Yuan): implement: a search of the questions list by id
+        if (questionId == null) {
+            return null;
+        }
+
+        for (Question question : questions) {
+            if (questionId.equals(question.getId())) {
+                return question;
+            }
+        }
+
         return null;
     }
 
@@ -103,7 +113,12 @@ public class Assessment {
      * @return the highest total a student can get
      */
     public double getMaxTotal() {
-        // TODO(Jing Yuan): implement: the sum of maxScore over all questions
-        return 0.0;
+        double maxTotal = 0.0;
+
+        for (Question question : questions) {
+            maxTotal += question.getMaxScore();
+        }
+
+        return maxTotal;
     }
 }

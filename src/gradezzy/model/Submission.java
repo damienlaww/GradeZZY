@@ -174,12 +174,19 @@ public class Submission {
     }
 
     /**
-     * Adds up the score of every question.
+     * Adds up the score of every question. The scores are used as they
+     * are stored; ScoreStage has already kept each one within its
+     * question's maximum.
      *
      * @return the student's total
      */
     public double getTotalScore() {
-        // TODO(Jing Yuan): implement: the sum of the scores in questionResults
-        return 0.0;
+        double total = 0.0;
+
+        for (QuestionResult questionResult : questionResults) {
+            total += questionResult.getScore();
+        }
+
+        return total;
     }
 }

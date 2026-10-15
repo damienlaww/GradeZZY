@@ -18,6 +18,9 @@ import gradezzy.model.Submission;
  */
 public class ScoreCalculator {
 
+    // The lowest mark a question can have
+    private static final double MIN_SCORE = 0.0;
+
     /**
      * Creates a new score calculator.
      */
@@ -26,37 +29,67 @@ public class ScoreCalculator {
     }
 
     /**
-     * Returns the score of a question, never above its maximum.
+     * Returns the score of a question, kept between 0 and the question's
+     * maximum. A tester that reports more than the maximum gets the
+     * maximum; a negative score or one that is not a number gets 0.
      *
      * @param questionResult the question result
-     * @return the marks for the question
+     * @return the marks for the question, or 0 if there is no result
      */
     public double questionScore(QuestionResult questionResult) {
-        // TODO(Jing Yuan): implement: limiting the score to
-        //     question.getMaxScore()
-        return 0.0;
+        if (questionResult == null || questionResult.getQuestion() == null) {
+            return MIN_SCORE;
+        }
+
+        double score = questionResult.getScore();
+        double maxScore = questionResult.getQuestion().getMaxScore();
+
+        // NaN fails every comparison, so it is checked first.
+        if (Double.isNaN(score) || score < MIN_SCORE) {
+            return MIN_SCORE;
+        }
+
+        if (score > maxScore) {
+            return maxScore;
+        }
+
+        return score;
     }
 
     /**
-     * Returns the total of a student over all questions.
+     * Returns the total of a student over all questions, using the
+     * limited score of each question.
      *
      * @param submission the submission
-     * @return the student's total
+     * @return the student's total, or 0 if there is no submission
      */
     public double totalScore(Submission submission) {
-        // TODO(Jing Yuan): implement: the sum of questionScore over the results
-        return 0.0;
+        double total = MIN_SCORE;
+
+        if (submission == null) {
+            return total;
+        }
+
+        for (QuestionResult questionResult
+                : submission.getQuestionResults()) {
+            total += questionScore(questionResult);
+        }
+
+        return total;
     }
 
     /**
      * Returns the highest total possible for the assessment.
      *
      * @param assessment the assessment
-     * @return the denominator for the score sheet
+     * @return the denominator for the score sheet, or 0 if there is no
+     *         assessment
      */
     public double maxTotal(Assessment assessment) {
-        // TODO(Jing Yuan): implement: the sum of the maximum score of every
-        //     question
-        return 0.0;
+        if (assessment == null) {
+            return MIN_SCORE;
+        }
+
+        return assessment.getMaxTotal();
     }
 }
