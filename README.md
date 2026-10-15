@@ -604,9 +604,9 @@ a student's compile error; explain when throwing is appropriate.
 ### 4. Jing Yuan: scoring, services and putting it together
 
 **Packages:** `app`, `config`, `model`, `service`, plus `ScoreStage` and
-`ScoreCalculator` in `grading`. 39 TODOs. You also own the wiring
-(`PipelineFactory`, `ApplicationContext`), so you are the person who
-checks that the slices fit together.
+`ScoreCalculator` in `grading`. 15 TODOs left (39 at the start). You
+also own the wiring (`PipelineFactory`, `ApplicationContext`), so you
+are the person who checks that the slices fit together.
 
 What to build, in order:
 
