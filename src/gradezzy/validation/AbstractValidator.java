@@ -16,7 +16,7 @@ import gradezzy.model.Submission;
 /**
  * Shared code for all validators.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public abstract class AbstractValidator implements Validator {
 
@@ -53,7 +53,7 @@ public abstract class AbstractValidator implements Validator {
      */
     protected Anomaly createAnomaly(Submission submission, AnomalyType type,
             Severity severity, String message) {
-        // TODO(Seth): implement: creating an Anomaly with a unique id and a
+        // TODO(Damien): implement: creating an Anomaly with a unique id and a
         //     suggested action that fits the type
         return null;
     }

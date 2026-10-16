@@ -64,14 +64,14 @@ ServiceRegistry -> GradingService, AnomalyService, ExportService, ...
 
 ## Capabilities
 
-Status on commit `aafc5aa`. "Works now" means the method returns real data
+Status on commit `aafc5aa`, with later owner and status changes applied. "Works now" means the method returns real data
 today.
 
 | Capability | What it does for the instructor | Screens | DashboardBackend method | Service method | Owner | Status | Contract needed |
 |---|---|---|---|---|---|---|---|
 | Module, sections, rubric and limits | Shows the module, sections, marks and time limits set in config.properties. | Context bar, Modules, Assessments | `getModuleCodes`, `getSectionCodes`, `getAssessment`, `getRunTimeoutSeconds`, `getCompileTimeoutSeconds` | `AppConfig, AssessmentFactory.create` | Jing Yuan | Works now | None |
-| Check chosen files and folders | Tells you at once when a chosen file or folder cannot be read. | Submissions | `inspect` | `InputValidator.isReadableFile, isReadableDirectory` | Seth | Waiting | Until these return true for readable paths, every chosen file is reported as unreadable. |
-| Import and grade a batch | Grades every submission of a section in one batch. | Submissions, Grading Progress | `startGrading` | `GradingService.startGrading` | Jing Yuan, with Seth, Jun Sheng, Zach and Huxley | Waiting | The pipeline stages that load, check, fix, compile, run and score submissions. |
+| Check chosen files and folders | Tells you at once when a chosen file or folder cannot be read. | Submissions | `inspect` | `InputValidator.isReadableFile, isReadableDirectory` | Damien | Waiting | Until these return true for readable paths, every chosen file is reported as unreadable. |
+| Import and grade a batch | Grades every submission of a section in one batch. | Submissions, Grading Progress | `startGrading` | `GradingService.startGrading` | Jing Yuan, with Seth, Damien, Jun Sheng, Zach and Huxley | Waiting | The pipeline stages that load, check, fix, compile, run and score submissions. |
 | Cancel grading | Stops a batch early and keeps the results already finished. | Grading Progress | `cancelGrading` | `GradingService.cancel` | Jing Yuan | Works now | None |
 | Retry failed submissions | Grades the submissions that failed or were cancelled again. | Grading Progress | `retryFailedSubmissions` | `GradingService.retryFailed` | Jing Yuan | Works now | None |
 | Resume a cancelled run | Finishes a cancelled run without grading finished students again. | Grading Progress | `resumeGrading` | `GradingService.resume` | Jing Yuan, Huxley | Waiting | Loading the run from the repository and grading the submissions that are still pending. |
@@ -120,7 +120,7 @@ what they need. Each one shows "Not connected yet" in live mode.
 | Manual mark changes | Jing Yuan, Huxley | Store a manual score with its reason and the earlier score, record it in the audit log, allow undo. |
 | Export scope | Jing Yuan, Huxley | Export only the visible or selected students. Today the whole run is exported and the message says so. |
 | Restore preview | Jing Yuan, Huxley | A list of backup files with the run each holds, and a restore of one run that saves a recovery snapshot first. Restoring a whole backup file is already wired to `HistoryService.restore`. |
-| Form checks | Seth | Two checks for `InputValidator`: a mark that may be a decimal between 0 and a maximum (Adjust Score), and a Java method name (typed test cases). Until they exist the screens check these themselves. |
+| Form checks | Damien | Two checks for `InputValidator`: a mark that may be a decimal between 0 and a maximum (Adjust Score), and a Java method name (typed test cases). Until they exist the screens check these themselves. |
 | Similar pair detail | Jun Sheng | The compared files, matching excerpts and the excluded starter and tester files of one pair. |
 | Audit log export | Jing Yuan, Huxley | Register `AuditLogExporter` and add an export method for the audit log. |
 | Student report export | Jing Yuan, Huxley | Register `StudentReportExporter` and add an export method for one submission. |
@@ -143,11 +143,12 @@ Most `LiveBackend` methods are one service call. Three are thin glue:
 
 ## What each owner will see
 
-- **Seth.** Submissions screen. Until `InputValidator` returns true for
-  readable paths, every chosen file is reported as unreadable and Start
-  Grading stays unavailable. That is expected. Student Evidence (Source)
-  shows the working-copy tree, and a chosen file's text once
-  `FileUtils.readText` works.
+- **Seth.** Student Evidence (Source) shows the working-copy tree, and
+  a chosen file's text once `FileUtils.readText` works.
+- **Damien.** Submissions screen. Until `InputValidator` returns true
+  for readable paths, every chosen file is reported as unreadable and
+  Start Grading stays unavailable. That is expected. Validation and
+  Review Anomalies list the anomalies the validators report.
 - **Jun Sheng.** Validation (approve, reject), Review Anomalies (flags
   from the detectors), Similarity Review (pairs from
   `PlagiarismService.check`).

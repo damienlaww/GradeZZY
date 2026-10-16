@@ -13,7 +13,7 @@ import gradezzy.validation.ValidationRunner;
 /**
  * Runs every validator and records what they find.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class ValidateStage implements GradingStage {
 
@@ -54,7 +54,7 @@ public class ValidateStage implements GradingStage {
     @Override
     public void process(Submission submission,
             GradingContext context) throws GradingException {
-        // TODO(Seth): implement: calling validationRunner.runAll and adding
+        // TODO(Damien): implement: calling validationRunner.runAll and adding
         //     each anomaly to the submission
     }
 }

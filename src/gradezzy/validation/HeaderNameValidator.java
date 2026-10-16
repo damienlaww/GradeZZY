@@ -19,7 +19,7 @@ import gradezzy.model.Submission;
  * Checks that each Java file has the student name and email in its header
  * comment.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class HeaderNameValidator extends AbstractValidator {
 
@@ -46,7 +46,7 @@ public class HeaderNameValidator extends AbstractValidator {
     @Override
     public List<Anomaly> validate(Submission submission,
             Assessment assessment) {
-        // TODO(Seth): implement: reading the first HEADER_SCAN_LINES lines
+        // TODO(Damien): implement: reading the first HEADER_SCAN_LINES lines
         //     and checking the text after the name and email labels
         return new ArrayList<>();
     }

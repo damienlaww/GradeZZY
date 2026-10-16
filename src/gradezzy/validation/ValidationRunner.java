@@ -18,7 +18,7 @@ import gradezzy.model.Submission;
 /**
  * Runs every registered validator on a submission.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class ValidationRunner {
 
@@ -49,7 +49,7 @@ public class ValidationRunner {
      * @return every anomaly found
      */
     public List<Anomaly> runAll(Submission submission, Assessment assessment) {
-        // TODO(Seth): implement: calling each validator and adding its
+        // TODO(Damien): implement: calling each validator and adding its
         //     anomalies to one list; a validator that throws must not stop the
         //     rest
         return new ArrayList<>();

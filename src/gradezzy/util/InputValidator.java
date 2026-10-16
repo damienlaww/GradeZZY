@@ -13,7 +13,7 @@ import java.nio.file.Path;
 /**
  * Checks what the instructor types or picks before it is used.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public final class InputValidator {
 
@@ -31,7 +31,7 @@ public final class InputValidator {
      * @return true if the code is valid
      */
     public static boolean isValidSectionCode(String sectionCode) {
-        // TODO(Seth): implement: the check: the letter G followed by a number
+        // TODO(Damien): implement: the check: the letter G followed by a number
         return false;
     }
 
@@ -42,7 +42,7 @@ public final class InputValidator {
      * @return true if the username is valid
      */
     public static boolean isValidUsername(String username) {
-        // TODO(Seth): implement: the username check
+        // TODO(Damien): implement: the username check
         return false;
     }
 
@@ -53,7 +53,7 @@ public final class InputValidator {
      * @return true if the file can be read
      */
     public static boolean isReadableFile(Path file) {
-        // TODO(Seth): implement: the file check
+        // TODO(Damien): implement: the file check
         return false;
     }
 
@@ -64,7 +64,7 @@ public final class InputValidator {
      * @return true if the folder can be read
      */
     public static boolean isReadableDirectory(Path directory) {
-        // TODO(Seth): implement: the folder check
+        // TODO(Damien): implement: the folder check
         return false;
     }
 
@@ -75,7 +75,8 @@ public final class InputValidator {
      * @return true if the text is a positive whole number
      */
     public static boolean isPositiveInteger(String text) {
-        // TODO(Seth): implement: the number check without throwing an exception
+        // TODO(Damien): implement: the number check without throwing an
+        //     exception
         return false;
     }
 }

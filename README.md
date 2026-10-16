@@ -197,7 +197,7 @@ ui (JavaFX)        app.ConsoleMain
 | Order | Stage | What it does | Owner |
 |---|---|---|---|
 | 1 | `ExtractStage` | Creates the working copy and matches the student on the roster. | Seth |
-| 2 | `ValidateStage` | Runs every `Validator`. | Seth |
+| 2 | `ValidateStage` | Runs every `Validator`. | Damien |
 | 3 | `FixStage` | Applies automatic corrections. | Jun Sheng |
 | 4 | `DetectStage` | Runs every `Detector`. | Jun Sheng |
 | 5 | `InstallTestersStage` | Copies testers and data files into the working copy. | Zach |
@@ -231,12 +231,17 @@ detail.
 
 | Owner | Packages | TODOs |
 |---|---|---|
-| Seth | `util`, `ingest`, `validation`, two stages | 31 |
+| Seth | `FileUtils`, `TextUtils`, `ingest`, one stage | 19 |
+| Damien | `validation`, `InputValidator`, one stage; looks after `ui` | 12 |
 | Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 23 |
 | Zach | `exec`, `testcase`, three stages, the score parser | 14 |
 | Jing Yuan | `app`, `config`, `model`, `service`, scoring | 15 |
 | Huxley | `report`, `stats`, `persistence`, one stage | 28 |
-| Damien | `ui` | 0 (screens built) |
+
+Jun Sheng built the whole `ui` package, so on 2026-10-16 the checking
+of submissions (`validation`, `ValidateStage`) and the form checks
+(`InputValidator`) moved from Seth to Damien, who also looks after the
+screens from now on.
 
 ### What is already real code
 
@@ -362,32 +367,27 @@ show me the output. Explain your approach before you write code.
 Ask for one class at a time, read what comes back, and ask "explain this
 method line by line" for anything you could not have written yourself.
 
-### 1. Seth: helpers, then reading and checking submissions
+### 1. Seth: helpers, then reading submissions
 
-**Packages:** `util`, `ingest`, `validation`, plus `ExtractStage` and
-`ValidateStage` in `grading`. 31 TODOs. Everyone else is blocked until
-`SubmissionLoader` and `WorkingCopyManager` work, so do the three helper
+**Packages:** `FileUtils` and `TextUtils` in `util`, `ingest`, plus
+`ExtractStage` in `grading`. 19 TODOs. Everyone else is blocked until
+`SubmissionLoader` and `WorkingCopyManager` work, so do the two helper
 classes quickly and move on to those two.
 
-Helpers first (`util`, 14 TODOs). Huxley needs `TextUtils` and `FileUtils`
-and Damien needs `InputValidator`:
+Helpers first (9 TODOs). Huxley and Damien both need `TextUtils` and
+`FileUtils`:
 
 1. `FileUtils`: copy and delete folders, read and write text, list files.
 2. `TextUtils`: `isBlank`, `splitCsvLine`, `joinCsvLine`,
    `normaliseLineEndings`.
-3. `InputValidator`: section code, username, readable file, readable
-   folder, positive whole number. The brief takes up to 10% off for
-   missing input validation, so every form in the app calls these.
 
-You are done with `util` when the methods give the right answers for the
-cases below.
+You are done with the helpers when the methods give the right answers
+for the cases below.
 
 | Method | Input | Expected |
 |---|---|---|
 | `splitCsvLine` | `#01400001,#ping.lee.2023,_,PING LEE,x@y.sg,,20,#` | 8 values, the sixth empty |
 | `splitCsvLine` | `a,"b,c",d` | 3 values: `a`, `b,c`, `d` |
-| `isValidSectionCode` | `G1`, `G12`, `g1`, `G`, `1`, empty | true, true, decide with the team, false, false, false |
-| `isPositiveInteger` | `10`, `0`, `-3`, `abc`, empty | true, false, false, false, false |
 
 Example prompts for the helpers:
 
@@ -397,12 +397,6 @@ library and without String.split, so quoted values that contain commas
 work. Show the result for these lines: [paste the table above]. An empty
 value between two commas must come back as an empty string, not be
 dropped.
-```
-
-```text
-Implement gradezzy.util.InputValidator. No method may throw an exception
-for any input, including null. List the edge cases you considered for
-each method before writing code.
 ```
 
 Then the submissions. What to build, in order:
@@ -422,10 +416,7 @@ Then the submissions. What to build, in order:
    files except those in `assessment.provided.class.files`.
 5. `RosterReader`: read `samples/IS442-ScoreSheet.csv` into `Student`
    objects and remove the `#` in front of the id and username.
-6. The four validators, `AbstractValidator.createAnomaly` and
-   `ValidationRunner.runAll`. Each validator returns anomalies and never
-   throws for bad student input.
-7. `ExtractStage` and `ValidateStage`, which call the classes above.
+6. `ExtractStage`, which calls the classes above.
 
 Facts from the provided files:
 
@@ -433,33 +424,11 @@ Facts from the provided files:
 - The score sheet header is `OrgDefinedId,Username,Last Name,First
   Name,Email,Calculated Final Grade Numerator,Calculated Final Grade
   Denominator,End-of-Line Indicator`, with Windows line endings.
-- A correct zip holds one folder named after the username, with `Q1`,
-  `Q2` and `Q3` inside. The required files are in `config.properties`
-  (`Q1/Q1a.java`, `Q1/Q1b.java`, `Q2/Q2a.java`, `Q2/Q2b.java`,
-  `Q3/Q3.java`).
-- Each Java file starts with a comment holding `Name:` and `Email ID:`.
-  Some students wrote only the username after `Email ID:`, others the
-  full address.
 
-You are done when `sh run.sh console` lists all six students and reports
-at least these anomalies:
-
-| Student | Expected anomaly |
-|---|---|
-| chee.teo.2022 | `MISSING_WRAPPER_FOLDER`; `MISSING_HEADER_NAME` in `Q3.java` |
-| david.2024 | `WRONG_FOLDER_NAME` (folder is `01400003`); `MISSING_HEADER_NAME` in `Q3.java` |
-| fen.lai.2022 | `WRONG_FOLDER_NAME` (folder is `RenameToYourStudentID`) |
-| jing.lim.2021 | `MISSING_WRAPPER_FOLDER`; `MISSING_HEADER_NAME` in all five required files |
-| ping.lee.2023 | none |
-| xing.yan.2023 | none |
-
-The table covers the five required files only. Some zips also hold
-extra files with no name in the header (`ShapeComparator.java`,
-`ShapeComparators.java`); decide with the team whether those are checked.
-
-Also make dummy zips for the cases the samples do not cover: a missing
-`Q2` folder, a missing `Q1b.java`, a file named `q1a.java`, an empty zip
-and a file that is not a zip at all. None may stop the batch.
+You are done when `sh run.sh console` lists all six students, each with
+a working copy under `workspace/working/<username>` and its roster
+entry, and an empty zip or a file that is not a zip is reported without
+stopping the batch.
 
 Example prompts:
 
@@ -479,6 +448,95 @@ an instructor can act on. Then write a small dummy zip that should be
 rejected and show me that it is.
 ```
 
+### 2. Damien: checking submissions, form checks and the screens
+
+**Packages:** `validation`, `InputValidator` in `util`, plus
+`ValidateStage` in `grading`. 12 TODOs. Jun Sheng built the whole `ui`
+package; Damien looks after it from here. Jun Sheng's fixers have
+nothing to fix until the validators report anomalies, so start with
+those. Until Seth's `WorkingCopyManager` works, test against a sample
+zip unzipped by hand.
+
+What to build, in order:
+
+1. `InputValidator`: section code, username, readable file, readable
+   folder, positive whole number. The brief takes up to 10% off for
+   missing input validation, and the Submissions screen reports every
+   chosen file as unreadable until `isReadableFile` and
+   `isReadableDirectory` work.
+2. `AbstractValidator.createAnomaly`, then the four validators
+   (`StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`,
+   `HeaderNameValidator`) and `ValidationRunner.runAll`. Each validator
+   returns anomalies and never throws for bad student input.
+3. `ValidateStage`, which calls `ValidationRunner`.
+4. Dummy submissions for the cases the samples do not cover: a missing
+   `Q2` folder, a missing `Q1b.java`, a file named `q1a.java`, an empty
+   zip, a file that is not a zip, and a `Q1a.java` holding
+   `while (true) { }`. Share them with the team; they test everyone's
+   stage, and the brief rewards extra edge cases.
+5. As each teammate finishes a service, open its screen in live mode
+   (`sh run.sh`) and check that the real data looks right.
+   `design/UI-INTEGRATION.md` says which screen shows which service;
+   `design/UI-REVIEW.md` records the design and what was verified.
+6. Make sure the scripts are run on Windows and on an Intel Mac, on
+   your own laptop or a teammate's: `compile`, `run --check`,
+   `run --selftest`, `run console` and `run --windowtest`. Record the
+   results in the tested table above. The brief takes up to 50% off if
+   the code does not run on the instructor's laptop.
+
+The checks `InputValidator` must give:
+
+| Method | Input | Expected |
+|---|---|---|
+| `isValidSectionCode` | `G1`, `G12`, `g1`, `G`, `1`, empty | true, true, decide with the team, false, false, false |
+| `isPositiveInteger` | `10`, `0`, `-3`, `abc`, empty | true, false, false, false, false |
+
+Facts from the provided files:
+
+- A correct zip holds one folder named after the username, with `Q1`,
+  `Q2` and `Q3` inside. The required files are in `config.properties`
+  (`Q1/Q1a.java`, `Q1/Q1b.java`, `Q2/Q2a.java`, `Q2/Q2b.java`,
+  `Q3/Q3.java`).
+- Each Java file starts with a comment holding `Name:` and `Email ID:`.
+  Some students wrote only the username after `Email ID:`, others the
+  full address.
+
+You are done when `sh run.sh console` reports at least these anomalies:
+
+| Student | Expected anomaly |
+|---|---|
+| chee.teo.2022 | `MISSING_WRAPPER_FOLDER`; `MISSING_HEADER_NAME` in `Q3.java` |
+| david.2024 | `WRONG_FOLDER_NAME` (folder is `01400003`); `MISSING_HEADER_NAME` in `Q3.java` |
+| fen.lai.2022 | `WRONG_FOLDER_NAME` (folder is `RenameToYourStudentID`) |
+| jing.lim.2021 | `MISSING_WRAPPER_FOLDER`; `MISSING_HEADER_NAME` in all five required files |
+| ping.lee.2023 | none |
+| xing.yan.2023 | none |
+
+The table covers the five required files only. Some zips also hold
+extra files with no name in the header (`ShapeComparator.java`,
+`ShapeComparators.java`); decide with the team whether those are checked.
+None of the dummy submissions may stop the batch.
+
+Rules that matter for the screens:
+
+- Controllers hold no grading logic. A controller calls
+  `DashboardBackend`, and `LiveBackend` passes the call to one service
+  method.
+- Grading runs on a background thread. A `ProgressListener` is called on
+  that thread, so every change to a control is wrapped in
+  `Platform.runLater`.
+- Every `javafx` import stays in the `ui` package and its subpackages.
+- After any change to a screen, run `sh run.sh --check` and
+  `sh run.sh --selftest`.
+
+Example prompts:
+
+```text
+Implement gradezzy.util.InputValidator. No method may throw an exception
+for any input, including null. List the edge cases you considered for
+each method before writing code.
+```
+
 ```text
 Implement gradezzy.validation.StructureValidator. Unzip each sample in
 samples/student-submission into a temporary folder and show me the top
@@ -487,11 +545,11 @@ MISSING_WRAPPER_FOLDER, WRONG_FOLDER_NAME and MISSING_QUESTION_FOLDER
 through createAnomaly. It must never throw for a badly formed submission.
 ```
 
-### 2. Jun Sheng: corrections, flags and plagiarism
+### 3. Jun Sheng: corrections, flags and plagiarism
 
 **Packages:** `fix`, `detection`, `plagiarism`, plus `FixStage` and
 `DetectStage` in `grading` and the TODO in
-`PipelineFactory.createDetectors`. 23 TODOs. You need Seth's validators
+`PipelineFactory.createDetectors`. 23 TODOs. You need Damien's validators
 to produce anomalies before your fixers have anything to fix; until then,
 build and test against a working copy you unzip by hand.
 
@@ -558,7 +616,7 @@ question paper as the example. Do not write code yet. I need to be able
 to explain the chosen approach in a presentation.
 ```
 
-### 3. Zach: compiling, running and reading scores
+### 4. Zach: compiling, running and reading scores
 
 **Packages:** `exec`, `testcase`, plus `InstallTestersStage`,
 `CompileStage`, `ExecuteStage` and `TesterOutputScoreParser` in
@@ -639,7 +697,7 @@ other questions must still be compiled. Do not throw GradingException for
 a student's compile error; explain when throwing is appropriate.
 ```
 
-### 4. Jing Yuan: scoring, services and putting it together
+### 5. Jing Yuan: scoring, services and putting it together
 
 **Packages:** `app`, `config`, `model`, `service`, plus `ScoreStage` and
 `ScoreCalculator` in `grading`. 15 TODOs left (39 at the start). You
@@ -699,7 +757,7 @@ Recommend the simplest one that I can explain to an instructor. Do not
 write code until I pick.
 ```
 
-### 5. Huxley: exports, statistics and saved state
+### 6. Huxley: exports, statistics and saved state
 
 **Packages:** `report`, `stats`, `persistence`, plus `PersistStage` in
 `grading` and the TODO in `ApplicationContext` that opens the database.
@@ -772,52 +830,15 @@ dividing by zero. Show the results for the scores 12, 10, 10, 0, 20, 15
 out of 20 and check them by hand.
 ```
 
-### 6. Damien: the screens
-
-**Package:** `ui` and its subpackages. No TODOs left: all fifteen
-screens are built, with a live backend that calls the services and a demo
-backend with synthetic data. `design/UI-INTEGRATION.md` is the handover
-for everyone else: which screen shows each service method, who owns it
-and whether it works yet. `design/UI-REVIEW.md` records the design
-tokens, the Nielsen review and what was verified.
-
-What is left:
-
-1. As each teammate finishes a service, open its screen in live mode
-   (`sh run.sh`) and check that the real data looks right.
-2. Some screens ask for service methods that do not exist yet; they
-   show "Not connected yet" in live mode. The Contract requests table
-   in `design/UI-INTEGRATION.md` lists them. Agree with the team which
-   ones are really wanted before anyone builds them.
-3. Run `sh run.sh --windowtest` on Windows and on an Intel Mac.
-
-Rules that matter here:
-
-- Controllers hold no grading logic. A handler validates the input, calls
-  one method on a service from `getServices()` and shows the result.
-- Grading runs on a background thread through `GradingTask`. A
-  `ProgressListener` is called on that thread, so it must wrap every
-  change to a control in `Platform.runLater`.
-- Every `javafx` import stays in the `ui` package.
-- Check each screen against Nielsen's ten heuristics. For this app that
-  means: always show what the grader is doing, confirm before Cancel or
-  Undo all, say what went wrong and what to do next, and never show a
-  stack trace.
-
-You are done when `sh run.sh --check` and `sh run.sh --selftest` pass,
-the instructor can complete every screen's task with the six samples in
-live mode, and bad input (nothing selected, a file that is not a zip, a
-blank section) produces a clear message instead of an error.
-
 ### Who is waiting on whom
 
 | If you are | You need first | From |
 |---|---|---|
-| Jun Sheng | Anomalies from the validators, the student on the submission | Seth |
+| Damien | A working copy to check; `FileUtils` and `TextUtils` | Seth |
+| Jun Sheng | Anomalies from the validators; the student on the submission | Damien; Seth |
 | Zach | A working copy to compile in | Seth |
 | Jing Yuan | Question results from `ExecuteStage` | Zach |
 | Huxley | Nothing to start; real runs later | Jing Yuan |
-| Damien | Real data from each service, to check the screens in live mode | Everyone (see `design/UI-INTEGRATION.md`) |
 
 Nobody has to sit idle: every class can be written and tried against a
 folder unzipped by hand or a `GradingRun` filled in by hand.

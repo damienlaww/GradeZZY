@@ -34,7 +34,7 @@ public enum Capability {
     /** Checks that a chosen file or folder can be read. */
     INPUT_CHECKS("Check chosen files and folders",
             "Tells you at once when a chosen file or folder cannot be "
-            + "read.", "Seth",
+            + "read.", "Damien",
             "InputValidator.isReadableFile, isReadableDirectory",
             CapabilityStatus.WAITING,
             "Until these return true for readable paths, every chosen "
@@ -43,7 +43,7 @@ public enum Capability {
     /** Imports a batch and grades it. */
     IMPORT_AND_GRADE("Import and grade a batch",
             "Grades every submission of a section in one batch.",
-            "Jing Yuan, with Seth, Jun Sheng, Zach and Huxley",
+            "Jing Yuan, with Seth, Damien, Jun Sheng, Zach and Huxley",
             "GradingService.startGrading", CapabilityStatus.WAITING,
             "The pipeline stages that load, check, fix, compile, run and "
             + "score submissions."),
