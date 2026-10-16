@@ -898,6 +898,9 @@ Kept to a minimum and confined to the classes named here:
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. |
 | `enum` | `model`, `ui.Screen` | Fixed lists of values. |
 | JDBC (to be written) | `persistence.SqliteResultRepository` | Talks to SQLite. |
+| `ProcessBuilder`, `Process`, `ProcessHandle` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and kills a run and its child processes at the time limit. |
+| `Stream.toList()` | `exec.ProcessRunner.terminate` | Turns the child processes of a run into a list so they can be killed. |
+| `Thread.sleep` | `exec.ProcessRunner.run` | Pauses between checks of a running program, instead of using a reader thread. |
 | `ProcessBuilder` (to be written) | `exec.ProcessRunner` | Runs `javac` and `java`. |
 | `java.util.zip` (to be written) | `ingest.ZipExtractor` | Unzips submissions. |
 | `java.util.regex.Pattern` | `service.SettingsService` | Checks that the zip name pattern setting is a valid regular expression. |
