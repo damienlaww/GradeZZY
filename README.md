@@ -58,6 +58,7 @@ sh run.sh --check        # load every screen once and exit, no window
 sh run.sh --selftest     # run the seven demo flows, print PASS or FAIL
 sh run.sh console        # grade from the terminal, without JavaFX
 sh run.sh console G2     # the same, for section G2
+sh run.sh console CS102 G2   # the same, for module CS102
 sh compile.sh core       # compile only the grading core, without JavaFX
 sh clean.sh              # empty classes/ before submission
 ```
@@ -72,6 +73,7 @@ run.bat --check
 run.bat --selftest
 run.bat console
 run.bat console G2
+run.bat console CS102 G2
 compile.bat core
 clean.bat
 ```
@@ -714,8 +716,9 @@ What to build, in order:
 4. `StatisticsCalculator`: mean, median, pass rate, mark bands, pass rate
    per question, most failed test, common compile errors, filtered by
    module and section.
-5. `SqliteResultRepository`: create the tables, then save and load runs,
-   submissions, anomalies, fix status and audit entries.
+5. `SqliteResultRepository`: create the tables, then save and load runs
+   (with the module and section of each run), submissions, anomalies,
+   fix status and audit entries.
 6. `PersistStage` and the `repository.open()` call in
    `ApplicationContext`.
 7. `BackupManager` (COULD tier).
@@ -828,7 +831,7 @@ file: `java -Dgradezzy.config=other.properties ...`.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `app.module.code` | `CS102` | Course code shown on every run. |
+| `app.module.codes` | `CS102` | Modules the instructor can pick from, separated by commas. The first is the default. Every module shares the sections and the assessment. |
 | `app.section.codes` | `G1` to `G10` | Sections the instructor can pick from. |
 | `paths.submissions.dir` | `samples/student-submission` | Folder graded by the console entry point. |
 | `paths.testers.dir` | `samples/Tester-Files` | Folder holding the tester files. |

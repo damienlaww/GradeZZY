@@ -101,7 +101,7 @@ today.
 | Retry one question | Runs one question's tester again without touching other marks. | Student Evidence | `retryQuestion` | None yet | Jing Yuan, Zach | Proposed | Run the tester of one question again and replace only that question's result. |
 | Retry one submission | Grades one student's submission again from the start. | Student Evidence | `retrySubmission` | None yet | Jing Yuan | Proposed | Grade one chosen submission again, even when it did not fail. |
 | Adjust a mark by hand | Lets you change a mark by hand with a reason, and undo it. | Student Evidence | `adjustScore`, `undoAdjustment`, `listAdjustments` | None yet | Jing Yuan, Huxley | Proposed | Store a manual score with its reason and the earlier score, record it in the audit log, and allow undo. |
-| More than one module | Lets you grade more than one module in the same app. | Modules, context bar | `getModuleCodes` | None yet | Jing Yuan | Proposed | More than one module in config.properties and in saved runs. |
+| More than one module | Lets you grade more than one module in the same app. | Modules, context bar | `getModuleCodes` | `AppConfig` (`app.module.codes`), `AssessmentFactory.create` | Jing Yuan | Works now | None. Saved runs keep the module through `Section` once Huxley's repository saves runs. |
 | Time taken per question | Shows how long each question's tester took to run. | Student Evidence | none | None yet | Zach | Proposed | Record how long each tester ran in QuestionResult. |
 | Export one student's report | Saves one student's marks and evidence as a report. | Student Evidence | `export` (one student) | None yet | Jing Yuan, Huxley | Proposed | Register StudentReportExporter and add an export method for one submission. |
 
@@ -124,7 +124,6 @@ what they need. Each one shows "Not connected yet" in live mode.
 | Similar pair detail | Jun Sheng | The compared files, matching excerpts and the excluded starter and tester files of one pair. |
 | Audit log export | Jing Yuan, Huxley | Register `AuditLogExporter` and add an export method for the audit log. |
 | Student report export | Jing Yuan, Huxley | Register `StudentReportExporter` and add an export method for one submission. |
-| More than one module | Jing Yuan | More than one module in `config.properties` and in saved runs. |
 | Time per question | Zach | Record how long each tester ran in `QuestionResult`. |
 
 ## Where a backend method does more than one call

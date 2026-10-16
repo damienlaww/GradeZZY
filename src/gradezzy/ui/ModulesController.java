@@ -7,8 +7,9 @@
  * sections, so sections always stay grouped under their module. Each
  * tile says how many submissions the section's run holds. Choosing a
  * tile makes that section the one in the context bar, which every other
- * screen reads. More than one module is a proposed backend feature, so
- * the live screen says so instead of pretending.
+ * screen reads. The modules come from app.module.codes; if that
+ * feature were not connected, the live screen would say so instead of
+ * pretending.
  *
  * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
@@ -120,7 +121,7 @@ public class ModulesController extends BaseController {
             EmptyState empty = new EmptyState(Icon.MODULES,
                     "No module is configured",
                     "config.properties names no module. Set "
-                    + "app.module.code, then open GradeZZY again.");
+                    + "app.module.codes, then open GradeZZY again.");
             empty.setAction("Open Help",
                     () -> getShell().navigate(Screen.HELP));
             modulePanels.getChildren().add(empty);

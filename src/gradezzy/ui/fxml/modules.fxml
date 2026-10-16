@@ -36,8 +36,8 @@
         <HBox fx:id="demoBanner" styleClass="banner">
             <Label wrapText="true">
                 <text>
-                    The DEMO module shows how an empty module looks. More than
-                    one module is a proposed feature.
+                    The DEMO module shows how an empty module looks. In the
+                    real app, list more modules in app.module.codes.
                 </text>
             </Label>
         </HBox>

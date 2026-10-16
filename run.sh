@@ -7,6 +7,7 @@
 #   sh run.sh --check       load every screen once, then exit (no window)
 #   sh run.sh console       grade from the terminal, without JavaFX
 #   sh run.sh console G2    the same, for section G2
+#   sh run.sh console CS102 G2   the same, for module CS102, section G2
 # ----------------------------------------------------------------------
 
 cd "$(dirname "$0")" || exit 1

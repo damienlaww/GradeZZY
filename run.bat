@@ -7,6 +7,7 @@ rem   run.bat               open the window
 rem   run.bat --check       load every screen once, then exit (no window)
 rem   run.bat console       grade from the terminal, without JavaFX
 rem   run.bat console G2    the same, for section G2
+rem   run.bat console CS102 G2   the same, for module CS102, section G2
 rem ----------------------------------------------------------------------
 setlocal
 cd /d "%~dp0"

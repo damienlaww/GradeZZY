@@ -16,9 +16,10 @@ package gradezzy.config;
 public final class ConfigKeys {
 
     /**
-     * Course code shown on every run.
+     * Comma separated course codes the instructor can pick from. The
+     * first is the default.
      */
-    public static final String MODULE_CODE = "app.module.code";
+    public static final String MODULE_CODES = "app.module.codes";
 
     /**
      * Comma separated section codes the instructor can pick from.

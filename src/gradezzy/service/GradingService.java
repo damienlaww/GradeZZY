@@ -90,7 +90,8 @@ public class GradingService {
             throws GradingException {
         cancellationToken.reset();
 
-        Assessment assessment = assessmentFactory.create();
+        Assessment assessment = assessmentFactory.create(
+                section.getModuleCode());
         String runId = RUN_ID_PREFIX + System.currentTimeMillis();
         GradingRun gradingRun = new GradingRun(runId, assessment, section,
                 LocalDateTime.now());

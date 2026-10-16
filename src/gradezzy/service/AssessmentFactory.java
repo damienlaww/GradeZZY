@@ -10,7 +10,10 @@
  */
 package gradezzy.service;
 
+import java.util.List;
+
 import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigException;
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Assessment;
 import gradezzy.model.Question;
@@ -35,15 +38,36 @@ public class AssessmentFactory {
     }
 
     /**
-     * Reads the assessment name, module, questions and placeholder folder
-     * names from the configuration.
+     * Reads the assessment for the default module, the first one in
+     * app.module.codes.
      *
      * @return the assessment to grade
+     * @throws ConfigException if app.module.codes lists no module
      */
     public Assessment create() {
+        return create(getDefaultModuleCode());
+    }
+
+    /**
+     * Reads the assessment name, questions and placeholder folder names
+     * from the configuration, for one module. Every module shares the
+     * same questions.
+     *
+     * @param moduleCode the module, or null or blank for the default
+     * @return the assessment to grade
+     * @throws ConfigException if no module is given and app.module.codes
+     *         lists none
+     */
+    public Assessment create(String moduleCode) {
+        String chosenModule = moduleCode;
+
+        if (chosenModule == null || chosenModule.trim().isEmpty()) {
+            chosenModule = getDefaultModuleCode();
+        }
+
         Assessment assessment = new Assessment(
                 config.getString(ConfigKeys.ASSESSMENT_NAME),
-                config.getString(ConfigKeys.MODULE_CODE));
+                chosenModule.trim());
 
         for (String questionId : config.getList(ConfigKeys.QUESTION_IDS)) {
             assessment.addQuestion(createQuestion(questionId));
@@ -53,6 +77,23 @@ public class AssessmentFactory {
                 config.getList(ConfigKeys.PLACEHOLDER_FOLDER_NAMES));
 
         return assessment;
+    }
+
+    /**
+     * Returns the first module in app.module.codes.
+     *
+     * @return the default module code
+     * @throws ConfigException if app.module.codes lists no module
+     */
+    public String getDefaultModuleCode() {
+        List<String> moduleCodes = config.getList(ConfigKeys.MODULE_CODES);
+
+        if (moduleCodes.isEmpty()) {
+            throw new ConfigException("Setting '" + ConfigKeys.MODULE_CODES
+                    + "' lists no module.");
+        }
+
+        return moduleCodes.get(0);
     }
 
     // Reads the three settings of one question.

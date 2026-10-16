@@ -256,9 +256,10 @@ public enum Capability {
     /** More than one module. */
     MULTIPLE_MODULES("More than one module",
             "Lets you grade more than one module in the same app.",
-            "Jing Yuan", null, CapabilityStatus.PROPOSED,
-            "More than one module in config.properties and in saved "
-            + "runs."),
+            "Jing Yuan", "AppConfig, AssessmentFactory.create",
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; modules come from app.module.codes. Saved runs "
+            + "keep the module once runs are saved."),
 
     /** How long each tester ran. */
     QUESTION_TIMING("Time taken per question",
