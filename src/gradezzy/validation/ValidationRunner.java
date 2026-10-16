@@ -5,14 +5,19 @@
  *
  * Where it fits: Called by ValidateStage. Validators are registered in
  * PipelineFactory.
+ *
+ * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.validation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
+import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 
 /**
@@ -21,6 +26,14 @@ import gradezzy.model.Submission;
  * <p>Tier: MUST. Owner: Seth.
  */
 public class ValidationRunner {
+
+    // The text in front of the id of an anomaly for a failed validator
+    private static final String FAILURE_ID_PREFIX = "validation-failure-";
+
+    // What the instructor can do when a validator itself fails
+    private static final String FAILURE_ACTION =
+            "Check this submission by hand and report the message to the "
+            + "team.";
 
     // The validators to run, in order
     private final List<Validator> validators = new ArrayList<>();
@@ -42,16 +55,42 @@ public class ValidationRunner {
     }
 
     /**
-     * Runs all validators and collects what they report.
+     * Runs all validators and collects what they report. A validator that
+     * throws is recorded as an INTERNAL_ERROR anomaly and the rest still
+     * run.
      *
      * @param submission the submission
      * @param assessment the assessment
      * @return every anomaly found
      */
     public List<Anomaly> runAll(Submission submission, Assessment assessment) {
-        // TODO(Seth): implement: calling each validator and adding its
-        //     anomalies to one list; a validator that throws must not stop the
-        //     rest
-        return new ArrayList<>();
+        List<Anomaly> anomalies = new ArrayList<>();
+
+        for (Validator validator : validators) {
+            try {
+                List<Anomaly> found = validator.validate(submission,
+                        assessment);
+
+                if (found != null) {
+                    anomalies.addAll(found);
+                }
+            } catch (RuntimeException exception) {
+                anomalies.add(describeFailure(submission, validator,
+                        exception));
+            }
+        }
+
+        return anomalies;
+    }
+
+    // Turns a validator that threw into an anomaly on the submission.
+    private Anomaly describeFailure(Submission submission,
+            Validator validator, RuntimeException exception) {
+        String id = FAILURE_ID_PREFIX + UUID.randomUUID();
+        String message = "The check '" + validator.getName() + "' failed: "
+                + exception.getMessage();
+
+        return new Anomaly(id, AnomalyType.INTERNAL_ERROR, Severity.ERROR,
+                submission.getUsername(), message, FAILURE_ACTION);
     }
 }

@@ -6,14 +6,20 @@
  *
  * Where it fits: Finds the missing wrapper folder, wrong folder name and
  * missing Qx folder cases described in the brief.
+ *
+ * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.validation;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
+import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 
 /**
@@ -47,8 +53,136 @@ public class StructureValidator extends AbstractValidator {
     @Override
     public List<Anomaly> validate(Submission submission,
             Assessment assessment) {
-        // TODO(Seth): implement: checks for the wrapper folder, its name and
-        //     each question folder; report with the matching AnomalyType
-        return new ArrayList<>();
+        try {
+            return checkLayout(submission, assessment);
+        } catch (IOException exception) {
+            return reportUnreadable(submission, exception);
+        }
+    }
+
+    // Checks the top folder first, then each question folder inside it.
+    private List<Anomaly> checkLayout(Submission submission,
+            Assessment assessment) throws IOException {
+        List<Anomaly> anomalies = new ArrayList<>();
+        Path workingCopy = submission.getWorkingCopyPath();
+
+        if (workingCopy == null) {
+            return anomalies;
+        }
+
+        Path contentRoot = findContentRoot(submission, assessment);
+
+        if (contentRoot == null) {
+            addAllFoldersMissing(anomalies, submission, assessment,
+                    describeTopLevel(workingCopy, submission));
+            return anomalies;
+        }
+
+        String username = submission.getUsername();
+        String topName = contentRoot.getFileName().toString();
+
+        if (contentRoot.equals(workingCopy)) {
+            anomalies.add(createAnomaly(submission,
+                    AnomalyType.MISSING_WRAPPER_FOLDER, Severity.INFO,
+                    "The question folders were at the top of the ZIP file "
+                    + "instead of inside a " + username + " folder."));
+        } else if (!topName.equals(username)) {
+            anomalies.add(createAnomaly(submission,
+                    AnomalyType.WRONG_FOLDER_NAME, Severity.WARNING,
+                    describeWrongName(topName, username, assessment)));
+        }
+
+        addMissingQuestionFolders(anomalies, submission, assessment,
+                contentRoot);
+        return anomalies;
+    }
+
+    // Reports each question folder that is not in the content root.
+    private void addMissingQuestionFolders(List<Anomaly> anomalies,
+            Submission submission, Assessment assessment, Path contentRoot)
+            throws IOException {
+        List<Path> folders = listFolders(contentRoot);
+        String nestingHint = describeNesting(contentRoot, folders,
+                assessment);
+
+        for (String folderName : getQuestionFolderNames(assessment)) {
+            boolean present = findExact(folders, folderName) != null;
+            Path nearMatch = findIgnoringCase(folders, folderName);
+
+            if (!present && nearMatch != null) {
+                anomalies.add(createAnomaly(submission,
+                        AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
+                        "The " + folderName + " folder is missing. A folder "
+                        + "named " + nearMatch.getFileName() + " was found, "
+                        + "but folder names must match exactly."));
+            } else if (!present) {
+                anomalies.add(createAnomaly(submission,
+                        AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
+                        "The " + folderName + " folder is missing."
+                        + nestingHint));
+            }
+        }
+    }
+
+    // Explains when the question folders sit one level too deep, inside
+    // the only folder of the content root, or returns empty text.
+    private String describeNesting(Path contentRoot, List<Path> folders,
+            Assessment assessment) throws IOException {
+        if (folders.size() != 1) {
+            return "";
+        }
+
+        Path inner = folders.get(0);
+
+        if (!holdsQuestionFolder(listFolders(inner), assessment)) {
+            return "";
+        }
+
+        return " The question folders were found one level too deep, in "
+                + contentRoot.getFileName() + "/" + inner.getFileName()
+                + ".";
+    }
+
+    // Reports every question folder as missing, with the same reason.
+    private void addAllFoldersMissing(List<Anomaly> anomalies,
+            Submission submission, Assessment assessment, String reason) {
+        for (String folderName : getQuestionFolderNames(assessment)) {
+            anomalies.add(createAnomaly(submission,
+                    AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
+                    "The " + folderName + " folder is missing. " + reason));
+        }
+    }
+
+    // Explains why no top folder could be used: none, or too many.
+    private String describeTopLevel(Path workingCopy,
+            Submission submission) throws IOException {
+        List<Path> topFolders = listFolders(workingCopy);
+
+        if (topFolders.isEmpty()) {
+            return "The ZIP file holds no folder.";
+        }
+
+        String names = topFolders.get(0).getFileName().toString();
+
+        for (int i = 1; i < topFolders.size(); i++) {
+            names += ", " + topFolders.get(i).getFileName();
+        }
+
+        return "The ZIP file holds several folders (" + names + ") and "
+                + "none is named " + submission.getUsername() + ".";
+    }
+
+    // Says what the top folder was called and why that is wrong.
+    private String describeWrongName(String topName, String username,
+            Assessment assessment) {
+        String message = "The top folder is named " + topName
+                + " instead of " + username + ".";
+
+        if (assessment.getPlaceholderFolderNames().contains(topName)) {
+            message += " This is the starter folder name, which the student "
+                    + "should have renamed.";
+        }
+
+        return message;
     }
 }
