@@ -47,10 +47,6 @@
     -gz-shadow: rgba(0, 0, 0, 0.5);
 }
 
-.stage-chip.current {
-    -fx-text-fill: #BFDBFE;
-}
-
 .sheet-scrim {
     -fx-background-color: rgba(0, 0, 0, 0.55);
 }

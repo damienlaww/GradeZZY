@@ -80,7 +80,8 @@
     -color-danger-subtle: -gz-error-tint;
     -color-shadow-default: -gz-shadow;
 
-    -fx-font-family: "System";
+    /* Explicit faces avoid platform-dependent System font metrics. */
+    -fx-font-family: "Arial";
     -fx-font-size: 13px;
     -fx-background-color: -gz-background;
 }
@@ -938,27 +939,12 @@
 
 /* ------------------------------------------------------------ progress */
 
-.stage-list {
-    -fx-hgap: 8px;
-    -fx-vgap: 8px;
-}
-
 .stage-chip {
     -fx-background-color: -gz-raised;
     -fx-background-radius: 6px;
     -fx-padding: 4px 8px 4px 8px;
     -fx-font-size: 12px;
     -fx-text-fill: -gz-secondary-strong;
-}
-
-.stage-chip.done {
-    -fx-text-fill: -gz-text;
-}
-
-.stage-chip.current {
-    -fx-background-color: -gz-primary-soft;
-    -fx-text-fill: -gz-primary-pressed;
-    -fx-font-weight: bold;
 }
 
 .progress-bar {

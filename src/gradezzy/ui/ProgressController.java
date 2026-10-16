@@ -22,14 +22,12 @@ import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
-import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 
 import gradezzy.model.GradingRun;
 import gradezzy.ui.GradingMonitor.ProgressRow;
 import gradezzy.ui.GradingMonitor.RunStatus;
-import gradezzy.ui.backend.PipelineStages;
 import gradezzy.ui.component.EmptyState;
 import gradezzy.ui.component.Icon;
 import gradezzy.ui.component.Labels;
@@ -59,12 +57,6 @@ public class ProgressController extends BaseController {
 
     // The width of the detail column
     private static final double DETAIL_WIDTH = 240.0;
-
-    // The style class of a stage that is done
-    private static final String DONE = "done";
-
-    // The style class of the stage being run
-    private static final String CURRENT = "current";
 
     @FXML
     private Label statusLabel;
@@ -101,9 +93,6 @@ public class ProgressController extends BaseController {
 
     @FXML
     private Label nowLabel;
-
-    @FXML
-    private FlowPane stageList;
 
     @FXML
     private MetricTile processedTile;
@@ -146,13 +135,6 @@ public class ProgressController extends BaseController {
     public void initialize() {
         Responsive.twoColumns(columns, studentsPanel, issuesPanel,
                 STUDENTS_PERCENT, STACK_WIDTH);
-
-        for (int index = 0; index < PipelineStages.count(); index++) {
-            Label chip = new Label((index + 1) + "  "
-                    + PipelineStages.nameAt(index));
-            chip.getStyleClass().add("stage-chip");
-            stageList.getChildren().add(chip);
-        }
 
         TableColumn<ProgressRow, String> student = new TableColumn<>(
                 "Student");
@@ -362,24 +344,9 @@ public class ProgressController extends BaseController {
         show(retryButton, (cancelled || finished) && failures > 0);
     }
 
-    // Marks the stage being run and the stages before it.
+    // Describes the student and stage currently being processed.
     private void refreshStage() {
         GradingMonitor monitor = getState().getMonitor();
-        int current = monitor.stageIndexProperty().get();
-        boolean finished = monitor.statusProperty().get()
-                == RunStatus.FINISHED;
-
-        for (int index = 0; index < stageList.getChildren().size();
-                index++) {
-            Label chip = (Label) stageList.getChildren().get(index);
-            chip.getStyleClass().removeAll(DONE, CURRENT);
-            if (index == current) {
-                chip.getStyleClass().add(CURRENT);
-            } else if (index < current || finished) {
-                chip.getStyleClass().add(DONE);
-            }
-        }
-
         String username = monitor.currentUsernameProperty().get();
         if (monitor.isActive() && !username.isEmpty()) {
             nowLabel.setText("Now grading " + username + ": "
