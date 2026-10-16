@@ -196,8 +196,8 @@ ui (JavaFX)        app.ConsoleMain
 
 | Order | Stage | What it does | Owner |
 |---|---|---|---|
-| 1 | `ExtractStage` | Creates the working copy and matches the student on the roster. | Seth |
-| 2 | `ValidateStage` | Runs every `Validator`. | Damien |
+| 1 | `ExtractStage` | Creates the working copy and matches the student on the roster. | Damien |
+| 2 | `ValidateStage` | Runs every `Validator`. | Seth |
 | 3 | `FixStage` | Applies automatic corrections. | Jun Sheng |
 | 4 | `DetectStage` | Runs every `Detector`. | Jun Sheng |
 | 5 | `InstallTestersStage` | Copies testers and data files into the working copy. | Zach |
@@ -231,17 +231,18 @@ detail.
 
 | Owner | Packages | TODOs |
 |---|---|---|
-| Seth | `FileUtils`, `TextUtils`, `ingest`, one stage | 19 |
-| Damien | `validation`, `InputValidator`, one stage; looks after `ui` | 12 |
+| Damien | `FileUtils`, `TextUtils`, `ingest`, one stage | 19 |
+| Seth | `validation`, `InputValidator`, one stage; looks after `ui` | 12 |
 | Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 23 |
 | Zach | `exec`, `testcase`, three stages, the score parser | 14 |
 | Jing Yuan | `app`, `config`, `model`, `service`, scoring | 15 |
 | Huxley | `report`, `stats`, `persistence`, one stage | 28 |
 
-Jun Sheng built the whole `ui` package, so on 2026-10-16 the checking
-of submissions (`validation`, `ValidateStage`) and the form checks
-(`InputValidator`) moved from Seth to Damien, who also looks after the
-screens from now on.
+Jun Sheng built the whole `ui` package, so on 2026-10-16 the work was
+split again: Damien took the helpers and the reading of submissions
+(`FileUtils`, `TextUtils`, `ingest`, `ExtractStage`), and Seth took the
+checking of submissions (`validation`, `ValidateStage`), the form checks
+(`InputValidator`) and looking after the screens.
 
 ### What is already real code
 
@@ -367,14 +368,14 @@ show me the output. Explain your approach before you write code.
 Ask for one class at a time, read what comes back, and ask "explain this
 method line by line" for anything you could not have written yourself.
 
-### 1. Seth: helpers, then reading submissions
+### 1. Damien: helpers, then reading submissions
 
 **Packages:** `FileUtils` and `TextUtils` in `util`, `ingest`, plus
 `ExtractStage` in `grading`. 19 TODOs. Everyone else is blocked until
 `SubmissionLoader` and `WorkingCopyManager` work, so do the two helper
 classes quickly and move on to those two.
 
-Helpers first (9 TODOs). Huxley and Damien both need `TextUtils` and
+Helpers first (9 TODOs). Huxley and Seth both need `TextUtils` and
 `FileUtils`:
 
 1. `FileUtils`: copy and delete folders, read and write text, list files.
@@ -448,13 +449,13 @@ an instructor can act on. Then write a small dummy zip that should be
 rejected and show me that it is.
 ```
 
-### 2. Damien: checking submissions, form checks and the screens
+### 2. Seth: checking submissions, form checks and the screens
 
 **Packages:** `validation`, `InputValidator` in `util`, plus
 `ValidateStage` in `grading`. 12 TODOs. Jun Sheng built the whole `ui`
-package; Damien looks after it from here. Jun Sheng's fixers have
+package; Seth looks after it from here. Jun Sheng's fixers have
 nothing to fix until the validators report anomalies, so start with
-those. Until Seth's `WorkingCopyManager` works, test against a sample
+those. Until Damien's `WorkingCopyManager` works, test against a sample
 zip unzipped by hand.
 
 What to build, in order:
@@ -549,7 +550,7 @@ through createAnomaly. It must never throw for a badly formed submission.
 
 **Packages:** `fix`, `detection`, `plagiarism`, plus `FixStage` and
 `DetectStage` in `grading` and the TODO in
-`PipelineFactory.createDetectors`. 23 TODOs. You need Damien's validators
+`PipelineFactory.createDetectors`. 23 TODOs. You need Seth's validators
 to produce anomalies before your fixers have anything to fix; until then,
 build and test against a working copy you unzip by hand.
 
@@ -834,9 +835,9 @@ out of 20 and check them by hand.
 
 | If you are | You need first | From |
 |---|---|---|
-| Damien | A working copy to check; `FileUtils` and `TextUtils` | Seth |
-| Jun Sheng | Anomalies from the validators; the student on the submission | Damien; Seth |
-| Zach | A working copy to compile in | Seth |
+| Seth | A working copy to check; `FileUtils` and `TextUtils` | Damien |
+| Jun Sheng | Anomalies from the validators; the student on the submission | Seth; Damien |
+| Zach | A working copy to compile in | Damien |
 | Jing Yuan | Question results from `ExecuteStage` | Zach |
 | Huxley | Nothing to start; real runs later | Jing Yuan |
 

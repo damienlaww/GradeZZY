@@ -17,7 +17,7 @@ import gradezzy.model.Submission;
 /**
  * Creates and removes the working copy of each submission.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class WorkingCopyManager {
 
@@ -47,7 +47,7 @@ public class WorkingCopyManager {
      */
     public Path createWorkingCopy(
             Submission submission) throws IngestException {
-        // TODO(Seth): implement: creating WORKING_DIR/<username> and filling
+        // TODO(Damien): implement: creating WORKING_DIR/<username> and filling
         //     it from the original zip or folder
         return null;
     }
@@ -61,7 +61,7 @@ public class WorkingCopyManager {
      */
     public void removeStudentClassFiles(Path workingCopy,
             Assessment assessment) {
-        // TODO(Seth): implement: deleting .class files not in
+        // TODO(Damien): implement: deleting .class files not in
         //     PROVIDED_CLASS_FILES
     }
 
@@ -71,6 +71,6 @@ public class WorkingCopyManager {
      * @param submission the submission
      */
     public void deleteWorkingCopy(Submission submission) {
-        // TODO(Seth): implement: deleting the working copy folder
+        // TODO(Damien): implement: deleting the working copy folder
     }
 }

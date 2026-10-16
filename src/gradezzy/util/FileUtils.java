@@ -15,7 +15,7 @@ import java.util.List;
 /**
  * Small file helpers shared by several packages.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public final class FileUtils {
 
@@ -35,7 +35,7 @@ public final class FileUtils {
      */
     public static void copyDirectory(Path source,
             Path target) throws IOException {
-        // TODO(Seth): implement: a recursive copy
+        // TODO(Damien): implement: a recursive copy
     }
 
     /**
@@ -45,7 +45,7 @@ public final class FileUtils {
      * @throws IOException if the operation fails
      */
     public static void deleteDirectory(Path directory) throws IOException {
-        // TODO(Seth): implement: a recursive delete
+        // TODO(Damien): implement: a recursive delete
     }
 
     /**
@@ -56,7 +56,7 @@ public final class FileUtils {
      * @throws IOException if the operation fails
      */
     public static String readText(Path file) throws IOException {
-        // TODO(Seth): implement: reading the file as UTF-8 text
+        // TODO(Damien): implement: reading the file as UTF-8 text
         return "";
     }
 
@@ -68,7 +68,7 @@ public final class FileUtils {
      * @throws IOException if the operation fails
      */
     public static void writeText(Path file, String text) throws IOException {
-        // TODO(Seth): implement: writing the text as UTF-8
+        // TODO(Damien): implement: writing the text as UTF-8
     }
 
     /**
@@ -81,7 +81,7 @@ public final class FileUtils {
      */
     public static List<Path> listFiles(Path directory,
             String extension) throws IOException {
-        // TODO(Seth): implement: listing matching files in name order
+        // TODO(Damien): implement: listing matching files in name order
         return new ArrayList<>();
     }
 }

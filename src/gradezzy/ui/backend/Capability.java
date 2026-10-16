@@ -34,7 +34,7 @@ public enum Capability {
     /** Checks that a chosen file or folder can be read. */
     INPUT_CHECKS("Check chosen files and folders",
             "Tells you at once when a chosen file or folder cannot be "
-            + "read.", "Damien",
+            + "read.", "Seth",
             "InputValidator.isReadableFile, isReadableDirectory",
             CapabilityStatus.WAITING,
             "Until these return true for readable paths, every chosen "
@@ -124,12 +124,12 @@ public enum Capability {
             "Finds the students whose code contains some text.",
             "Jing Yuan", "SearchService.searchCode",
             CapabilityStatus.WORKS_NOW,
-            "Working copies on disk, which need Seth's extraction."),
+            "Working copies on disk, which need Damien's extraction."),
 
     /** The folder tree and source files of a working copy. */
     SOURCE_VIEW("Show working-copy files",
             "Shows a student's files, so you can read the code behind a "
-            + "mark.", "Seth", "FileTreeBuilder, FileUtils.readText",
+            + "mark.", "Damien", "FileTreeBuilder, FileUtils.readText",
             CapabilityStatus.WAITING,
             "FileUtils.readText, so a chosen source file can be shown."),
 

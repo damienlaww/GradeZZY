@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * Small text helpers shared by several packages.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public final class TextUtils {
 
@@ -32,7 +32,7 @@ public final class TextUtils {
      * @return true if there is no real text
      */
     public static boolean isBlank(String text) {
-        // TODO(Seth): implement: the blank check
+        // TODO(Damien): implement: the blank check
         return false;
     }
 
@@ -43,7 +43,7 @@ public final class TextUtils {
      * @return the values of the line
      */
     public static List<String> splitCsvLine(String line) {
-        // TODO(Seth): implement: splitting on commas while respecting quoted
+        // TODO(Damien): implement: splitting on commas while respecting quoted
         //     values
         return new ArrayList<>();
     }
@@ -55,7 +55,7 @@ public final class TextUtils {
      * @return the CSV line, without a line ending
      */
     public static String joinCsvLine(List<String> values) {
-        // TODO(Seth): implement: joining with commas and quoting values that
+        // TODO(Damien): implement: joining with commas and quoting values that
         //     need it
         return "";
     }
@@ -67,7 +67,7 @@ public final class TextUtils {
      * @return the text with uniform line endings
      */
     public static String normaliseLineEndings(String text) {
-        // TODO(Seth): implement: replacing Windows and old Mac line endings
+        // TODO(Damien): implement: replacing Windows and old Mac line endings
         return "";
     }
 }
