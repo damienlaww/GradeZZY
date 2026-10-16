@@ -37,6 +37,9 @@ public class ConsoleMain {
     // Exit code used when the batch could not be run
     private static final int EXIT_FAILURE = 1;
 
+    // Number of arguments when both the module and the section are given
+    private static final int MODULE_AND_SECTION = 2;
+
     /**
      * Not used: this class only holds the main method.
      */
@@ -45,12 +48,13 @@ public class ConsoleMain {
     }
 
     /**
-     * Grades one batch. The section code may be given as the first
-     * argument (for example G2, in any case); it must be one of the
-     * sections in app.section.codes. Otherwise the first section in
-     * config.properties is used.
+     * Grades one batch. With one argument it is the section code (for
+     * example G2); with two they are the module and the section (for
+     * example CS102 G2). Any case is accepted. Each must be listed in
+     * app.module.codes or app.section.codes; a value that is not given
+     * is the first one in config.properties.
      *
-     * @param args optional: the section code
+     * @param args optional: the section, or the module and the section
      */
     public static void main(String[] args) {
         try {
@@ -74,9 +78,27 @@ public class ConsoleMain {
     private static GradingRun gradeBatch(AppConfig config,
             ApplicationContext context, String[] args)
             throws GradingException {
+        if (args.length > MODULE_AND_SECTION) {
+            throw new ConfigException("Too many arguments. Use: run.sh "
+                    + "console [module] [section], for example run.sh "
+                    + "console CS102 G2.");
+        }
+
+        String requestedModule = "";
+        String requestedSection = "";
+
+        if (args.length == MODULE_AND_SECTION) {
+            requestedModule = args[0];
+            requestedSection = args[1];
+        } else if (args.length == 1) {
+            requestedSection = args[0];
+        }
+
         Section section = new Section(
-                config.getString(ConfigKeys.MODULE_CODE),
-                chooseSectionCode(config, args));
+                chooseCode(config, ConfigKeys.MODULE_CODES, "module",
+                        requestedModule),
+                chooseCode(config, ConfigKeys.SECTION_CODES, "section",
+                        requestedSection));
 
         List<Path> inputPaths = new ArrayList<>();
         inputPaths.add(Paths.get(
@@ -93,34 +115,33 @@ public class ConsoleMain {
                 new ConsoleProgressListener());
     }
 
-    // Takes the section from the arguments, or the first configured one.
-    // A typed section must be one of the configured sections; any case
-    // is accepted and the configured spelling is returned.
-    private static String chooseSectionCode(AppConfig config,
-            String[] args) {
-        List<String> sectionCodes = config.getList(
-                ConfigKeys.SECTION_CODES);
+    // Returns the typed module or section, or the first configured one
+    // when none was typed. A typed code must be listed in the setting;
+    // any case is accepted and the configured spelling is returned.
+    private static String chooseCode(AppConfig config, String key,
+            String kind, String requested) {
+        List<String> codes = config.getList(key);
 
-        if (sectionCodes.isEmpty()) {
-            throw new ConfigException("Setting '"
-                    + ConfigKeys.SECTION_CODES + "' lists no section.");
+        if (codes.isEmpty()) {
+            throw new ConfigException("Setting '" + key + "' lists no "
+                    + kind + ".");
         }
 
-        if (args.length == 0) {
-            return sectionCodes.get(0);
+        String typed = requested.trim();
+
+        if (typed.isEmpty()) {
+            return codes.get(0);
         }
 
-        String requested = args[0].trim();
-
-        for (String sectionCode : sectionCodes) {
-            if (sectionCode.equalsIgnoreCase(requested)) {
-                return sectionCode;
+        for (String code : codes) {
+            if (code.equalsIgnoreCase(typed)) {
+                return code;
             }
         }
 
-        throw new ConfigException("Unknown section '" + requested
-                + "'. Choose one of: " + String.join(", ", sectionCodes)
-                + " (setting '" + ConfigKeys.SECTION_CODES + "').");
+        throw new ConfigException("Unknown " + kind + " '" + typed
+                + "'. Choose one of: " + String.join(", ", codes)
+                + " (setting '" + key + "').");
     }
 
     // Prints one line per submission and the totals.

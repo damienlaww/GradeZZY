@@ -110,13 +110,11 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns the one module code in config.properties.
+     * Returns the module codes listed in config.properties.
      */
     @Override
     public List<String> getModuleCodes() {
-        List<String> codes = new ArrayList<>();
-        codes.add(config.getString(ConfigKeys.MODULE_CODE));
-        return codes;
+        return config.getList(ConfigKeys.MODULE_CODES);
     }
 
     /**

@@ -8,6 +8,10 @@
  */
 package gradezzy.grading;
 
+import java.io.UncheckedIOException;
+import java.nio.file.Path;
+
+import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.ingest.WorkingCopyManager;
 import gradezzy.model.Submission;
@@ -16,7 +20,7 @@ import gradezzy.model.Submission;
  * Creates the working copy of a submission and matches it to a student on the
  * roster.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class ExtractStage implements GradingStage {
 
@@ -64,8 +68,18 @@ public class ExtractStage implements GradingStage {
     @Override
     public void process(Submission submission,
             GradingContext context) throws GradingException {
-        // TODO(Seth): implement: calling
-        //     workingCopyManager.createWorkingCopy, removing student class
-        //     files and setting the student from the roster
+        try {
+            Path workingCopy = workingCopyManager.createWorkingCopy(
+                    submission);
+            submission.setWorkingCopyPath(workingCopy);
+            workingCopyManager.removeStudentClassFiles(workingCopy,
+                    context.getAssessment());
+            submission.setStudent(rosterReader.findByUsername(
+                    context.getRoster(), submission.getUsername()));
+        } catch (IngestException | UncheckedIOException exception) {
+            throw new GradingException("Could not prepare "
+                    + submission.getUsername() + ": "
+                    + exception.getMessage(), exception);
+        }
     }
 }

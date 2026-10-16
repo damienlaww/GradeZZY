@@ -8,19 +8,32 @@
  */
 package gradezzy.ingest;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.Student;
+import gradezzy.util.FileUtils;
+import gradezzy.util.TextUtils;
 
 /**
  * Reads the provided score sheet CSV into Student objects.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class RosterReader {
+
+    // Column labels are a file-format contract, not configurable settings.
+    private static final String ID_COLUMN = "OrgDefinedId";
+    private static final String USERNAME_COLUMN = "Username";
+    private static final String LAST_NAME_COLUMN = "Last Name";
+    private static final String FIRST_NAME_COLUMN = "First Name";
+    private static final String EMAIL_COLUMN = "Email";
 
     // The application settings
     private final AppConfig config;
@@ -43,10 +56,54 @@ public class RosterReader {
      */
     public List<Student> readRoster(
             Path scoreSheetFile) throws IngestException {
-        // TODO(Seth): implement: reading the CSV (columns OrgDefinedId,
-        //     Username, Last Name, First Name, Email, ...) and removing the id
-        //     prefix
-        return new ArrayList<>();
+        try {
+            String text = FileUtils.readText(scoreSheetFile);
+            if (text.startsWith("\uFEFF")) {
+                text = text.substring(1);
+            }
+            List<String> records = splitRecords(
+                    TextUtils.normaliseLineEndings(text));
+            if (records.isEmpty()) {
+                throw new IllegalArgumentException("The roster is empty.");
+            }
+            List<String> header = TextUtils.splitCsvLine(records.get(0));
+            requireColumn(header, ID_COLUMN);
+            requireColumn(header, USERNAME_COLUMN);
+            requireColumn(header, LAST_NAME_COLUMN);
+            requireColumn(header, FIRST_NAME_COLUMN);
+            requireColumn(header, EMAIL_COLUMN);
+
+            List<Student> students = new ArrayList<>();
+            Set<String> usernames = new HashSet<>();
+            for (int index = 1; index < records.size(); index++) {
+                List<String> fields = TextUtils.splitCsvLine(
+                        records.get(index));
+                if (fields.size() != header.size()) {
+                    throw new IllegalArgumentException("Wrong column count "
+                            + "in roster record " + (index + 1) + ".");
+                }
+                String id = removePrefix(fields.get(header.indexOf(
+                        ID_COLUMN)));
+                String username = removePrefix(fields.get(header.indexOf(
+                        USERNAME_COLUMN)));
+                if (TextUtils.isBlank(id) || TextUtils.isBlank(username)
+                        || !usernames.add(username)) {
+                    throw new IllegalArgumentException("Missing student ID "
+                            + "or missing/duplicate username in record "
+                            + (index + 1) + ".");
+                }
+                students.add(new Student(id, username,
+                        fields.get(header.indexOf(LAST_NAME_COLUMN)),
+                        fields.get(header.indexOf(FIRST_NAME_COLUMN)),
+                        fields.get(header.indexOf(EMAIL_COLUMN))));
+            }
+            return students;
+        } catch (IOException | IllegalArgumentException exception) {
+            throw new IngestException("Could not read roster "
+                    + scoreSheetFile + ": " + exception.getMessage()
+                    + " Choose the score sheet CSV with student columns.",
+                    exception);
+        }
     }
 
     /**
@@ -57,7 +114,60 @@ public class RosterReader {
      * @return the student, or null if not on the roster
      */
     public Student findByUsername(List<Student> roster, String username) {
-        // TODO(Seth): implement: a search of the roster by username
+        if (roster == null || username == null) {
+            return null;
+        }
+        for (Student student : roster) {
+            if (student != null && username.equals(student.getUsername())) {
+                return student;
+            }
+        }
         return null;
+    }
+
+    private void requireColumn(List<String> header, String name) {
+        if (header.indexOf(name) < 0
+                || header.indexOf(name) != header.lastIndexOf(name)) {
+            throw new IllegalArgumentException("Missing or repeated column: "
+                    + name);
+        }
+    }
+
+    // Remove exactly one configured prefix; preserve leading zeroes.
+    private String removePrefix(String value) {
+        String prefix = config.getString(ConfigKeys.CSV_ID_PREFIX);
+        if (!prefix.isEmpty() && value.startsWith(prefix)) {
+            return value.substring(prefix.length());
+        }
+        return value;
+    }
+
+    // A quoted name can contain a newline, so physical lines alone are
+    // not records. The field parser later rejects malformed quotes.
+    private List<String> splitRecords(String text) {
+        List<String> records = new ArrayList<>();
+        StringBuilder record = new StringBuilder();
+        boolean quoted = false;
+        for (int index = 0; index < text.length(); index++) {
+            char current = text.charAt(index);
+            if (current == '"') {
+                quoted = !quoted;
+            }
+            if (current == '\n' && !quoted) {
+                if (!TextUtils.isBlank(record.toString())) {
+                    records.add(record.toString());
+                }
+                record.setLength(0);
+            } else {
+                record.append(current);
+            }
+        }
+        if (quoted) {
+            throw new IllegalArgumentException("Unclosed roster CSV quote.");
+        }
+        if (!TextUtils.isBlank(record.toString())) {
+            records.add(record.toString());
+        }
+        return records;
     }
 }

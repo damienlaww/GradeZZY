@@ -4,9 +4,14 @@ rem run.bat: runs GradeZZY. Run compile.bat first.
 rem
 rem Usage (Windows Command Prompt):
 rem   run.bat               open the window
+rem   run.bat --demo        the same screens with synthetic data only
 rem   run.bat --check       load every screen once, then exit (no window)
+rem   run.bat --selftest    run the seven demo flows, print PASS or FAIL
+rem   run.bat --snapshot    save a picture of every screen
+rem   run.bat --windowtest  drive the real window with mouse and keyboard
 rem   run.bat console       grade from the terminal, without JavaFX
 rem   run.bat console G2    the same, for section G2
+rem   run.bat console CS102 G2   the same, for module CS102, section G2
 rem ----------------------------------------------------------------------
 setlocal
 cd /d "%~dp0"

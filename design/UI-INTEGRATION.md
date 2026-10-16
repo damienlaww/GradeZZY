@@ -64,14 +64,14 @@ ServiceRegistry -> GradingService, AnomalyService, ExportService, ...
 
 ## Capabilities
 
-Status on commit `aafc5aa`. "Works now" means the method returns real data
+Status on commit `aafc5aa`, with later owner and status changes applied. "Works now" means the method returns real data
 today.
 
 | Capability | What it does for the instructor | Screens | DashboardBackend method | Service method | Owner | Status | Contract needed |
 |---|---|---|---|---|---|---|---|
 | Module, sections, rubric and limits | Shows the module, sections, marks and time limits set in config.properties. | Context bar, Modules, Assessments | `getModuleCodes`, `getSectionCodes`, `getAssessment`, `getRunTimeoutSeconds`, `getCompileTimeoutSeconds` | `AppConfig, AssessmentFactory.create` | Jing Yuan | Works now | None |
 | Check chosen files and folders | Tells you at once when a chosen file or folder cannot be read. | Submissions | `inspect` | `InputValidator.isReadableFile, isReadableDirectory` | Seth | Waiting | Until these return true for readable paths, every chosen file is reported as unreadable. |
-| Import and grade a batch | Grades every submission of a section in one batch. | Submissions, Grading Progress | `startGrading` | `GradingService.startGrading` | Jing Yuan, with Seth, Jun Sheng, Zach and Huxley | Waiting | The pipeline stages that load, check, fix, compile, run and score submissions. |
+| Import and grade a batch | Grades every submission of a section in one batch. | Submissions, Grading Progress | `startGrading` | `GradingService.startGrading` | Jing Yuan, with Seth, Damien, Jun Sheng, Zach and Huxley | Waiting | The pipeline stages that load, check, fix, compile, run and score submissions. |
 | Cancel grading | Stops a batch early and keeps the results already finished. | Grading Progress | `cancelGrading` | `GradingService.cancel` | Jing Yuan | Works now | None |
 | Retry failed submissions | Grades the submissions that failed or were cancelled again. | Grading Progress | `retryFailedSubmissions` | `GradingService.retryFailed` | Jing Yuan | Works now | None |
 | Resume a cancelled run | Finishes a cancelled run without grading finished students again. | Grading Progress | `resumeGrading` | `GradingService.resume` | Jing Yuan, Huxley | Waiting | Loading the run from the repository and grading the submissions that are still pending. |
@@ -83,7 +83,7 @@ today.
 | Mark flags reviewed or rejected | Records that you looked at a flag, without changing any mark. | Review Anomalies, Similarity Review | `getDecision`, `setDecision` | None yet | Jing Yuan | Proposed | Store an Open, Reviewed or Rejected decision for each anomaly, with undo and an audit entry. |
 | Search, filter and sort | Finds students by name and orders the results table. | Results | `search` | `SearchService.search` | Jing Yuan | Works now | None |
 | Search inside source code | Finds the students whose code contains some text. | Results (Code) | `searchCode` | `SearchService.searchCode` | Jing Yuan | Works now (needs working copies) | None |
-| Show working-copy files | Shows a student's files, so you can read the code behind a mark. | Student Evidence (Source) | `getFileTree`, `readSourceFile` | `FileTreeBuilder, FileUtils.readText` | Seth | Waiting | FileUtils.readText, so a chosen source file can be shown. |
+| Show working-copy files | Shows a student's files, so you can read the code behind a mark. | Student Evidence (Source) | `getFileTree`, `readSourceFile` | `FileTreeBuilder, FileUtils.readText` | Damien | Waiting | FileUtils.readText, so a chosen source file can be shown. |
 | Export CSV and JSON | Saves the score sheet as a CSV or JSON file. | Results | `export` | `ExportService.export` | Jing Yuan, Huxley | Waiting | ExportService.export and the CSV and JSON exporters. |
 | Export only chosen students | Exports only the students you selected or filtered. | Results | `export` (scope argument) | None yet | Jing Yuan, Huxley | Proposed | An export method that takes the visible or selected students instead of the whole run. |
 | Statistics | Summarises the marks and common mistakes of a section. | Statistics | `summarise` | `StatisticsService.summarise` | Jing Yuan, Huxley | Waiting | StatisticsService.summarise and StatisticsCalculator. |
@@ -101,7 +101,7 @@ today.
 | Retry one question | Runs one question's tester again without touching other marks. | Student Evidence | `retryQuestion` | None yet | Jing Yuan, Zach | Proposed | Run the tester of one question again and replace only that question's result. |
 | Retry one submission | Grades one student's submission again from the start. | Student Evidence | `retrySubmission` | None yet | Jing Yuan | Proposed | Grade one chosen submission again, even when it did not fail. |
 | Adjust a mark by hand | Lets you change a mark by hand with a reason, and undo it. | Student Evidence | `adjustScore`, `undoAdjustment`, `listAdjustments` | None yet | Jing Yuan, Huxley | Proposed | Store a manual score with its reason and the earlier score, record it in the audit log, and allow undo. |
-| More than one module | Lets you grade more than one module in the same app. | Modules, context bar | `getModuleCodes` | None yet | Jing Yuan | Proposed | More than one module in config.properties and in saved runs. |
+| More than one module | Lets you grade more than one module in the same app. | Modules, context bar | `getModuleCodes` | `AppConfig` (`app.module.codes`), `AssessmentFactory.create` | Jing Yuan | Works now | None. Saved runs keep the module through `Section` once Huxley's repository saves runs. |
 | Time taken per question | Shows how long each question's tester took to run. | Student Evidence | none | None yet | Zach | Proposed | Record how long each tester ran in QuestionResult. |
 | Export one student's report | Saves one student's marks and evidence as a report. | Student Evidence | `export` (one student) | None yet | Jing Yuan, Huxley | Proposed | Register StudentReportExporter and add an export method for one submission. |
 
@@ -124,7 +124,6 @@ what they need. Each one shows "Not connected yet" in live mode.
 | Similar pair detail | Jun Sheng | The compared files, matching excerpts and the excluded starter and tester files of one pair. |
 | Audit log export | Jing Yuan, Huxley | Register `AuditLogExporter` and add an export method for the audit log. |
 | Student report export | Jing Yuan, Huxley | Register `StudentReportExporter` and add an export method for one submission. |
-| More than one module | Jing Yuan | More than one module in `config.properties` and in saved runs. |
 | Time per question | Zach | Record how long each tester ran in `QuestionResult`. |
 
 ## Where a backend method does more than one call
@@ -144,11 +143,12 @@ Most `LiveBackend` methods are one service call. Three are thin glue:
 
 ## What each owner will see
 
-- **Seth.** Submissions screen. Until `InputValidator` returns true for
-  readable paths, every chosen file is reported as unreadable and Start
-  Grading stays unavailable. That is expected. Student Evidence (Source)
-  shows the working-copy tree, and a chosen file's text once
-  `FileUtils.readText` works.
+- **Seth.** Submissions screen. Until `InputValidator` returns true
+  for readable paths, every chosen file is reported as unreadable and
+  Start Grading stays unavailable. That is expected. Validation and
+  Review Anomalies list the anomalies the validators report.
+- **Damien.** Student Evidence (Source) shows the working-copy tree, and
+  a chosen file's text once `FileUtils.readText` works.
 - **Jun Sheng.** Validation (approve, reject), Review Anomalies (flags
   from the detectors), Similarity Review (pairs from
   `PlagiarismService.check`).

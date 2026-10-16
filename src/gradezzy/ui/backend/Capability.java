@@ -43,7 +43,7 @@ public enum Capability {
     /** Imports a batch and grades it. */
     IMPORT_AND_GRADE("Import and grade a batch",
             "Grades every submission of a section in one batch.",
-            "Jing Yuan, with Seth, Jun Sheng, Zach and Huxley",
+            "Jing Yuan, with Seth, Damien, Jun Sheng, Zach and Huxley",
             "GradingService.startGrading", CapabilityStatus.WAITING,
             "The pipeline stages that load, check, fix, compile, run and "
             + "score submissions."),
@@ -124,12 +124,12 @@ public enum Capability {
             "Finds the students whose code contains some text.",
             "Jing Yuan", "SearchService.searchCode",
             CapabilityStatus.WORKS_NOW,
-            "Working copies on disk, which need Seth's extraction."),
+            "Working copies on disk, which need Damien's extraction."),
 
     /** The folder tree and source files of a working copy. */
     SOURCE_VIEW("Show working-copy files",
             "Shows a student's files, so you can read the code behind a "
-            + "mark.", "Seth", "FileTreeBuilder, FileUtils.readText",
+            + "mark.", "Damien", "FileTreeBuilder, FileUtils.readText",
             CapabilityStatus.WAITING,
             "FileUtils.readText, so a chosen source file can be shown."),
 
@@ -256,9 +256,10 @@ public enum Capability {
     /** More than one module. */
     MULTIPLE_MODULES("More than one module",
             "Lets you grade more than one module in the same app.",
-            "Jing Yuan", null, CapabilityStatus.PROPOSED,
-            "More than one module in config.properties and in saved "
-            + "runs."),
+            "Jing Yuan", "AppConfig, AssessmentFactory.create",
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; modules come from app.module.codes. Saved runs "
+            + "keep the module once runs are saved."),
 
     /** How long each tester ran. */
     QUESTION_TIMING("Time taken per question",

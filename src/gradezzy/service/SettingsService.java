@@ -133,6 +133,7 @@ public class SettingsService {
 
     // List settings that need at least one item
     private static final String[] REQUIRED_LIST_KEYS = {
+        ConfigKeys.MODULE_CODES,
         ConfigKeys.SECTION_CODES,
         ConfigKeys.EXPORT_FORMATS
     };

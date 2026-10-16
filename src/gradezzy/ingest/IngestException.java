@@ -11,7 +11,7 @@ package gradezzy.ingest;
 /**
  * Signals that an upload could not be read or unpacked.
  *
- * <p>Tier: MUST. Owner: Seth.
+ * <p>Tier: MUST. Owner: Damien.
  */
 public class IngestException extends Exception {
 

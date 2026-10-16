@@ -75,7 +75,8 @@ public final class InputValidator {
      * @return true if the text is a positive whole number
      */
     public static boolean isPositiveInteger(String text) {
-        // TODO(Seth): implement: the number check without throwing an exception
+        // TODO(Seth): implement: the number check without throwing an
+        //     exception
         return false;
     }
 }

@@ -4,9 +4,14 @@
 #
 # Usage (macOS Terminal, or Git Bash on Windows):
 #   sh run.sh               open the window
+#   sh run.sh --demo        the same screens with synthetic data only
 #   sh run.sh --check       load every screen once, then exit (no window)
+#   sh run.sh --selftest    run the seven demo flows, print PASS or FAIL
+#   sh run.sh --snapshot    save a picture of every screen
+#   sh run.sh --windowtest  drive the real window with mouse and keyboard
 #   sh run.sh console       grade from the terminal, without JavaFX
 #   sh run.sh console G2    the same, for section G2
+#   sh run.sh console CS102 G2   the same, for module CS102, section G2
 # ----------------------------------------------------------------------
 
 cd "$(dirname "$0")" || exit 1

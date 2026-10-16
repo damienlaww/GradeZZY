@@ -3,10 +3,14 @@
 CS102 group project (Singapore Management University): an Auto Grading
 System for Java lab tests.
 
-> **Status: skeleton.** The project compiles and runs, but the grading
-> logic and the screens are not written yet. Every unfinished method holds
-> a `// TODO(owner): implement: ...` comment. See
-> [Where to add your code](#where-to-add-your-code).
+> **Status: screens built, grading logic in progress.** The project
+> compiles and runs. Every screen is built and can be tried with
+> synthetic data (`sh run.sh --demo`). Most grading stages are not
+> written yet, so live mode shows an empty state wherever a service is
+> still a stub. Every unfinished method holds a
+> `// TODO(owner): implement: ...` comment. See
+> [Where to add your code](#where-to-add-your-code) and
+> `design/UI-INTEGRATION.md`.
 
 ## What the application does
 
@@ -49,9 +53,12 @@ Run every command from the `GradeZZY` folder.
 ```sh
 sh compile.sh            # compile everything into classes/
 sh run.sh                # open the window
+sh run.sh --demo         # the same screens with synthetic data only
 sh run.sh --check        # load every screen once and exit, no window
+sh run.sh --selftest     # run the seven demo flows, print PASS or FAIL
 sh run.sh console        # grade from the terminal, without JavaFX
 sh run.sh console G2     # the same, for section G2
+sh run.sh console CS102 G2   # the same, for module CS102
 sh compile.sh core       # compile only the grading core, without JavaFX
 sh clean.sh              # empty classes/ before submission
 ```
@@ -61,14 +68,25 @@ sh clean.sh              # empty classes/ before submission
 ```bat
 compile.bat
 run.bat
+run.bat --demo
 run.bat --check
+run.bat --selftest
 run.bat console
 run.bat console G2
+run.bat console CS102 G2
 compile.bat core
 clean.bat
 ```
 
 The `.sh` scripts are also written to work in Git Bash on Windows.
+
+Two more developer options exist for checking the screens:
+`--snapshot` saves a picture of every screen, and `--windowtest` drives
+the real window with the mouse and keyboard. Both are explained in
+`design/UI-INTEGRATION.md`.
+
+`compile.sh core` empties `classes/` before it compiles, so run
+`compile.sh` again before `run.sh`.
 
 ### What has been tested
 
@@ -77,8 +95,10 @@ The `.sh` scripts are also written to work in Git Bash on Windows.
 | `compile.sh`, zero errors and warnings | Passed | Not tested | Not tested |
 | `compile.sh core` (no JavaFX) | Passed | Not tested | Not tested |
 | `run.sh console` | Passed | Not tested | Not tested |
-| `run.sh --check` (12 screens load) | Passed | Not tested | Not tested |
-| `run.sh` (window opens) | Passed | Not tested | Not tested |
+| `run.sh --check` (16 screens, live and demo, both themes) | Passed | Not tested | Not tested |
+| `run.sh --selftest` (7 demo flows) | Passed | Not tested | Not tested |
+| `run.sh` (window opens) | Passed before the new screens; not run since | Not tested | Not tested |
+| `run.sh --snapshot`, `run.sh --windowtest` | Not tested | Not tested | Not tested |
 | `.bat` scripts | Not applicable | Not applicable | Not tested |
 
 **A teammate on Windows and one on an Intel Mac must run the scripts and
@@ -90,14 +110,14 @@ or run on the instructor's laptop.
 | Folder or file | What it holds |
 |---|---|
 | `compile.sh`, `compile.bat` | Compile all sources into `classes/` and copy the `.fxml` and `.css` files. |
-| `run.sh`, `run.bat` | Run the window, the screen check or the console. |
+| `run.sh`, `run.bat` | Run the window, the demo, the screen checks or the console. |
 | `clean.sh`, `clean.bat` | Empty `classes/` and remove `workspace/`. |
 | `config.properties` | Every setting of the application. |
 | `src/` | All Java source files, plus the FXML and CSS files of the `ui` package. |
 | `classes/` | Compiled classes. Created by the compile script, not in git, and must be empty at submission. |
 | `lib/` | The library jars. `lib/javafx/<platform>/` holds JavaFX for each platform. |
 | `media/` | Images and audio used by the application. Empty for now. |
-| `design/` | The interface design as one clickable HTML page. Open it in a browser. |
+| `design/` | `gradezzy-design.html`, the clickable design (open it in a browser); `UI-INTEGRATION.md`, how each backend method reaches the screens; `UI-REVIEW.md`, the design and accessibility review; `concept/`, Damien's design concept and its handoff notes. |
 | `README.md` | This file. |
 | `docs/` | The project brief and coding style PDFs. Not in git. |
 | `samples/` | The provided testers, score sheet, starter folder and six sample submissions. Not in git. |
@@ -135,7 +155,12 @@ The base package is `gradezzy`. Each package has one job.
 | `stats` | Statistics for the dashboard. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
 | `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ProgressEstimator`, `ServiceRegistry` |
-| `ui` | JavaFX only: FXML files and controllers. | `MainApp`, `Screen`, `ScreenNavigator`, `BaseController`, `ThemeManager`, `GradingTask`, twelve `...Controller` classes, `FileTreeBuilder`, `DragDropHandler` |
+| `ui` | JavaFX only: FXML files, controllers and the window. | `MainApp`, `Screen`, `ScreenNavigator`, `ShellBuilder`, `UiState`, `BaseController`, `ThemeManager`, `GradingTask`, `GradingMonitor`, sixteen `...Controller` classes, `FileTreeBuilder`, `DragDropHandler` |
+| `ui.backend` | The one interface the screens call, and its live version that calls the services. | `DashboardBackend`, `LiveBackend`, `Capability`, small view classes such as `RepairItem` and `RunRecord` |
+| `ui.demo` | Synthetic data for `--demo`. Never reads, grades or saves real files. | `DemoBackend`, `DemoData`, `DemoGrader` |
+| `ui.component` | Reusable parts of screens. | `StatusBadge`, `EmptyState`, `NotConnectedPanel`, `MetricTile`, `Sheet` |
+| `ui.view` | Parts of single screens, so each controller stays short. | `Sidebar`, `ContextBar`, `ResultsColumns`, the `Evidence...` tabs, the `Statistics...` charts |
+| `ui.check` | Developer checks behind the `--check`, `--selftest`, `--snapshot` and `--windowtest` options. Not used when grading. | `ScreenCheck`, `SelfTest`, `SnapshotWriter`, `WindowTest` |
 | `util` | Small shared helpers. | `FileUtils`, `TextUtils`, `InputValidator` |
 
 ### How the pieces fit
@@ -152,9 +177,12 @@ ui (JavaFX)        app.ConsoleMain
      -> ScoreStage -> PersistStage
 ```
 
-- **Every `javafx` import is in the `ui` package.** The console entry
-  point and `compile.sh core` prove that the rest compiles and runs
-  without JavaFX.
+- **Every `javafx` import is in the `ui` package and its subpackages.**
+  The console entry point and `compile.sh core` prove that the rest
+  compiles and runs without JavaFX.
+- **Screens never call a service directly.** A controller calls
+  `ui.backend.DashboardBackend`. `LiveBackend` passes each call to one
+  service method; `DemoBackend` answers from synthetic data.
 - **One failing submission never stops the batch.** `GradingPipeline`
   catches the failure of any stage, records it as an `INTERNAL_ERROR`
   anomaly on that submission, marks the submission `FAILED` and moves on
@@ -168,7 +196,7 @@ ui (JavaFX)        app.ConsoleMain
 
 | Order | Stage | What it does | Owner |
 |---|---|---|---|
-| 1 | `ExtractStage` | Creates the working copy and matches the student on the roster. | Seth |
+| 1 | `ExtractStage` | Creates the working copy and matches the student on the roster. | Damien |
 | 2 | `ValidateStage` | Runs every `Validator`. | Seth |
 | 3 | `FixStage` | Applies automatic corrections. | Jun Sheng |
 | 4 | `DetectStage` | Runs every `Detector`. | Jun Sheng |
@@ -191,28 +219,42 @@ a harmless return value, so the project keeps compiling while you work.
 Replace the TODO comment and the placeholder return with real code. Do not
 change a method signature without telling whoever calls it.
 
-Owners and TODO counts (160 in total). The split is a starting point;
+When a method you finish makes a screen show real data, change that
+feature's status from `WAITING` to `WORKS_NOW` in
+`src/gradezzy/ui/backend/Capability.java`, then run `sh run.sh --check`
+and `sh run.sh --selftest`. `design/UI-INTEGRATION.md` lists which screen
+shows each service method.
+
+Owners and TODO counts (111 left). The split is a starting point;
 the team can swap areas. The next section explains each person's work in
 detail.
 
 | Owner | Packages | TODOs |
 |---|---|---|
-| Seth | `util`, `ingest`, `validation`, two stages | 31 |
+| Damien | `FileUtils`, `TextUtils`, `ingest`, one stage | 19 |
+| Seth | `validation`, `InputValidator`, one stage; looks after `ui` | 12 |
 | Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 23 |
 | Zach | `exec`, `testcase`, three stages, the score parser | 14 |
 | Jing Yuan | `app`, `config`, `model`, `service`, scoring | 15 |
 | Huxley | `report`, `stats`, `persistence`, one stage | 28 |
-| Damien | `ui` | 49 |
+
+Jun Sheng built the whole `ui` package, so on 2026-10-16 the work was
+split again: Damien took the helpers and the reading of submissions
+(`FileUtils`, `TextUtils`, `ingest`, `ExtractStage`), and Seth took the
+checking of submissions (`validation`, `ValidateStage`), the form checks
+(`InputValidator`) and looking after the screens.
 
 ### What is already real code
 
 These parts are written, not stubs, because the skeleton cannot run
 without them: `AppConfig`, `GradingPipeline`, `CancellationToken`,
 `AssessmentFactory`, `PipelineFactory`, `GradingService.startGrading`,
-`ApplicationContext`, `ConsoleMain`, `ConsoleProgressListener`, `MainApp`,
-`ScreenNavigator`, `Screen`, `ThemeManager`, `GradingTask`, the getters
-and setters of the model classes, and the two constructors of each
-exception class. Read them before the presentation; they are short.
+`ApplicationContext`, `ConsoleMain`, `ConsoleProgressListener`, the
+getters and setters of the model classes, and the two constructors of
+each exception class. Read them before the presentation; they are short.
+
+The whole `ui` package is also real code: every screen, the live and
+demo backends, and the developer checks.
 
 ### How to add a new validator
 
@@ -257,9 +299,11 @@ exception class. Read them before the presentation; they are short.
   `PipelineFactory.createPipeline(...)`.
 - **Screen:** add a constant to `Screen`, an FXML file in
   `src/gradezzy/ui/fxml/` and a controller that extends `BaseController`.
-  `run.sh --check` then confirms that it loads.
+  Anything it needs from a service goes through a new
+  `DashboardBackend` method, written in both `LiveBackend` and
+  `DemoBackend`. `run.sh --check` then confirms that it loads.
 - **Package:** add its folder to `CORE_SOURCES` in both `compile.sh` and
-  `compile.bat`.
+  `compile.bat`, or to `UI_SOURCES` for a package under `ui`.
 
 ### The tester output format
 
@@ -324,32 +368,27 @@ show me the output. Explain your approach before you write code.
 Ask for one class at a time, read what comes back, and ask "explain this
 method line by line" for anything you could not have written yourself.
 
-### 1. Seth: helpers, then reading and checking submissions
+### 1. Damien: helpers, then reading submissions
 
-**Packages:** `util`, `ingest`, `validation`, plus `ExtractStage` and
-`ValidateStage` in `grading`. 31 TODOs. Everyone else is blocked until
-`SubmissionLoader` and `WorkingCopyManager` work, so do the three helper
+**Packages:** `FileUtils` and `TextUtils` in `util`, `ingest`, plus
+`ExtractStage` in `grading`. 19 TODOs. Everyone else is blocked until
+`SubmissionLoader` and `WorkingCopyManager` work, so do the two helper
 classes quickly and move on to those two.
 
-Helpers first (`util`, 14 TODOs). Huxley needs `TextUtils` and `FileUtils`
-and Damien needs `InputValidator`:
+Helpers first (9 TODOs). Huxley and Seth both need `TextUtils` and
+`FileUtils`:
 
 1. `FileUtils`: copy and delete folders, read and write text, list files.
 2. `TextUtils`: `isBlank`, `splitCsvLine`, `joinCsvLine`,
    `normaliseLineEndings`.
-3. `InputValidator`: section code, username, readable file, readable
-   folder, positive whole number. The brief takes up to 10% off for
-   missing input validation, so every form in the app calls these.
 
-You are done with `util` when the methods give the right answers for the
-cases below.
+You are done with the helpers when the methods give the right answers
+for the cases below.
 
 | Method | Input | Expected |
 |---|---|---|
 | `splitCsvLine` | `#01400001,#ping.lee.2023,_,PING LEE,x@y.sg,,20,#` | 8 values, the sixth empty |
 | `splitCsvLine` | `a,"b,c",d` | 3 values: `a`, `b,c`, `d` |
-| `isValidSectionCode` | `G1`, `G12`, `g1`, `G`, `1`, empty | true, true, decide with the team, false, false, false |
-| `isPositiveInteger` | `10`, `0`, `-3`, `abc`, empty | true, false, false, false, false |
 
 Example prompts for the helpers:
 
@@ -359,12 +398,6 @@ library and without String.split, so quoted values that contain commas
 work. Show the result for these lines: [paste the table above]. An empty
 value between two commas must come back as an empty string, not be
 dropped.
-```
-
-```text
-Implement gradezzy.util.InputValidator. No method may throw an exception
-for any input, including null. List the edge cases you considered for
-each method before writing code.
 ```
 
 Then the submissions. What to build, in order:
@@ -384,10 +417,7 @@ Then the submissions. What to build, in order:
    files except those in `assessment.provided.class.files`.
 5. `RosterReader`: read `samples/IS442-ScoreSheet.csv` into `Student`
    objects and remove the `#` in front of the id and username.
-6. The four validators, `AbstractValidator.createAnomaly` and
-   `ValidationRunner.runAll`. Each validator returns anomalies and never
-   throws for bad student input.
-7. `ExtractStage` and `ValidateStage`, which call the classes above.
+6. `ExtractStage`, which calls the classes above.
 
 Facts from the provided files:
 
@@ -395,33 +425,11 @@ Facts from the provided files:
 - The score sheet header is `OrgDefinedId,Username,Last Name,First
   Name,Email,Calculated Final Grade Numerator,Calculated Final Grade
   Denominator,End-of-Line Indicator`, with Windows line endings.
-- A correct zip holds one folder named after the username, with `Q1`,
-  `Q2` and `Q3` inside. The required files are in `config.properties`
-  (`Q1/Q1a.java`, `Q1/Q1b.java`, `Q2/Q2a.java`, `Q2/Q2b.java`,
-  `Q3/Q3.java`).
-- Each Java file starts with a comment holding `Name:` and `Email ID:`.
-  Some students wrote only the username after `Email ID:`, others the
-  full address.
 
-You are done when `sh run.sh console` lists all six students and reports
-at least these anomalies:
-
-| Student | Expected anomaly |
-|---|---|
-| chee.teo.2022 | `MISSING_WRAPPER_FOLDER`; `MISSING_HEADER_NAME` in `Q3.java` |
-| david.2024 | `WRONG_FOLDER_NAME` (folder is `01400003`); `MISSING_HEADER_NAME` in `Q3.java` |
-| fen.lai.2022 | `WRONG_FOLDER_NAME` (folder is `RenameToYourStudentID`) |
-| jing.lim.2021 | `MISSING_WRAPPER_FOLDER`; `MISSING_HEADER_NAME` in all five required files |
-| ping.lee.2023 | none |
-| xing.yan.2023 | none |
-
-The table covers the five required files only. Some zips also hold
-extra files with no name in the header (`ShapeComparator.java`,
-`ShapeComparators.java`); decide with the team whether those are checked.
-
-Also make dummy zips for the cases the samples do not cover: a missing
-`Q2` folder, a missing `Q1b.java`, a file named `q1a.java`, an empty zip
-and a file that is not a zip at all. None may stop the batch.
+You are done when `sh run.sh console` lists all six students, each with
+a working copy under `workspace/working/<username>` and its roster
+entry, and an empty zip or a file that is not a zip is reported without
+stopping the batch.
 
 Example prompts:
 
@@ -441,6 +449,95 @@ an instructor can act on. Then write a small dummy zip that should be
 rejected and show me that it is.
 ```
 
+### 2. Seth: checking submissions, form checks and the screens
+
+**Packages:** `validation`, `InputValidator` in `util`, plus
+`ValidateStage` in `grading`. 12 TODOs. Jun Sheng built the whole `ui`
+package; Seth looks after it from here. Jun Sheng's fixers have
+nothing to fix until the validators report anomalies, so start with
+those. Until Damien's `WorkingCopyManager` works, test against a sample
+zip unzipped by hand.
+
+What to build, in order:
+
+1. `InputValidator`: section code, username, readable file, readable
+   folder, positive whole number. The brief takes up to 10% off for
+   missing input validation, and the Submissions screen reports every
+   chosen file as unreadable until `isReadableFile` and
+   `isReadableDirectory` work.
+2. `AbstractValidator.createAnomaly`, then the four validators
+   (`StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`,
+   `HeaderNameValidator`) and `ValidationRunner.runAll`. Each validator
+   returns anomalies and never throws for bad student input.
+3. `ValidateStage`, which calls `ValidationRunner`.
+4. Dummy submissions for the cases the samples do not cover: a missing
+   `Q2` folder, a missing `Q1b.java`, a file named `q1a.java`, an empty
+   zip, a file that is not a zip, and a `Q1a.java` holding
+   `while (true) { }`. Share them with the team; they test everyone's
+   stage, and the brief rewards extra edge cases.
+5. As each teammate finishes a service, open its screen in live mode
+   (`sh run.sh`) and check that the real data looks right.
+   `design/UI-INTEGRATION.md` says which screen shows which service;
+   `design/UI-REVIEW.md` records the design and what was verified.
+6. Make sure the scripts are run on Windows and on an Intel Mac, on
+   your own laptop or a teammate's: `compile`, `run --check`,
+   `run --selftest`, `run console` and `run --windowtest`. Record the
+   results in the tested table above. The brief takes up to 50% off if
+   the code does not run on the instructor's laptop.
+
+The checks `InputValidator` must give:
+
+| Method | Input | Expected |
+|---|---|---|
+| `isValidSectionCode` | `G1`, `G12`, `g1`, `G`, `1`, empty | true, true, decide with the team, false, false, false |
+| `isPositiveInteger` | `10`, `0`, `-3`, `abc`, empty | true, false, false, false, false |
+
+Facts from the provided files:
+
+- A correct zip holds one folder named after the username, with `Q1`,
+  `Q2` and `Q3` inside. The required files are in `config.properties`
+  (`Q1/Q1a.java`, `Q1/Q1b.java`, `Q2/Q2a.java`, `Q2/Q2b.java`,
+  `Q3/Q3.java`).
+- Each Java file starts with a comment holding `Name:` and `Email ID:`.
+  Some students wrote only the username after `Email ID:`, others the
+  full address.
+
+You are done when `sh run.sh console` reports at least these anomalies:
+
+| Student | Expected anomaly |
+|---|---|
+| chee.teo.2022 | `MISSING_WRAPPER_FOLDER`; `MISSING_HEADER_NAME` in `Q3.java` |
+| david.2024 | `WRONG_FOLDER_NAME` (folder is `01400003`); `MISSING_HEADER_NAME` in `Q3.java` |
+| fen.lai.2022 | `WRONG_FOLDER_NAME` (folder is `RenameToYourStudentID`) |
+| jing.lim.2021 | `MISSING_WRAPPER_FOLDER`; `MISSING_HEADER_NAME` in all five required files |
+| ping.lee.2023 | none |
+| xing.yan.2023 | none |
+
+The table covers the five required files only. Some zips also hold
+extra files with no name in the header (`ShapeComparator.java`,
+`ShapeComparators.java`); decide with the team whether those are checked.
+None of the dummy submissions may stop the batch.
+
+Rules that matter for the screens:
+
+- Controllers hold no grading logic. A controller calls
+  `DashboardBackend`, and `LiveBackend` passes the call to one service
+  method.
+- Grading runs on a background thread. A `ProgressListener` is called on
+  that thread, so every change to a control is wrapped in
+  `Platform.runLater`.
+- Every `javafx` import stays in the `ui` package and its subpackages.
+- After any change to a screen, run `sh run.sh --check` and
+  `sh run.sh --selftest`.
+
+Example prompts:
+
+```text
+Implement gradezzy.util.InputValidator. No method may throw an exception
+for any input, including null. List the edge cases you considered for
+each method before writing code.
+```
+
 ```text
 Implement gradezzy.validation.StructureValidator. Unzip each sample in
 samples/student-submission into a temporary folder and show me the top
@@ -449,7 +546,7 @@ MISSING_WRAPPER_FOLDER, WRONG_FOLDER_NAME and MISSING_QUESTION_FOLDER
 through createAnomaly. It must never throw for a badly formed submission.
 ```
 
-### 2. Jun Sheng: corrections, flags and plagiarism
+### 3. Jun Sheng: corrections, flags and plagiarism
 
 **Packages:** `fix`, `detection`, `plagiarism`, plus `FixStage` and
 `DetectStage` in `grading` and the TODO in
@@ -520,7 +617,7 @@ question paper as the example. Do not write code yet. I need to be able
 to explain the chosen approach in a presentation.
 ```
 
-### 3. Zach: compiling, running and reading scores
+### 4. Zach: compiling, running and reading scores
 
 **Packages:** `exec`, `testcase`, plus `InstallTestersStage`,
 `CompileStage`, `ExecuteStage` and `TesterOutputScoreParser` in
@@ -601,7 +698,7 @@ other questions must still be compiled. Do not throw GradingException for
 a student's compile error; explain when throwing is appropriate.
 ```
 
-### 4. Jing Yuan: scoring, services and putting it together
+### 5. Jing Yuan: scoring, services and putting it together
 
 **Packages:** `app`, `config`, `model`, `service`, plus `ScoreStage` and
 `ScoreCalculator` in `grading`. 15 TODOs left (39 at the start). You
@@ -661,7 +758,7 @@ Recommend the simplest one that I can explain to an instructor. Do not
 write code until I pick.
 ```
 
-### 5. Huxley: exports, statistics and saved state
+### 6. Huxley: exports, statistics and saved state
 
 **Packages:** `report`, `stats`, `persistence`, plus `PersistStage` in
 `grading` and the TODO in `ApplicationContext` that opens the database.
@@ -678,8 +775,9 @@ What to build, in order:
 4. `StatisticsCalculator`: mean, median, pass rate, mark bands, pass rate
    per question, most failed test, common compile errors, filtered by
    module and section.
-5. `SqliteResultRepository`: create the tables, then save and load runs,
-   submissions, anomalies, fix status and audit entries.
+5. `SqliteResultRepository`: create the tables, then save and load runs
+   (with the module and section of each run), submissions, anomalies,
+   fix status and audit entries.
 6. `PersistStage` and the `repository.open()` call in
    `ApplicationContext`.
 7. `BackupManager` (COULD tier).
@@ -733,65 +831,15 @@ dividing by zero. Show the results for the scores 12, 10, 10, 0, 20, 15
 out of 20 and check them by hand.
 ```
 
-### 6. Damien: the screens
-
-**Package:** `ui`. 49 TODOs, most of them one-line button handlers. Every
-form calls Seth's `InputValidator`; until it is ready, build the layouts
-and leave the checks for last.
-
-What to build, in order:
-
-1. Open `design/gradezzy-design.html` in a browser. It is the design to
-   build: every screen is clickable, and its Design Notes screen lists the
-   colours, type sizes and the JavaFX or AtlantaFX control for each part.
-2. Then, per screen: lay out the FXML, add `fx:id` fields and connect the
-   handlers in its controller. Suggested order: Upload, Progress, Results,
-   Anomaly log, Settings, Statistics, Student report, Test cases, Audit
-   log, History, Plagiarism.
-3. `MainController`: Next, Back, Cancel and the light and dark switch.
-4. `FileTreeBuilder` and `DragDropHandler` for the Upload screen.
-5. `BaseController.showError` and `showInfo`, used by every screen.
-
-Rules that matter here:
-
-- Controllers hold no grading logic. A handler validates the input, calls
-  one method on a service from `getServices()` and shows the result.
-- Grading runs on a background thread through `GradingTask`. A
-  `ProgressListener` is called on that thread, so it must wrap every
-  change to a control in `Platform.runLater`.
-- Every `javafx` import stays in the `ui` package.
-- Check each screen against Nielsen's ten heuristics. For this app that
-  means: always show what the grader is doing, confirm before Cancel or
-  Undo all, say what went wrong and what to do next, and never show a
-  stack trace.
-
-You are done with a screen when `sh run.sh --check` loads it, the
-instructor can complete its task with the six samples, and bad input
-(nothing selected, a file that is not a zip, a blank section) produces a
-clear message instead of an error.
-
-Example prompt:
-
-```text
-Read design/gradezzy-design.html, including its Design Notes screen.
-Build the Upload screen only, matching that design: edit src/gradezzy/ui/fxml/upload.fxml and
-UploadController.java. Use standard JavaFX controls and the AtlantaFX
-Cupertino theme; do not add another library. The controller must contain
-no grading logic: validate with InputValidator, then call
-getServices().getGradingService() through a GradingTask. Explain where a
-lambda is used and why, since lambdas are not taught in CS102. Finish by
-running "sh run.sh --check".
-```
-
 ### Who is waiting on whom
 
 | If you are | You need first | From |
 |---|---|---|
-| Jun Sheng | Anomalies from the validators, the student on the submission | Seth |
-| Zach | A working copy to compile in | Seth |
+| Seth | A working copy to check; `FileUtils` and `TextUtils` | Damien |
+| Jun Sheng | Anomalies from the validators; the student on the submission | Seth; Damien |
+| Zach | A working copy to compile in | Damien |
 | Jing Yuan | Question results from `ExecuteStage` | Zach |
 | Huxley | Nothing to start; real runs later | Jing Yuan |
-| Damien | The chosen design; working services; `InputValidator` | Team, Jing Yuan, Seth |
 
 Nobody has to sit idle: every class can be written and tried against a
 folder unzipped by hand or a `GradingRun` filled in by hand.
@@ -805,7 +853,7 @@ file: `java -Dgradezzy.config=other.properties ...`.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `app.module.code` | `CS102` | Course code shown on every run. |
+| `app.module.codes` | `CS102` | Modules the instructor can pick from, separated by commas. The first is the default. Every module shares the sections and the assessment. |
 | `app.section.codes` | `G1` to `G10` | Sections the instructor can pick from. |
 | `paths.submissions.dir` | `samples/student-submission` | Folder graded by the console entry point. |
 | `paths.testers.dir` | `samples/Tester-Files` | Folder holding the tester files. |
@@ -871,7 +919,7 @@ from Maven Central.
 |---|---|---|---|
 | JavaFX (`javafx-base`, `-graphics`, `-controls`, `-fxml`) | 25.0.4 | GPL v2 with Classpath Exception | The desktop window. It matches JDK 25, separates layout (FXML) from logic (controllers), and has built-in charts, tables, tree views, file pickers and drag and drop. |
 | AtlantaFX (`atlantafx-base`) | 3.0.0 | MIT | Modern themes for JavaFX. Its Cupertino Light and Dark themes give light and dark mode with one line of code. |
-| ControlsFX (`controlsfx`) | 11.2.5 | BSD 3-Clause | Extra controls JavaFX lacks, such as notifications and auto-completing search fields. Not used by any class yet. |
+| ControlsFX (`controlsfx`) | 11.2.5 | BSD 3-Clause | Extra controls JavaFX lacks. Used for the auto-completing search fields (`TextFields.bindAutoCompletion`) in `ui.ResultsController` and `ui.view.AnomalyFilters`. |
 | SQLite JDBC (`sqlite-jdbc`) | 3.53.4.0 | Apache 2.0 | A database in a single file with no server to install, for saved state, history, resume and backup. |
 
 Notes:
@@ -893,7 +941,13 @@ Kept to a minimum and confined to the classes named here:
 | Construct | Where | Why |
 |---|---|---|
 | JavaFX, FXML | `ui` package only | The window. |
+| Lambdas and method references (`->`, `::`) | 49 files in `ui` | Button handlers, table cells and callbacks. |
+| `java.util.function` (`Function`, `Consumer`, `IntConsumer`) | `ui.HelpController`, several `ui.view` classes, `ui.check.WindowTest` | Passing a small piece of behaviour to a shared table or filter part. |
 | `javafx.concurrent.Task` (a background thread) | `ui.GradingTask` | Keeps the window responsive while grading. |
+| `new Thread`, `Platform.runLater` | `ui.backend.LiveBackend`, `ui.ResultsController`, `ui.PlagiarismController`, `ui.HistoryController`, `ui.GradingTask`, `ui.GradingMonitor` | Grading, exports, backups and the similarity check run off the window's thread; screen updates go back to it. |
+| `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. |
+| `javafx.animation` (`Timeline`, `FadeTransition` and others) | `ui.MainController`, `ui.GradingMonitor`, `ui.view.SheetLayer`, `ui.view.ToastLayer`, `ui.demo.DemoGrader` | Subtle animations and timers. Turned off by `ui.animations.enabled`. |
+| `java.awt.Robot`, `javax.imageio.ImageIO`, `java.util.concurrent`, `java.util.zip.ZipOutputStream` | `ui.check` only | The `--snapshot` and `--windowtest` developer checks. Not used when grading. |
 | `synchronized` | `grading.CancellationToken` | The Cancel button and the grading thread share one flag. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. |
 | `enum` | `model`, `ui.Screen` | Fixed lists of values. |
@@ -905,9 +959,9 @@ Kept to a minimum and confined to the classes named here:
 | `java.util.zip` (to be written) | `ingest.ZipExtractor` | Unzips submissions. |
 | `java.util.regex.Pattern` | `service.SettingsService` | Checks that the zip name pattern setting is a valid regular expression. |
 | `java.nio.file.Files` (`readString`, `writeString`, `move`, `isSymbolicLink`) | `service.SettingsService`, `service.SearchService` | Saves `config.properties` through a temporary copy; reads source files for the code search. |
+| `java.nio.file` (`Path`, `Paths`, `Files`) | About 20 files in `ui` | The files and folders the instructor chooses or drops on the window. |
 
-No lambdas or streams are used in the skeleton. JavaFX event handlers will
-need lambdas (or anonymous classes) in the `ui` package.
+No streams are used anywhere. Lambdas appear only in the `ui` package.
 
 ## Coding rules
 
@@ -981,7 +1035,9 @@ implemented. `[x]` means it works now.
 - [x] Configuration in an external file (`config.properties`,
   `config.AppConfig`)
 - [ ] Screens that show progress, errors and results
-  (`ui.ProgressController`, `AnomalyLogController`, `ResultsController`)
+  (`ui.ProgressController`, `AnomalyLogController`, `ResultsController`;
+  the screens are built and work in demo mode, real results wait on the
+  pipeline stages)
 - [ ] Input validation everywhere (`util.InputValidator`)
 
 ### SHOULD
@@ -992,19 +1048,20 @@ implemented. `[x]` means it works now.
   (`detection` package)
 - [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
   `TesterGenerator`, `ui.TestCaseController`)
-- [ ] Progress bar and estimated time of completion
-  (`service.ProgressEstimator`)
+- [x] Progress bar and estimated time of completion
+  (`service.ProgressEstimator`, `ui.GradingMonitor`)
 - [ ] Statistics dashboard filtered by module and section (`stats`
   package, `ui.StatisticsController`)
 - [x] Search, filter and sort (`service.SearchService`)
-- [ ] Select one, several or all (`ui.AnomalyLogController`,
+- [x] Select one, several or all (`ui.AnomalyLogController`,
   `ResultsController`)
-- [ ] Collapse and expand panels (`ui`, once the design is chosen)
-- [ ] Next, Back and Cancel (`ui.MainController`)
+- [ ] Collapse and expand panels (`ui`)
+- [x] Next, Back and Cancel (`ui.MainController`)
 - [ ] Cancel, retry and resume grading (`service.GradingService`,
-  `grading.CancellationToken`; cancel already works in the pipeline)
+  `grading.CancellationToken`; cancel and retry work, resume waits on the
+  repository)
 - [x] Light and dark theme switch (`ui.ThemeManager`, `ui.theme`)
-- [ ] Settings page backed by `config.properties`
+- [x] Settings page backed by `config.properties`
   (`service.SettingsService`, `ui.SettingsController`)
 - [ ] SQLite persistence behind `ResultRepository`
   (`persistence.SqliteResultRepository`)
@@ -1020,7 +1077,7 @@ implemented. `[x]` means it works now.
 
 - [ ] Backup and recovery of a previous grading state
   (`persistence.BackupManager`, `service.HistoryService`)
-- [ ] Subtle animations (`ui`, `ui.animations.enabled`)
+- [x] Subtle animations (`ui`, `ui.animations.enabled`)
 - [ ] Plagiarism detection (`plagiarism` package,
   `service.PlagiarismService`)
 
