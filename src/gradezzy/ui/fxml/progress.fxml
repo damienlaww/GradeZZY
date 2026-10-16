@@ -62,8 +62,6 @@
                              accessibleText="Submissions processed"/>
                 <Label fx:id="nowLabel" styleClass="secondary-text"
                        wrapText="true"/>
-                <Label text="Pipeline stages" styleClass="eyebrow"/>
-                <FlowPane fx:id="stageList" styleClass="stage-list"/>
             </VBox>
 
             <FlowPane fx:id="metrics" hgap="12" vgap="12">

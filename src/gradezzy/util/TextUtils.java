@@ -32,20 +32,64 @@ public final class TextUtils {
      * @return true if there is no real text
      */
     public static boolean isBlank(String text) {
-        // TODO(Damien): implement: the blank check
-        return false;
+        return text == null || text.isBlank();
     }
 
     /**
-     * Splits one CSV line into its values.
+     * Splits one CSV record into values, retaining empty fields. Doubled
+     * quotes escape quotes inside a quoted field. Line endings are allowed
+     * only inside quotes; spaces outside closing quotes are rejected.
      *
      * @param line the line
      * @return the values of the line
+     * @throws IllegalArgumentException if quotes are malformed or a field
+     *         contains an unquoted line ending
      */
     public static List<String> splitCsvLine(String line) {
-        // TODO(Damien): implement: splitting on commas while respecting quoted
-        //     values
-        return new ArrayList<>();
+        if (line == null) {
+            throw new IllegalArgumentException("CSV line must not be null.");
+        }
+
+        List<String> values = new ArrayList<>();
+        StringBuilder value = new StringBuilder();
+        boolean quoted = false;
+        boolean closedQuote = false;
+
+        for (int index = 0; index < line.length(); index++) {
+            char current = line.charAt(index);
+            if (quoted) {
+                if (current != '"') {
+                    value.append(current);
+                } else if (index + 1 < line.length()
+                        && line.charAt(index + 1) == '"') {
+                    value.append('"');
+                    index++;
+                } else {
+                    quoted = false;
+                    closedQuote = true;
+                }
+            } else if (current == ',') {
+                values.add(value.toString());
+                value.setLength(0);
+                closedQuote = false;
+            } else if (closedQuote || current == '\r' || current == '\n') {
+                throw new IllegalArgumentException("Malformed CSV field.");
+            } else if (current == '"') {
+                if (!value.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "A CSV quote must start a field.");
+                }
+                quoted = true;
+            } else {
+                value.append(current);
+            }
+        }
+
+        if (quoted) {
+            throw new IllegalArgumentException("Unclosed CSV quote.");
+        }
+        values.add(value.toString());
+        return values;
     }
 
     /**
@@ -53,11 +97,23 @@ public final class TextUtils {
      *
      * @param values the values
      * @return the CSV line, without a line ending
+     * @throws IllegalArgumentException if a value is null
      */
     public static String joinCsvLine(List<String> values) {
-        // TODO(Damien): implement: joining with commas and quoting values that
-        //     need it
-        return "";
+        List<String> fields = new ArrayList<>();
+        for (String value : values) {
+            if (value == null) {
+                throw new IllegalArgumentException(
+                        "CSV values must not be null.");
+            }
+            if (value.contains(",") || value.contains("\"")
+                    || value.contains("\r") || value.contains("\n")) {
+                fields.add("\"" + value.replace("\"", "\"\"") + "\"");
+            } else {
+                fields.add(value);
+            }
+        }
+        return String.join(",", fields);
     }
 
     /**
@@ -67,7 +123,6 @@ public final class TextUtils {
      * @return the text with uniform line endings
      */
     public static String normaliseLineEndings(String text) {
-        // TODO(Damien): implement: replacing Windows and old Mac line endings
-        return "";
+        return text.replace("\r\n", "\n").replace('\r', '\n');
     }
 }
