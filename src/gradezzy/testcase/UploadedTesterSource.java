@@ -8,11 +8,15 @@
  */
 package gradezzy.testcase;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.Assessment;
+import gradezzy.model.Question;
 
 /**
  * Supplies tester files the instructor uploaded.
@@ -26,16 +30,24 @@ public class UploadedTesterSource implements TestCaseSource {
      */
     public static final String NAME = "Uploaded tester files";
 
+    // Extension of a tester source file
+    private static final String JAVA_EXTENSION = ".java";
+
     // The folder holding the uploaded testers
     private final Path testersDirectory;
+
+    // The application settings
+    private final AppConfig config;
 
     /**
      * Creates a new uploaded tester source.
      *
      * @param testersDirectory the folder holding the uploaded testers
+     * @param config the application settings
      */
-    public UploadedTesterSource(Path testersDirectory) {
+    public UploadedTesterSource(Path testersDirectory, AppConfig config) {
         this.testersDirectory = testersDirectory;
+        this.config = config;
     }
 
     /**
@@ -58,9 +70,31 @@ public class UploadedTesterSource implements TestCaseSource {
     @Override
     public List<TesterFile> prepareTesters(
             Assessment assessment) throws TestCaseException {
-        // TODO(Zach): implement: matching
-        //     <questionId><TESTER_CLASS_SUFFIX>.java files to the questions of
-        //     the assessment
-        return new ArrayList<>();
+        if (testersDirectory == null || !Files.isDirectory(testersDirectory)) {
+            throw new TestCaseException(
+                    "Tester folder not found: " + testersDirectory);
+        }
+
+        String suffix = config.getString(ConfigKeys.TESTER_CLASS_SUFFIX);
+        List<TesterFile> testers = new ArrayList<>();
+
+        // A question without a tester is skipped: it simply gets no score
+        for (Question question : assessment.getQuestions()) {
+            String className = question.getId() + suffix;
+            Path sourceFile = testersDirectory.resolve(
+                    className + JAVA_EXTENSION);
+
+            if (Files.isRegularFile(sourceFile)) {
+                testers.add(new TesterFile(question.getId(), className,
+                        sourceFile));
+            }
+        }
+
+        if (testers.isEmpty()) {
+            throw new TestCaseException("No file named <question id>"
+                    + suffix + JAVA_EXTENSION + " was found in "
+                    + testersDirectory);
+        }
+        return testers;
     }
 }

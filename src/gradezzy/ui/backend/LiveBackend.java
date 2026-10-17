@@ -713,7 +713,7 @@ public class LiveBackend implements DashboardBackend {
     private TestCaseSource createTestCaseSource(ImportBatch batch) {
         if (!batch.isUsingTypedTestCases()) {
             return new UploadedTesterSource(
-                    batch.getSinglePath(InputKind.TESTERS));
+                    batch.getSinglePath(InputKind.TESTERS), config);
         }
 
         Path outputFolder = Paths.get(config.getString(

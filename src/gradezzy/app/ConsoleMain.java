@@ -105,7 +105,7 @@ public class ConsoleMain {
                 config.getString(ConfigKeys.SUBMISSIONS_DIR)));
 
         TestCaseSource testCaseSource = new UploadedTesterSource(
-                Paths.get(config.getString(ConfigKeys.TESTERS_DIR)));
+                Paths.get(config.getString(ConfigKeys.TESTERS_DIR)), config);
 
         System.out.println("GradeZZY console, section "
                 + section.getLabel());
