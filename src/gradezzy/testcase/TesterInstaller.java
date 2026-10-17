@@ -8,11 +8,16 @@
  */
 package gradezzy.testcase;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.Assessment;
+import gradezzy.model.Question;
 import gradezzy.model.Submission;
 
 /**
@@ -35,7 +40,10 @@ public class TesterInstaller {
     }
 
     /**
-     * Copies each tester into the matching question folder.
+     * Copies each tester into the matching question folder. A question
+     * whose folder is missing is skipped: the validators already reported
+     * it. A tester or data file the student included is replaced, so a
+     * student cannot ship a tester that always passes.
      *
      * @param testers the testers
      * @param submission the submission
@@ -44,12 +52,33 @@ public class TesterInstaller {
      */
     public void install(List<TesterFile> testers, Submission submission,
             Assessment assessment) throws TestCaseException {
-        // TODO(Zach): implement: copying each tester into the folder of its
-        //     question inside the working copy
+        try {
+            for (TesterFile tester : testers) {
+                Question question = assessment.findQuestion(
+                        tester.getQuestionId());
+                Path questionFolder = null;
+                if (question != null) {
+                    questionFolder = QuestionFolderFinder.find(submission,
+                            assessment, question);
+                }
+
+                if (questionFolder != null) {
+                    Path sourceFile = tester.getSourceFile();
+                    copyReplacing(sourceFile, questionFolder);
+                    copyDataFiles(sourceFile.getParent(), questionFolder);
+                }
+            }
+        } catch (IOException exception) {
+            throw new TestCaseException("Could not install the testers for "
+                    + submission.getUsername() + ": "
+                    + exception.getMessage(), exception);
+        }
     }
 
     /**
-     * Copies the data files listed in config next to a tester.
+     * Copies the data files listed in config next to a tester. Only files
+     * found in the tester folder are copied; when the instructor did not
+     * supply one, the copy inside the submission is used.
      *
      * @param sourceDirectory the source directory
      * @param questionFolder the question folder
@@ -57,6 +86,31 @@ public class TesterInstaller {
      */
     public void copyDataFiles(Path sourceDirectory,
             Path questionFolder) throws TestCaseException {
-        // TODO(Zach): implement: copying the files named in TESTER_DATA_FILES
+        List<String> dataFileNames = config.getList(
+                ConfigKeys.TESTER_DATA_FILES);
+
+        try {
+            for (String dataFileName : dataFileNames) {
+                Path dataFile = sourceDirectory.resolve(dataFileName);
+                if (Files.isRegularFile(dataFile)) {
+                    copyReplacing(dataFile, questionFolder);
+                }
+            }
+        } catch (IOException exception) {
+            throw new TestCaseException("Could not copy the tester data "
+                    + "files: " + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Copies a file into a folder, replacing a file with the same name.
+     *
+     * @param file the file to copy
+     * @param folder the folder to copy it into
+     * @throws IOException if the copy fails
+     */
+    private void copyReplacing(Path file, Path folder) throws IOException {
+        Files.copy(file, folder.resolve(file.getFileName()),
+                StandardCopyOption.REPLACE_EXISTING);
     }
 }
