@@ -182,6 +182,12 @@ public final class ConfigKeys {
     public static final String FAIL_MARKER = "grading.fail.marker";
 
     /**
+     * Start of the line a tester prints before each test case.
+     */
+    public static final String TEST_HEADER_MARKER =
+            "grading.test.header.marker";
+
+    /**
      * Whether untouched starter files are flagged.
      */
     public static final String DETECT_UNTOUCHED_ENABLED =

@@ -51,6 +51,9 @@ public class CompileStage implements GradingStage {
     // Splits compiler messages into lines, whatever the line ending
     private static final String LINE_BREAK = "\\R";
 
+    // Full stop at the end of a sentence
+    private static final String FULL_STOP = ".";
+
     // What the instructor can do about a compile error
     private static final String COMPILE_ERROR_ACTION =
             "Read the compiler output on the Logs tab.";
@@ -193,6 +196,11 @@ public class CompileStage implements GradingStage {
         if (trimmed.isEmpty()) {
             return "the compiler stopped without a message";
         }
-        return trimmed.split(LINE_BREAK)[0];
+        String line = trimmed.split(LINE_BREAK)[0];
+        // The message is put inside a sentence, so its own full stop goes
+        if (line.endsWith(FULL_STOP)) {
+            return line.substring(0, line.length() - FULL_STOP.length());
+        }
+        return line;
     }
 }

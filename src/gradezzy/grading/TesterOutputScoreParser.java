@@ -28,6 +28,13 @@ public class TesterOutputScoreParser implements ScoreParser {
     // Separates standard output from standard error in the saved log
     private static final String LOG_SEPARATOR = "\n";
 
+    // Exit code of a tester that finished normally
+    private static final int SUCCESS_EXIT_CODE = 0;
+
+    // Detail of a test case that was still running when the tester stopped
+    private static final String NOT_FINISHED = "Not finished: the tester "
+            + "stopped before this case printed a result.";
+
     // The application settings
     private final AppConfig config;
 
@@ -56,24 +63,28 @@ public class TesterOutputScoreParser implements ScoreParser {
         }
 
         String output = processResult.getStandardOutput();
+        String headerMarker = config.getString(ConfigKeys.TEST_HEADER_MARKER);
         String passMarker = config.getString(ConfigKeys.PASS_MARKER);
         String failMarker = config.getString(ConfigKeys.FAIL_MARKER);
         int testNumber = 0;
-        int passCount = 0;
+        String verdict = "";
         String lastLine = "";
 
+        // A test case runs from its header to the next header. The tester
+        // prints its verdict after the student's code returns, so the last
+        // verdict line of a case wins over any the student printed.
         for (String rawLine : output.split(LINE_BREAK)) {
             String line = rawLine.trim();
 
-            if (line.equals(passMarker)) {
+            if (line.startsWith(headerMarker)) {
+                if (testNumber > 0) {
+                    addCase(result, testNumber, verdict, passMarker);
+                }
                 testNumber++;
-                passCount++;
-                result.addTestCaseResult(
-                        new TestCaseResult(testNumber, true, line));
-            } else if (line.startsWith(failMarker)) {
-                testNumber++;
-                result.addTestCaseResult(
-                        new TestCaseResult(testNumber, false, line));
+                verdict = "";
+            } else if (line.equals(passMarker)
+                    || line.startsWith(failMarker)) {
+                verdict = line;
             }
 
             if (!line.isEmpty()) {
@@ -81,6 +92,17 @@ public class TesterOutputScoreParser implements ScoreParser {
             }
         }
 
+        // The last case only counts if the tester ran to the end; after a
+        // timeout or crash it is unfinished, whatever it printed
+        if (testNumber > 0) {
+            String lastVerdict = verdict;
+            if (!finishedNormally(processResult)) {
+                lastVerdict = "";
+            }
+            addCase(result, testNumber, lastVerdict, passMarker);
+        }
+
+        int passCount = countPasses(result);
         result.setCompiled(true);
         result.setTimedOut(processResult.isTimedOut());
         result.setOutput(buildLog(processResult));
@@ -101,7 +123,7 @@ public class TesterOutputScoreParser implements ScoreParser {
      */
     private double readScore(ProcessResult processResult, String lastLine,
             int passCount) {
-        if (processResult.isTimedOut() || processResult.getExitCode() != 0) {
+        if (!finishedNormally(processResult)) {
             return passCount;
         }
 
@@ -110,6 +132,52 @@ public class TesterOutputScoreParser implements ScoreParser {
         } catch (NumberFormatException exception) {
             return passCount;
         }
+    }
+
+    /**
+     * Records one test case. A case with no verdict never finished.
+     *
+     * @param result where the case is added
+     * @param testNumber the position of the case, from 1
+     * @param verdict the verdict line, or empty if none was printed
+     * @param passMarker the line printed for a pass
+     */
+    private void addCase(QuestionResult result, int testNumber,
+            String verdict, String passMarker) {
+        if (verdict.isEmpty()) {
+            result.addTestCaseResult(new TestCaseResult(testNumber, false,
+                    NOT_FINISHED));
+        } else {
+            result.addTestCaseResult(new TestCaseResult(testNumber,
+                    verdict.equals(passMarker), verdict));
+        }
+    }
+
+    /**
+     * Counts the passed test cases of a result.
+     *
+     * @param result the result
+     * @return the number of passed cases
+     */
+    private int countPasses(QuestionResult result) {
+        int count = 0;
+        for (TestCaseResult testCase : result.getTestCaseResults()) {
+            if (testCase.isPassed()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Says whether the tester ended by itself without an error.
+     *
+     * @param processResult the finished run
+     * @return true if it was not stopped and exited normally
+     */
+    private boolean finishedNormally(ProcessResult processResult) {
+        return !processResult.isTimedOut()
+                && processResult.getExitCode() == SUCCESS_EXIT_CODE;
     }
 
     /**
