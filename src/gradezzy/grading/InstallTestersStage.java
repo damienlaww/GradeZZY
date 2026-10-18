@@ -8,6 +8,7 @@
 package gradezzy.grading;
 
 import gradezzy.model.Submission;
+import gradezzy.testcase.TestCaseException;
 import gradezzy.testcase.TesterInstaller;
 
 /**
@@ -54,7 +55,11 @@ public class InstallTestersStage implements GradingStage {
     @Override
     public void process(Submission submission,
             GradingContext context) throws GradingException {
-        // TODO(Zach): implement: calling testerInstaller.install with
-        //     context.getTesters()
+        try {
+            testerInstaller.install(context.getTesters(), submission,
+                    context.getAssessment());
+        } catch (TestCaseException exception) {
+            throw new GradingException(exception.getMessage(), exception);
+        }
     }
 }

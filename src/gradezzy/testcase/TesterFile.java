@@ -9,6 +9,7 @@
 package gradezzy.testcase;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * One tester source file ready to be used for a question.
@@ -64,5 +65,22 @@ public class TesterFile {
      */
     public Path getSourceFile() {
         return sourceFile;
+    }
+
+    /**
+     * Finds the tester of a question in a list of testers.
+     *
+     * @param testers the testers to search
+     * @param questionId the question
+     * @return the tester, or null if the question has none
+     */
+    public static TesterFile findFor(List<TesterFile> testers,
+            String questionId) {
+        for (TesterFile tester : testers) {
+            if (tester.getQuestionId().equals(questionId)) {
+                return tester;
+            }
+        }
+        return null;
     }
 }

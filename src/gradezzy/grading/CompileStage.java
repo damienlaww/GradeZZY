@@ -8,8 +8,24 @@
  */
 package gradezzy.grading;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.UUID;
+
+import gradezzy.exec.ProcessExecutionException;
+import gradezzy.exec.ProcessResult;
 import gradezzy.exec.SourceCompiler;
+import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
+import gradezzy.model.Assessment;
+import gradezzy.model.Question;
+import gradezzy.model.QuestionResult;
+import gradezzy.model.Severity;
 import gradezzy.model.Submission;
+import gradezzy.testcase.QuestionFolderFinder;
+import gradezzy.testcase.TesterFile;
 
 /**
  * Compiles the student's code and the testers, one question at a time.
@@ -22,6 +38,22 @@ public class CompileStage implements GradingStage {
      * The name shown while this stage runs.
      */
     public static final String NAME = "Compiling";
+
+    // Start of the id of each anomaly this stage reports
+    private static final String ID_PREFIX = "compile-";
+
+    // Extension of a Java source file
+    private static final String JAVA_EXTENSION = ".java";
+
+    // Exit code of a successful javac run
+    private static final int SUCCESS_EXIT_CODE = 0;
+
+    // Splits compiler messages into lines, whatever the line ending
+    private static final String LINE_BREAK = "\\R";
+
+    // What the instructor can do about a compile error
+    private static final String COMPILE_ERROR_ACTION =
+            "Read the compiler output on the Logs tab.";
 
     // The helper that runs javac
     private final SourceCompiler sourceCompiler;
@@ -47,16 +79,120 @@ public class CompileStage implements GradingStage {
 
     /**
      * Compiles the student's code and the testers, one question at a time.
+     * A question that does not compile gets a COMPILE_ERROR anomaly and the
+     * others are still compiled. A question with no tester, folder or file
+     * is skipped: the validators already reported what is missing.
      *
      * @param submission the submission
      * @param context the context
-     * @throws GradingException if the operation fails
+     * @throws GradingException if javac itself cannot be run
      */
     @Override
     public void process(Submission submission,
             GradingContext context) throws GradingException {
-        // TODO(Zach): implement: compiling each question folder, creating a
-        //     QuestionResult per question and recording compile errors as
-        //     anomalies
+        Assessment assessment = context.getAssessment();
+
+        for (Question question : assessment.getQuestions()) {
+            TesterFile tester = TesterFile.findFor(context.getTesters(),
+                    question.getId());
+            Path folder = findFolder(submission, assessment, question);
+
+            if (tester != null && folder != null
+                    && Files.isRegularFile(
+                            folder.resolve(question.getFileName()))) {
+                submission.addQuestionResult(compileQuestion(submission,
+                        question, tester, folder));
+            }
+        }
+    }
+
+    /**
+     * Compiles one question and its tester.
+     *
+     * @param submission the submission
+     * @param question the question
+     * @param tester the tester of the question
+     * @param folder the question folder
+     * @return the result, marked compiled or not
+     * @throws GradingException if javac itself cannot be run
+     */
+    private QuestionResult compileQuestion(Submission submission,
+            Question question, TesterFile tester, Path folder)
+            throws GradingException {
+        List<String> sourceFiles = List.of(question.getFileName(),
+                tester.getClassName() + JAVA_EXTENSION);
+        ProcessResult compileResult = runCompiler(folder, sourceFiles);
+        boolean compiled = compileResult.getExitCode() == SUCCESS_EXIT_CODE
+                && !compileResult.isTimedOut();
+
+        QuestionResult result = new QuestionResult(question);
+        result.setCompiled(compiled);
+        result.setOutput(compileResult.getStandardError());
+
+        if (!compiled) {
+            String message = question.getId() + " did not compile: "
+                    + firstLine(compileResult.getStandardError())
+                    + ". The other questions were still graded.";
+            submission.addAnomaly(new Anomaly(ID_PREFIX + UUID.randomUUID(),
+                    AnomalyType.COMPILE_ERROR, Severity.ERROR,
+                    submission.getUsername(), message,
+                    COMPILE_ERROR_ACTION));
+        }
+        return result;
+    }
+
+    /**
+     * Runs javac. Failing to start it is a problem with the computer, not
+     * with the student's work, so it stops this submission.
+     *
+     * @param folder the question folder
+     * @param sourceFiles the files to compile
+     * @return the compiler result
+     * @throws GradingException if javac cannot be run
+     */
+    private ProcessResult runCompiler(Path folder, List<String> sourceFiles)
+            throws GradingException {
+        try {
+            return sourceCompiler.compile(folder, sourceFiles);
+        } catch (ProcessExecutionException exception) {
+            throw new GradingException("The compiler could not be run: "
+                    + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Finds the question folder, turning a listing failure into a
+     * GradingException.
+     *
+     * @param submission the submission
+     * @param assessment the assessment
+     * @param question the question
+     * @return the folder, or null if it is missing
+     * @throws GradingException if the working copy cannot be read
+     */
+    private Path findFolder(Submission submission, Assessment assessment,
+            Question question) throws GradingException {
+        try {
+            return QuestionFolderFinder.find(submission, assessment,
+                    question);
+        } catch (IOException exception) {
+            throw new GradingException("The working copy could not be read: "
+                    + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Returns the first line of the compiler messages, such as
+     * "Q1a.java:12: error: ';' expected".
+     *
+     * @param messages the compiler messages
+     * @return the first line, or a note when there is no message
+     */
+    private String firstLine(String messages) {
+        String trimmed = messages.trim();
+        if (trimmed.isEmpty()) {
+            return "the compiler stopped without a message";
+        }
+        return trimmed.split(LINE_BREAK)[0];
     }
 }
