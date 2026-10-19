@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
@@ -78,11 +79,13 @@ public class ProcessRunner {
         Process process = startProcess(command, workingDirectory);
         StringBuilder outputText = new StringBuilder();
         StringBuilder errorText = new StringBuilder();
+        List<ProcessHandle> children = new ArrayList<>();
         boolean timedOut = false;
 
         try (InputStream output = process.getInputStream();
                 InputStream error = process.getErrorStream()) {
             while (process.isAlive() && !timedOut) {
+                rememberChildren(process, children);
                 readAvailable(output, outputText, maxCharacters);
                 readAvailable(error, errorText, maxCharacters);
 
@@ -115,6 +118,9 @@ public class ProcessRunner {
             Thread.currentThread().interrupt();
             throw new ProcessExecutionException(
                     "Interrupted while running " + command.get(0), exception);
+        } finally {
+            // Student code may start programs that outlive the tester
+            stopChildren(children);
         }
     }
 
@@ -135,6 +141,36 @@ public class ProcessRunner {
             descendant.destroyForcibly();
         }
         process.destroyForcibly();
+    }
+
+    /**
+     * Adds the child processes running now to the list, so they can still
+     * be stopped after the process that started them has ended.
+     *
+     * @param process the process
+     * @param children the children seen so far
+     */
+    private void rememberChildren(Process process,
+            List<ProcessHandle> children) {
+        List<ProcessHandle> descendants = process.descendants().toList();
+        for (ProcessHandle descendant : descendants) {
+            if (!children.contains(descendant)) {
+                children.add(descendant);
+            }
+        }
+    }
+
+    /**
+     * Stops every remembered child process that is still running.
+     *
+     * @param children the children seen while the process ran
+     */
+    private void stopChildren(List<ProcessHandle> children) {
+        for (ProcessHandle child : children) {
+            if (child.isAlive()) {
+                child.destroyForcibly();
+            }
+        }
     }
 
     /**

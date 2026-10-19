@@ -111,7 +111,8 @@ public class TesterOutputScoreParser implements ScoreParser {
     }
 
     /**
-     * Reads the total from the last line. A run that was stopped or that
+     * Reads the total from the last line, capped at the number of passed
+     * cases. A run that was stopped or that
      * crashed never printed its total, and its last line may be the
      * student's own output, so the passes printed so far are counted
      * instead, one mark each, as the provided testers award.
@@ -127,8 +128,11 @@ public class TesterOutputScoreParser implements ScoreParser {
             return passCount;
         }
 
+        // Student code can print a number and call System.exit(0), so the
+        // total is never more than one mark per passed case, the brief's
+        // rubric
         try {
-            return Double.parseDouble(lastLine);
+            return Math.min(Double.parseDouble(lastLine), passCount);
         } catch (NumberFormatException exception) {
             return passCount;
         }
