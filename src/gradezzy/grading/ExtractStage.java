@@ -15,6 +15,9 @@ import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.ingest.WorkingCopyManager;
 import gradezzy.model.Submission;
+import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
+import gradezzy.model.Severity;
 
 /**
  * Creates the working copy of a submission and matches it to a student on the
@@ -68,14 +71,24 @@ public class ExtractStage implements GradingStage {
     @Override
     public void process(Submission submission,
             GradingContext context) throws GradingException {
+        if (submission.getIngestFailure() != null) {
+            throw new GradingException(submission.getIngestFailure());
+        }
+        submission.setStudent(rosterReader.findByUsername(
+                context.getRoster(), submission.getUsername()));
+        if (submission.getStudent() == null) {
+            submission.addAnomaly(new Anomaly("UNKNOWN-" + java.util.UUID.randomUUID(),
+                    AnomalyType.UNKNOWN_STUDENT, Severity.WARNING,
+                    submission.getUsername(), submission.getUsername()
+                            + " is not on the roster.",
+                    "Check the upload filename and the selected roster."));
+        }
         try {
             Path workingCopy = workingCopyManager.createWorkingCopy(
                     submission);
             submission.setWorkingCopyPath(workingCopy);
             workingCopyManager.removeStudentClassFiles(workingCopy,
                     context.getAssessment());
-            submission.setStudent(rosterReader.findByUsername(
-                    context.getRoster(), submission.getUsername()));
         } catch (IngestException | UncheckedIOException exception) {
             throw new GradingException("Could not prepare "
                     + submission.getUsername() + ": "

@@ -102,6 +102,10 @@ public class GradingPipeline {
     private void processSubmission(Submission submission,
             GradingContext context, ProgressListener listener) {
         listener.onSubmissionStarted(submission);
+        if (submission.getIngestFailure() != null) {
+            submission.setStatus(SubmissionStatus.FAILED);
+            return;
+        }
         submission.setStatus(SubmissionStatus.RUNNING);
 
         try {

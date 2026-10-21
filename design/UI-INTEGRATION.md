@@ -202,3 +202,24 @@ Most `LiveBackend` methods are one service call. Three are thin glue:
 `compile.sh` and `compile.bat` list these folders in `UI_SOURCES`. Every
 `javafx` import stays in `gradezzy.ui` and its subpackages, so
 `sh compile.sh core` still compiles the grading core without JavaFX.
+
+## Submission ingestion behavior
+
+Each ZIP passed to `SubmissionLoader.loadSubmissions` belongs to the student
+named by its outer filename, even when it contains other ZIPs. Bulk containers
+must be explicitly opened through `loadBatchArchive`; the ordinary upload flow
+accepts individual student ZIPs or a folder containing them.
+
+The first upload for a username is kept. Later uploads for the same username
+(case-insensitive), and uploads without a username, remain in the run as failed
+submissions with an ingestion anomaly. They never create a working copy and
+Retry leaves their rejection intact. Duplicate import rows do not block the
+other students from being graded.
+
+`LiveBackend` passes the selected roster through `GradingTask` to
+`GradingService`; console runs use the configured score sheet. Roster lookup is
+case-insensitive, and unmatched usernames raise `UNKNOWN_STUDENT` while
+remaining eligible for grading. ZIP extraction accepts Windows separators and
+`./` entries while rejecting traversal, absolute paths and unsafe filenames.
+
+The regression checks are documented in [tests/README.md](../tests/README.md).

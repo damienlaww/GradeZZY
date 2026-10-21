@@ -31,6 +31,9 @@ public class Submission {
     // The working copy that may be modified
     private Path workingCopyPath = null;
 
+    // A rejected upload must never reach a working copy, including on retry.
+    private String ingestFailure = null;
+
     // The matching roster entry
     private Student student = null;
 
@@ -54,6 +57,16 @@ public class Submission {
         this.username = username;
         this.section = section;
         this.originalPath = originalPath;
+    }
+
+    /** Returns the upload rejection reason, or null for an accepted upload. */
+    public String getIngestFailure() {
+        return ingestFailure;
+    }
+
+    /** Records why this upload cannot be graded. */
+    public void setIngestFailure(String ingestFailure) {
+        this.ingestFailure = ingestFailure;
     }
 
     /**

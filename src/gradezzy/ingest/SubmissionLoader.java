@@ -5,7 +5,7 @@
  * objects.
  *
  * Where it fits: The first step of batch upload: it accepts many zips, a folder
- * of zips or one zip of zips, for one section.
+ * of zips, or an explicitly selected bulk archive, for one section.
  */
 package gradezzy.ingest;
 
@@ -16,16 +16,17 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
+import gradezzy.model.Severity;
+import gradezzy.model.SubmissionStatus;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.util.FileUtils;
@@ -58,8 +59,9 @@ public class SubmissionLoader {
      * A folder containing configured question folders is one student;
      * otherwise its immediate children are individual submissions.
      * Non-ZIP files are retained so extraction reports their failures
-     * without discarding the other students. Bulk ZIPs containing only
-     * student ZIPs are unpacked under the working root and kept for retry.
+     * without discarding the other students. A ZIP always belongs to the
+     * student named by its outer filename; use loadBatchArchive explicitly
+     * for a ZIP of student ZIPs.
      *
      * @param inputPaths the input paths
      * @param section the section
@@ -89,20 +91,18 @@ public class SubmissionLoader {
         // All candidates share the same comparison, even across uploads.
         List<Submission> submissions = new ArrayList<>();
         Set<String> usernames = new HashSet<>();
-        Set<Path> seen = new HashSet<>();
         for (Path candidate : candidates) {
-            if (seen.add(candidate.toAbsolutePath().normalize())) {
-                String username = extractUsername(
-                        candidate.getFileName().toString());
-                if (TextUtils.isBlank(username)) {
-                    throw new IngestException("No username in " + candidate);
-                }
-                if (!usernames.add(username.toLowerCase(Locale.ROOT))) {
-                    throw new IngestException("Duplicate submission for "
-                            + username + ". Choose one file per student.");
-                }
-                submissions.add(new Submission(username, section, candidate));
+            String username = extractUsername(
+                    candidate.getFileName().toString());
+            Submission submission = new Submission(username, section,
+                    candidate);
+            if (TextUtils.isBlank(username)) {
+                reject(submission, "No username in " + candidate);
+            } else if (!usernames.add(username.toLowerCase(Locale.ROOT))) {
+                reject(submission, "Duplicate submission for " + username
+                        + ". Choose one file per student.");
             }
+            submissions.add(submission);
         }
         // Insertion sort avoids a comparator/lambda for this short list.
         for (int index = 1; index < submissions.size(); index++) {
@@ -153,11 +153,7 @@ public class SubmissionLoader {
                 collectChildren(input, candidates);
             }
         } else if (Files.isRegularFile(input, LinkOption.NOFOLLOW_LINKS)) {
-            if (isBulkArchive(input)) {
-                unpackBatch(input, candidates);
-            } else {
-                candidates.add(input);
-            }
+            candidates.add(input);
         } else {
             throw new IOException("Not a file or folder: " + input);
         }
@@ -191,30 +187,38 @@ public class SubmissionLoader {
         return false;
     }
 
-    // Inspect metadata only. Corrupt student archives fail in ExtractStage.
-    private boolean isBulkArchive(Path input) {
-        if (!input.getFileName().toString().toLowerCase(Locale.ROOT)
-                .endsWith(ZIP_EXTENSION)) {
-            return false;
+    /**
+     * Loads a ZIP explicitly identified by the caller as a batch container.
+     * Ordinary uploads never infer student identities from nested ZIPs.
+     *
+     * @param archive the batch ZIP
+     * @param section the section
+     * @return the student submissions
+     * @throws IngestException if the batch archive cannot be unpacked
+     */
+    public List<Submission> loadBatchArchive(Path archive, Section section)
+            throws IngestException {
+        if (archive == null || section == null) {
+            throw new IngestException("Choose a batch archive and a section.");
         }
-        boolean foundZip = false;
-        try (ZipFile zip = new ZipFile(input.toFile())) {
-            Enumeration<? extends ZipEntry> entries = zip.entries();
-            while (entries.hasMoreElements()) {
-                ZipEntry entry = entries.nextElement();
-                if (!entry.isDirectory() && !isIgnored(Path.of(
-                        entry.getName()))) {
-                    if (!entry.getName().toLowerCase(Locale.ROOT)
-                            .endsWith(ZIP_EXTENSION)) {
-                        return false;
-                    }
-                    foundZip = true;
-                }
-            }
-        } catch (IOException | java.nio.file.InvalidPathException exception) {
-            return false;
+        List<Path> candidates = new ArrayList<>();
+        try {
+            unpackBatch(archive, candidates);
+        } catch (IOException exception) {
+            throw new IngestException("Could not read batch archive: "
+                    + exception.getMessage(), exception);
         }
-        return foundZip;
+        Collections.sort(candidates);
+        return loadSubmissions(candidates, section);
+    }
+
+    private void reject(Submission submission, String message) {
+        submission.setIngestFailure(message);
+        submission.setStatus(SubmissionStatus.FAILED);
+        submission.addAnomaly(new Anomaly("INGEST-" + java.util.UUID.randomUUID(),
+                AnomalyType.INVALID_ARCHIVE, Severity.ERROR,
+                submission.getUsername(), message,
+                "Correct this upload and add it to a new batch."));
     }
 
     // Each batch gets its own directory so original inner ZIPs survive
