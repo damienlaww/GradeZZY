@@ -117,7 +117,7 @@ public class PipelineFactory {
         runner.addValidator(new StructureValidator());
         runner.addValidator(new FileNameValidator());
         runner.addValidator(new RequiredFilesValidator());
-        runner.addValidator(new HeaderNameValidator());
+        runner.addValidator(new HeaderNameValidator(config));
 
         return runner;
     }
