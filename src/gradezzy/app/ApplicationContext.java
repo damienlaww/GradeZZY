@@ -80,7 +80,7 @@ public class ApplicationContext {
                 createExportService(),
                 new StatisticsService(new StatisticsCalculator(config),
                         repository),
-                new SearchService(),
+                new SearchService(config),
                 new AuditService(config, repository),
                 new SettingsService(config),
                 new HistoryService(config, repository,

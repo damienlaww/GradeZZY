@@ -131,6 +131,21 @@ public class SettingsService {
         ConfigKeys.SCORE_SHEET_FILE
     };
 
+    // Folders GradeZZY writes into and may delete inside
+    private static final String[] WRITTEN_FOLDER_KEYS = {
+        ConfigKeys.WORKING_DIR,
+        ConfigKeys.OUTPUT_DIR,
+        ConfigKeys.BACKUP_DIR
+    };
+
+    // Settings naming the uploads, which a written folder must not touch
+    private static final String[] INPUT_PATH_KEYS = {
+        ConfigKeys.SUBMISSIONS_DIR,
+        ConfigKeys.TESTERS_DIR,
+        ConfigKeys.STARTER_DIR,
+        ConfigKeys.SCORE_SHEET_FILE
+    };
+
     // List settings that need at least one item
     private static final String[] REQUIRED_LIST_KEYS = {
         ConfigKeys.MODULE_CODES,
@@ -246,6 +261,10 @@ public class SettingsService {
 
         if (contains(EXISTING_FILE_KEYS, key)) {
             return checkPath(key, text, false);
+        }
+
+        if (contains(WRITTEN_FOLDER_KEYS, key)) {
+            return checkWrittenFolder(key, text);
         }
 
         if (key.equals(ConfigKeys.QUESTION_IDS)) {
@@ -483,6 +502,79 @@ public class SettingsService {
 
     // Checks that a value names an existing folder or file. A relative
     // path is taken from the folder the application was started in.
+    // Checks a folder GradeZZY writes into. Working copies are made by
+    // deleting and replacing a folder named after each student, so a
+    // folder that holds the program, the uploads or other files could
+    // lose them.
+    private String checkWrittenFolder(String key, String text) {
+        if (text.isEmpty()) {
+            return "'" + key + "' cannot be blank.";
+        }
+
+        Path folder;
+        Path programFolder;
+
+        try {
+            folder = Paths.get(text).toAbsolutePath().normalize();
+            programFolder = Paths.get("").toAbsolutePath().normalize();
+        } catch (InvalidPathException exception) {
+            return "'" + key + "' is not a valid folder name.";
+        }
+
+        if (programFolder.startsWith(folder)) {
+            return "'" + key + "' cannot be the GradeZZY folder or a folder "
+                    + "around it. Use a folder such as workspace/output.";
+        }
+
+        for (String inputKey : INPUT_PATH_KEYS) {
+            if (overlaps(folder, config.getString(inputKey))) {
+                return "'" + key + "' cannot be the same as, inside or "
+                        + "around the folder of '" + inputKey + "'.";
+            }
+        }
+
+        if (key.equals(ConfigKeys.WORKING_DIR)
+                && !isSamePath(folder, config.getString(key))
+                && !isNewOrEmpty(folder)) {
+            return "'" + key + "' must be a new or empty folder, because "
+                    + "GradeZZY deletes and replaces the folders inside it.";
+        }
+
+        return "";
+    }
+
+    // Says whether a folder is the same as, inside or around a path
+    // from another setting. A setting that is not a valid path cannot
+    // overlap.
+    private boolean overlaps(Path folder, String otherText) {
+        try {
+            Path other = Paths.get(otherText).toAbsolutePath().normalize();
+            return folder.startsWith(other) || other.startsWith(folder);
+        } catch (InvalidPathException exception) {
+            return false;
+        }
+    }
+
+    // Says whether a folder is the one a setting holds now.
+    private boolean isSamePath(Path folder, String currentText) {
+        try {
+            return folder.equals(Paths.get(currentText).toAbsolutePath()
+                    .normalize());
+        } catch (InvalidPathException exception) {
+            return false;
+        }
+    }
+
+    // Says whether a folder does not exist yet or holds nothing.
+    private boolean isNewOrEmpty(Path folder) {
+        if (!Files.exists(folder)) {
+            return true;
+        }
+
+        String[] names = folder.toFile().list();
+        return names != null && names.length == 0;
+    }
+
     private String checkPath(String key, String text, boolean folder) {
         String kind = "file";
 

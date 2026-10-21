@@ -14,9 +14,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Question;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
@@ -32,11 +35,16 @@ public class SearchService {
     // Extension of the source files searched by searchCode
     private static final String SOURCE_EXTENSION = ".java";
 
+    // The application settings, for the tester class suffix
+    private final AppConfig config;
+
     /**
      * Creates a new search service.
+     *
+     * @param config the application settings
      */
-    public SearchService() {
-        // nothing to set up yet
+    public SearchService(AppConfig config) {
+        this.config = config;
     }
 
     /**
@@ -71,7 +79,9 @@ public class SearchService {
     /**
      * Finds submissions whose source contains a piece of code. Only the
      * .java files in each working copy are searched, and the match is
-     * case sensitive. A file that cannot be read is skipped.
+     * case sensitive. The testers copied into each working copy are
+     * skipped, because every submission holds the same ones. A file that
+     * cannot be read is skipped.
      *
      * @param gradingRun the grading run
      * @param codeFragment the code fragment
@@ -87,11 +97,13 @@ public class SearchService {
             return matches;
         }
 
+        List<String> testerFiles = listTesterFiles(gradingRun);
+
         for (Submission submission : gradingRun.getSubmissions()) {
             Path workingCopy = submission.getWorkingCopyPath();
 
-            if (workingCopy != null
-                    && containsCode(workingCopy.toFile(), codeFragment)) {
+            if (workingCopy != null && containsCode(workingCopy.toFile(),
+                    codeFragment, testerFiles)) {
                 matches.add(submission);
             }
         }
@@ -214,7 +226,8 @@ public class SearchService {
     }
 
     // Says whether a .java file in or under a folder holds the fragment.
-    private boolean containsCode(File folder, String codeFragment) {
+    private boolean containsCode(File folder, String codeFragment,
+            List<String> testerFiles) {
         File[] entries = folder.listFiles();
 
         if (entries == null) {
@@ -226,17 +239,30 @@ public class SearchService {
             boolean isLink = Files.isSymbolicLink(entry.toPath());
 
             if (!isLink && entry.isDirectory()
-                    && containsCode(entry, codeFragment)) {
+                    && containsCode(entry, codeFragment, testerFiles)) {
                 return true;
             }
 
             if (!isLink && isSourceFile(entry)
+                    && !testerFiles.contains(entry.getName())
                     && fileContains(entry, codeFragment)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    // Lists the tester source file names, for example Q1aTester.java.
+    private List<String> listTesterFiles(GradingRun gradingRun) {
+        List<String> names = new ArrayList<>();
+        String suffix = config.getString(ConfigKeys.TESTER_CLASS_SUFFIX);
+
+        for (Question question : gradingRun.getAssessment().getQuestions()) {
+            names.add(question.getId() + suffix + SOURCE_EXTENSION);
+        }
+
+        return names;
     }
 
     // Says whether a file is a Java source file.
