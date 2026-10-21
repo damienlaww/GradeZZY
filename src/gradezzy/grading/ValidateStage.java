@@ -4,9 +4,14 @@
  * Purpose: Runs every validator and records what they find.
  *
  * Where it fits: Second stage. Its anomalies tell FixStage what to correct.
+ *
+ * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.grading;
 
+import java.util.List;
+
+import gradezzy.model.Anomaly;
 import gradezzy.model.Submission;
 import gradezzy.validation.ValidationRunner;
 
@@ -45,16 +50,27 @@ public class ValidateStage implements GradingStage {
     }
 
     /**
-     * Runs every validator and records what they find.
+     * Runs every validator and records what they find. Problems in the
+     * student's work become anomalies; only a missing working copy stops
+     * the submission, because there is then nothing to check.
      *
      * @param submission the submission
      * @param context the context
-     * @throws GradingException if the operation fails
+     * @throws GradingException if the submission has no working copy
      */
     @Override
     public void process(Submission submission,
             GradingContext context) throws GradingException {
-        // TODO(Seth): implement: calling validationRunner.runAll and adding
-        //     each anomaly to the submission
+        if (submission.getWorkingCopyPath() == null) {
+            throw new GradingException("There is no working copy to check "
+                    + "for " + submission.getUsername() + ".");
+        }
+
+        List<Anomaly> anomalies = validationRunner.runAll(submission,
+                context.getAssessment());
+
+        for (Anomaly anomaly : anomalies) {
+            submission.addAnomaly(anomaly);
+        }
     }
 }
