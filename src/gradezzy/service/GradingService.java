@@ -153,8 +153,7 @@ public class GradingService {
 
         // TODO(Jing Yuan): implement: save the run with the repository
         //     before grading starts, once Huxley's repository works
-        // TODO(Jing Yuan): implement: grade THREAD_COUNT submissions at a
-        //     time. For now submissions are graded one after another.
+        // The pipeline grades exec.thread.count submissions at a time.
         GradingPipeline pipeline = pipelineFactory.createPipeline(
                 cancellationToken);
         pipeline.run(gradingRun, context, listener);
