@@ -225,7 +225,7 @@ feature's status from `WAITING` to `WORKS_NOW` in
 and `sh run.sh --selftest`. `design/UI-INTEGRATION.md` lists which screen
 shows each service method.
 
-Owners and TODO counts (79 left). The split is a starting point;
+Owners and TODO counts (68 left). The split is a starting point;
 the team can swap areas. The next section explains each person's work in
 detail.
 
@@ -234,7 +234,7 @@ detail.
 | Damien | `FileUtils`, `TextUtils`, `ingest`, one stage | 0 |
 | Seth | `validation`, `InputValidator`, one stage; looks after `ui` | 0 |
 | Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 23 |
-| Zach | `exec`, `testcase`, three stages, the score parser | 14 |
+| Zach | `exec`, `testcase`, three stages, the score parser | 3 |
 | Jing Yuan | `app`, `config`, `model`, `service`, scoring | 14 |
 | Huxley | `report`, `stats`, `persistence`, one stage | 28 |
 
