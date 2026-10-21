@@ -225,17 +225,17 @@ feature's status from `WAITING` to `WORKS_NOW` in
 and `sh run.sh --selftest`. `design/UI-INTEGRATION.md` lists which screen
 shows each service method.
 
-Owners and TODO counts (111 left). The split is a starting point;
+Owners and TODO counts (79 left). The split is a starting point;
 the team can swap areas. The next section explains each person's work in
 detail.
 
 | Owner | Packages | TODOs |
 |---|---|---|
-| Damien | `FileUtils`, `TextUtils`, `ingest`, one stage | 19 |
-| Seth | `validation`, `InputValidator`, one stage; looks after `ui` | 12 |
+| Damien | `FileUtils`, `TextUtils`, `ingest`, one stage | 0 |
+| Seth | `validation`, `InputValidator`, one stage; looks after `ui` | 0 |
 | Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 23 |
 | Zach | `exec`, `testcase`, three stages, the score parser | 14 |
-| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 15 |
+| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 14 |
 | Huxley | `report`, `stats`, `persistence`, one stage | 28 |
 
 Jun Sheng built the whole `ui` package, so on 2026-10-16 the work was
@@ -701,7 +701,7 @@ a student's compile error; explain when throwing is appropriate.
 ### 5. Jing Yuan: scoring, services and putting it together
 
 **Packages:** `app`, `config`, `model`, `service`, plus `ScoreStage` and
-`ScoreCalculator` in `grading`. 15 TODOs left (39 at the start). You
+`ScoreCalculator` in `grading`. 14 TODOs left (39 at the start). You
 also own the wiring (`PipelineFactory`, `ApplicationContext`), so you
 are the person who checks that the slices fit together.
 
