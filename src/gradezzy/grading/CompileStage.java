@@ -88,7 +88,7 @@ public class CompileStage implements GradingStage {
      *
      * @param submission the submission
      * @param context the context
-     * @throws GradingException if javac itself cannot be run
+     * @throws GradingException if javac cannot be run or runs too long
      */
     @Override
     public void process(Submission submission,
@@ -117,16 +117,27 @@ public class CompileStage implements GradingStage {
      * @param tester the tester of the question
      * @param folder the question folder
      * @return the result, marked compiled or not
-     * @throws GradingException if javac itself cannot be run
+     * @throws GradingException if javac cannot be run or runs too long
      */
     private QuestionResult compileQuestion(Submission submission,
             Question question, TesterFile tester, Path folder)
             throws GradingException {
+        String testerSource = tester.getClassName() + JAVA_EXTENSION;
         List<String> sourceFiles = List.of(question.getFileName(),
-                tester.getClassName() + JAVA_EXTENSION);
+                testerSource);
         ProcessResult compileResult = runCompiler(folder, sourceFiles);
-        boolean compiled = compileResult.getExitCode() == SUCCESS_EXIT_CODE
-                && !compileResult.isTimedOut();
+        removeTesterSource(folder.resolve(testerSource));
+
+        // A slow compiler says nothing about the student's code: the
+        // computer may just be busy, so no mark is taken and the
+        // submission is left for a retry
+        if (compileResult.isTimedOut()) {
+            throw new GradingException("javac did not finish "
+                    + question.getId() + " in time, probably because the "
+                    + "computer was busy. Nothing was marked wrong; retry "
+                    + "this submission.");
+        }
+        boolean compiled = compileResult.getExitCode() == SUCCESS_EXIT_CODE;
 
         QuestionResult result = new QuestionResult(question);
         result.setCompiled(compiled);
@@ -160,6 +171,24 @@ public class CompileStage implements GradingStage {
         } catch (ProcessExecutionException exception) {
             throw new GradingException("The compiler could not be run: "
                     + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Deletes the copied tester source once it is compiled. Only the
+     * compiled class is needed to run it, and student code could read the
+     * source to find the expected answers.
+     *
+     * @param testerSource the tester source in the question folder
+     * @throws GradingException if it cannot be deleted
+     */
+    private void removeTesterSource(Path testerSource)
+            throws GradingException {
+        try {
+            Files.deleteIfExists(testerSource);
+        } catch (IOException exception) {
+            throw new GradingException("The tester source could not be "
+                    + "removed: " + exception.getMessage(), exception);
         }
     }
 
