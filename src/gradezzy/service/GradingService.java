@@ -107,9 +107,18 @@ public class GradingService {
                 LocalDateTime.now());
         GradingContext context = new GradingContext(config, assessment);
 
+        // The roster for this batch is read first, so a bad score sheet
+        // stops the run before any zip is extracted.
         try {
-            context.getRoster().addAll(new RosterReader(config).readRoster(
+            RosterReader rosterReader = new RosterReader(config);
+            context.getRoster().addAll(rosterReader.readRoster(
                     scoreSheetFile));
+        } catch (IngestException exception) {
+            throw new GradingException("The score sheet could not be "
+                    + "read: " + exception.getMessage(), exception);
+        }
+
+        try {
             SubmissionLoader loader = new SubmissionLoader(config);
             List<Submission> submissions = loader.loadSubmissions(
                     inputPaths, section);
@@ -121,7 +130,7 @@ public class GradingService {
             context.getTesters().addAll(
                     testCaseSource.prepareTesters(assessment));
         } catch (IngestException exception) {
-            throw new GradingException("The submissions or roster could not be "
+            throw new GradingException("The submissions could not be "
                     + "read: " + exception.getMessage(), exception);
         } catch (TestCaseException exception) {
             throw new GradingException("The testers could not be "
@@ -131,7 +140,8 @@ public class GradingService {
         lastRun = gradingRun;
         lastContext = context;
 
-        // TODO(Jing Yuan): save the run with the repository before grading starts
+        // TODO(Jing Yuan): implement: save the run with the repository
+        //     before grading starts, once Huxley's repository works
         // TODO(Jing Yuan): implement: grade THREAD_COUNT submissions at a
         //     time. For now submissions are graded one after another.
         GradingPipeline pipeline = pipelineFactory.createPipeline(
