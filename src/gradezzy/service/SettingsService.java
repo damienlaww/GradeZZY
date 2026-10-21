@@ -523,7 +523,7 @@ public class SettingsService {
 
         if (programFolder.startsWith(folder)) {
             return "'" + key + "' cannot be the GradeZZY folder or a folder "
-                    + "around it. Use a folder such as workspace/output.";
+                    + "around it. Use a folder inside workspace instead.";
         }
 
         for (String inputKey : INPUT_PATH_KEYS) {
