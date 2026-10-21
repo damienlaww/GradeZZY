@@ -85,7 +85,9 @@ public class GradingService {
      * @param listener the object told about progress
      * @return the finished run, holding every submission and its results
      * @throws GradingException if the batch cannot start at all, for
-     *         example when the uploads or the testers cannot be read
+     *         example when an argument is missing, the module or section
+     *         is not in the settings, or the score sheet, the uploads or
+     *         the testers cannot be read
      */
     public GradingRun startGrading(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener)
@@ -98,6 +100,7 @@ public class GradingService {
     public GradingRun startGrading(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener,
             Path scoreSheetFile) throws GradingException {
+        checkArguments(inputPaths, section, testCaseSource, listener);
         cancellationToken.reset();
 
         Assessment assessment = assessmentFactory.create(
@@ -116,6 +119,9 @@ public class GradingService {
         } catch (IngestException exception) {
             throw new GradingException("The score sheet could not be "
                     + "read: " + exception.getMessage(), exception);
+        } catch (IllegalArgumentException exception) {
+            throw new GradingException("The score sheet setting is not a "
+                    + "valid path: " + exception.getMessage(), exception);
         }
 
         try {
@@ -135,6 +141,11 @@ public class GradingService {
         } catch (TestCaseException exception) {
             throw new GradingException("The testers could not be "
                     + "prepared: " + exception.getMessage(), exception);
+        } catch (IllegalArgumentException exception) {
+            // For example a zip name pattern in the settings that is not
+            // a valid regular expression, or a path that is not valid
+            throw new GradingException("A setting or path is not valid: "
+                    + exception.getMessage(), exception);
         }
 
         lastRun = gradingRun;
@@ -169,9 +180,10 @@ public class GradingService {
      * new one. Fixes applied in the earlier attempt are therefore not
      * carried over; the stages find and fix the problems again.
      *
-     * <p>The listener hears about a temporary run that holds only the
-     * retried submissions. A screen should keep showing the run it
-     * passed in, which is also the run returned.
+     * <p>The listener is told how many submissions are retried and
+     * hears about each of them; when the retry ends it is given the run
+     * passed in, with every submission, so a later Retry can be called
+     * with that run again.
      *
      * <p>Tier: SHOULD.
      *
@@ -215,7 +227,8 @@ public class GradingService {
         cancellationToken.reset();
         GradingPipeline pipeline = pipelineFactory.createPipeline(
                 cancellationToken);
-        pipeline.run(retryRun, lastContext, listener);
+        pipeline.run(retryRun, lastContext,
+                new RetryProgressListener(listener, gradingRun));
 
         return gradingRun;
     }
@@ -235,6 +248,54 @@ public class GradingService {
         // TODO(Jing Yuan): implement: load the run from the repository and
         //     run the pipeline on the submissions that are still PENDING
         return null;
+    }
+
+    // Stops a run that is missing an argument or names a module or
+    // section that is not in the settings.
+    private void checkArguments(List<Path> inputPaths, Section section,
+            TestCaseSource testCaseSource, ProgressListener listener)
+            throws GradingException {
+        if (inputPaths == null || inputPaths.isEmpty()) {
+            throw new GradingException("Choose at least one ZIP file or "
+                    + "folder to grade.");
+        }
+
+        if (section == null) {
+            throw new GradingException("Choose a module and section.");
+        }
+
+        if (testCaseSource == null || listener == null) {
+            throw new GradingException("The testers and the progress "
+                    + "listener must be given.");
+        }
+
+        if (!isListed(ConfigKeys.MODULE_CODES, section.getModuleCode())) {
+            throw new GradingException("Module '" + section.getModuleCode()
+                    + "' is not in the setting "
+                    + ConfigKeys.MODULE_CODES + ".");
+        }
+
+        if (!isListed(ConfigKeys.SECTION_CODES,
+                section.getSectionCode())) {
+            throw new GradingException("Section '"
+                    + section.getSectionCode() + "' is not in the setting "
+                    + ConfigKeys.SECTION_CODES + ".");
+        }
+    }
+
+    // Says whether a code is in a list setting, ignoring case.
+    private boolean isListed(String key, String code) {
+        if (code == null) {
+            return false;
+        }
+
+        for (String listed : config.getList(key)) {
+            if (listed.equalsIgnoreCase(code)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Says whether a submission stopped early and should be graded again.

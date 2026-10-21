@@ -61,9 +61,12 @@ public class ExportService {
 
     /**
      * Finds an exporter by its format name, ignoring case and spaces at
-     * both ends, so "csv" finds the exporter named "CSV".
+     * both ends, so "csv score sheet" finds the exporter named "CSV score
+     * sheet". When no name matches, the first exporter registered with
+     * that file extension is used, so the screens' "csv" finds the score
+     * sheet exporter, which ApplicationContext registers first.
      *
-     * @param formatName the format name
+     * @param formatName the format name or file extension
      * @return the exporter, or null if the format is unknown or null
      */
     public Exporter findExporter(String formatName) {
@@ -75,6 +78,12 @@ public class ExportService {
 
         for (Exporter exporter : exporters) {
             if (wanted.equalsIgnoreCase(exporter.getFormatName())) {
+                return exporter;
+            }
+        }
+
+        for (Exporter exporter : exporters) {
+            if (wanted.equalsIgnoreCase(exporter.getFileExtension())) {
                 return exporter;
             }
         }
