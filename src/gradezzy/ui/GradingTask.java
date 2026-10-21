@@ -60,6 +60,9 @@ public class GradingTask extends Task<GradingRun> {
     // The zip files or folders the instructor chose
     private final List<Path> inputPaths;
 
+    // The roster explicitly selected for this batch, or null for config.
+    private Path scoreSheetFile;
+
     // The section the batch belongs to
     private final Section section;
 
@@ -95,6 +98,14 @@ public class GradingTask extends Task<GradingRun> {
         this.listener = listener;
     }
 
+    /** Creates a task with the roster selected on the upload screen. */
+    public GradingTask(GradingService gradingService, List<Path> inputPaths,
+            Section section, TestCaseSource testCaseSource,
+            ProgressListener listener, Path scoreSheetFile) {
+        this(gradingService, inputPaths, section, testCaseSource, listener);
+        this.scoreSheetFile = scoreSheetFile;
+    }
+
     /**
      * Creates a task that retries or resumes an existing run.
      *
@@ -127,6 +138,10 @@ public class GradingTask extends Task<GradingRun> {
             return gradingService.retryFailed(gradingRun, listener);
         } else if (kind == Kind.RESUME) {
             return gradingService.resume(gradingRun.getId(), listener);
+        }
+        if (scoreSheetFile != null) {
+            return gradingService.startGrading(inputPaths, section,
+                    testCaseSource, listener, scoreSheetFile);
         }
         return gradingService.startGrading(inputPaths, section,
                 testCaseSource, listener);

@@ -15,12 +15,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.grading.CancellationToken;
 import gradezzy.grading.GradingContext;
 import gradezzy.grading.GradingException;
 import gradezzy.grading.GradingPipeline;
 import gradezzy.grading.ProgressListener;
 import gradezzy.ingest.IngestException;
+import gradezzy.ingest.RosterReader;
 import gradezzy.ingest.SubmissionLoader;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
@@ -88,6 +90,14 @@ public class GradingService {
     public GradingRun startGrading(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener)
             throws GradingException {
+        return startGrading(inputPaths, section, testCaseSource, listener,
+                Path.of(config.getString(ConfigKeys.SCORE_SHEET_FILE)));
+    }
+
+    /** Starts a run using the roster explicitly selected for this batch. */
+    public GradingRun startGrading(List<Path> inputPaths, Section section,
+            TestCaseSource testCaseSource, ProgressListener listener,
+            Path scoreSheetFile) throws GradingException {
         cancellationToken.reset();
 
         Assessment assessment = assessmentFactory.create(
@@ -98,6 +108,8 @@ public class GradingService {
         GradingContext context = new GradingContext(config, assessment);
 
         try {
+            context.getRoster().addAll(new RosterReader(config).readRoster(
+                    scoreSheetFile));
             SubmissionLoader loader = new SubmissionLoader(config);
             List<Submission> submissions = loader.loadSubmissions(
                     inputPaths, section);
@@ -109,7 +121,7 @@ public class GradingService {
             context.getTesters().addAll(
                     testCaseSource.prepareTesters(assessment));
         } catch (IngestException exception) {
-            throw new GradingException("The submissions could not be "
+            throw new GradingException("The submissions or roster could not be "
                     + "read: " + exception.getMessage(), exception);
         } catch (TestCaseException exception) {
             throw new GradingException("The testers could not be "
@@ -119,9 +131,7 @@ public class GradingService {
         lastRun = gradingRun;
         lastContext = context;
 
-        // TODO(Jing Yuan): implement: read the roster into
-        //     context.getRoster() with RosterReader, and save the run with
-        //     the repository before grading starts
+        // TODO(Jing Yuan): save the run with the repository before grading starts
         // TODO(Jing Yuan): implement: grade THREAD_COUNT submissions at a
         //     time. For now submissions are graded one after another.
         GradingPipeline pipeline = pipelineFactory.createPipeline(
@@ -219,6 +229,9 @@ public class GradingService {
 
     // Says whether a submission stopped early and should be graded again.
     private boolean needsRetry(Submission submission) {
+        if (submission.getIngestFailure() != null) {
+            return false;
+        }
         SubmissionStatus status = submission.getStatus();
 
         return status == SubmissionStatus.FAILED

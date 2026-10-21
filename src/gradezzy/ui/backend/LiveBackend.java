@@ -266,7 +266,8 @@ public class LiveBackend implements DashboardBackend {
             ProgressListener listener, RunCallback callback) {
         GradingTask task = new GradingTask(services.getGradingService(),
                 batch.getSubmissionPaths(), section,
-                createTestCaseSource(batch), listener);
+                createTestCaseSource(batch), listener,
+                batch.getSinglePath(InputKind.ROSTER));
         runInBackground(task, callback, Capability.IMPORT_AND_GRADE);
     }
 

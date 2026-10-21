@@ -163,7 +163,7 @@ public class ImportBatch {
             }
             if (other.getKind() == InputKind.SUBMISSION
                     && other.getState().isUsable()
-                    && other.getUsername().equals(item.getUsername())) {
+                    && other.getUsername().equalsIgnoreCase(item.getUsername())) {
                 return ImportState.DUPLICATE;
             }
         }
@@ -190,12 +190,12 @@ public class ImportBatch {
     /**
      * Returns the submission files that will be graded.
      *
-     * @return the paths of usable, non-duplicate submissions
+     * @return the usable uploads, including duplicates for per-file reporting
      */
     public List<Path> getSubmissionPaths() {
         List<Path> paths = new ArrayList<>();
         for (ImportItem item : getItems(InputKind.SUBMISSION)) {
-            if (getEffectiveState(item).isUsable()) {
+            if (item.getState().isUsable()) {
                 paths.add(item.getPath());
             }
         }
@@ -235,12 +235,6 @@ public class ImportBatch {
             reasons.add(invalid + " ZIP file" + plural(invalid)
                     + " cannot be used. Replace or remove "
                     + pronoun(invalid) + ".");
-        }
-
-        int duplicates = count(InputKind.SUBMISSION, ImportState.DUPLICATE);
-        if (duplicates > 0) {
-            reasons.add(duplicates + " duplicate ZIP file" + plural(duplicates)
-                    + ". Keep one file per student.");
         }
 
         addSingleReason(reasons, InputKind.ROSTER);
