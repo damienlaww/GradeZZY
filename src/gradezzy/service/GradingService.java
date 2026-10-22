@@ -15,12 +15,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.grading.CancellationToken;
 import gradezzy.grading.GradingContext;
 import gradezzy.grading.GradingException;
 import gradezzy.grading.GradingPipeline;
 import gradezzy.grading.ProgressListener;
 import gradezzy.ingest.IngestException;
+import gradezzy.ingest.RosterReader;
 import gradezzy.ingest.SubmissionLoader;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
@@ -83,11 +85,22 @@ public class GradingService {
      * @param listener the object told about progress
      * @return the finished run, holding every submission and its results
      * @throws GradingException if the batch cannot start at all, for
-     *         example when the uploads or the testers cannot be read
+     *         example when an argument is missing, the module or section
+     *         is not in the settings, or the score sheet, the uploads or
+     *         the testers cannot be read
      */
     public GradingRun startGrading(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener)
             throws GradingException {
+        return startGrading(inputPaths, section, testCaseSource, listener,
+                Path.of(config.getString(ConfigKeys.SCORE_SHEET_FILE)));
+    }
+
+    /** Starts a run using the roster explicitly selected for this batch. */
+    public GradingRun startGrading(List<Path> inputPaths, Section section,
+            TestCaseSource testCaseSource, ProgressListener listener,
+            Path scoreSheetFile) throws GradingException {
+        checkArguments(inputPaths, section, testCaseSource, listener);
         cancellationToken.reset();
 
         Assessment assessment = assessmentFactory.create(
@@ -96,6 +109,20 @@ public class GradingService {
         GradingRun gradingRun = new GradingRun(runId, assessment, section,
                 LocalDateTime.now());
         GradingContext context = new GradingContext(config, assessment);
+
+        // The roster for this batch is read first, so a bad score sheet
+        // stops the run before any zip is extracted.
+        try {
+            RosterReader rosterReader = new RosterReader(config);
+            context.getRoster().addAll(rosterReader.readRoster(
+                    scoreSheetFile));
+        } catch (IngestException exception) {
+            throw new GradingException("The score sheet could not be "
+                    + "read: " + exception.getMessage(), exception);
+        } catch (IllegalArgumentException exception) {
+            throw new GradingException("The score sheet setting is not a "
+                    + "valid path: " + exception.getMessage(), exception);
+        }
 
         try {
             SubmissionLoader loader = new SubmissionLoader(config);
@@ -114,16 +141,19 @@ public class GradingService {
         } catch (TestCaseException exception) {
             throw new GradingException("The testers could not be "
                     + "prepared: " + exception.getMessage(), exception);
+        } catch (IllegalArgumentException exception) {
+            // For example a zip name pattern in the settings that is not
+            // a valid regular expression, or a path that is not valid
+            throw new GradingException("A setting or path is not valid: "
+                    + exception.getMessage(), exception);
         }
 
         lastRun = gradingRun;
         lastContext = context;
 
-        // TODO(Jing Yuan): implement: read the roster into
-        //     context.getRoster() with RosterReader, and save the run with
-        //     the repository before grading starts
-        // TODO(Jing Yuan): implement: grade THREAD_COUNT submissions at a
-        //     time. For now submissions are graded one after another.
+        // TODO(Jing Yuan): implement: save the run with the repository
+        //     before grading starts, once Huxley's repository works
+        // The pipeline grades exec.thread.count submissions at a time.
         GradingPipeline pipeline = pipelineFactory.createPipeline(
                 cancellationToken);
         pipeline.run(gradingRun, context, listener);
@@ -149,9 +179,10 @@ public class GradingService {
      * new one. Fixes applied in the earlier attempt are therefore not
      * carried over; the stages find and fix the problems again.
      *
-     * <p>The listener hears about a temporary run that holds only the
-     * retried submissions. A screen should keep showing the run it
-     * passed in, which is also the run returned.
+     * <p>The listener is told how many submissions are retried and
+     * hears about each of them; when the retry ends it is given the run
+     * passed in, with every submission, so a later Retry can be called
+     * with that run again.
      *
      * <p>Tier: SHOULD.
      *
@@ -195,7 +226,8 @@ public class GradingService {
         cancellationToken.reset();
         GradingPipeline pipeline = pipelineFactory.createPipeline(
                 cancellationToken);
-        pipeline.run(retryRun, lastContext, listener);
+        pipeline.run(retryRun, lastContext,
+                new RetryProgressListener(listener, gradingRun));
 
         return gradingRun;
     }
@@ -217,8 +249,59 @@ public class GradingService {
         return null;
     }
 
+    // Stops a run that is missing an argument or names a module or
+    // section that is not in the settings.
+    private void checkArguments(List<Path> inputPaths, Section section,
+            TestCaseSource testCaseSource, ProgressListener listener)
+            throws GradingException {
+        if (inputPaths == null || inputPaths.isEmpty()) {
+            throw new GradingException("Choose at least one ZIP file or "
+                    + "folder to grade.");
+        }
+
+        if (section == null) {
+            throw new GradingException("Choose a module and section.");
+        }
+
+        if (testCaseSource == null || listener == null) {
+            throw new GradingException("The testers and the progress "
+                    + "listener must be given.");
+        }
+
+        if (!isListed(ConfigKeys.MODULE_CODES, section.getModuleCode())) {
+            throw new GradingException("Module '" + section.getModuleCode()
+                    + "' is not in the setting "
+                    + ConfigKeys.MODULE_CODES + ".");
+        }
+
+        if (!isListed(ConfigKeys.SECTION_CODES,
+                section.getSectionCode())) {
+            throw new GradingException("Section '"
+                    + section.getSectionCode() + "' is not in the setting "
+                    + ConfigKeys.SECTION_CODES + ".");
+        }
+    }
+
+    // Says whether a code is in a list setting, ignoring case.
+    private boolean isListed(String key, String code) {
+        if (code == null) {
+            return false;
+        }
+
+        for (String listed : config.getList(key)) {
+            if (listed.equalsIgnoreCase(code)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // Says whether a submission stopped early and should be graded again.
     private boolean needsRetry(Submission submission) {
+        if (submission.getIngestFailure() != null) {
+            return false;
+        }
         SubmissionStatus status = submission.getStatus();
 
         return status == SubmissionStatus.FAILED

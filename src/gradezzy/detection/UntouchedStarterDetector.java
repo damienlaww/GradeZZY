@@ -10,15 +10,17 @@ package gradezzy.detection;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
+import gradezzy.model.Question;
+import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 
 /**
  * Flags files that are identical to the starter file.
- *
- * <p>Tier: SHOULD. Owner: Jun Sheng.
  */
 public class UntouchedStarterDetector implements Detector {
 
@@ -26,6 +28,15 @@ public class UntouchedStarterDetector implements Detector {
      * The name shown in the anomaly log.
      */
     public static final String NAME = "Untouched starter file";
+
+    // The text in front of the id of every flag a detector raises
+    private static final String ID_PREFIX = "detection-";
+
+    // What the instructor can do about a whole submission or one file
+    private static final String WHOLE_SUBMISSION_ACTION =
+            "Ask the student whether the wrong folder was submitted.";
+    private static final String ONE_FILE_ACTION =
+            "Check whether the student attempted this question.";
 
     // The folder holding the starter files
     private final Path starterDirectory;
@@ -58,8 +69,54 @@ public class UntouchedStarterDetector implements Detector {
      */
     @Override
     public List<Anomaly> detect(Submission submission, Assessment assessment) {
-        // TODO(Jun Sheng): implement: a comparison of each source file with the
-        //     starter file, ignoring the header and blank lines
-        return new ArrayList<>();
+        List<String> unchangedFiles = new ArrayList<>();
+
+        for (Question question : assessment.getQuestions()) {
+            String studentText = JavaSourceText.readStudentFile(submission,
+                    assessment, question);
+            String starterText = JavaSourceText.readStarterFile(
+                    starterDirectory, question);
+            boolean bothRead = studentText != null && starterText != null;
+
+            if (bothRead
+                    && JavaSourceText.isUnchanged(studentText, starterText)) {
+                unchangedFiles.add(JavaSourceText.describeFile(question));
+            }
+        }
+
+        return createFlags(submission, unchangedFiles,
+                assessment.getQuestions().size());
+    }
+
+    // Raises one flag if every file is unchanged, otherwise one per file.
+    private List<Anomaly> createFlags(Submission submission,
+            List<String> unchangedFiles, int questionCount) {
+        List<Anomaly> flags = new ArrayList<>();
+
+        if (!unchangedFiles.isEmpty()
+                && unchangedFiles.size() == questionCount) {
+            flags.add(createFlag(submission, "The whole submission matches "
+                    + "the starter folder: all " + questionCount
+                    + " question files are unchanged. The student probably "
+                    + "submitted the original resource folder.",
+                    WHOLE_SUBMISSION_ACTION));
+        } else {
+            for (String fileName : unchangedFiles) {
+                flags.add(createFlag(submission, fileName + " is unchanged "
+                        + "from the starter file.", ONE_FILE_ACTION));
+            }
+        }
+
+        return flags;
+    }
+
+    // Builds one flag for the instructor. It never changes a score.
+    private Anomaly createFlag(Submission submission, String message,
+            String suggestedAction) {
+        String id = ID_PREFIX + UUID.randomUUID();
+
+        return new Anomaly(id, AnomalyType.UNTOUCHED_STARTER,
+                Severity.WARNING, submission.getUsername(), message,
+                suggestedAction);
     }
 }

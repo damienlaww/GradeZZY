@@ -112,16 +112,19 @@ public class ZipExtractor {
      */
     public boolean isSafeEntry(String entryName, Path targetDirectory) {
         if (entryName == null || entryName.isEmpty()
-                || entryName.contains("\\") || entryName.contains(":")) {
+                || entryName.contains(":")) {
             return false;
         }
         try {
-            Path entry = Path.of(entryName);
+            Path entry = Path.of(entryName.replace('\\', '/'));
             if (entry.isAbsolute()) {
                 return false;
             }
             for (Path part : entry) {
                 String name = part.toString();
+                if (name.equals(".")) {
+                    continue;
+                }
                 if (name.equals("..") || name.endsWith(".")
                         || name.endsWith(" ") || name.matches(WINDOWS_DEVICE)
                         || name.matches(".*[<>\"|?*\\p{Cntrl}].*")) {
@@ -169,14 +172,19 @@ public class ZipExtractor {
                 if (entryCount > maxEntries) {
                     throw new IOException("Too many ZIP entries.");
                 }
-                if (!isSafeEntry(entry.getName(), target)) {
+                String entryName = entry.getName().replace('\\', '/');
+                // Some ZIP tools emit an explicit ./ directory entry.
+                if (entryName.endsWith("/") && entryName.matches("(?:\\./)+")) {
+                    continue;
+                }
+                if (!isSafeEntry(entryName, target)) {
                     throw new IOException("Unsafe ZIP entry: "
                             + entry.getName());
                 }
-                Path relative = Path.of(entry.getName());
+                Path relative = Path.of(entryName).normalize();
                 boolean skip = isIgnored(relative, ignored);
                 Path output = target.resolve(relative).normalize();
-                if (entry.isDirectory()) {
+                if (entryName.endsWith("/")) {
                     if (!skip) {
                         Files.createDirectories(output);
                     }

@@ -71,6 +71,10 @@ public class ConsoleMain {
             fail(exception.getMessage());
         } catch (GradingException exception) {
             fail(exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            // For example a path setting holding a character that is not
+            // allowed in a path
+            fail("A setting is not valid: " + exception.getMessage());
         }
     }
 

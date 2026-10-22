@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 import gradezzy.config.AppConfig;
@@ -87,7 +88,7 @@ public class RosterReader {
                 String username = removePrefix(fields.get(header.indexOf(
                         USERNAME_COLUMN)));
                 if (TextUtils.isBlank(id) || TextUtils.isBlank(username)
-                        || !usernames.add(username)) {
+                        || !usernames.add(username.toLowerCase(Locale.ROOT))) {
                     throw new IllegalArgumentException("Missing student ID "
                             + "or missing/duplicate username in record "
                             + (index + 1) + ".");
@@ -118,7 +119,7 @@ public class RosterReader {
             return null;
         }
         for (Student student : roster) {
-            if (student != null && username.equals(student.getUsername())) {
+            if (student != null && username.equalsIgnoreCase(student.getUsername())) {
                 return student;
             }
         }

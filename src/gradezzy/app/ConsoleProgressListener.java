@@ -9,6 +9,7 @@
 package gradezzy.app;
 
 import gradezzy.grading.ProgressListener;
+import gradezzy.model.Anomaly;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Submission;
 
@@ -68,7 +69,8 @@ public class ConsoleProgressListener implements ProgressListener {
     }
 
     /**
-     * Prints the status and number of anomalies of a finished submission.
+     * Prints the status of a finished submission and each of its
+     * anomalies, so the reason for a FAILED submission is shown.
      *
      * @param submission the submission that is done
      */
@@ -77,6 +79,11 @@ public class ConsoleProgressListener implements ProgressListener {
         finishedSubmissions++;
         System.out.println("    -> " + submission.getStatus() + ", "
                 + submission.getAnomalies().size() + " anomaly(ies)");
+
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            System.out.println("       " + anomaly.getType() + ": "
+                    + anomaly.getMessage());
+        }
     }
 
     /**

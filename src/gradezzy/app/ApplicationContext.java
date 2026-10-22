@@ -80,7 +80,7 @@ public class ApplicationContext {
                 createExportService(),
                 new StatisticsService(new StatisticsCalculator(config),
                         repository),
-                new SearchService(),
+                new SearchService(config),
                 new AuditService(config, repository),
                 new SettingsService(config),
                 new HistoryService(config, repository,
@@ -122,7 +122,7 @@ public class ApplicationContext {
 
         fixManager.addFixer(new FolderHierarchyFixer());
         fixManager.addFixer(new FolderNameFixer());
-        fixManager.addFixer(new HeaderNameFixer());
+        fixManager.addFixer(new HeaderNameFixer(config));
 
         return fixManager;
     }
