@@ -7,13 +7,12 @@
  */
 package gradezzy.grading;
 
+import gradezzy.config.ConfigKeys;
 import gradezzy.fix.FixManager;
 import gradezzy.model.Submission;
 
 /**
  * Applies automatic corrections to the working copy.
- *
- * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class FixStage implements GradingStage {
 
@@ -45,7 +44,7 @@ public class FixStage implements GradingStage {
     }
 
     /**
-     * Applies automatic corrections to the working copy.
+     * Applies automatic corrections unless they are turned off.
      *
      * @param submission the submission
      * @param context the context
@@ -54,7 +53,9 @@ public class FixStage implements GradingStage {
     @Override
     public void process(Submission submission,
             GradingContext context) throws GradingException {
-        // TODO(Jun Sheng): implement: calling fixManager.applyAll when auto
-        //     fixing is enabled
+        if (!context.getConfig().getBoolean(ConfigKeys.AUTO_FIX_ENABLED)) {
+            return;
+        }
+        fixManager.applyAll(submission);
     }
 }

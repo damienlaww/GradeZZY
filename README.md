@@ -92,11 +92,11 @@ the real window with the mouse and keyboard. Both are explained in
 
 | Check | macOS Apple Silicon, JDK 25.0.4 | macOS Intel | Windows |
 |---|---|---|---|
-| `compile.sh`, zero errors and warnings | Passed | Not tested | Not tested |
-| `compile.sh core` (no JavaFX) | Passed | Not tested | Not tested |
-| `run.sh console` | Passed | Not tested | Not tested |
-| `run.sh --check` (16 screens, live and demo, both themes) | Passed | Not tested | Not tested |
-| `run.sh --selftest` (7 demo flows) | Passed | Not tested | Not tested |
+| `compile.sh`, zero errors and warnings | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
+| `compile.sh core` (no JavaFX) | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
+| `run.sh console` | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
+| `run.sh --check` (16 screens, live and demo, both themes) | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
+| `run.sh --selftest` (7 demo flows) | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
 | `run.sh` (window opens) | Passed before the new screens; not run since | Not tested | Not tested |
 | `run.sh --snapshot`, `run.sh --windowtest` | Not tested | Not tested | Not tested |
 | `.bat` scripts | Not applicable | Not applicable | Not tested |
@@ -225,7 +225,7 @@ feature's status from `WAITING` to `WORKS_NOW` in
 and `sh run.sh --selftest`. `design/UI-INTEGRATION.md` lists which screen
 shows each service method.
 
-Owners and TODO counts (68 left). The split is a starting point;
+Owners and TODO counts (15 left). The split is a starting point;
 the team can swap areas. The next section explains each person's work in
 detail.
 
@@ -233,10 +233,10 @@ detail.
 |---|---|---|
 | Damien | `FileUtils`, `TextUtils`, `ingest`, one stage | 0 |
 | Seth | `validation`, `InputValidator`, one stage; looks after `ui` | 0 |
-| Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 23 |
+| Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 0 |
 | Zach | `exec`, `testcase`, three stages, the score parser | 3 |
-| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 14 |
-| Huxley | `report`, `stats`, `persistence`, one stage | 28 |
+| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 12 |
+| Huxley | `report`, `stats`, `persistence`, one stage | 0 |
 
 Jun Sheng built the whole `ui` package, so on 2026-10-16 the work was
 split again: Damien took the helpers and the reading of submissions
@@ -254,7 +254,8 @@ getters and setters of the model classes, and the two constructors of
 each exception class. Read them before the presentation; they are short.
 
 The whole `ui` package is also real code: every screen, the live and
-demo backends, and the developer checks.
+demo backends, and the developer checks. So are the `fix`, `detection` and
+`plagiarism` packages with `FixStage` and `DetectStage`.
 
 ### How to add a new validator
 
@@ -269,10 +270,15 @@ demo backends, and the developer checks.
 ### How to add a new fixer
 
 1. Create a class in `gradezzy.fix` that extends `AbstractFixer`.
-2. Write `canFix`, `apply` and `undo`. `apply` must call `backup(...)`
-   before changing anything and may only touch the working copy.
+2. Write `canFix`, `apply` and `undo`. `apply` may only touch the working
+   copy. Before changing a file's content it calls
+   `backup(submission, file)`, and `undo` restores that copy and calls
+   `discardBackup`. A move or rename is undone by moving back and needs no
+   backup. Keep no fields that change after the constructor: one fixer is
+   shared by every grading thread.
 3. Register it in `ApplicationContext.createFixManager()`:
-   `fixManager.addFixer(new MyFixer());`
+   `fixManager.addFixer(new MyFixer());`. Fixers run in the order they are
+   added, so folder fixes come before header fixes.
 
 ### How to add a new exporter
 
@@ -549,73 +555,73 @@ through createAnomaly. It must never throw for a badly formed submission.
 ### 3. Jun Sheng: corrections, flags and plagiarism
 
 **Packages:** `fix`, `detection`, `plagiarism`, plus `FixStage` and
-`DetectStage` in `grading` and the TODO in
-`PipelineFactory.createDetectors`. 23 TODOs. You need Seth's validators
-to produce anomalies before your fixers have anything to fix; until then,
-build and test against a working copy you unzip by hand.
+`DetectStage` in `grading` and the detector list in
+`PipelineFactory.createDetectors`. **Done: 0 TODOs.**
 
-What to build, in order:
+How the fixes work:
 
-1. `AbstractFixer.backup`: copy a file or folder aside before changing it.
-2. `FolderHierarchyFixer`: when the Q folders sit at the top level, create
-   a folder named after the username and move them into it. `undo` moves
-   them back.
-3. `FolderNameFixer`: rename a wrongly named top folder to the username.
-4. `HeaderNameFixer`: write the student's name and email after the header
-   labels, using the roster entry on the submission. If the student is
-   not on the roster, do not fix; leave the anomaly for the instructor.
-5. `FixManager`: `applyAll` finds a fixer for each anomaly, applies it,
-   keeps the `FixRecord` and sets the status to `APPLIED`. `approve`,
-   `undo`, `approveAll` and `undoAll` change the status.
-6. `FixStage` (skip when `fix.auto.apply.enabled` is false) and
-   `DetectStage`.
-7. The three detectors. They add an anomaly and never touch a score.
-8. `TokenSimilarityDetector` (COULD tier; leave it for last).
+- `FixStage` runs after the validators and calls `FixManager.applyAll`,
+  unless `fix.auto.apply.enabled` is false. Each fixer whose `canFix`
+  matches an anomaly fixes the working copy and returns a `FixRecord`, and
+  the anomaly becomes `APPLIED`. Fixers run in the order they are
+  registered, so folder fixes come before header fixes. A fix that fails
+  is skipped and its anomaly stays for the instructor.
+- `FolderHierarchyFixer` moves everything visible at the top of the
+  working copy (the Q folders and any other files) into a new username
+  folder. `FolderNameFixer` renames the only top folder to the username,
+  including a change of letter case only. Both are undone by moving back.
+- `HeaderNameFixer` reads the file named at the start of the header
+  anomaly's message, such as `Q1/Q1a.java`. It copies the file into the
+  hidden `.gradezzy-backup` folder of the working copy, then writes the
+  roster name and email after the blank `Name:` and `Email ID:` labels.
+  Undo restores the copy. If the student is not on the roster, or the
+  header cannot be completed (for example it has no `Name:` line), the
+  file is left unchanged for the instructor.
+- `FixManager` is shared by the grading threads, so its public methods
+  are `synchronized`. `findRecord(anomaly)` returns the fix for an
+  anomaly. `approve` turns an applied fix into `APPROVED`; `undo` reverses
+  an applied or approved fix and sets `UNDONE`.
 
-Rules that matter here:
+How the flags work (never a change of mark):
 
-- Every fix happens in the working copy only. The uploaded zip must be
-  byte-for-byte unchanged afterwards.
-- Every fix must be undoable. Test `apply` followed by `undo` and compare
-  the folder with what it was before.
-- Hard-coded answers are flagged for review. Never lower a mark.
+- `UntouchedStarterDetector` compares each answer file with the starter
+  file, ignoring the header comment, blank lines and line endings. If
+  every file is unchanged it raises one flag for the whole submission (the
+  original resource folder was submitted); otherwise one flag per
+  unchanged file.
+- `EmptyAnswerDetector` flags an answer method whose body, without
+  comments and spaces, is still the starter's body. A wholly unchanged
+  file is left to the untouched check when that check is on.
+- `HardCodedAnswerDetector` flags an answer method with 3 or more `if` or
+  `case` branches that compare a value with a fixed literal, such as
+  `s.equals("cat")`. Common values (0, 1, -1 and `""`) do not count. It
+  can still flag honest code with many such checks, and misses answers
+  hidden in arrays or maps.
+- `DetectStage` runs each detector that is switched on
+  (`detection.*.enabled`). If one fails, it adds a warning saying the
+  check could not run; it never fails a submission.
 
-You are done when, after grading the samples: chee.teo and jing.lim have
-a username folder; david's and fen.lai's folders are renamed; blank
-headers are filled in; each fix shows as `APPLIED`; undoing every fix
-restores the working copy exactly; and a copy of the starter folder
-submitted as a zip is flagged `UNTOUCHED_STARTER`.
+How the similarity check works: `TokenSimilarityDetector` splits each
+answer into tokens, ignoring spacing and comments, and collects every run
+of three tokens. It removes the starter file's runs, so the shared
+skeleton does not count, then compares two students with the Jaccard
+measure (shared runs divided by all runs). Pairs at or above
+`plagiarism.similarity.threshold` are reported. Renaming variables or
+reordering code lowers the score.
 
-For hard-coding, start simple and explainable: flag a method whose body
-contains the literal expected outputs of the sample cases in the question
-paper (`samples/IS442-ExamSample.pdf`), or a chain of `if` statements
-comparing the input with literal values. For the presentation, be ready
-to explain what your check misses.
+Checked on the six samples: chee.teo and jing.lim get a username folder;
+david's and fen.lai's folders are renamed; the blank headers (Q3 for
+chee.teo and david, all five files for jing.lim) are filled in; every fix
+shows `APPLIED`; undoing every fix restores each working copy byte for
+byte; the totals and the original zips are unchanged.
 
-Example prompts:
+Still to do by others:
 
-```text
-Implement gradezzy.fix.FolderHierarchyFixer (canFix, apply, undo) and
-AbstractFixer.backup. Work only on the working copy path of the
-Submission, never the original. Show me a test where you apply the fix to
-an unzipped copy of 2023-2024-jing.lim.2021.zip, list the folder, undo
-it, and list the folder again to prove it is back to how it started.
-```
-
-```text
-Implement gradezzy.fix.FixManager. Explain the life cycle of FixStatus
-(PENDING, APPLIED, APPROVED, UNDONE) first. A fixer that throws
-FixException must not stop the other fixes for that submission; describe
-how you handle that.
-```
-
-```text
-Propose three simple ways to detect hard-coded answers in a student's
-Java method, with the advantages and disadvantages of each, using
-samples/RenameToYourUsername/Q1/Q1a.java and the sample cases in the
-question paper as the example. Do not write code yet. I need to be able
-to explain the chosen approach in a presentation.
-```
+- Jing Yuan: `AnomalyService` approve and undo (find the record with
+  `fixManager.findRecord(anomaly)`), and `PlagiarismService.check`, which
+  should also honour `plagiarism.enabled`.
+- Seth: `ui.FileTreeBuilder` shows the hidden `.gradezzy-backup` folder;
+  skip names that start with a dot.
 
 ### 4. Zach: compiling, running and reading scores
 
@@ -701,7 +707,7 @@ a student's compile error; explain when throwing is appropriate.
 ### 5. Jing Yuan: scoring, services and putting it together
 
 **Packages:** `app`, `config`, `model`, `service`, plus `ScoreStage` and
-`ScoreCalculator` in `grading`. 14 TODOs left (39 at the start). You
+`ScoreCalculator` in `grading`. 12 TODOs left (39 at the start). You
 also own the wiring (`PipelineFactory`, `ApplicationContext`), so you
 are the person who checks that the slices fit together.
 
@@ -762,8 +768,9 @@ write code until I pick.
 
 **Packages:** `report`, `stats`, `persistence`, plus `PersistStage` in
 `grading` and the TODO in `ApplicationContext` that opens the database.
-28 TODOs. You can start today: build against a `GradingRun` you fill in
-by hand with the ground truth scores, without waiting for the pipeline.
+All 28 TODOs are done. Every run is saved to SQLite through
+`PersistStage` and `GradingService`, so History can list it after a
+restart once `HistoryService` reads the repository.
 
 What to build, in order:
 
@@ -949,10 +956,12 @@ Kept to a minimum and confined to the classes named here:
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. |
 | `javafx.animation` (`Timeline`, `FadeTransition` and others) | `ui.MainController`, `ui.GradingMonitor`, `ui.view.SheetLayer`, `ui.view.ToastLayer`, `ui.demo.DemoGrader` | Subtle animations and timers. Turned off by `ui.animations.enabled`. |
 | `java.awt.Robot`, `javax.imageio.ImageIO`, `java.util.concurrent`, `java.util.zip.ZipOutputStream` | `ui.check` only | The `--snapshot` and `--windowtest` developer checks. Not used when grading. |
-| `synchronized` | `grading.CancellationToken` | The Cancel button and the grading thread share one flag. |
+| `synchronized` | `grading.CancellationToken`, `fix.FixManager` | The Cancel button and the grading thread share one flag; the grading threads and the anomaly log share one list of fixes. |
+| `java.nio.file` (`Files.move`, `Files.copy`, `Files.createTempDirectory`, `DirectoryStream`, `StandardCopyOption`) | `fix` package | Moves and renames folders in the working copy and keeps a backup of each file a fix changes. |
+| `HashSet`, `String.join`, `List.subList` | `plagiarism.TokenSimilarityDetector` | Holds each answer's runs of three tokens for the similarity measure. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. |
 | `enum` | `model`, `ui.Screen` | Fixed lists of values. |
-| JDBC (to be written) | `persistence.SqliteResultRepository` | Talks to SQLite. |
+| JDBC (`Connection`, `PreparedStatement`, `ResultSet`), try-with-resources | `persistence.SqliteResultRepository` | Talks to SQLite and closes each statement even when a query fails. |
 | `ProcessBuilder`, `Process`, `ProcessHandle` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and kills a run and its child processes at the time limit. |
 | `Stream.toList()` | `exec.ProcessRunner.terminate` | Turns the child processes of a run into a list so they can be killed. |
 | `Thread.sleep` | `exec.ProcessRunner.run` | Pauses between checks of a running program, instead of using a reader thread. |
@@ -1022,7 +1031,7 @@ implemented. `[x]` means it works now.
   (`validation.HeaderNameValidator`)
 - [x] A failing submission is recorded as an anomaly and does not stop
   the batch (`grading.GradingPipeline`)
-- [ ] Auto-correct folder names, folder hierarchy and missing header
+- [x] Auto-correct folder names, folder hierarchy and missing header
   names on a working copy (`fix.FolderNameFixer`,
   `FolderHierarchyFixer`, `HeaderNameFixer`, `FixManager`)
 - [ ] Compile and run with testers (`exec.SourceCompiler`,
@@ -1030,7 +1039,7 @@ implemented. `[x]` means it works now.
 - [ ] Stop programs that exceed the time limit (`exec.ProcessRunner`)
 - [ ] Per-question and per-student scores
   (`grading.TesterOutputScoreParser`, `ScoreCalculator`)
-- [ ] Export in the provided CSV format (`report.CsvScoreSheetExporter`)
+- [x] Export in the provided CSV format (`report.CsvScoreSheetExporter`)
 - [x] Separate classes for validation, compilation, execution, grading
   and reporting (the package structure)
 - [x] Configuration in an external file (`config.properties`,
@@ -1045,7 +1054,7 @@ implemented. `[x]` means it works now.
 
 - [ ] Anomaly log with action buttons; approve and undo, singly and in
   bulk (`service.AnomalyService`, `ui.AnomalyLogController`)
-- [ ] Flag untouched starter files, empty answers and hard-coded answers
+- [x] Flag untouched starter files, empty answers and hard-coded answers
   (`detection` package)
 - [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
   `TesterGenerator`, `ui.TestCaseController`)
@@ -1064,13 +1073,13 @@ implemented. `[x]` means it works now.
 - [x] Light and dark theme switch (`ui.ThemeManager`, `ui.theme`)
 - [x] Settings page backed by `config.properties`
   (`service.SettingsService`, `ui.SettingsController`)
-- [ ] SQLite persistence behind `ResultRepository`
+- [x] SQLite persistence behind `ResultRepository`
   (`persistence.SqliteResultRepository`)
 - [ ] Audit log, exportable (`service.AuditService`,
   `report.AuditLogExporter`)
 - [ ] Individual student report, exportable
   (`report.StudentReportExporter`, `ui.StudentReportController`)
-- [ ] JSON export (`report.JsonExporter`, `JsonWriter`)
+- [x] JSON export (`report.JsonExporter`, `JsonWriter`)
 - [ ] Nielsen's 10 usability heuristics, reviewed screen by screen:
   https://www.nngroup.com/articles/ten-usability-heuristics/
 
@@ -1080,7 +1089,8 @@ implemented. `[x]` means it works now.
   (`persistence.BackupManager`, `service.HistoryService`)
 - [x] Subtle animations (`ui`, `ui.animations.enabled`)
 - [ ] Plagiarism detection (`plagiarism` package,
-  `service.PlagiarismService`)
+  `service.PlagiarismService`; the detector works, the service call waits
+  on Jing Yuan)
 
 ## Before submission
 
