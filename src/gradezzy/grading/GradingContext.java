@@ -35,6 +35,9 @@ public class GradingContext {
     // The tester files to use
     private final List<TesterFile> testers = new ArrayList<>();
 
+    // The id of the run being graded, so PersistStage can save to it
+    private String runId = null;
+
     /**
      * Creates a new grading context.
      *
@@ -80,5 +83,27 @@ public class GradingContext {
      */
     public List<TesterFile> getTesters() {
         return testers;
+    }
+
+    /**
+     * Returns the id of the run being graded.
+     *
+     * @return the run id, or null if none was set
+     */
+    // Added by Claude Opus 5.5 for Huxley's PersistStage; reviewed by
+    // Huxley
+    public String getRunId() {
+        return runId;
+    }
+
+    /**
+     * Sets the id of the run being graded.
+     *
+     * @param runId the run id
+     */
+    // Added by Claude Opus 5.5 for Huxley's PersistStage; reviewed by
+    // Huxley
+    public void setRunId(String runId) {
+        this.runId = runId;
     }
 }

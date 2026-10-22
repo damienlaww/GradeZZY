@@ -29,6 +29,8 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
+import gradezzy.persistence.PersistenceException;
+import gradezzy.persistence.ResultRepository;
 import gradezzy.testcase.TestCaseException;
 import gradezzy.testcase.TestCaseSource;
 
@@ -51,6 +53,9 @@ public class GradingService {
     // The helper that reads the assessment from the settings
     private final AssessmentFactory assessmentFactory;
 
+    // The store runs are saved to, or null to save nothing
+    private final ResultRepository repository;
+
     // The flag that stops the current run
     private final CancellationToken cancellationToken =
             new CancellationToken();
@@ -70,9 +75,26 @@ public class GradingService {
      */
     public GradingService(AppConfig config, PipelineFactory pipelineFactory,
             AssessmentFactory assessmentFactory) {
+        this(config, pipelineFactory, assessmentFactory, null);
+    }
+
+    /**
+     * Creates a new grading service that saves each run.
+     *
+     * @param config the application settings
+     * @param pipelineFactory the helper that builds the pipeline
+     * @param assessmentFactory the helper that reads the assessment
+     * @param repository the store runs are saved to, or null to save
+     *        nothing
+     */
+    // Added by Claude Opus 5.5 for Huxley's repository; reviewed by Huxley
+    public GradingService(AppConfig config, PipelineFactory pipelineFactory,
+            AssessmentFactory assessmentFactory,
+            ResultRepository repository) {
         this.config = config;
         this.pipelineFactory = pipelineFactory;
         this.assessmentFactory = assessmentFactory;
+        this.repository = repository;
     }
 
     /**
@@ -109,6 +131,7 @@ public class GradingService {
         GradingRun gradingRun = new GradingRun(runId, assessment, section,
                 LocalDateTime.now());
         GradingContext context = new GradingContext(config, assessment);
+        context.setRunId(runId);
 
         // The roster for this batch is read first, so a bad score sheet
         // stops the run before any zip is extracted.
@@ -151,14 +174,19 @@ public class GradingService {
         lastRun = gradingRun;
         lastContext = context;
 
-        // TODO(Jing Yuan): implement: save the run with the repository
-        //     before grading starts, once Huxley's repository works
+        // Saved before grading so every submission is on record as PENDING
+        // and the run can be resumed after a crash
+        saveRun(gradingRun);
+
         // TODO(Jing Yuan): implement: grade THREAD_COUNT submissions at a
         //     time. For now submissions are graded one after another.
         GradingPipeline pipeline = pipelineFactory.createPipeline(
                 cancellationToken);
         pipeline.run(gradingRun, context, listener);
 
+        // Saved again so FAILED and CANCELLED submissions, which never
+        // reach PersistStage, are on record too
+        saveRun(gradingRun);
         return gradingRun;
     }
 
@@ -230,6 +258,7 @@ public class GradingService {
         pipeline.run(retryRun, lastContext,
                 new RetryProgressListener(listener, gradingRun));
 
+        saveRun(gradingRun);
         return gradingRun;
     }
 
@@ -248,6 +277,24 @@ public class GradingService {
         // TODO(Jing Yuan): implement: load the run from the repository and
         //     run the pipeline on the submissions that are still PENDING
         return null;
+    }
+
+    // Saves the run when the database is switched on. A failure does not
+    // stop grading: the results stay in memory, and PersistStage reports
+    // a database that cannot be written on each submission, so it is not
+    // reported twice here.
+    // Added by Claude Opus 5.5 for Huxley's repository; reviewed by Huxley
+    private void saveRun(GradingRun gradingRun) {
+        if (repository == null
+                || !config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+            return;
+        }
+
+        try {
+            repository.saveRun(gradingRun);
+        } catch (PersistenceException exception) {
+            // Reported by PersistStage, as explained above
+        }
     }
 
     // Stops a run that is missing an argument or names a module or

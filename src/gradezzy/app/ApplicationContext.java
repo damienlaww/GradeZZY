@@ -20,6 +20,7 @@ import gradezzy.fix.FolderHierarchyFixer;
 import gradezzy.fix.FolderNameFixer;
 import gradezzy.fix.HeaderNameFixer;
 import gradezzy.persistence.BackupManager;
+import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
 import gradezzy.persistence.SqliteResultRepository;
 import gradezzy.plagiarism.TokenSimilarityDetector;
@@ -57,6 +58,9 @@ public class ApplicationContext {
     // Every service, ready for the user interface
     private final ServiceRegistry services;
 
+    // Why the database could not be opened, or empty when it is fine
+    private final String startupProblem;
+
     /**
      * Builds every service from the configuration.
      *
@@ -67,15 +71,14 @@ public class ApplicationContext {
         this.repository = new SqliteResultRepository(
                 config.getString(ConfigKeys.DATABASE_FILE));
 
-        // TODO(Huxley): implement: call repository.open() here when
-        //     DATABASE_ENABLED is true, and report a failure to the user
+        this.startupProblem = openRepository();
         FixManager fixManager = createFixManager();
         PipelineFactory pipelineFactory = new PipelineFactory(config,
                 fixManager, repository);
 
         this.services = new ServiceRegistry(config,
                 new GradingService(config, pipelineFactory,
-                        new AssessmentFactory(config)),
+                        new AssessmentFactory(config), repository),
                 new AnomalyService(fixManager, repository),
                 createExportService(),
                 new StatisticsService(new StatisticsCalculator(config),
@@ -105,6 +108,39 @@ public class ApplicationContext {
      */
     public ServiceRegistry getServices() {
         return services;
+    }
+
+    /**
+     * Returns why the database could not be opened at start-up.
+     *
+     * <p>Grading still works without the database, but nothing is saved,
+     * so a screen should show this message when it is not empty.
+     *
+     * @return the problem, or an empty string when there is none
+     */
+    // Generated with Claude Opus 5.5; reviewed by Huxley
+    public String getStartupProblem() {
+        return startupProblem;
+    }
+
+    // Opens the database when it is switched on. A failure is reported
+    // on the error stream and returned, but does not stop the app: grading
+    // still works, only saving does not.
+    // Generated with Claude Opus 5.5; reviewed by Huxley
+    private String openRepository() {
+        if (!config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+            return "";
+        }
+
+        try {
+            repository.open();
+            return "";
+        } catch (PersistenceException exception) {
+            String problem = "Results will not be saved: "
+                    + exception.getMessage();
+            System.err.println(problem);
+            return problem;
+        }
     }
 
     /**
