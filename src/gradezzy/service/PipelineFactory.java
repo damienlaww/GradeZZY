@@ -9,6 +9,7 @@
  */
 package gradezzy.service;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -126,13 +127,23 @@ public class PipelineFactory {
     // it here.
     private List<Detector> createDetectors() {
         List<Detector> detectors = new ArrayList<>();
+        Path starterDirectory = Paths.get(
+                config.getString(ConfigKeys.STARTER_DIR));
+        boolean untouchedOn = config.getBoolean(
+                ConfigKeys.DETECT_UNTOUCHED_ENABLED);
 
-        // TODO(Jun Sheng): implement: only add each detector when its
-        //     DETECT_..._ENABLED setting is true
-        detectors.add(new UntouchedStarterDetector(Paths.get(
-                config.getString(ConfigKeys.STARTER_DIR))));
-        detectors.add(new EmptyAnswerDetector());
-        detectors.add(new HardCodedAnswerDetector(config));
+        if (untouchedOn) {
+            detectors.add(new UntouchedStarterDetector(starterDirectory));
+        }
+
+        if (config.getBoolean(ConfigKeys.DETECT_EMPTY_ENABLED)) {
+            detectors.add(new EmptyAnswerDetector(starterDirectory,
+                    untouchedOn));
+        }
+
+        if (config.getBoolean(ConfigKeys.DETECT_HARD_CODED_ENABLED)) {
+            detectors.add(new HardCodedAnswerDetector());
+        }
 
         return detectors;
     }

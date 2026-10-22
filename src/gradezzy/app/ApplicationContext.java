@@ -158,7 +158,7 @@ public class ApplicationContext {
 
         fixManager.addFixer(new FolderHierarchyFixer());
         fixManager.addFixer(new FolderNameFixer());
-        fixManager.addFixer(new HeaderNameFixer());
+        fixManager.addFixer(new HeaderNameFixer(config));
 
         return fixManager;
     }

@@ -178,8 +178,7 @@ public class GradingService {
         // and the run can be resumed after a crash
         saveRun(gradingRun);
 
-        // TODO(Jing Yuan): implement: grade THREAD_COUNT submissions at a
-        //     time. For now submissions are graded one after another.
+        // The pipeline grades exec.thread.count submissions at a time.
         GradingPipeline pipeline = pipelineFactory.createPipeline(
                 cancellationToken);
         pipeline.run(gradingRun, context, listener);

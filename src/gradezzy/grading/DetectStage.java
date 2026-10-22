@@ -8,16 +8,19 @@
  */
 package gradezzy.grading;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import gradezzy.detection.Detector;
+import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
+import gradezzy.model.Assessment;
+import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 
 /**
- * Flags untouched starter files, empty answers and hard-coded answers for the
- * instructor to review.
- *
- * <p>Tier: MUST. Owner: Jun Sheng.
+ * Flags suspicious answers for the instructor to review.
  */
 public class DetectStage implements GradingStage {
 
@@ -25,6 +28,13 @@ public class DetectStage implements GradingStage {
      * The name shown while this stage runs.
      */
     public static final String NAME = "Looking for abnormal answers";
+
+    // The text in front of the id of a failed check's warning
+    private static final String ID_PREFIX = "detection-";
+
+    // What the instructor can do when a check could not run
+    private static final String FAILED_CHECK_ACTION =
+            "Check this submission by hand. No mark was changed.";
 
     // The detectors to run
     private final List<Detector> detectors;
@@ -49,8 +59,7 @@ public class DetectStage implements GradingStage {
     }
 
     /**
-     * Flags untouched starter files, empty answers and hard-coded answers for
-     * the instructor to review.
+     * Flags suspicious answers for the instructor to review.
      *
      * @param submission the submission
      * @param context the context
@@ -59,7 +68,29 @@ public class DetectStage implements GradingStage {
     @Override
     public void process(Submission submission,
             GradingContext context) throws GradingException {
-        // TODO(Jun Sheng): implement: calling each detector and adding its
-        //     anomalies to the submission
+        for (Detector detector : detectors) {
+            List<Anomaly> flags = runDetector(detector, submission,
+                    context.getAssessment());
+
+            for (Anomaly flag : flags) {
+                submission.addAnomaly(flag);
+            }
+        }
+    }
+
+    // Runs one detector, or returns a warning if it fails.
+    private List<Anomaly> runDetector(Detector detector,
+            Submission submission, Assessment assessment) {
+        try {
+            return detector.detect(submission, assessment);
+        } catch (RuntimeException exception) {
+            List<Anomaly> warning = new ArrayList<>();
+            warning.add(new Anomaly(ID_PREFIX + UUID.randomUUID(),
+                    AnomalyType.INTERNAL_ERROR, Severity.WARNING,
+                    submission.getUsername(), "The check '"
+                    + detector.getName() + "' could not run: "
+                    + exception.getMessage(), FAILED_CHECK_ACTION));
+            return warning;
+        }
     }
 }
