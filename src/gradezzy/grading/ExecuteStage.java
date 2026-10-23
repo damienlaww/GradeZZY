@@ -129,6 +129,13 @@ public class ExecuteStage implements GradingStage {
                     + " case(s) passed before that and their marks are "
                     + "kept.", "Check the loops in " + question.getFileName()
                     + ", then retry " + question.getId() + ".");
+        } else if (run.getExitCode() == TesterRunner.EARLY_EXIT_CODE) {
+            addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
+                    + question.getId() + " tester did not reach its end: "
+                    + "the program was ended early, for example by "
+                    + "System.exit in " + question.getFileName() + ". "
+                    + passCount(parsed) + " case(s) passed and were scored.",
+                    RUNTIME_ERROR_ACTION);
         } else if (run.getExitCode() != SUCCESS_EXIT_CODE) {
             addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
                     + question.getId() + " tester ended with an error (exit "

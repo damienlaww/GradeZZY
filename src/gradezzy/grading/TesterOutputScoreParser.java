@@ -11,6 +11,7 @@ package gradezzy.grading;
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.exec.ProcessResult;
+import gradezzy.exec.TesterRunner;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.TestCaseResult;
@@ -70,13 +71,14 @@ public class TesterOutputScoreParser implements ScoreParser {
         String verdict = "";
         String lastLine = "";
 
-        // A test case runs from its header to the next header. The tester
-        // prints its verdict after the student's code returns, so the last
-        // verdict line of a case wins over any the student printed.
+        // A test case runs from its header to the next header. Lines that
+        // student code printed are marked by TesterRunner and never count.
         for (String rawLine : output.split(LINE_BREAK)) {
             String line = rawLine.trim();
 
-            if (line.startsWith(headerMarker)) {
+            if (rawLine.startsWith(TesterRunner.STUDENT_LINE_PREFIX)) {
+                line = "";
+            } else if (line.startsWith(headerMarker)) {
                 if (testNumber > 0) {
                     addCase(result, testNumber, verdict, passMarker);
                 }
@@ -92,14 +94,8 @@ public class TesterOutputScoreParser implements ScoreParser {
             }
         }
 
-        // The last case only counts if the tester ran to the end; after a
-        // timeout or crash it is unfinished, whatever it printed
         if (testNumber > 0) {
-            String lastVerdict = verdict;
-            if (!finishedNormally(processResult)) {
-                lastVerdict = "";
-            }
-            addCase(result, testNumber, lastVerdict, passMarker);
+            addCase(result, testNumber, verdict, passMarker);
         }
 
         int passCount = countPasses(result);
@@ -111,11 +107,10 @@ public class TesterOutputScoreParser implements ScoreParser {
     }
 
     /**
-     * Reads the total from the last line, capped at the number of passed
-     * cases. A run that was stopped or that
-     * crashed never printed its total, and its last line may be the
-     * student's own output, so the passes printed so far are counted
-     * instead, one mark each, as the provided testers award.
+     * Reads the total from the tester's last line, capped at the number of
+     * passed cases. A run that was stopped, crashed or ended early never
+     * printed its total, so the passes printed so far are counted instead,
+     * one mark each, as the provided testers award.
      *
      * @param processResult the finished run
      * @param lastLine the last line that was not blank
@@ -128,9 +123,7 @@ public class TesterOutputScoreParser implements ScoreParser {
             return passCount;
         }
 
-        // Student code can print a number and call System.exit(0), so the
-        // total is never more than one mark per passed case, the brief's
-        // rubric
+        // The total is never more than one mark per passed case
         try {
             return Math.min(Double.parseDouble(lastLine), passCount);
         } catch (NumberFormatException exception) {

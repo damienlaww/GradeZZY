@@ -10,6 +10,8 @@ package gradezzy.exec;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -61,6 +63,23 @@ public class ProcessRunner {
      */
     public ProcessResult run(List<String> command, Path workingDirectory,
             long timeoutSeconds) throws ProcessExecutionException {
+        return run(command, workingDirectory, timeoutSeconds, "");
+    }
+
+    /**
+     * Runs a command with some text on its standard input, and waits for
+     * it, up to the time limit. Standard input is closed after the text.
+     *
+     * @param command the command
+     * @param workingDirectory the working directory
+     * @param timeoutSeconds the timeout seconds
+     * @param input the text sent to standard input
+     * @return the exit code, output and timeout flag
+     * @throws ProcessExecutionException if the operation fails
+     */
+    public ProcessResult run(List<String> command, Path workingDirectory,
+            long timeoutSeconds, String input)
+            throws ProcessExecutionException {
         if (command == null || command.isEmpty()) {
             throw new ProcessExecutionException("No command to run.");
         }
@@ -76,7 +95,7 @@ public class ProcessRunner {
         int maxCharacters = config.getInt(ConfigKeys.MAX_OUTPUT_CHARACTERS);
         long startMillis = System.currentTimeMillis();
         long deadlineMillis = startMillis + timeoutSeconds * MILLIS_PER_SECOND;
-        Process process = startProcess(command, workingDirectory);
+        Process process = startProcess(command, workingDirectory, input);
         StringBuilder outputText = new StringBuilder();
         StringBuilder errorText = new StringBuilder();
         List<ProcessHandle> children = new ArrayList<>();
@@ -178,24 +197,33 @@ public class ProcessRunner {
      *
      * @param command the command
      * @param workingDirectory the working directory
+     * @param input the text sent to standard input
      * @return the running process
      * @throws ProcessExecutionException if the process cannot be started
      */
-    private Process startProcess(List<String> command, Path workingDirectory)
-            throws ProcessExecutionException {
+    private Process startProcess(List<String> command, Path workingDirectory,
+            String input) throws ProcessExecutionException {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workingDirectory.toFile());
 
+        Process process = null;
         try {
-            Process process = builder.start();
-            // A program waiting for keyboard input gets end-of-input at once
-            // instead of hanging until the time limit
-            process.getOutputStream().close();
-            return process;
+            process = builder.start();
         } catch (IOException exception) {
             throw new ProcessExecutionException(
                     "Could not start " + command.get(0), exception);
         }
+
+        // A program waiting for keyboard input gets end-of-input right
+        // after the text instead of hanging until the time limit
+        try (OutputStream stdin = process.getOutputStream()) {
+            stdin.write(input.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException exception) {
+            terminate(process);
+            throw new ProcessExecutionException(
+                    "Could not send input to " + command.get(0), exception);
+        }
+        return process;
     }
 
     /**
