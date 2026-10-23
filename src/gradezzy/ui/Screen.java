@@ -1,71 +1,64 @@
 /*
  * File: Screen.java
  *
- * Purpose: Lists every screen of the application with its FXML file and
- * window title.
+ * Purpose: Lists every screen with its FXML file and title.
  *
- * Where it fits: ScreenNavigator loads a screen by one of these constants,
- * so FXML file names are written in exactly one place. To add a screen,
- * add a constant here, an FXML file in the fxml folder and a controller.
- *
- * AI use: OVERVIEW, MODULES, VALIDATION and HELP added with Claude Code,
- * reviewed by Jun Sheng.
+ * Where it fits: ScreenNavigator loads a screen by one of these constants.
+ * To add a screen, add a constant, an FXML file and a controller.
  */
 package gradezzy.ui;
 
 /**
  * The screens of the application.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public enum Screen {
 
-    /** The main window that hosts the other screens. Tier: MUST. */
+    /** The main window that hosts the other screens. */
     MAIN("main.fxml", "GradeZZY"),
 
-    /** Modules, sections, runs and recent activity. Tier: SHOULD. */
+    /** Modules, sections, runs and recent activity. */
     OVERVIEW("overview.fxml", "Overview"),
 
-    /** The sections of each module. Tier: SHOULD. */
+    /** The sections of each module. */
     MODULES("modules.fxml", "Modules"),
 
-    /** The rubric, testers and typed test cases. Tier: SHOULD. */
+    /** The rubric, testers and typed test cases. */
     TEST_CASES("test-cases.fxml", "Assessments"),
 
-    /** Upload of submissions for one section. Tier: MUST. */
+    /** Upload of submissions for one section. */
     UPLOAD("upload.fxml", "Submissions"),
 
-    /** Working-copy repairs to approve or reject. Tier: SHOULD. */
+    /** Working-copy repairs to approve or reject. */
     VALIDATION("validation.fxml", "Validation"),
 
-    /** Progress of a running batch. Tier: MUST. */
+    /** Progress of a running batch. */
     PROGRESS("progress.fxml", "Grading Progress"),
 
-    /** The anomaly log with review decisions. Tier: SHOULD. */
+    /** The anomaly log with review decisions. */
     ANOMALY_LOG("anomaly-log.fxml", "Review Anomalies"),
 
-    /** Per-question and per-student results. Tier: MUST. */
+    /** Per-question and per-student results. */
     RESULTS("results.fxml", "Results"),
 
-    /** The evidence behind one student's result. Tier: SHOULD. */
+    /** The evidence behind one student's result. */
     STUDENT_REPORT("student-report.fxml", "Student Evidence"),
 
-    /** The statistics dashboard. Tier: SHOULD. */
+    /** The statistics dashboard. */
     STATISTICS("statistics.fxml", "Statistics"),
 
-    /** Pairs of similar submissions. Tier: COULD. */
+    /** Pairs of similar submissions. */
     PLAGIARISM("plagiarism.fxml", "Similarity Review"),
 
-    /** Earlier runs, backup and recovery. Tier: COULD. */
+    /** Earlier runs, backup and recovery. */
     HISTORY("history.fxml", "History"),
 
-    /** The audit log. Tier: SHOULD. */
+    /** The audit log. */
     AUDIT_LOG("audit-log.fxml", "Audit Log"),
 
-    /** The settings page. Tier: SHOULD. */
+    /** The settings page. */
     SETTINGS("settings.fxml", "Settings"),
 
-    /** Walkthroughs, shortcuts and backend connections. Tier: SHOULD. */
+    /** Walkthroughs, shortcuts and backend connections. */
     HELP("help.fxml", "Help");
 
     // The classpath folder that holds every FXML file

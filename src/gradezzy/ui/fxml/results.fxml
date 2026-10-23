@@ -4,9 +4,7 @@
   Results screen: one row per student with Q1a /3 to Q3 /4 and Total /20,
   search, filter, sort, multi-selection, export and an inspector for the
   selected student.
-  Tier: MUST. Owner: Damien.
   Controller: gradezzy.ui.ResultsController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.scene.control.Button?>

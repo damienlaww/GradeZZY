@@ -5,9 +5,7 @@
   similarity threshold, and for the chosen pair the two compared files,
   matching excerpts side by side and the starter and tester files left
   out. Similarity is a review aid for the instructor, never a finding.
-  Tier: COULD. Owner: Damien.
   Controller: gradezzy.ui.PlagiarismController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.scene.control.Button?>

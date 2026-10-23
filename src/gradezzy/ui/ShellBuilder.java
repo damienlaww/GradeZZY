@@ -1,14 +1,10 @@
 /*
  * File: ShellBuilder.java
  *
- * Purpose: Builds the main window: loads the MAIN screen, puts it in a
- * scene, applies the theme and starts the shell.
+ * Purpose: Builds the main window in a scene with the theme applied.
  *
- * Where it fits: Used by MainApp for the real window, and by the screen
- * check, the self-test and the snapshot writer, which build the same
- * window without showing it.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Used by MainApp and by the developer checks in
+ * gradezzy.ui.check, so the checks build the same window as the app.
  */
 package gradezzy.ui;
 
@@ -25,18 +21,16 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * Builds the main window.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class ShellBuilder {
 
-    // Every service of the application
+    // Every service
     private final ServiceRegistry services;
 
     // The backend every screen calls
     private final DashboardBackend backend;
 
-    // The state shared by every screen
+    // The shared state
     private final UiState state;
 
     // Switches the theme
@@ -54,9 +48,9 @@ public class ShellBuilder {
     /**
      * Creates a builder.
      *
-     * @param services every service of the application
-     * @param backend the backend every screen calls
-     * @param state the state shared by every screen
+     * @param services every service
+     * @param backend the backend
+     * @param state the shared state
      * @param themeManager switches the theme
      */
     public ShellBuilder(ServiceRegistry services, DashboardBackend backend,
@@ -68,8 +62,7 @@ public class ShellBuilder {
     }
 
     /**
-     * Creates the shared state with the theme and animation settings from
-     * config.properties.
+     * Creates the shared state from the theme and animation settings.
      *
      * @param config the application settings
      * @return the state
@@ -84,8 +77,7 @@ public class ShellBuilder {
     }
 
     /**
-     * Builds the window in a scene of a given size and shows the first
-     * screen.
+     * Builds the window in a scene and shows the first screen.
      *
      * @param width the scene width in pixels
      * @param height the scene height in pixels
@@ -103,8 +95,7 @@ public class ShellBuilder {
     }
 
     /**
-     * Moves the window into a new scene of another size, keeping every
-     * screen and its state. Used to render several window sizes.
+     * Moves the window into a new scene of another size, keeping its state.
      *
      * @param width the new width in pixels
      * @param height the new height in pixels

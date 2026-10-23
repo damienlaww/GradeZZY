@@ -1,14 +1,10 @@
 /*
  * File: DemoData.java
  *
- * Purpose: Builds the synthetic students, runs, results, anomalies and
- * source files that demo mode shows.
+ * Purpose: Builds the made-up students, runs and files that demo mode shows.
  *
- * Where it fits: Used only by DemoBackend and DemoGrader. Every name,
- * username and line of code here is invented. Nothing is copied from the
- * sample submissions, which hold real student names.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Used by DemoBackend and the checks in gradezzy.ui.check.
+ * Every name and line of code is invented; the real samples hold real names.
  */
 package gradezzy.ui.demo;
 
@@ -35,8 +31,6 @@ import gradezzy.model.TestCaseResult;
 
 /**
  * Synthetic data for demo mode.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class DemoData {
 
@@ -99,7 +93,7 @@ public final class DemoData {
     /** The folder name used for every synthetic sample file. */
     public static final String SAMPLE_FOLDER = "demo-samples";
 
-    /** The file name of the replacement for the unreadable ZIP. */
+    /** Added after the username in the replacement ZIP file's name. */
     public static final String REPLACEMENT_SUFFIX = "-resubmitted";
 
     /** The extension of a submission file. */
@@ -152,8 +146,7 @@ public final class DemoData {
     // The folder inside the sample folder that holds the working copies
     private static final String WORKING_FOLDER = "working";
 
-    // The student whose ZIP file and working copy sit in long, deep
-    // folders, so the screens show how they break long paths
+    // The student whose files sit in long folders, to test long paths
     private static final String LONG_PATH_USERNAME = "learner.charlie";
 
     // The folders a portal download put the long-path ZIP file in
@@ -229,13 +222,12 @@ public final class DemoData {
     }
 
     /**
-     * Builds the sample run shown at start-up. Five students are graded
-     * and one waits for a replacement ZIP file.
+     * Builds the sample run shown at start-up. One ZIP file cannot be opened.
      *
      * @param assessment the assessment
      * @param section the section of the run
-     * @param timeoutSeconds the configured tester time limit
-     * @param ids hands out anomaly ids
+     * @param timeoutSeconds the tester time limit
+     * @param ids the anomaly id counter
      * @return the run
      */
     public static GradingRun buildCurrentRun(Assessment assessment,
@@ -260,15 +252,13 @@ public final class DemoData {
     }
 
     /**
-     * Builds the earlier sample run shown on the History screen. Four
-     * students are graded, one was not on the score sheet used then, and
-     * grading stopped on the unreadable ZIP file, so the run shows a
-     * student who could not be graded.
+     * Builds the earlier run on the History screen, with one student not
+     * on the roster and one failed submission.
      *
      * @param assessment the assessment
      * @param section the section of the run
-     * @param timeoutSeconds the configured tester time limit
-     * @param ids hands out anomaly ids
+     * @param timeoutSeconds the tester time limit
+     * @param ids the anomaly id counter
      * @return the run
      */
     public static GradingRun buildEarlierRun(Assessment assessment,
@@ -290,13 +280,12 @@ public final class DemoData {
     }
 
     /**
-     * Builds the large cohort: the six sample students followed by
-     * generated students with a spread of outcomes.
+     * Builds the large cohort: the six samples plus generated students.
      *
      * @param assessment the assessment
      * @param section the section of the run
-     * @param timeoutSeconds the configured tester time limit
-     * @param ids hands out anomaly ids
+     * @param timeoutSeconds the tester time limit
+     * @param ids the anomaly id counter
      * @return the run
      */
     public static GradingRun buildLargeCohort(Assessment assessment,
@@ -322,13 +311,12 @@ public final class DemoData {
     }
 
     /**
-     * Fills in the results and anomalies of one sample student, as the
-     * pipeline would after grading.
+     * Fills in one sample student's results and anomalies, as grading would.
      *
-     * @param submission a submission of a sample student
+     * @param submission a sample student's submission
      * @param assessment the assessment
-     * @param timeoutSeconds the configured tester time limit
-     * @param ids hands out anomaly ids
+     * @param timeoutSeconds the tester time limit
+     * @param ids the anomaly id counter
      */
     public static void applyOutcome(Submission submission,
             Assessment assessment, int timeoutSeconds, IdCounter ids) {
@@ -362,10 +350,9 @@ public final class DemoData {
     }
 
     /**
-     * Gives the timed-out sample question a passing retry, as a repaired
-     * tester run would.
+     * Makes the timed-out sample question pass, as a good retry would.
      *
-     * @param result the question result to replace in place
+     * @param result the question result, changed in place
      */
     public static void applyPassingRetry(QuestionResult result) {
         int cases = (int) result.getQuestion().getMaxScore();
@@ -451,9 +438,7 @@ public final class DemoData {
     }
 
     /**
-     * Returns a synthetic path that stands for a sample file. Nothing
-     * exists at this path. The ZIP file of learner.charlie sits in long,
-     * deep folders, so the screens show how they break long paths.
+     * Returns a made-up path for a sample file. Nothing exists there.
      *
      * @param fileName the file name
      * @return the path
@@ -467,9 +452,7 @@ public final class DemoData {
     }
 
     /**
-     * Returns the synthetic working copy of a student. Nothing exists at
-     * this path. The working copy of learner.charlie sits in long, deep
-     * folders, so the screens show how they break long paths.
+     * Returns the made-up working copy of a student. Nothing exists there.
      *
      * @param username a sample or generated username
      * @return the path
@@ -509,7 +492,7 @@ public final class DemoData {
         return submission;
     }
 
-    // The repair a sample student needed, already approved in the run.
+    // A missing wrapper folder, repaired; the repair waits for approval.
     private static void addAlphaOutcome(Submission submission,
             IdCounter ids) {
         Anomaly wrapper = new Anomaly(ids.next(),
@@ -587,7 +570,7 @@ public final class DemoData {
                 + "file names."));
     }
 
-    // Untouched starter files and a missing folder, already reviewed.
+    // Untouched starter files, an empty answer and a missing folder.
     private static void addDeltaOutcome(Submission submission,
             IdCounter ids) {
         String username = submission.getUsername();
@@ -651,8 +634,7 @@ public final class DemoData {
                 "Compare the pair on the Similarity Review screen."));
     }
 
-    // A student missing from the score sheet used for the earlier run,
-    // so the ZIP file was set aside and not graded.
+    // A student not on the earlier run's score sheet, so not graded.
     private static void addNotOnRosterOutcome(Submission submission,
             IdCounter ids) {
         String username = submission.getUsername();

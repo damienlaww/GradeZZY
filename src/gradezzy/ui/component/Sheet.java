@@ -1,15 +1,10 @@
 /*
  * File: Sheet.java
  *
- * Purpose: The content of a sheet that slides over the window: a title,
- * an explanation, optional content and a row of buttons with Cancel on
- * the left and the action on the right.
+ * Purpose: The content of a sheet that slides over the window.
  *
- * Where it fits: MainController shows sheets in a layer over the window.
- * Screens build a Sheet for confirmations, forms and previews, so every
- * dialog looks and behaves the same.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: MainController shows sheets over the window. Screens
+ * build one for each confirmation, form and preview.
  */
 package gradezzy.ui.component;
 
@@ -26,8 +21,6 @@ import javafx.scene.layout.VBox;
 
 /**
  * The content of one sheet.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class Sheet extends VBox {
 
@@ -100,9 +93,8 @@ public final class Sheet extends VBox {
     }
 
     /**
-     * Adds a secondary button, such as Copy, on the left of the row. A
-     * button named Cancel is made the dismiss button, as Esc does the
-     * same.
+     * Adds a secondary button, such as Copy, on the left. A button named
+     * Cancel becomes the dismiss button.
      *
      * @param label the button text
      * @param onAction what the button does
@@ -119,9 +111,8 @@ public final class Sheet extends VBox {
     }
 
     /**
-     * Adds the button that closes the sheet without acting, such as
-     * Cancel or Keep Grading, on the left of the row. Esc does the same,
-     * which its tooltip says.
+     * Adds a button that closes the sheet without acting, such as Cancel.
+     * Esc does the same.
      *
      * @param label the button text
      * @param onAction what the button does

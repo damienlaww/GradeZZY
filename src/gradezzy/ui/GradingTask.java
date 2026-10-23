@@ -2,18 +2,13 @@
  * File: GradingTask.java
  *
  * Purpose: Runs a grading batch on a background thread so the window
- * stays responsive while submissions are graded.
+ * stays responsive.
  *
- * Where it fits: Created by LiveBackend for a new batch, a retry of the
- * failed submissions or a resumed run, and watched by the progress
- * screen through GradingMonitor. All grading still happens in
- * GradingService; this class only moves the call off the JavaFX thread.
+ * Where it fits: Created by LiveBackend and watched by the progress screen
+ * through GradingMonitor. GradingService does the grading itself.
  *
- * Note on untaught Java: javafx.concurrent.Task and threads are not
- * covered in CS102. They are kept inside this one class.
- *
- * AI use: retry and resume kinds drafted with Claude Code, reviewed by
- * Jun Sheng.
+ * Note on untaught Java: javafx.concurrent.Task runs the grading on a
+ * background thread, so the window does not freeze.
  */
 package gradezzy.ui;
 
@@ -31,8 +26,6 @@ import gradezzy.testcase.TestCaseSource;
 
 /**
  * A background task that grades one batch.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class GradingTask extends Task<GradingRun> {
 
@@ -60,7 +53,7 @@ public class GradingTask extends Task<GradingRun> {
     // The zip files or folders the instructor chose
     private final List<Path> inputPaths;
 
-    // The roster explicitly selected for this batch, or null for config.
+    // The roster chosen for this batch, or null to use the config
     private Path scoreSheetFile;
 
     // The section the batch belongs to
@@ -76,15 +69,14 @@ public class GradingTask extends Task<GradingRun> {
     private final ProgressListener listener;
 
     /**
-     * Creates a task for one batch.
+     * Creates a task for a new batch. The listener runs on the background
+     * thread, so it must use Platform.runLater to touch a control.
      *
-     * @param gradingService the service that does the grading
-     * @param inputPaths the zip files or folders the instructor chose
-     * @param section the section the batch belongs to
-     * @param testCaseSource where the tester files come from
-     * @param listener the object told about progress. It is called on the
-     *        background thread, so it must use Platform.runLater before
-     *        touching any control.
+     * @param gradingService the grading service
+     * @param inputPaths the chosen zip files or folders
+     * @param section the section of the batch
+     * @param testCaseSource where the testers come from
+     * @param listener the progress listener
      */
     public GradingTask(GradingService gradingService, List<Path> inputPaths,
             Section section, TestCaseSource testCaseSource,
@@ -109,11 +101,10 @@ public class GradingTask extends Task<GradingRun> {
     /**
      * Creates a task that retries or resumes an existing run.
      *
-     * @param gradingService the service that does the grading
+     * @param gradingService the grading service
      * @param kind RETRY_FAILED or RESUME
      * @param gradingRun the run to retry or resume
-     * @param listener the object told about progress, on the background
-     *        thread
+     * @param listener the progress listener, on the background thread
      */
     public GradingTask(GradingService gradingService, Kind kind,
             GradingRun gradingRun, ProgressListener listener) {

@@ -6,8 +6,6 @@
  *
  * Where it fits: Finds the missing wrapper folder, wrong folder name and
  * missing Qx folder cases described in the brief.
- *
- * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.validation;
 

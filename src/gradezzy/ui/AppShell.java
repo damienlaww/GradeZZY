@@ -1,14 +1,10 @@
 /*
  * File: AppShell.java
  *
- * Purpose: What a screen may ask of the window around it: navigation,
- * messages, sheets and confirmations.
+ * Purpose: What a screen may ask of the window around it.
  *
- * Where it fits: MainController implements it and every controller
- * reaches it through BaseController.getShell(), so screens never build
- * their own dialogs or know about each other.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: MainController implements it. Controllers reach it through
+ * BaseController.getShell() instead of building their own dialogs.
  */
 package gradezzy.ui;
 
@@ -19,8 +15,6 @@ import gradezzy.ui.backend.Capability;
 
 /**
  * The window that hosts the screens.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public interface AppShell {
 
@@ -34,14 +28,14 @@ public interface AppShell {
     /**
      * Shows a short message that disappears by itself.
      *
-     * @param message a plain sentence in the past tense
+     * @param message a sentence in the past tense
      */
     void showToast(String message);
 
     /**
      * Shows a problem that stays until the instructor closes it.
      *
-     * @param message what went wrong and what to do next
+     * @param message what went wrong and what to do
      */
     void showError(String message);
 
@@ -60,26 +54,24 @@ public interface AppShell {
     /**
      * Asks the instructor to confirm an action in a sheet.
      *
-     * @param title the question, such as "Cancel grading?"
-     * @param message what will happen and what is kept
+     * @param title the question
+     * @param message what will happen
      * @param actionLabel the verb on the confirm button
-     * @param destructive true to colour the confirm button as a warning
-     * @param onConfirm what to do when the instructor confirms
+     * @param destructive true for a warning colour
+     * @param onConfirm run when the instructor confirms
      */
     void confirm(String title, String message, String actionLabel,
             boolean destructive, Runnable onConfirm);
 
     /**
-     * Asks the instructor to confirm an action, with chosen words on the
-     * button that dismisses the sheet.
+     * Asks the instructor to confirm an action, with a custom dismiss button.
      *
      * @param title the question
-     * @param message what will happen and what is kept
+     * @param message what will happen
      * @param actionLabel the verb on the confirm button
-     * @param dismissLabel the words on the button that changes nothing,
-     *        such as "Keep Grading"
-     * @param destructive true to colour the confirm button as a warning
-     * @param onConfirm what to do when the instructor confirms
+     * @param dismissLabel the words on the dismiss button
+     * @param destructive true for a warning colour
+     * @param onConfirm run when the instructor confirms
      */
     void confirm(String title, String message, String actionLabel,
             String dismissLabel, boolean destructive, Runnable onConfirm);
@@ -101,16 +93,14 @@ public interface AppShell {
     void showPreview(String title, String note, String text);
 
     /**
-     * Switches between the light and dark theme without reloading any
-     * screen.
+     * Switches the theme without reloading any screen.
      *
      * @param dark true for the dark theme
      */
     void setDark(boolean dark);
 
     /**
-     * Refreshes the context bar and sidebar after the run or section
-     * changed.
+     * Refreshes the context bar and sidebar after the run or section changes.
      */
     void refreshContext();
 

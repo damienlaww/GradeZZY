@@ -1,16 +1,11 @@
 /*
  * File: WindowFlows.java
  *
- * Purpose: The seven demo flows of the brief, done in the real window
- * with real clicks, double clicks, typing and keys: import and replace a
- * file, grade, cancel and resume, approve a repair and reject a flag,
- * retry a question, adjust a mark, filter and export, and switch themes.
+ * Purpose: The seven demo flows of the brief, done in the real window with
+ * real clicks, typing and keys.
  *
- * Where it fits: Run by WindowTest between the window-level checks. The
- * outcome of each step is read from the demo backend and the window, the
- * same facts SelfTest checks without a window.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Run by WindowTest. Each step's outcome is read from the
+ * demo backend and the window.
  */
 package gradezzy.ui.check;
 
@@ -47,8 +42,6 @@ import gradezzy.ui.demo.DemoData;
 
 /**
  * The seven demo flows with real input.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class WindowFlows {
 
@@ -80,7 +73,7 @@ public class WindowFlows {
     // A section with no run, for flow 6
     private static final String EMPTY_SECTION = "G2";
 
-    // The lines of a score sheet for two students: header and two rows
+    // Lines in a two-student score sheet: a header and two rows
     private static final int TWO_STUDENT_LINES = 3;
 
     // The test that keeps the score
@@ -112,8 +105,7 @@ public class WindowFlows {
         flowTheme();
     }
 
-    // Flow 1: six files with one unreadable, replaced, then the roster
-    // and testers; Start Grading becomes available.
+    // Flow 1: imports and replaces files until Start Grading is available.
     private void flowImport() {
         test.section("Flow 1: import six ZIP files, replace the unreadable "
                 + "one, reach Ready to Grade");
@@ -154,8 +146,7 @@ public class WindowFlows {
         test.capture("10-ready-to-grade");
     }
 
-    // Flow 2: grading carries on past problems; Cancel keeps finished
-    // results; Resume grades only the rest.
+    // Flow 2: grades, cancels and keeps results, then resumes the rest.
     private void flowGrade() {
         test.section("Flow 2: grade, cancel, resume");
         GradingMonitor monitor = test.getState().getMonitor();
@@ -197,8 +188,7 @@ public class WindowFlows {
         test.capture("12-run-finished");
     }
 
-    // Flow 3: approve one repair in Validation; reject one flag in Review
-    // Anomalies, then undo that decision.
+    // Flow 3: approves a repair, rejects a flag, then undoes the rejection.
     private void flowDecisions() {
         test.section("Flow 3: approve a repair, reject a flag, undo");
         test.openFromSidebar("Submissions", Screen.UPLOAD);
@@ -248,8 +238,7 @@ public class WindowFlows {
                 + "back to Open");
     }
 
-    // Flow 4: learner.bravo has 19 of 20 with a Q1a timeout; Retry Q1a
-    // makes it 20.
+    // Flow 4: retries learner.bravo's Q1a timeout, taking 19 to 20.
     private void flowRetry() {
         test.section("Flow 4: open learner.bravo from Results, retry Q1a");
         test.openFromSidebar("Results", Screen.RESULTS);
@@ -332,8 +321,7 @@ public class WindowFlows {
         test.check(undone, "Undo restores the mark of 3");
     }
 
-    // Flow 6: the results follow the section, and exports use the
-    // selected students.
+    // Flow 6: results follow the section; exports use the selection.
     private void flowExport() {
         test.section("Flow 6: filter by section, select, export");
         test.clickText("Back to Results");

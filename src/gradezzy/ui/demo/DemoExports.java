@@ -4,11 +4,8 @@
  * Purpose: Builds the CSV and JSON text that demo mode shows as an
  * export preview.
  *
- * Where it fits: Used only by DemoBackend.export. Nothing is written to
- * a file. Live mode uses the real exporters through ExportService.
- * Ungraded marks are left blank, never written as zero.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Used only by DemoBackend.export; nothing is written to a
+ * file. Ungraded marks are left blank (null in JSON), never zero.
  */
 package gradezzy.ui.demo;
 
@@ -23,18 +20,16 @@ import gradezzy.ui.backend.ResultState;
 
 /**
  * Export previews for demo mode.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class DemoExports {
 
-    // The line ending of the preview, matching the score sheet
+    // The line ending, matching the score sheet
     private static final String CSV_LINE_END = "\r\n";
 
     // The separator between CSV values
     private static final String COMMA = ",";
 
-    // The quote around a CSV value that holds a comma
+    // The quote around a CSV value that holds a comma or a quote
     private static final String QUOTE = "\"";
 
     // The indentation of one JSON level

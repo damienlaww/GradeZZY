@@ -1,14 +1,10 @@
 /*
  * File: ReviewInspector.java
  *
- * Purpose: Fills the part of an inspector that the review screens share:
- * the title, the student, the message and what the instructor can do.
+ * Purpose: Fills the inspector part that the review screens share.
  *
- * Where it fits: AnomalyInspector and RepairInspector each add their own
- * badges and boxes to one of these. When no row is selected, the
- * inspector shows a hint instead of the details.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: AnomalyInspector and RepairInspector each use one and add
+ * their own badges and boxes.
  */
 package gradezzy.ui.view;
 
@@ -22,8 +18,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * The shared part of the review inspectors.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ReviewInspector {
 
@@ -36,7 +30,7 @@ public final class ReviewInspector {
     // The details, hidden when nothing is selected
     private final VBox detailBox;
 
-    // The student's full name, or the username when it is not known
+    // The student's name, or the username if unknown
     private final Label nameLabel;
 
     // The username under the full name
@@ -85,8 +79,7 @@ public final class ReviewInspector {
     }
 
     /**
-     * Shows one finding: its title, student, message and suggested
-     * action.
+     * Shows one finding: its title, student, message and suggested action.
      *
      * @param anomaly the finding or flag
      * @param student the student, or null when the roster names none

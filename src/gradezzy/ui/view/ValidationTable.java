@@ -1,16 +1,10 @@
 /*
  * File: ValidationTable.java
  *
- * Purpose: Builds the columns of the Validation table, describes what it
- * shows in the status line, and explains why it is empty when no finding
- * is shown.
+ * Purpose: Builds the Validation table's columns, status line and empty states.
  *
  * Where it fits: The Validation screen creates one in onAttach. Each row
- * is one validation finding: the student, the finding with its message,
- * what the student submitted, the change proposed for the working copy,
- * and the state of the repair as an icon and words.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * is one validation finding and its proposed repair.
  */
 package gradezzy.ui.view;
 
@@ -33,8 +27,6 @@ import gradezzy.ui.component.StatusBadge;
 
 /**
  * The columns, status line and empty states of the finding table.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ValidationTable {
 
@@ -59,16 +51,15 @@ public final class ValidationTable {
     // The narrowest the state column may get
     private static final double STATE_WIDTH = 184.0;
 
-    // The window, for the buttons of the empty states
+    // The window, for the empty-state buttons
     private final AppShell shell;
 
     /**
-     * Adds the Student, Finding, Original, Proposed and State columns to
-     * a table.
+     * Adds the Student, Finding, Original, Proposed and State columns.
      *
      * @param table the table
      * @param students the students of the run
-     * @param shell the window, for the buttons of the empty states
+     * @param shell the window, for the empty-state buttons
      */
     public ValidationTable(TableView<RepairItem> table,
             ReviewStudents students, AppShell shell) {
@@ -96,8 +87,7 @@ public final class ValidationTable {
     }
 
     /**
-     * Describes how many findings wait for a decision, have no automatic
-     * repair, are shown and are selected.
+     * Builds the status line that counts the findings.
      *
      * @param run the run of the section, or null
      * @param repairs every finding of the run
@@ -133,7 +123,7 @@ public final class ValidationTable {
     }
 
     /**
-     * Builds the explanation that fits why no finding is shown.
+     * Builds the empty state that says why no finding is shown.
      *
      * @param run the run of the section, or null
      * @param anyFindings whether the run has findings at all
@@ -165,8 +155,7 @@ public final class ValidationTable {
     }
 
     /**
-     * Shows the original or the proposed value in a monospaced font,
-     * wrapped over the row's lines.
+     * Shows the original or proposed value, monospaced and wrapped.
      */
     private static final class ValueCell
             extends TableCell<RepairItem, RepairItem> {

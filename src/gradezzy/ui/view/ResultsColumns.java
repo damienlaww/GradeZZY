@@ -1,15 +1,10 @@
 /*
  * File: ResultsColumns.java
  *
- * Purpose: Builds the columns of the Results table (Student, one column
- * per question with its maximum, Total and Status) and the orders the
- * table can be sorted in.
+ * Purpose: Builds the columns and sort orders of the Results table.
  *
  * Where it fits: Used by ResultsController. Ungraded marks show a dash,
- * a real zero shows 0, and compile failures and timeouts carry an icon
- * and words, so they never look alike. Ungraded students sort last.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * a real zero shows 0, and ungraded students sort last.
  */
 package gradezzy.ui.view;
 
@@ -37,8 +32,6 @@ import gradezzy.ui.component.StatusBadge;
 
 /**
  * The columns and sort orders of the Results table.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public final class ResultsColumns {
 
@@ -70,7 +63,7 @@ public final class ResultsColumns {
      * Adds the Student, question, Total and Status columns to a table.
      *
      * @param table the Results table
-     * @param assessment gives the questions and their maximums
+     * @param assessment the questions and their maximums
      */
     public void addTo(TableView<Submission> table, Assessment assessment) {
         TableColumn<Submission, Submission> student = column("Student",

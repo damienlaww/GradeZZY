@@ -4,12 +4,7 @@
  * Purpose: Connects the screens to the real services of GradeZZY.
  *
  * Where it fits: The default backend, used by "sh run.sh". Each method
- * passes the call to one service method, or reads a configured value,
- * and holds no grading logic. When a service still holds a placeholder,
- * the screen shows an empty state; when no service method exists, the
- * method returns a Not connected yet result naming the owner.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * calls one service or reads a setting, else returns Not connected yet.
  */
 package gradezzy.ui.backend;
 
@@ -52,8 +47,6 @@ import gradezzy.util.InputValidator;
 
 /**
  * The backend that calls the real services.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class LiveBackend implements DashboardBackend {
 
@@ -63,7 +56,7 @@ public class LiveBackend implements DashboardBackend {
     // The extension of a score sheet file
     private static final String CSV_EXTENSION = ".csv";
 
-    // The folder, inside the output folder, for generated testers
+    // The folder for generated testers, inside the output folder
     private static final String GENERATED_TESTERS_FOLDER =
             "generated-testers";
 
@@ -76,16 +69,14 @@ public class LiveBackend implements DashboardBackend {
     // The assessment, built once from the configuration
     private final Assessment assessment;
 
-    // The run finished most recently in each section, by section label.
-    // A restore clears it on a background thread, so the map is one that
-    // two threads may use at once.
+    // Latest run per section; a restore clears it on a background thread
     private final Map<String, GradingRun> runsBySection =
             new ConcurrentHashMap<>();
 
     /**
      * Creates a live backend.
      *
-     * @param services every service of the application
+     * @param services every service
      */
     public LiveBackend(ServiceRegistry services) {
         this.services = services;
@@ -118,8 +109,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns an empty string, because config.properties holds no
-     * module names.
+     * Returns an empty string: config.properties has no module names.
      */
     @Override
     public String getModuleName(String moduleCode) {
@@ -135,8 +125,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns the assessment AssessmentFactory built from the
-     * configuration.
+     * Returns the assessment built from the configuration.
      */
     @Override
     public Assessment getAssessment() {
@@ -160,8 +149,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns the run finished in this session for the section, or
-     * the newest saved run from HistoryService.listRuns.
+     * Returns this session's run for the section, else its newest saved run.
      */
     @Override
     public GradingRun getRun(Section section) {
@@ -197,8 +185,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns an empty list, because live mode uses the system
-     * file picker.
+     * Returns an empty list, because live mode uses the system file picker.
      */
     @Override
     public List<Path> getSampleFiles(InputKind kind) {
@@ -311,8 +298,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet: no service retries one chosen
-     * submission.
+     * Returns Not connected yet: no service retries one submission.
      */
     @Override
     public ActionResult retrySubmission(Submission submission) {
@@ -336,8 +322,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet: no service stores review
-     * decisions.
+     * Returns Not connected yet: no service stores review decisions.
      */
     @Override
     public ActionResult setDecision(Anomaly anomaly,
@@ -369,8 +354,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls AnomalyService.approveFix and checks that the fix
-     * status changed.
+     * Calls AnomalyService.approveFix and checks the fix status changed.
      */
     @Override
     public ActionResult approveRepair(RepairItem repair) {
@@ -381,8 +365,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls AnomalyService.undoFix and checks that the fix status
-     * changed.
+     * Calls AnomalyService.undoFix and checks the fix status changed.
      */
     @Override
     public ActionResult rejectRepair(RepairItem repair) {
@@ -394,8 +377,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet: no service returns a fix to
-     * Applied.
+     * Returns Not connected yet: no service returns a fix to Applied.
      */
     @Override
     public ActionResult undoRepairDecision(RepairItem repair) {
@@ -468,8 +450,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns an empty list, because no service stores manual
-     * marks.
+     * Returns an empty list, because no service stores manual marks.
      */
     @Override
     public List<ScoreAdjustment> listAdjustments(Submission submission) {
@@ -534,8 +515,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet: no service lists backup files with the
-     * run each holds.
+     * Returns Not connected yet: no service lists the run in each backup.
      */
     @Override
     public ActionResult restore(RunRecord record) {
@@ -543,9 +523,8 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls HistoryService.restore. The method returns nothing, so while
-     * its capability is still WAITING the call is treated as the
-     * placeholder it is and the result says Not connected yet.
+     * Calls HistoryService.restore. It returns nothing, so this says Not
+     * connected yet until the RESTORE capability works.
      */
     @Override
     public ActionResult restoreBackup(Path backupFile) {
@@ -563,8 +542,7 @@ public class LiveBackend implements DashboardBackend {
         if (Capability.RESTORE.getStatus() != CapabilityStatus.WORKS_NOW) {
             return ActionResult.notConnected(Capability.RESTORE);
         }
-        // The runs kept from this session may no longer match the
-        // restored results, so getRun reads them from the history again.
+        // Forget session runs so getRun reads the restored history.
         runsBySection.clear();
         return ActionResult.done("Restored the saved results from "
                 + backupFile.getFileName() + ".");
@@ -609,8 +587,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Validates every change, then calls
-     * SettingsService.updateSetting and save.
+     * Validates every change, then saves them with SettingsService.
      */
     @Override
     public ActionResult saveSettings(Map<String, String> changes) {
@@ -698,8 +675,7 @@ public class LiveBackend implements DashboardBackend {
         return new ImportItem(kind, path, "", ImportState.INVALID, message);
     }
 
-    // Works out the username shown for a zip file name, for display and
-    // duplicate checks only. SubmissionLoader decides the real username.
+    // Guesses the username from a zip name; SubmissionLoader sets the real one.
     private String usernameOf(String fileName) {
         String withoutPrefix = fileName.replaceFirst(
                 config.getString(ConfigKeys.ZIP_NAME_PREFIX_PATTERN), "");

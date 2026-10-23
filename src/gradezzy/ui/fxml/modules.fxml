@@ -4,9 +4,7 @@
   Modules screen: one panel per module with a tile for each of its
   sections, so sections always stay grouped under their module. Choosing
   a tile makes that section the one in the context bar.
-  Tier: SHOULD. Owner: Damien.
   Controller: gradezzy.ui.ModulesController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.scene.control.Button?>

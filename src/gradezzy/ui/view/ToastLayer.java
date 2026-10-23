@@ -1,14 +1,10 @@
 /*
  * File: ToastLayer.java
  *
- * Purpose: Shows short messages at the bottom centre of the window:
- * confirmations that disappear by themselves, and problems that stay
- * until the instructor closes them.
+ * Purpose: Shows short messages at the bottom centre of the window.
  *
  * Where it fits: MainController passes every showToast and showError
  * here. At most three messages are shown; the oldest goes first.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.view;
 
@@ -26,8 +22,6 @@ import gradezzy.ui.component.Icon;
 
 /**
  * The layer that shows messages.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ToastLayer {
 
@@ -67,8 +61,7 @@ public final class ToastLayer {
     public void showMessage(String message) {
         Notification toast = new Notification(message, Icon.CHECK.create());
         toast.getStyleClass().add("toast");
-        // A confirmation has nothing to press, so clicks pass through it
-        // to the controls it covers until it fades.
+        // Nothing to press, so clicks pass through to the controls below
         toast.setMouseTransparent(true);
         add(toast);
 
@@ -80,7 +73,7 @@ public final class ToastLayer {
     /**
      * Shows a problem that stays until the instructor closes it.
      *
-     * @param message what went wrong and what to do next
+     * @param message what went wrong and what to do
      */
     public void showProblem(String message) {
         Notification toast = new Notification(message, Icon.ERROR.create());

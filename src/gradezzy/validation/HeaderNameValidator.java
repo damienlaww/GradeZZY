@@ -5,8 +5,6 @@
  * header comment.
  *
  * Where it fits: Finds blank headers so HeaderNameFixer can fill them in.
- *
- * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.validation;
 

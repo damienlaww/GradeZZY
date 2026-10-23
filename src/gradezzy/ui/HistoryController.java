@@ -3,21 +3,12 @@
  *
  * Purpose: Controller of the history screen.
  *
- * Where it fits: Lists earlier grading runs and their backups, and
- * offers Back Up Now, Restore and Open Run. Before a restore it spells
- * out what happens: a recovery snapshot of the run shown now is saved
- * first, the chosen run is shown instead, and original ZIP files and
- * exported files are never changed. While no service lists the run each
- * backup holds (the proposed restore preview), the live application
- * restores a backup file the instructor picks with
- * HistoryService.restore instead. Demo mode never opens the file picker.
+ * Where it fits: Lists earlier runs and their backups, with Back Up Now,
+ * Restore and Open Run. Until the restore preview is connected, the live
+ * app asks the instructor for a backup file to restore.
  *
  * Note on untaught Java: backups and restores read and write files, so
- * each backend call runs in a javafx.concurrent.Task on a background
- * thread, as GradingTask does for grading. The screen is only changed
- * when the task has finished, back on the JavaFX thread.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * they run in a javafx.concurrent.Task on a background thread.
  */
 package gradezzy.ui;
 
@@ -60,8 +51,6 @@ import gradezzy.ui.component.Tone;
 
 /**
  * Controller of the history screen.
- *
- * <p>Tier: COULD. Owner: Damien.
  */
 public class HistoryController extends BaseController {
 
@@ -189,9 +178,7 @@ public class HistoryController extends BaseController {
     }
 
     /**
-     * Chooses how Restore works. Without a restore preview the live
-     * application asks for a backup file; demo mode always restores a
-     * run from the list.
+     * Chooses whether Restore uses the list or asks for a backup file.
      */
     @Override
     public void onAttach() {
@@ -211,11 +198,8 @@ public class HistoryController extends BaseController {
     }
 
     /**
-     * Opens the results of the selected run. Only the run shown now can
-     * be opened; another run must be restored first, which the sheet
-     * explains and offers.
-     *
-     * <p>Tier: SHOULD.
+     * Opens the results of the selected run. A run not shown now is
+     * restored first, after asking.
      */
     @FXML
     public void handleOpenRun() {
@@ -247,8 +231,7 @@ public class HistoryController extends BaseController {
     }
 
     /**
-     * Backs up the saved results now, in the background. The button is
-     * unavailable until the backup has finished.
+     * Backs up the saved results now, in the background.
      */
     @FXML
     public void handleBackup() {
@@ -276,9 +259,7 @@ public class HistoryController extends BaseController {
     }
 
     /**
-     * Restores a backup after a confirmation that lists what happens:
-     * the selected run from the list, or, in the live application while
-     * no restore preview exists, a backup file the instructor picks.
+     * Restores the selected run, or a chosen backup file, after asking.
      */
     @FXML
     public void handleRestore() {
@@ -314,14 +295,12 @@ public class HistoryController extends BaseController {
                 "Keep Current Run", false, () -> restore(record, false));
     }
 
-    // Restores a run in the background, then shows its results when
-    // asked to.
+    // Restores a run in the background, then opens its results if asked.
     private void restore(RunRecord record, boolean open) {
         Task<ActionResult> task = new Task<>() {
 
             /**
-             * Asks the backend to restore the run, on a background
-             * thread.
+             * Asks the backend to restore the run, on a background thread.
              *
              * @return what happened
              */
@@ -351,9 +330,7 @@ public class HistoryController extends BaseController {
         refresh();
     }
 
-    // Asks for a backup file, then restores it after a confirmation.
-    // Only the live application gets here; demo mode never opens the
-    // file picker.
+    // Asks for a backup file, then restores it once confirmed. Live only.
     private void restoreBackupFile() {
         if (!getBackend().supports(Capability.RESTORE)) {
             getShell().showNotConnected(Capability.RESTORE);
@@ -377,8 +354,7 @@ public class HistoryController extends BaseController {
         Task<ActionResult> task = new Task<>() {
 
             /**
-             * Asks the backend to restore the file, on a background
-             * thread.
+             * Asks the backend to restore the file, on a background thread.
              *
              * @return what happened
              */
@@ -422,8 +398,7 @@ public class HistoryController extends BaseController {
         refresh();
     }
 
-    // Shows that a backup or restore runs, or that it has ended, and
-    // keeps the buttons unavailable meanwhile.
+    // Marks a backup or restore as running or ended, and updates buttons.
     private void setBusy(boolean running, String message) {
         busy = running;
         busyMessage = message;
@@ -431,8 +406,7 @@ public class HistoryController extends BaseController {
         refreshStatus();
     }
 
-    // Starts a task on a background thread that never keeps the
-    // application open.
+    // Starts a task on a daemon thread, so it never keeps the app open.
     private static void runInBackground(Task<?> task, String name) {
         Thread worker = new Thread(task, name);
         worker.setDaemon(true);
@@ -465,8 +439,7 @@ public class HistoryController extends BaseController {
         refreshStatus();
     }
 
-    // Returns the run to select: the one chosen before, else the run
-    // shown now for the context bar's section, else the first.
+    // Returns the run chosen before, else the shown run, else the first.
     private RunRecord findSelected() {
         String section = getState().getSection().getLabel();
         RunRecord shown = null;
@@ -514,8 +487,7 @@ public class HistoryController extends BaseController {
         statusLabel.setText(status);
     }
 
-    // Enables the buttons that fit the chosen run, and none while a
-    // backup or restore runs.
+    // Enables the buttons that fit the chosen run, and none while busy.
     private void refreshButtons(RunRecord record) {
         boolean selected = record != null;
         backupButton.setDisable(busy);
@@ -586,8 +558,7 @@ public class HistoryController extends BaseController {
         }
     }
 
-    // Returns the numbered steps of restoring a backup file, or of
-    // restoring any chosen file when the file is null.
+    // Returns the steps of restoring a backup file; null means any file.
     private List<String> fileConsequences(Path backupFile) {
         String source = "the backup file you choose";
         if (backupFile != null) {

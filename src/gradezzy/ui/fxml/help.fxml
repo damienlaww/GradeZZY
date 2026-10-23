@@ -4,9 +4,7 @@
   Help screen: the demo walkthrough, keyboard shortcuts, what each result
   state means, recovery advice, the demo data switch and the backend
   connections of every capability.
-  Tier: SHOULD. Owner: Damien.
   Controller: gradezzy.ui.HelpController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import atlantafx.base.controls.ToggleSwitch?>

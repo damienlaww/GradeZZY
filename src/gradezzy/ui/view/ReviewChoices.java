@@ -1,15 +1,10 @@
 /*
  * File: ReviewChoices.java
  *
- * Purpose: Fills a filter's choice box with a "no filter" choice first,
- * then the values, each shown in plain words.
+ * Purpose: Fills a filter's choice box with "no filter" first, then the values.
  *
- * Where it fits: The type, severity and decision filters of Review
- * Anomalies and the student and state filters of Validation all use it,
- * so every filter reads the same way. The empty choice is null, which
- * stands for "show everything".
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Used by the filters of Review Anomalies and Validation.
+ * The "no filter" choice is null and stands for "show everything".
  */
 package gradezzy.ui.view;
 
@@ -23,8 +18,6 @@ import javafx.util.StringConverter;
 
 /**
  * Filter choices with a "no filter" entry.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ReviewChoices {
 
@@ -34,8 +27,7 @@ public final class ReviewChoices {
     }
 
     /**
-     * Fills a choice box: null first, shown with the "no filter" words,
-     * then each value, shown with its label.
+     * Fills a choice box with null, shown as noneText, then each value.
      *
      * @param <T> the type of the values
      * @param box the choice box

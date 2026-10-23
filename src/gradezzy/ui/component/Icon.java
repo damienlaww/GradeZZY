@@ -2,15 +2,10 @@
  * File: Icon.java
  *
  * Purpose: The line icons of the interface, drawn as SVG paths on a
- * 16 by 16 grid in the spirit of SF Symbols.
+ * 16 by 16 grid.
  *
- * Where it fits: Every screen and component that shows an icon calls
- * create(). No icon font or image file is used, so nothing is loaded
- * from the internet and the icons follow the theme colours through CSS.
- * An icon never carries meaning alone; a text label is always next to
- * it.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Screens and components call create(). The icons take
+ * the theme colours through CSS and always sit next to a text label.
  */
 package gradezzy.ui.component;
 
@@ -20,8 +15,6 @@ import javafx.scene.transform.Scale;
 
 /**
  * A line icon.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public enum Icon {
 

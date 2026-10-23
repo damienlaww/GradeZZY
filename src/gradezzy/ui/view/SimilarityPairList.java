@@ -1,17 +1,10 @@
 /*
  * File: SimilarityPairList.java
  *
- * Purpose: The list of similar pairs on the Similarity Review screen:
- * asks the backend for the pairs at or above the threshold, shows each
- * with its question, similarity and review decision, and keeps the pair
- * the instructor chose across reloads.
+ * Purpose: The list of similar pairs on the Similarity Review screen.
  *
  * Where it fits: The Similarity Review screen creates one in onAttach.
- * A pair's decision is the decision on the Similar code flags of its two
- * students; a pair with no flag is shown as Open. Similarity is a review
- * aid and never a finding.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Similarity is a review aid and never a finding.
  */
 package gradezzy.ui.view;
 
@@ -38,8 +31,6 @@ import gradezzy.ui.component.StatusBadge;
 
 /**
  * The list of similar pairs.
- *
- * <p>Tier: COULD. Owner: Damien.
  */
 public final class SimilarityPairList {
 
@@ -113,8 +104,7 @@ public final class SimilarityPairList {
     }
 
     /**
-     * Asks the backend for the pairs of a run and keeps those at or above
-     * the threshold.
+     * Loads the pairs of a run at or above the threshold.
      *
      * @param run the run, or null
      */
@@ -142,8 +132,7 @@ public final class SimilarityPairList {
     }
 
     /**
-     * Chooses the first listed pair that holds a student, when there is
-     * one.
+     * Chooses the first listed pair that holds a student, if any.
      *
      * @param username the student
      */
@@ -158,8 +147,7 @@ public final class SimilarityPairList {
     }
 
     /**
-     * Shows the pairs with their decisions, and selects the chosen pair
-     * again, or the first one.
+     * Shows the pairs and selects the chosen pair again, or the first.
      *
      * @param run the run of the section, or null
      */
@@ -308,8 +296,7 @@ public final class SimilarityPairList {
     }
 
     /**
-     * One pair in the list: both usernames, the question, the similarity
-     * and the review decision.
+     * One pair in the list, with its similarity and decision.
      */
     private final class PairCell extends ListCell<SimilarityPair> {
 

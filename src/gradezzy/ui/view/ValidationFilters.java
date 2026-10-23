@@ -1,16 +1,10 @@
 /*
  * File: ValidationFilters.java
  *
- * Purpose: The student and state filters of the Validation screen: fills
- * the choices, keeps the student choice when the run changes, and decides
- * which findings are shown.
+ * Purpose: The student and state filters of the Validation screen.
  *
- * Where it fits: The Validation screen creates one when its FXML is
- * loaded. UiState has no fields for these two filters; the screen is
- * loaded once and kept, so the choices still survive navigation and theme
- * switches.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: ValidationController creates one when its FXML is loaded.
+ * The screen is loaded once and kept, so the choices survive navigation.
  */
 package gradezzy.ui.view;
 
@@ -27,8 +21,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * The filters of the finding list.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ValidationFilters {
 
@@ -85,8 +77,7 @@ public final class ValidationFilters {
     }
 
     /**
-     * Lists the students of a new run. The chosen student stays chosen
-     * when the new run has them too.
+     * Lists the students of a new run, keeping the chosen one if present.
      *
      * @param usernames the usernames of the run
      */

@@ -1,16 +1,11 @@
 /*
  * File: EvidenceCaseRow.java
  *
- * Purpose: One row of the Cases table on the Student Evidence screen: a
- * test case of one question, or one Not compiled row for a question that
- * did not compile, with the plain words that explain it.
+ * Purpose: One row of the Cases table on the Student Evidence screen, with
+ * the plain words that explain it.
  *
- * Where it fits: EvidenceCasesTab lists these rows and EvidenceCaseDetails
- * shows the selected one. Expected and actual values are read from tester
- * details shaped "Failed: expected X but got Y". A case that never
- * printed a result is "Not finished", never a per-case time limit.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Listed by EvidenceCasesTab. Expected and actual values are
+ * read from tester details shaped "Failed: expected X but got Y".
  */
 package gradezzy.ui.view;
 
@@ -29,8 +24,6 @@ import gradezzy.ui.component.Tone;
 
 /**
  * One row of the Cases table.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class EvidenceCaseRow {
 
@@ -64,8 +57,8 @@ public final class EvidenceCaseRow {
     }
 
     /**
-     * Builds the rows of one student: one per case, or one Not compiled
-     * row per question that did not compile.
+     * Builds one student's rows: one per case, or a single row for a
+     * question that did not compile or ran no case.
      *
      * @param shown the student
      * @return the rows, or an empty list when the student is not graded
@@ -141,8 +134,7 @@ public final class EvidenceCaseRow {
     }
 
     /**
-     * Says whether the tester was stopped before the case printed a
-     * result.
+     * Says whether the tester was stopped before the case printed a result.
      *
      * @return true for an unfinished case
      */

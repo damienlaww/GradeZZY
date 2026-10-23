@@ -1,16 +1,10 @@
 /*
  * File: ReviewOutcome.java
  *
- * Purpose: Collects what happened when one action was applied to several
- * flags or repairs: which changed, the first problem, and whether a
- * backend was missing.
+ * Purpose: Collects the result of one action on several flags or repairs.
  *
- * Where it fits: ReviewDecisions fills one for bulk flag decisions, and
- * the Validation screen fills one for bulk repair decisions. The outcome
- * is then reported once, so the instructor sees one message, one audit
- * entry and at most one Not connected sheet.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: ReviewDecisions and RepairDecisions fill one per bulk
+ * action, so the instructor sees one message and one audit entry.
  */
 package gradezzy.ui.view;
 
@@ -24,8 +18,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * The outcome of one action on several anomalies.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ReviewOutcome {
 
@@ -35,7 +27,7 @@ public final class ReviewOutcome {
     // The anomalies the action changed
     private final List<Anomaly> changed = new ArrayList<>();
 
-    // The missing backend feature, or null while every call was answered
+    // The missing backend feature, or null
     private Capability missing = null;
 
     // The first problem reported, or an empty string
@@ -74,8 +66,7 @@ public final class ReviewOutcome {
     }
 
     /**
-     * Says whether nothing happened at all: nothing changed, nothing
-     * failed and no backend was missing.
+     * Says whether nothing changed, failed or came back Not connected.
      *
      * @return true when there is nothing to report
      */

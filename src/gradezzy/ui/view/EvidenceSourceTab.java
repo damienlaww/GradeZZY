@@ -1,16 +1,11 @@
 /*
  * File: EvidenceSourceTab.java
  *
- * Purpose: Fills the Source tab of the Student Evidence screen: the folder
- * tree of the student's working copy beside the read-only text of the
- * chosen file.
+ * Purpose: Fills the Source tab of Student Evidence: the working-copy tree
+ * beside the text of the chosen file.
  *
- * Where it fits: StudentReportController creates one, calls fill each
- * time the screen is shown and select when another question comes into
- * focus. It explains an empty tree (no working copy yet) and a file with
- * no text, naming the owner and service of SOURCE_VIEW in live mode.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: StudentReportController calls fill when the screen is
+ * shown and select when another question comes into focus.
  */
 package gradezzy.ui.view;
 
@@ -33,8 +28,6 @@ import gradezzy.ui.component.Icon;
 
 /**
  * The Source tab of the Student Evidence screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class EvidenceSourceTab {
 

@@ -5,8 +5,6 @@
  *
  * Where it fits: Every screen calls these so bad input gives a clear message
  * instead of an error. The brief penalises missing input validation.
- *
- * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.util;
 

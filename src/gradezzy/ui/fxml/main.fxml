@@ -4,9 +4,7 @@
   Main window: the sidebar, the context bar and the area that shows one
   screen at a time. Messages are layered over the content; sheets are
   layered over the whole window, with the window behind them inert.
-  Tier: MUST. Owner: Damien.
   Controller: gradezzy.ui.MainController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.scene.control.ComboBox?>

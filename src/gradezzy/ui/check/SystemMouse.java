@@ -1,18 +1,14 @@
 /*
  * File: SystemMouse.java
  *
- * Purpose: Drags the real mouse with the operating system's robot, for
- * drags between two windows.
+ * Purpose: Drags the real mouse between two windows.
  *
- * Where it fits: Used by RobotDriver. A drag between windows runs the
- * system's own loop on the JavaFX thread, so the JavaFX robot, which
- * must be called on that thread, cannot release the button. This robot
- * may be called from the test's own thread.
+ * Where it fits: Used by RobotDriver. A drag between windows holds the
+ * JavaFX thread, which the JavaFX robot needs, so it cannot release the
+ * button; this robot may be called from the test's own thread.
  *
  * Note on untaught Java: java.awt.Robot sends operating-system mouse
  * events, and java.awt.event.InputEvent names the mouse button.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.check;
 
@@ -22,8 +18,6 @@ import java.awt.event.InputEvent;
 
 /**
  * Drags the mouse with the operating system's robot.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class SystemMouse {
 
@@ -49,8 +43,7 @@ public final class SystemMouse {
     }
 
     /**
-     * Presses the left button at one point, moves in small steps to
-     * another, rests there, and releases the button.
+     * Drags with the left button from one point to another, in steps.
      *
      * @param start the screen point pressed, as x and y
      * @param end the screen point released on, as x and y

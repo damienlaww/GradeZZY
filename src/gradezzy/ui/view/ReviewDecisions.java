@@ -1,17 +1,12 @@
 /*
  * File: ReviewDecisions.java
  *
- * Purpose: Records the instructor's decisions on flags, one or several at
- * a time, keeps the decision each flag had before so it can be undone,
- * and reports the outcome once.
+ * Purpose: Records the instructor's decisions on flags, with Undo, and
+ * never changes a mark.
  *
- * Where it fits: Shared by Review Anomalies, Similarity Review and
- * Validation. The decision a flag had before its latest change is kept in
- * UiState, so Undo works from any of these screens. A bulk action shows
- * at most one Not connected sheet, one message and one audit entry. A
- * decision never changes a mark.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Used by Review Anomalies, Similarity Review and
+ * Validation. Earlier decisions are kept in UiState, so Undo works from
+ * any of them.
  */
 package gradezzy.ui.view;
 
@@ -30,8 +25,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * Review decisions with Undo and one report per action.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ReviewDecisions {
 
@@ -62,8 +55,7 @@ public final class ReviewDecisions {
     }
 
     /**
-     * Says whether flag decisions can be stored, and shows the Not
-     * connected sheet when they cannot.
+     * Says whether decisions can be stored, else shows Not connected.
      *
      * @return true when a backend stores decisions
      */
@@ -86,9 +78,8 @@ public final class ReviewDecisions {
     }
 
     /**
-     * Stores the decision a flag has now, so it can be undone, then
-     * records the new one. The stored decision is put back when the
-     * backend did not record the new one.
+     * Records a new decision and keeps the old one for Undo. If the
+     * backend fails, the Undo entry is left as it was.
      *
      * @param anomaly the flag
      * @param decision the new decision
@@ -127,8 +118,7 @@ public final class ReviewDecisions {
     }
 
     /**
-     * Says whether a flag's latest decision can be undone in this
-     * session.
+     * Says whether a flag's latest decision can be undone in this session.
      *
      * @param anomaly the flag
      * @return true when an earlier decision is stored
@@ -154,9 +144,8 @@ public final class ReviewDecisions {
     }
 
     /**
-     * Records one decision on several flags. Flags that already have it
-     * are left alone, and the work stops when no backend stores
-     * decisions.
+     * Records one decision on several flags, skipping those that have it.
+     * Stops when decisions cannot be stored.
      *
      * @param anomalies the flags
      * @param decision the new decision
@@ -194,8 +183,7 @@ public final class ReviewDecisions {
     }
 
     /**
-     * Records one decision on the selected flags of Review Anomalies and
-     * reports it once, or explains why nothing changed.
+     * Records one decision on the selected flags and reports it once.
      *
      * @param selected the selected flags
      * @param decision the new decision, Reviewed or Rejected
@@ -236,8 +224,7 @@ public final class ReviewDecisions {
     }
 
     /**
-     * Gives the selected flags of Review Anomalies back their earlier
-     * decisions and reports it once.
+     * Restores the selected flags' earlier decisions and reports it once.
      *
      * @param selected the selected flags
      * @return true when the screen should redraw
@@ -261,8 +248,7 @@ public final class ReviewDecisions {
     }
 
     /**
-     * Records one decision on one flag and shows the backend's message.
-     * Nothing happens when the flag is missing or already has it.
+     * Records one decision on one flag, unless it is null or already has it.
      *
      * @param anomaly the flag, or null
      * @param decision the new decision
@@ -282,8 +268,7 @@ public final class ReviewDecisions {
     }
 
     /**
-     * Gives one flag back its earlier decision and shows the backend's
-     * message. Nothing happens when there is nothing to undo.
+     * Gives one flag back its earlier decision, if it has one to undo.
      *
      * @param anomaly the flag, or null
      * @param auditAction the short audit name
@@ -301,9 +286,8 @@ public final class ReviewDecisions {
     }
 
     /**
-     * Shows the outcome of one backend action: a confirmation, a problem
-     * or a Not connected sheet. A successful action is recorded in the
-     * audit log. The sidebar counts are refreshed afterwards.
+     * Shows the outcome of one action and records a success in the audit
+     * log. Then refreshes the sidebar counts.
      *
      * @param result what the backend answered
      * @param auditAction the short audit name
@@ -322,16 +306,13 @@ public final class ReviewDecisions {
     }
 
     /**
-     * Reports the outcome of one action on several items once: the Not
-     * connected sheet or the first problem, then one message and one
-     * audit entry when something changed. The sidebar counts are
-     * refreshed afterwards.
+     * Reports an action on several items once, with one message and one
+     * audit entry if something changed. Then refreshes the sidebar counts.
      *
      * @param outcome what happened
      * @param auditAction the short audit name
      * @param message the message, in the past tense
-     * @param listLabel the word before the changed items in the audit
-     *        entry, such as "Flags", or an empty string to name none
+     * @param listLabel the word before the listed items, or an empty string
      */
     public void report(ReviewOutcome outcome, String auditAction,
             String message, String listLabel) {

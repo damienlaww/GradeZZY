@@ -1,14 +1,10 @@
 /*
  * File: ScreenCheck.java
  *
- * Purpose: Loads every screen with the live and the demo backend, shows
- * each one, and applies both themes, without opening a window. Reports
- * any FXML file, stylesheet or controller that fails.
+ * Purpose: Loads every screen in both modes and both themes, without a
+ * window, and reports any that fails.
  *
- * Where it fits: Run by "sh run.sh --check". Teammates run it after a
- * change to confirm every screen still opens.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Run by "sh run.sh --check" after a change.
  */
 package gradezzy.ui.check;
 
@@ -28,22 +24,20 @@ import gradezzy.ui.demo.DemoBackend;
 
 /**
  * Checks that every screen loads.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class ScreenCheck {
 
-    // The size of the window the screens are laid out in
+    // The window size the screens are laid out in
     private static final double WIDTH = 1200.0;
     private static final double HEIGHT = 800.0;
 
-    // Every service of the application
+    // Every service
     private final ServiceRegistry services;
 
     /**
      * Creates a screen check.
      *
-     * @param services every service of the application
+     * @param services every service
      */
     public ScreenCheck(ServiceRegistry services) {
         this.services = services;

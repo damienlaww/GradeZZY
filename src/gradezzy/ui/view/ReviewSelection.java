@@ -1,17 +1,11 @@
 /*
  * File: ReviewSelection.java
  *
- * Purpose: Gives a review table multiple selection that is remembered in
- * UiState, so the selected rows come back after a reload, a navigation
- * or a theme switch.
+ * Purpose: Gives a review table a multiple selection that is kept in
+ * UiState, so it survives a reload or a theme switch.
  *
  * Where it fits: Review Anomalies and Validation each wrap their table in
- * one. Rows are matched by a key, the anomaly id, because the backend may
- * return new row objects on every reload. The screen is told when the
- * selection changes and when the focused row changes, which JavaFX
- * reports one after the other.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * one. Rows are matched by anomaly id, since a reload may give new objects.
  */
 package gradezzy.ui.view;
 
@@ -29,8 +23,6 @@ import javafx.scene.control.TableView;
 
 /**
  * A remembered multiple selection of table rows.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  *
  * @param <T> the type of the rows
  */
@@ -61,9 +53,9 @@ public final class ReviewSelection<T> {
      * Sets up multiple selection on a table.
      *
      * @param table the table
-     * @param remembered the keys of the selected rows, kept in UiState
+     * @param remembered the selected keys, kept in UiState
      * @param keyOf returns the key of a row
-     * @param onChange run after the instructor changed the selection
+     * @param onChange run after the selection changed
      * @param onFocus run after the focused row changed
      */
     public ReviewSelection(TableView<T> table, Set<String> remembered,
@@ -84,11 +76,10 @@ public final class ReviewSelection<T> {
     }
 
     /**
-     * Shows new rows, or an explanation when there are none, and selects
-     * the remembered rows again.
+     * Shows new rows and selects the remembered rows again.
      *
      * @param shown the rows, in table order
-     * @param placeholder what the table shows when it has no rows
+     * @param placeholder shown when there are no rows
      */
     public void show(List<T> shown, Node placeholder) {
         rows.clear();
@@ -97,8 +88,7 @@ public final class ReviewSelection<T> {
         restoring = true;
         table.setItems(FXCollections.observableArrayList(rows));
         restoring = false;
-        // The rows may be the same objects with a new decision, which a
-        // table does not redraw by itself.
+        // A table does not redraw a changed row that is the same object.
         table.refresh();
         restore();
     }
@@ -193,8 +183,7 @@ public final class ReviewSelection<T> {
         onChange.run();
     }
 
-    // Tells the screen the focused row changed. JavaFX updates the
-    // focused row after the selected list, so both are followed.
+    // Reports a new focused row, which JavaFX sets after the selected list.
     private void focusChanged() {
         if (!restoring) {
             onFocus.run();

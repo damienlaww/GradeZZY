@@ -4,9 +4,7 @@
   Grading progress screen: overall progress, the pipeline stage, counts,
   timing, execution issues and one row per student, with Cancel, Resume
   and Retry.
-  Tier: MUST. Owner: Damien.
   Controller: gradezzy.ui.ProgressController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import gradezzy.ui.component.MetricTile?>

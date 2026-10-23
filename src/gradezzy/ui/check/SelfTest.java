@@ -2,17 +2,10 @@
  * File: SelfTest.java
  *
  * Purpose: Runs the seven demo flows of the brief without a window and
- * checks that each one ends as it should, so the interface can be tested
- * without clicking through it.
+ * checks how each one ends.
  *
- * Where it fits: Run by "sh run.sh --selftest". It builds the real main
- * window off screen with the demo backend, presses the same handler
- * methods the buttons call, steps the simulated grading run by hand, and
- * prints PASS or FAIL for each flow. Confirmation sheets are accepted
- * automatically, except the Cancel sheet of flow 2, whose explanation is
- * read before its button is pressed.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Run by "sh run.sh --selftest". It builds the main window
+ * off screen with the demo backend and calls the handlers the buttons call.
  */
 package gradezzy.ui.check;
 
@@ -63,8 +56,6 @@ import gradezzy.ui.demo.DemoData;
 
 /**
  * Runs the seven demo flows and checks their outcomes.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class SelfTest {
 
@@ -72,14 +63,13 @@ public class SelfTest {
     private static final double WIDTH = 1200.0;
     private static final double HEIGHT = 800.0;
 
-    // The simulated stages in one submission: start, eight more, finish
+    // Steps in one submission: start, eight more stages, then finish
     private static final int STEPS_PER_SUBMISSION = 10;
 
     // The submissions graded before Cancel in flow 2
     private static final int GRADED_BEFORE_CANCEL = 3;
 
-    // The steps into the last submission before Cancel at which flow 2
-    // checks the stage on show
+    // How far into the last submission flow 2 checks the stage
     private static final int STEPS_BEFORE_STAGE_CHECK = 4;
 
     // The six sample students
@@ -128,7 +118,7 @@ public class SelfTest {
     // The failed checks of the flow being run
     private final List<String> problems = new ArrayList<>();
 
-    // The repair approved in flow 3, checked again after the theme switch
+    // The repair approved in flow 3, checked again in flow 7
     private Anomaly approvedRepair = null;
 
     // The flag rejected and put back to Open in flow 3
@@ -218,8 +208,7 @@ public class SelfTest {
         return 1;
     }
 
-    // Flow 1: six files with one unreadable, replaced, then the roster and
-    // testers; Start Grading stays unavailable until then.
+    // Flow 1: import six files, replace the bad one, add roster and testers.
     private void flowImport() throws IOException {
         main.navigate(Screen.UPLOAD);
         UploadController upload = (UploadController) controller(
@@ -265,10 +254,7 @@ public class SelfTest {
                 "the list of blocking reasons is gone");
     }
 
-    // Flow 2: Progress shows the stage, the elapsed time and the time
-    // left; grading records a compile error and a timeout and carries on;
-    // Cancel explains and keeps the finished results; Resume grades the
-    // rest only.
+    // Flow 2: grade with a compile error and a timeout, cancel, then resume.
     private void flowGrade() throws IOException {
         UploadController upload = (UploadController) controller(
                 Screen.UPLOAD);
@@ -337,8 +323,7 @@ public class SelfTest {
                 "Results show the new run");
     }
 
-    // Flow 3: approve one repair in Validation; reject one flag in Review
-    // Anomalies, then undo that decision.
+    // Flow 3: approve a repair, reject a flag, then undo the rejection.
     private void flowDecisions() throws IOException {
         main.navigate(Screen.VALIDATION);
         ValidationController validation = (ValidationController) controller(
@@ -390,8 +375,7 @@ public class SelfTest {
         reopenedFlag = flag;
     }
 
-    // Flow 4: learner.bravo has 19/20 with a Q1a timeout on case 3;
-    // Retry Q1a passes and only Q1a changes.
+    // Flow 4: retry the timed-out Q1a of learner.bravo; only Q1a changes.
     private void flowRetry() throws IOException {
         state.setSelectedUsername(DemoData.TIMEOUT_USERNAME);
         main.navigate(Screen.STUDENT_REPORT);
@@ -454,8 +438,7 @@ public class SelfTest {
                 "Undo removed the change");
     }
 
-    // Flow 6: results follow the module and section, and exports use the
-    // selected students.
+    // Flow 6: results follow module and section; exports use the selection.
     private void flowExport() throws IOException {
         main.navigate(Screen.RESULTS);
         ResultsController results = (ResultsController) controller(
@@ -501,8 +484,7 @@ public class SelfTest {
         results.handleExportJson();
     }
 
-    // Flow 7: switching themes keeps the screen, filters, selection,
-    // progress and decisions.
+    // Flow 7: switching themes keeps the screens and their state.
     private void flowTheme() throws IOException {
         ScreenNavigator navigator = builder.getNavigator();
         Parent before = navigator.getView(Screen.RESULTS);
@@ -559,8 +541,7 @@ public class SelfTest {
         return builder.getNavigator().getController(screen);
     }
 
-    // Finds a node by its fx:id, written as "#id". Unlike lookup, it also
-    // looks inside scroll panes whose skin does not exist yet off screen.
+    // Finds a node by "#id"; lookup misses scroll panes with no skin yet.
     private Node findNode(Node node, String selector) {
         if (selector.equals("#" + node.getId())) {
             return node;
@@ -628,8 +609,7 @@ public class SelfTest {
         return "";
     }
 
-    // Presses the action button of the sheet on show, which is the last
-    // button of its row, as the instructor would.
+    // Presses the sheet's action button, the last button in its row.
     private void pressSheetAction() {
         Node holder = builder.getScene().lookup("#sheetHolder");
         Node row = null;

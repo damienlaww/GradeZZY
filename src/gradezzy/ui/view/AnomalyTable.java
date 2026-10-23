@@ -1,15 +1,11 @@
 /*
  * File: AnomalyTable.java
  *
- * Purpose: Builds the columns of the Review Anomalies table, describes
- * what it shows in the status line, and explains why it is empty when no
- * flag is shown.
+ * Purpose: Builds the Review Anomalies table, its status line and its
+ * empty states.
  *
  * Where it fits: The Review Anomalies screen creates one in onAttach. Each
- * row is one flag: the student, the flag with its message, the severity
- * and the review decision, each status as an icon and words.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * row is one flag with its student, message, severity and decision.
  */
 package gradezzy.ui.view;
 
@@ -31,8 +27,6 @@ import gradezzy.ui.component.StatusBadge;
 
 /**
  * The columns, status line and empty states of the flag table.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class AnomalyTable {
 
@@ -93,8 +87,7 @@ public final class AnomalyTable {
     }
 
     /**
-     * Describes how many flags wait for a decision, are shown and are
-     * selected.
+     * Describes how many flags wait for review, are shown and are selected.
      *
      * @param run the run of the section, or null
      * @param anomalies every flag of the run

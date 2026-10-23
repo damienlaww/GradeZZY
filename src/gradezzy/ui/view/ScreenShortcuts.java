@@ -1,13 +1,10 @@
 /*
  * File: ScreenShortcuts.java
  *
- * Purpose: The keyboard shortcut of each screen, in one place, so the
- * shortcuts, the sidebar tooltips and the Help screen always agree.
+ * Purpose: The keyboard shortcut of each screen, kept in one place.
  *
  * Where it fits: MainController installs the shortcuts and Sidebar shows
  * them in tooltips. SHORTCUT is Cmd on macOS and Ctrl on Windows.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.view;
 
@@ -26,18 +23,16 @@ import gradezzy.ui.Screen;
 
 /**
  * The keyboard shortcuts that open screens.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ScreenShortcuts {
 
-    // The nine digit keys, for Shortcut+1 to Shortcut+9
     // The fx:id of a screen's search field
     private static final String SEARCH_ID = "#searchField";
 
     // The fx:id of a screen's Select All button
     private static final String SELECT_ALL_ID = "#selectAllButton";
 
+    // The nine digit keys, for Shortcut+1 to Shortcut+9
     private static final KeyCode[] DIGITS = {KeyCode.DIGIT1, KeyCode.DIGIT2,
         KeyCode.DIGIT3, KeyCode.DIGIT4, KeyCode.DIGIT5, KeyCode.DIGIT6,
         KeyCode.DIGIT7, KeyCode.DIGIT8, KeyCode.DIGIT9};
@@ -89,9 +84,8 @@ public final class ScreenShortcuts {
     }
 
     /**
-     * Adds tooltips naming the shortcuts of a screen's search field
-     * (Shortcut+F) and Select All button (Shortcut+A in the table), when
-     * the screen has them and they have no tooltip yet.
+     * Adds shortcut tooltips to a screen's search field and Select All
+     * button, if they exist and have no tooltip yet.
      *
      * @param view the screen
      */

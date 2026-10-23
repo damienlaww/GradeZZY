@@ -5,8 +5,6 @@
  *
  * Where it fits: Finds files that exist but are misnamed, for example q1a.java
  * or Q1A.java.
- *
- * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.validation;
 

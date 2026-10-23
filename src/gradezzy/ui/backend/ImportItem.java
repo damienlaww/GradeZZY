@@ -1,13 +1,10 @@
 /*
  * File: ImportItem.java
  *
- * Purpose: One file or folder the instructor chose before grading, with
- * whether it can be used.
+ * Purpose: One file or folder chosen before grading, and whether it is usable.
  *
- * Where it fits: DashboardBackend.inspect creates these; ImportBatch
- * holds them; the Submissions screen lists them.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: DashboardBackend.inspect creates these, ImportBatch holds
+ * them and the Submissions screen lists them.
  */
 package gradezzy.ui.backend;
 
@@ -15,8 +12,6 @@ import java.nio.file.Path;
 
 /**
  * One chosen input file or folder.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class ImportItem {
 
@@ -38,11 +33,11 @@ public class ImportItem {
     /**
      * Creates an import item.
      *
-     * @param kind the group this file belongs to
+     * @param kind the group of the file
      * @param path the chosen file or folder
-     * @param username the student the file belongs to, or an empty string
+     * @param username the student, or an empty string
      * @param state whether the file can be used
-     * @param message why the file has this state, in plain words
+     * @param message why the file has this state
      */
     public ImportItem(InputKind kind, Path path, String username,
             ImportState state, String message) {

@@ -1,14 +1,10 @@
 /*
  * File: ResultState.java
  *
- * Purpose: The one state shown for a student's result, so ungraded, zero,
- * failed, flagged and completed results always look different.
+ * Purpose: The one state shown for a student's result.
  *
- * Where it fits: The Results, Overview, Statistics and Student Evidence
- * screens show it. It is worked out from the submission; it is never
- * stored.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Shown on the Results, Overview, Statistics and Student
+ * Evidence screens. It is worked out from the submission, never stored.
  */
 package gradezzy.ui.backend;
 
@@ -20,8 +16,6 @@ import gradezzy.model.SubmissionStatus;
 
 /**
  * The state shown for one student's result.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public enum ResultState {
 
@@ -67,8 +61,7 @@ public enum ResultState {
      * Works out the state of one submission.
      *
      * @param submission the submission
-     * @param waitingForReview whether a flag or repair of the submission
-     *        still waits for the instructor
+     * @param waitingForReview whether a flag or repair still waits for review
      * @return the state to show
      */
     public static ResultState of(Submission submission,
@@ -82,6 +75,7 @@ public enum ResultState {
                 || submission.getQuestionResults().isEmpty()) {
             return UNGRADED;
         }
+        // Check the anomaly, not isCompiled: a missing file is uncompiled too
         if (hasAnomaly(submission, AnomalyType.COMPILE_ERROR)) {
             return COMPILE_ERROR;
         }
@@ -98,11 +92,10 @@ public enum ResultState {
     }
 
     /**
-     * Works out the state of one submission, asking the backend which of
-     * its anomalies still wait for the instructor.
+     * Works out a submission's state, asking the backend about reviews.
      *
      * @param submission the submission
-     * @param backend the backend that holds the review decisions
+     * @param backend the backend with the review decisions
      * @return the state to show
      */
     public static ResultState of(Submission submission,
@@ -117,8 +110,7 @@ public enum ResultState {
     }
 
     /**
-     * Says whether a submission has a total that can be compared with
-     * other students.
+     * Says whether a submission has a total to compare with others.
      *
      * @param submission the submission
      * @return true when the submission was graded
@@ -128,9 +120,7 @@ public enum ResultState {
                 && !submission.getQuestionResults().isEmpty();
     }
 
-    // Says whether the submission has an anomaly of one type. A compile
-    // error is read from the anomaly, because a missing file also leaves
-    // a question uncompiled without being a compile error.
+    // Says whether the submission has an anomaly of one type.
     private static boolean hasAnomaly(Submission submission,
             AnomalyType type) {
         for (Anomaly anomaly : submission.getAnomalies()) {

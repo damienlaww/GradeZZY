@@ -1,14 +1,10 @@
 /*
  * File: SimilarityDetail.java
  *
- * Purpose: What the instructor needs to compare one similar pair fairly:
- * the two files, matching excerpts and what was left out of the
- * comparison.
+ * Purpose: The evidence the instructor needs to compare one similar pair.
  *
  * Where it fits: Returned by DashboardBackend.getSimilarityDetail and
  * shown on the Similarity Review screen.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.backend;
 
@@ -19,8 +15,6 @@ import gradezzy.plagiarism.SimilarityPair;
 
 /**
  * The evidence for one similar pair.
- *
- * <p>Tier: COULD. Owner: Damien.
  */
 public class SimilarityDetail {
 
