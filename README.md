@@ -225,7 +225,7 @@ feature's status from `WAITING` to `WORKS_NOW` in
 and `sh run.sh --selftest`. `design/UI-INTEGRATION.md` lists which screen
 shows each service method.
 
-Owners and TODO counts (44 left). The split is a starting point;
+Owners and TODO counts (15 left). The split is a starting point;
 the team can swap areas. The next section explains each person's work in
 detail.
 
@@ -235,8 +235,8 @@ detail.
 | Seth | `validation`, `InputValidator`, one stage; looks after `ui` | 0 |
 | Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 0 |
 | Zach | `exec`, `testcase`, three stages, the score parser | 3 |
-| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 13 |
-| Huxley | `report`, `stats`, `persistence`, one stage | 28 |
+| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 12 |
+| Huxley | `report`, `stats`, `persistence`, one stage | 0 |
 
 Jun Sheng built the whole `ui` package, so on 2026-10-16 the work was
 split again: Damien took the helpers and the reading of submissions
@@ -707,7 +707,7 @@ a student's compile error; explain when throwing is appropriate.
 ### 5. Jing Yuan: scoring, services and putting it together
 
 **Packages:** `app`, `config`, `model`, `service`, plus `ScoreStage` and
-`ScoreCalculator` in `grading`. 13 TODOs left (39 at the start). You
+`ScoreCalculator` in `grading`. 12 TODOs left (39 at the start). You
 also own the wiring (`PipelineFactory`, `ApplicationContext`), so you
 are the person who checks that the slices fit together.
 
@@ -768,8 +768,9 @@ write code until I pick.
 
 **Packages:** `report`, `stats`, `persistence`, plus `PersistStage` in
 `grading` and the TODO in `ApplicationContext` that opens the database.
-28 TODOs. You can start today: build against a `GradingRun` you fill in
-by hand with the ground truth scores, without waiting for the pipeline.
+All 28 TODOs are done. Every run is saved to SQLite through
+`PersistStage` and `GradingService`, so History can list it after a
+restart once `HistoryService` reads the repository.
 
 What to build, in order:
 
@@ -960,7 +961,7 @@ Kept to a minimum and confined to the classes named here:
 | `HashSet`, `String.join`, `List.subList` | `plagiarism.TokenSimilarityDetector` | Holds each answer's runs of three tokens for the similarity measure. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. |
 | `enum` | `model`, `ui.Screen` | Fixed lists of values. |
-| JDBC (to be written) | `persistence.SqliteResultRepository` | Talks to SQLite. |
+| JDBC (`Connection`, `PreparedStatement`, `ResultSet`), try-with-resources | `persistence.SqliteResultRepository` | Talks to SQLite and closes each statement even when a query fails. |
 | `ProcessBuilder`, `Process`, `ProcessHandle` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and kills a run and its child processes at the time limit. |
 | `Stream.toList()` | `exec.ProcessRunner.terminate` | Turns the child processes of a run into a list so they can be killed. |
 | `Thread.sleep` | `exec.ProcessRunner.run` | Pauses between checks of a running program, instead of using a reader thread. |
@@ -1042,7 +1043,7 @@ implemented. `[x]` means it works now.
 - [ ] Stop programs that exceed the time limit (`exec.ProcessRunner`)
 - [ ] Per-question and per-student scores
   (`grading.TesterOutputScoreParser`, `ScoreCalculator`)
-- [ ] Export in the provided CSV format (`report.CsvScoreSheetExporter`)
+- [x] Export in the provided CSV format (`report.CsvScoreSheetExporter`)
 - [x] Separate classes for validation, compilation, execution, grading
   and reporting (the package structure)
 - [x] Configuration in an external file (`config.properties`,
@@ -1076,13 +1077,13 @@ implemented. `[x]` means it works now.
 - [x] Light and dark theme switch (`ui.ThemeManager`, `ui.theme`)
 - [x] Settings page backed by `config.properties`
   (`service.SettingsService`, `ui.SettingsController`)
-- [ ] SQLite persistence behind `ResultRepository`
+- [x] SQLite persistence behind `ResultRepository`
   (`persistence.SqliteResultRepository`)
 - [ ] Audit log, exportable (`service.AuditService`,
   `report.AuditLogExporter`)
 - [ ] Individual student report, exportable
   (`report.StudentReportExporter`, `ui.StudentReportController`)
-- [ ] JSON export (`report.JsonExporter`, `JsonWriter`)
+- [x] JSON export (`report.JsonExporter`, `JsonWriter`)
 - [ ] Nielsen's 10 usability heuristics, reviewed screen by screen:
   https://www.nngroup.com/articles/ten-usability-heuristics/
 

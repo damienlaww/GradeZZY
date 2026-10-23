@@ -7,11 +7,16 @@
  */
 package gradezzy.report;
 
+import java.io.IOException;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import gradezzy.model.AuditEntry;
 import gradezzy.model.GradingRun;
+import gradezzy.util.FileUtils;
+import gradezzy.util.TextUtils;
 
 /**
  * Writes the audit log to a file.
@@ -29,6 +34,16 @@ public class AuditLogExporter implements Exporter {
      * The file extension, without the dot.
      */
     public static final String FILE_EXTENSION = "csv";
+
+    // The header row, in the order of the values in each row
+    private static final List<String> HEADER =
+            List.of("Time", "Action", "Detail");
+
+    // CSV files end each row with CRLF so spreadsheets read them cleanly
+    private static final String LINE_ENDING = "\r\n";
+
+    // Date, then the time to the second, so every row has the same width
+    private static final String TIME_FORMAT = "%sT%02d:%02d:%02d";
 
     // The entries to write
     private final List<AuditEntry> entries;
@@ -65,14 +80,65 @@ public class AuditLogExporter implements Exporter {
     /**
      * Writes the audit log to a file.
      *
+     * <p>One row per entry, in the order given. The audit log covers every
+     * run, so the grading run is not used and may be null.
+     *
      * @param gradingRun the grading run
      * @param outputFile the output file
      * @throws ExportException if the operation fails
      */
+    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public void export(GradingRun gradingRun,
             Path outputFile) throws ExportException {
-        // TODO(Huxley): implement: one row per audit entry: time, action,
-        //     detail
+        if (outputFile == null) {
+            throw new ExportException("Nothing to export: the file is "
+                    + "missing.");
+        }
+
+        StringBuilder output = new StringBuilder();
+        output.append(TextUtils.joinCsvLine(HEADER)).append(LINE_ENDING);
+        if (entries != null) {
+            for (AuditEntry entry : entries) {
+                output.append(TextUtils.joinCsvLine(toRow(entry)))
+                        .append(LINE_ENDING);
+            }
+        }
+
+        try {
+            FileUtils.writeText(outputFile, output.toString());
+        } catch (IOException exception) {
+            throw new ExportException("Could not write the audit log to "
+                    + outputFile + ". Check that the folder exists and is "
+                    + "not read-only.", exception);
+        }
+    }
+
+    // The values of one row, in the order of HEADER
+    private List<String> toRow(AuditEntry entry) {
+        List<String> row = new ArrayList<>();
+        row.add(formatTime(entry.getTimestamp()));
+        row.add(textOf(entry.getAction()));
+        row.add(textOf(entry.getDetail()));
+        return row;
+    }
+
+    // Writes the time to the second, for example 2026-10-21T15:42:50.
+    // LocalDateTime.toString would drop the seconds when they are zero.
+    private String formatTime(LocalDateTime timestamp) {
+        if (timestamp == null) {
+            return "";
+        }
+        return String.format(TIME_FORMAT, timestamp.toLocalDate(),
+                timestamp.getHour(), timestamp.getMinute(),
+                timestamp.getSecond());
+    }
+
+    // A missing value becomes an empty cell
+    private String textOf(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value;
     }
 }
