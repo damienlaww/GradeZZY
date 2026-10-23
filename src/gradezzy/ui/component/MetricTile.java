@@ -5,8 +5,6 @@
  *
  * Where it fits: Used on Overview, Grading Progress and Statistics. The
  * number is always paired with words, so it is never read alone.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.component;
 
@@ -15,8 +13,6 @@ import javafx.scene.layout.VBox;
 
 /**
  * One key number.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class MetricTile extends VBox {
 

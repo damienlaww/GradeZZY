@@ -4,17 +4,12 @@
  * Purpose: The status colours of the interface, each tied to one meaning.
  *
  * Where it fits: StatusBadge and banners add the style class of a tone.
- * Green, amber, red and the information blue mean grading status and
- * nothing else; NEUTRAL is for states that need no attention.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * These colours mean grading status and nothing else.
  */
 package gradezzy.ui.component;
 
 /**
  * A status colour.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public enum Tone {
 

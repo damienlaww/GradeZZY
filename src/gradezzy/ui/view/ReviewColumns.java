@@ -1,16 +1,10 @@
 /*
  * File: ReviewColumns.java
  *
- * Purpose: The table columns and cells the review screens share: the
- * student with their full name, the finding or flag with its message,
- * and a status badge.
+ * Purpose: The table columns and cells the review screens share.
  *
- * Where it fits: The Review Anomalies and Validation tables are built
- * from these, so both show students and findings the same way. Each
- * column receives the whole row; a function picks the anomaly or the
- * badge out of it.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: The Review Anomalies and Validation tables use these, so
+ * both show students and findings the same way.
  */
 package gradezzy.ui.view;
 
@@ -31,8 +25,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * Shared columns and cells of the review tables.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ReviewColumns {
 
@@ -48,14 +40,14 @@ public final class ReviewColumns {
     }
 
     /**
-     * Adds a column whose cells receive the whole row. Columns cannot be
-     * sorted by their header, because the screen keeps its own order.
+     * Adds an unsortable column whose cells receive the whole row, since
+     * the screen keeps its own order.
      *
      * @param <T> the type of the rows
      * @param table the table
      * @param title the column header
-     * @param minWidth the narrowest the column may get
-     * @param prefWidth the width the column starts from
+     * @param minWidth the narrowest width
+     * @param prefWidth the starting width
      * @return the column
      */
     public static <T> TableColumn<T, T> add(TableView<T> table,
@@ -71,8 +63,7 @@ public final class ReviewColumns {
     }
 
     /**
-     * Creates a cell that shows the username in bold with the full name
-     * under it.
+     * Creates a cell with the username in bold and the full name under it.
      *
      * @param <T> the type of the rows
      * @param students the students of the run
@@ -85,8 +76,7 @@ public final class ReviewColumns {
     }
 
     /**
-     * Creates a cell that shows a finding's title with its message under
-     * it. The whole message is in the tooltip.
+     * Creates a cell with a finding's title, its message and a tooltip.
      *
      * @param <T> the type of the rows
      * @param anomalyOf picks the anomaly out of a row

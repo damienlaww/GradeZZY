@@ -1,13 +1,10 @@
 /*
  * File: RepairItem.java
  *
- * Purpose: One finding from validation, with the change proposed for the
- * working copy, shown so the instructor can approve or reject it.
+ * Purpose: One validation finding and the repair proposed for it.
  *
- * Where it fits: DashboardBackend.listRepairs builds these from the
- * anomalies of a run. The Validation screen lists them side by side.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: DashboardBackend.listRepairs builds these from a run's
+ * anomalies, and the Validation screen lists them.
  */
 package gradezzy.ui.backend;
 
@@ -16,8 +13,6 @@ import gradezzy.model.FixStatus;
 
 /**
  * One validation finding and its proposed repair.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class RepairItem {
 
@@ -33,7 +28,7 @@ public class RepairItem {
     /**
      * Creates a repair item.
      *
-     * @param anomaly the anomaly the finding was recorded as
+     * @param anomaly the finding's anomaly
      * @param originalValue what the student submitted
      * @param proposedValue what the working copy holds after the repair
      */
@@ -72,8 +67,7 @@ public class RepairItem {
     }
 
     /**
-     * Says whether no automatic repair exists for this finding, so the
-     * instructor must handle it by hand.
+     * Says whether no automatic repair exists, so it is handled by hand.
      *
      * @return true when the fix status is NOT_FIXABLE
      */

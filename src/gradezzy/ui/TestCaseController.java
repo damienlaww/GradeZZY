@@ -3,14 +3,9 @@
  *
  * Purpose: Controller of the Assessments screen.
  *
- * Where it fits: Shows the rubric of the assessment (folders, required
- * files, testers and maximum marks), the time limits from
- * config.properties and the output each tester must print. The
- * instructor chooses where the testers come from: a tester folder or test
- * cases typed here. Both live in the import batch in UiState, so the
- * Submissions screen shows the same choice.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Shows the rubric and time limits, and lets the
+ * instructor choose a tester folder or typed test cases. The choice is
+ * kept in UiState, so the Submissions screen shows it too.
  */
 package gradezzy.ui;
 
@@ -63,8 +58,6 @@ import gradezzy.ui.component.Tone;
 
 /**
  * Controller of the Assessments screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class TestCaseController extends BaseController {
 
@@ -116,7 +109,7 @@ public class TestCaseController extends BaseController {
     // The gap between a file name and its message
     private static final double TEXT_GAP = 4.0;
 
-    // The gap between the icon, text and badge of the tester folder row
+    // The gap between the parts of the tester folder row
     private static final double ROW_GAP = 12.0;
 
     // The file extension of a tester source file
@@ -223,7 +216,7 @@ public class TestCaseController extends BaseController {
     }
 
     /**
-     * Fills in the rubric and the limits, which come from the backend.
+     * Fills in the rubric and the limits from the backend.
      */
     @Override
     public void onAttach() {
@@ -283,10 +276,7 @@ public class TestCaseController extends BaseController {
     }
 
     /**
-     * Lets the instructor pick the tester folder. Demo mode uses the
-     * sample testers instead of the folder picker.
-     *
-     * <p>Tier: MUST.
+     * Adds the tester folder; demo mode uses the sample testers.
      */
     @FXML
     public void handleUploadTesters() {
@@ -303,7 +293,7 @@ public class TestCaseController extends BaseController {
     }
 
     /**
-     * Adds a typed test case, through a form in a sheet.
+     * Opens a form for one typed test case.
      */
     @FXML
     public void handleAddTestCase() {
@@ -558,8 +548,7 @@ public class TestCaseController extends BaseController {
                 + capability.getStatus().getLabel() + ".";
     }
 
-    // Adds the Question, Folder, Required file, Tester and Maximum
-    // columns.
+    // Adds the five columns of the rubric table.
     private void buildRubricColumns() {
         TableColumn<Question, String> id = new TableColumn<>("Question");
         id.setCellValueFactory(data -> new ReadOnlyStringWrapper(
@@ -674,8 +663,7 @@ public class TestCaseController extends BaseController {
     }
 
     /**
-     * Shows code, such as a file or method name, in the code font. A
-     * long value is cut short in the cell; its tooltip holds all of it.
+     * A table cell for code, with the full text in a tooltip.
      *
      * @param <S> the type of the table rows
      */

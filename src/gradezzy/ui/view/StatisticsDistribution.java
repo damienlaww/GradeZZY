@@ -1,17 +1,11 @@
 /*
  * File: StatisticsDistribution.java
  *
- * Purpose: Fills the score distribution panel of the Statistics screen:
- * a horizontal bar chart of the mark bands, labelled in marks such as
- * "0 to 2", with the count at the end of each bar, an accessible text
- * that reads every band, and a one-sentence summary.
+ * Purpose: Fills the score distribution bar chart of the Statistics
+ * screen, with a count on each bar and a one-sentence summary.
  *
- * Where it fits: StatisticsController creates one and calls fill when
- * statistics are available. The bars use the primary colour from CSS,
- * never a status colour, and the chart does not animate when animations
- * are switched off.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: StatisticsController calls fill when statistics are
+ * available. Bars use the primary colour from CSS, never a status colour.
  */
 package gradezzy.ui.view;
 
@@ -34,8 +28,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * The score distribution of the Statistics screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class StatisticsDistribution {
 
@@ -82,8 +74,8 @@ public final class StatisticsDistribution {
      * Draws the score distribution and adds it to the summary text.
      *
      * @param summary the statistics
-     * @param max the most marks of the assessment
-     * @param text the plain-text summary, added to
+     * @param max the assessment's maximum mark
+     * @param text the plain-text summary to add to
      */
     public void fill(StatisticsSummary summary, double max,
             StringBuilder text) {
@@ -146,8 +138,7 @@ public final class StatisticsDistribution {
                 + " graded students each.";
     }
 
-    // Puts the count just past the end of a bar, in the text colour. The
-    // chart itself gives each bar its accessible text.
+    // Puts the count past a bar's end; JavaFX gives each bar its spoken text.
     private void labelBar(XYChart.Data<Number, String> data) {
         Node node = data.getNode();
         if (!(node instanceof StackPane)) {

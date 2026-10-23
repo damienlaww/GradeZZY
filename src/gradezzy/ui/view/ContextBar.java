@@ -1,16 +1,11 @@
 /*
  * File: ContextBar.java
  *
- * Purpose: Keeps the context bar in step with the shared state: the
- * module and section choices, the assessment, the grading run and the
- * Demo data badge.
+ * Purpose: Keeps the context bar's module, section, assessment, run and
+ * demo badge in step with UiState.
  *
- * Where it fits: Created by MainController with the context bar's FXML
- * nodes. A choice made here, or on another screen such as Modules,
- * updates both the bar and UiState, then tells MainController so the
- * screen on show reloads.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Created by MainController. A module or section change,
+ * here or on another screen, tells MainController to reload the screen.
  */
 package gradezzy.ui.view;
 
@@ -34,8 +29,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * The context bar at the top of the window.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public final class ContextBar {
 
@@ -79,7 +72,7 @@ public final class ContextBar {
      * @param demoBadge shown only in demo mode
      * @param captions caption labels dropped in a compact window
      * @param backend the backend
-     * @param state the state shared by every screen
+     * @param state the shared state
      * @param onContextChanged called after the module or section changed
      */
     public ContextBar(ComboBox<String> moduleBox,

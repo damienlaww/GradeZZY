@@ -3,17 +3,9 @@
  *
  * Purpose: Controller of the statistics dashboard.
  *
- * Where it fits: Shows how the graded students of one module and section
- * did: completion, mean, median and pass rate, the score distribution,
- * the pass rate of each question, how often each anomaly occurred and
- * the most common mistakes. Ungraded students are left out of every
- * figure, never counted as zero. Every chart and bar list has a one
- * sentence summary, and Copy Summary puts every figure on the clipboard
- * as plain text. The module and section choices stay in step with the
- * context bar. The tiles, chart, bars and mistakes are filled by classes
- * in gradezzy.ui.view; this controller chooses what to show.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Shows figures for the graded students of one section;
+ * ungraded students are left out, never counted as zero. The panels are
+ * filled by classes in gradezzy.ui.view.
  */
 package gradezzy.ui;
 
@@ -50,8 +42,6 @@ import gradezzy.ui.view.StatisticsTiles;
 
 /**
  * Controller of the statistics dashboard.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class StatisticsController extends BaseController {
 
@@ -151,7 +141,7 @@ public class StatisticsController extends BaseController {
     // Lists the common mistakes
     private StatisticsMistakes mistakes = null;
 
-    // Whether the filter choices are being filled in by code
+    // True while code fills in the filter choices
     private boolean filling = false;
 
     // Every figure on show as plain text, for Copy Summary
@@ -177,7 +167,7 @@ public class StatisticsController extends BaseController {
 
     /**
      * Creates the parts that fill the panels and keeps the module and
-     * section choices in step with the context bar.
+     * section filters in step with the context bar.
      */
     @Override
     public void onAttach() {
@@ -205,8 +195,7 @@ public class StatisticsController extends BaseController {
     }
 
     /**
-     * Applies the module and section chosen on this screen, which also
-     * changes them in the context bar.
+     * Applies the chosen module and section, also in the context bar.
      */
     @FXML
     public void handleFilterChanged() {
@@ -252,11 +241,9 @@ public class StatisticsController extends BaseController {
     }
 
     /**
-     * Returns the plain-text summary that Copy Summary puts on the
-     * clipboard. Used by the self-test.
+     * Returns the Copy Summary text. Used by the self-test.
      *
-     * @return the summary, or an empty string when there are no
-     *         statistics
+     * @return the summary, or an empty string if there is none
      */
     public String getSummaryText() {
         return summaryText;

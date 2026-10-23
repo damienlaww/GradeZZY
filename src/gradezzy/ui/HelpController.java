@@ -3,15 +3,9 @@
  *
  * Purpose: Controller of the Help screen.
  *
- * Where it fits: Explains how to use GradeZZY: the seven demo flows as
- * numbered steps, the keyboard shortcuts as this computer writes them,
- * what each result state means and how to recover from common problems.
- * Its Backend connections table lists every Capability with what it
- * does for the instructor, its owner, service method and status, so each
- * teammate can see which parts of the interface wait for their code. In
- * demo mode it also offers the large sample cohort.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Shows the demo steps, shortcuts, result states and advice
+ * for common problems. Its Backend connections table shows which features
+ * wait for a teammate.
  */
 package gradezzy.ui;
 
@@ -51,8 +45,6 @@ import gradezzy.ui.component.Tone;
 
 /**
  * Controller of the Help screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class HelpController extends BaseController {
 
@@ -319,8 +311,7 @@ public class HelpController extends BaseController {
                 "Close a sheet without changing anything");
     }
 
-    // Returns a key with the Shortcut modifier as this computer writes
-    // it, such as "Ctrl+F".
+    // Returns a Shortcut key as this computer writes it, such as Ctrl+F.
     private String shortcut(KeyCode code) {
         return new KeyCodeCombination(code, KeyCombination.SHORTCUT_DOWN)
                 .getDisplayText();
@@ -464,8 +455,7 @@ public class HelpController extends BaseController {
     }
 
     /**
-     * Shows how ready a capability is as an icon and words. The badge is
-     * neutral, because green, amber and red mean grading status only.
+     * Shows a capability status as a neutral badge; colour means grade status.
      */
     private static class StatusCell
             extends TableCell<Capability, CapabilityStatus> {
@@ -496,8 +486,7 @@ public class HelpController extends BaseController {
     }
 
     /**
-     * Shows text that wraps within its column, so long needs stay
-     * readable at any window width.
+     * Shows text that wraps, so long text stays readable at any width.
      */
     private static class WrapCell extends TableCell<Capability, String> {
 
@@ -538,8 +527,7 @@ public class HelpController extends BaseController {
         }
 
         /**
-         * Returns the height the wrapped text needs at the column's
-         * width.
+         * Returns the height the wrapped text needs at the column's width.
          *
          * @param width ignored; the column's width is used
          * @return the preferred height

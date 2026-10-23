@@ -6,9 +6,7 @@
   repairs, the mark history and the anomalies. Offers Retry for the
   narrowest failed question, Retry Entire Submission, Adjust Score with
   a required reason and Undo, and Export Report.
-  Tier: SHOULD. Owner: Damien.
   Controller: gradezzy.ui.StudentReportController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.scene.control.Button?>

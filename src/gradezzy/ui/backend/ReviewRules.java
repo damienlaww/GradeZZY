@@ -1,14 +1,10 @@
 /*
  * File: ReviewRules.java
  *
- * Purpose: The few rules both backends share about when an anomaly
- * still waits for the instructor and which anomalies are validation
- * findings.
+ * Purpose: The review rules that both backends share.
  *
  * Where it fits: Used by LiveBackend and DemoBackend so both modes
  * decide "needs review" the same way.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.backend;
 
@@ -18,8 +14,6 @@ import gradezzy.model.FixStatus;
 
 /**
  * Shared review rules.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ReviewRules {
 
@@ -29,8 +23,7 @@ public final class ReviewRules {
     }
 
     /**
-     * Says whether the instructor has already settled an anomaly's
-     * repair by approving or undoing it.
+     * Says whether an anomaly's repair was approved or undone.
      *
      * @param anomaly the anomaly
      * @return true when the repair was approved or undone
@@ -53,8 +46,7 @@ public final class ReviewRules {
     }
 
     /**
-     * Says whether an anomaly type comes from checking the structure,
-     * names and headers of a submission.
+     * Says whether an anomaly type is a validation finding.
      *
      * @param type the anomaly type
      * @return true for structure, file and header findings

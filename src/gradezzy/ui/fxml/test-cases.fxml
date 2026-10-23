@@ -4,9 +4,7 @@
   Assessments screen: the rubric with its folders, files and testers, the
   time limits, the tester output format, and the tester source: a tester
   folder or typed test cases.
-  Tier: SHOULD. Owner: Damien.
   Controller: gradezzy.ui.TestCaseController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.scene.control.Button?>

@@ -3,22 +3,8 @@
  *
  * Purpose: Starts the JavaFX window of GradeZZY.
  *
- * Where it fits: The graphical entry point, started by run.sh and
- * run.bat. It loads the configuration, builds the services through
- * ApplicationContext (the same wiring the console uses), chooses the live
- * or demo backend and shows the main window. The developer flags only
- * dispatch to classes in gradezzy.ui.check:
- *   --check      load every screen in both modes and themes, then exit
- *   --demo       use synthetic demo data instead of the real services
- *   --selftest   run the seven demo flows without a window, then exit
- *   --snapshot   save pictures of every screen, then exit; an optional
- *                folder and comma-separated screen list may follow, and
- *                --fullpage also saves each scrolling page whole
- *   --windowtest drive the real window with real mouse and keyboard
- *                input, then exit; an optional picture folder may follow
- *
- * AI use: the backend choice and developer flags drafted with Claude
- * Code, reviewed by Jun Sheng.
+ * Where it fits: Started by run.sh and run.bat. Shows the main window with
+ * the live or demo backend, or runs a developer check in gradezzy.ui.check.
  */
 package gradezzy.ui;
 
@@ -49,16 +35,10 @@ import gradezzy.ui.demo.DemoBackend;
 
 /**
  * The JavaFX application class and graphical entry point.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class MainApp extends Application {
 
-    /**
-     * Command line argument that loads every screen once and then exits,
-     * without showing a window. Used to check that all FXML files,
-     * stylesheets and controllers load: run.sh --check
-     */
+    /** Command line argument that loads every screen once and exits. */
     public static final String CHECK_ARGUMENT = "--check";
 
     /** Command line argument that shows synthetic demo data. */
@@ -73,11 +53,7 @@ public class MainApp extends Application {
     /** With --snapshot, also saves each scrolling page at full height. */
     public static final String FULL_PAGE_ARGUMENT = "--fullpage";
 
-    /**
-     * Command line argument that tests the real window with real mouse
-     * and keyboard input. Leave the mouse and keyboard alone while it
-     * runs.
-     */
+    /** Command line argument that tests the window with real input. */
     public static final String WINDOW_TEST_ARGUMENT = "--windowtest";
 
     /** The folder pictures are saved to when none is given. */
@@ -88,14 +64,14 @@ public class MainApp extends Application {
     public static final String DEFAULT_WINDOW_TEST_FOLDER =
             "workspace/ui-window-test";
 
-    // The smallest window: a 1200 by 800 window at 200 percent scaling
+    // The smallest window: a 1200 by 800 screen at 200 percent scaling
     private static final double MIN_WIDTH = 600.0;
     private static final double MIN_HEIGHT = 400.0;
 
-    // The exit code of a developer flag, given to the operating system
+    // The exit code of a developer flag
     private static int exitCode = 0;
 
-    // The services of the application; null until start succeeds
+    // The services; null until start succeeds
     private ApplicationContext context = null;
 
     /**
@@ -111,8 +87,7 @@ public class MainApp extends Application {
     }
 
     /**
-     * Builds the application and shows the main window, or runs a
-     * developer flag. JavaFX calls this once at start-up.
+     * Shows the main window, or runs a developer flag. Called once by JavaFX.
      *
      * @param stage the main window
      */
@@ -160,8 +135,7 @@ public class MainApp extends Application {
     }
 
     /**
-     * Releases the database and other resources. JavaFX calls this when
-     * the application ends.
+     * Releases the database and other resources when the app ends.
      */
     @Override
     public void stop() {
@@ -212,8 +186,7 @@ public class MainApp extends Application {
         return Paths.get(defaultFolder);
     }
 
-    // Returns the screens named after the snapshot folder, such as
-    // "RESULTS,PROGRESS", or an empty list for every screen.
+    // Returns the screens listed after the folder; empty means every one.
     private List<Screen> snapshotScreens(List<String> args) {
         List<Screen> screens = new ArrayList<>();
         int index = args.indexOf(SNAPSHOT_ARGUMENT) + 2;

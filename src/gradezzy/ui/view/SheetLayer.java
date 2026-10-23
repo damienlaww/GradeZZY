@@ -1,16 +1,12 @@
 /*
  * File: SheetLayer.java
  *
- * Purpose: Shows one sheet at a time over the whole window, on a dimmed
- * backdrop, with the window behind it taking no clicks and no keyboard
- * focus until the sheet closes.
+ * Purpose: Shows one sheet at a time and blocks the window behind it until
+ * the sheet closes.
  *
- * Where it fits: MainController passes confirmations, forms, previews
- * and Not connected yet panels here. It is built on plain JavaFX instead
- * of AtlantaFX's ModalPane, because ModalPane in AtlantaFX 3.0.0 calls
- * Interpolator.ofSpline, which JavaFX 25.0.4 does not have.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: MainController passes every sheet here. It uses plain JavaFX
+ * because AtlantaFX 3.0.0's ModalPane calls Interpolator.ofSpline, which
+ * JavaFX 25.0.4 does not have.
  */
 package gradezzy.ui.view;
 
@@ -30,8 +26,6 @@ import gradezzy.ui.component.Sheet;
 
 /**
  * The layer that shows sheets.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class SheetLayer {
 
@@ -60,7 +54,7 @@ public final class SheetLayer {
      * Creates the sheet layer.
      *
      * @param layer the layer over the window
-     * @param holder holds the sheet at the top centre of the layer
+     * @param holder holds the sheet
      * @param behind the window behind the sheet
      * @param animations whether sheets slide and fade
      */

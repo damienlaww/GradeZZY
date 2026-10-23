@@ -3,9 +3,7 @@
 <!--
   Audit Log screen: every instructor action and automatic repair, newest
   first, with search, an action filter and an export preview.
-  Tier: SHOULD. Owner: Damien.
   Controller: gradezzy.ui.AuditLogController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.scene.control.Button?>

@@ -1,14 +1,10 @@
 /*
  * File: RunFollower.java
  *
- * Purpose: Handles the end of a background grading run the same way for
- * every screen that starts one: it updates the monitor, refreshes the
- * window, records the outcome in the audit log and tells the instructor.
+ * Purpose: Handles the end of a grading run the same way on every screen.
  *
- * Where it fits: The RunCallback given to DashboardBackend by the
- * Submissions and Grading Progress screens.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: The RunCallback that the Submissions and Grading Progress
+ * screens give to DashboardBackend.
  */
 package gradezzy.ui;
 
@@ -18,29 +14,27 @@ import gradezzy.ui.backend.RunCallback;
 
 /**
  * Follows a grading run to its end.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class RunFollower implements RunCallback {
 
     // The backend, for the audit log
     private final DashboardBackend backend;
 
-    // The state shared by every screen
+    // The shared state
     private final UiState state;
 
     // The window, for messages
     private final AppShell shell;
 
-    // What started, such as "Grading", for the messages
+    // What started, such as "Grading"
     private final String activity;
 
     /**
      * Creates a follower for one run.
      *
-     * @param backend the backend, for the audit log
-     * @param state the state shared by every screen
-     * @param shell the window, for messages
+     * @param backend the backend
+     * @param state the shared state
+     * @param shell the window
      * @param activity what started, such as "Grading"
      */
     public RunFollower(DashboardBackend backend, UiState state,
@@ -68,7 +62,7 @@ public class RunFollower implements RunCallback {
     }
 
     /**
-     * Records the failure and tells the instructor what to do next.
+     * Records the failure and tells the instructor.
      *
      * @param message what went wrong and what to do next
      */

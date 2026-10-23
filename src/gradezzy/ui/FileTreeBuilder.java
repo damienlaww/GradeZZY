@@ -3,10 +3,8 @@
  *
  * Purpose: Builds the tree view of a submission's folders and files.
  *
- * Where it fits: Used by the upload and student report screens, through
- * LiveBackend for a real working copy and DemoBackend for sample files.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Used by the Source tab of Student Evidence, through
+ * LiveBackend for a working copy and DemoBackend for sample files.
  */
 package gradezzy.ui;
 
@@ -21,18 +19,15 @@ import javafx.scene.control.TreeItem;
 
 /**
  * Builds the tree view of a submission's folders and files.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class FileTreeBuilder {
 
     /**
-     * The most entries added to one tree, so a huge or looping folder
-     * cannot freeze the window.
+     * The most entries in one tree, so a huge folder cannot freeze the app.
      */
     public static final int MAX_ENTRIES = 2000;
 
-    // The separator used in relative paths shown to the instructor
+    // The separator in relative paths
     private static final String SEPARATOR = "/";
 
     // The number of entries added to the tree being built
@@ -67,7 +62,7 @@ public class FileTreeBuilder {
     /**
      * Builds a tree from relative file paths, such as "Q1/Q1a.java".
      *
-     * @param rootName the name shown for the top folder
+     * @param rootName the name of the top folder
      * @param relativePaths the files, with folders separated by "/"
      * @return the root item
      */
@@ -87,9 +82,9 @@ public class FileTreeBuilder {
     }
 
     /**
-     * Returns the path of a tree item relative to the root of its tree.
+     * Returns the path of a tree item relative to its tree's root.
      *
-     * @param item an item of a tree built by this class
+     * @param item an item of a tree built here
      * @return the relative path, such as "Q1/Q1a.java"
      */
     public static String relativePath(TreeItem<String> item) {

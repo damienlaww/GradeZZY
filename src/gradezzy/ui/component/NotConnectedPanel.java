@@ -1,14 +1,10 @@
 /*
  * File: NotConnectedPanel.java
  *
- * Purpose: Explains that a feature has no backend yet: what it needs,
- * who owns it and which service method it waits for. It never pretends
- * the action happened.
+ * Purpose: Explains that a feature has no backend yet and what it waits for.
  *
- * Where it fits: Shown inline on a screen, or in a sheet when the
- * instructor presses a button whose capability is not supported.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Shown on a screen, or in a sheet when the instructor
+ * presses a button whose capability is not supported.
  */
 package gradezzy.ui.component;
 
@@ -22,8 +18,6 @@ import gradezzy.ui.backend.Capability;
 
 /**
  * A Not connected yet message for one capability.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public final class NotConnectedPanel extends VBox {
 

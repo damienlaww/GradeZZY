@@ -1,15 +1,10 @@
 /*
  * File: EvidenceCaseDetails.java
  *
- * Purpose: Fills the panel beside the Cases table on the Student Evidence
- * screen: what the tester expected, what the code produced, the time
- * limit, the marks kept, the last lines of the output and plain advice.
+ * Purpose: Fills the panel beside the Cases table on Student Evidence.
  *
  * Where it fits: EvidenceCasesTab calls show whenever a row is selected.
- * The time limit is the configured limit for one tester run, never a
- * per-case limit.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * The time limit shown is for one tester run, not for one case.
  */
 package gradezzy.ui.view;
 
@@ -25,8 +20,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * The details of the case selected on the Cases tab.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class EvidenceCaseDetails {
 
@@ -69,8 +62,7 @@ public final class EvidenceCaseDetails {
      * @param backend the backend, for the configured time limit
      * @param title the heading, such as "Q1a case 3"
      * @param badgeHolder holds the outcome badge
-     * @param facts the values and the excerpt, hidden when no case is
-     *        selected
+     * @param facts the values and excerpt, hidden when no case is selected
      * @param expected what the tester expected
      * @param actual what the code produced
      * @param limit the time limit of one tester run

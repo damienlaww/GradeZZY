@@ -3,18 +3,13 @@
  *
  * Purpose: Says whether a chosen input file can be used for grading.
  *
- * Where it fits: Each ImportItem has one state. The Submissions screen
- * shows it as a status label and ImportBatch uses it to decide whether
- * grading may start.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Each ImportItem has one state, shown on the Submissions
+ * screen and used by ImportBatch.
  */
 package gradezzy.ui.backend;
 
 /**
  * The state of one chosen input file.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public enum ImportState {
 

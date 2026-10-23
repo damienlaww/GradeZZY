@@ -7,8 +7,6 @@
  * theme is on. Only token values change, so every component keeps its
  * shape and the switch keeps all state. Status colours are lighter here
  * because the light-theme values fail contrast on dark surfaces.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 
 .root {

@@ -3,9 +3,7 @@
 <!--
   Overview screen: where the instructor is, what has been graded, what
   waits for review, the main grading journey, sections and recent activity.
-  Tier: SHOULD. Owner: Damien.
   Controller: gradezzy.ui.OverviewController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import gradezzy.ui.component.MetricTile?>

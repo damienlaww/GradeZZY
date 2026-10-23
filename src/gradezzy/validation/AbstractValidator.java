@@ -5,8 +5,6 @@
  *
  * Where it fits: Holds the name and the helper that builds an Anomaly, so each
  * concrete validator only contains its own rule.
- *
- * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.validation;
 

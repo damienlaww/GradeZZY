@@ -1,14 +1,10 @@
 /*
  * File: ImportBatch.java
  *
- * Purpose: Holds the files chosen for the next grading run and decides
- * whether grading may start.
+ * Purpose: Holds the files for the next grading run and says if it may start.
  *
  * Where it fits: Kept in UiState so the choices survive navigation. The
  * Submissions screen fills it and DashboardBackend.startGrading reads it.
- * It only checks what was chosen; it never opens a file.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.backend;
 
@@ -20,8 +16,6 @@ import gradezzy.testcase.TestCase;
 
 /**
  * The files chosen for the next grading run.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class ImportBatch {
 
@@ -69,8 +63,8 @@ public class ImportBatch {
     }
 
     /**
-     * Adds a chosen file. A roster, tester folder or starter folder
-     * replaces the one chosen before, because a run uses only one.
+     * Adds a chosen file. A new roster, tester folder or starter folder
+     * replaces the old one, as a run uses only one.
      *
      * @param item the chosen file
      */
@@ -217,8 +211,7 @@ public class ImportBatch {
     }
 
     /**
-     * Returns every reason grading cannot start yet. An empty list means
-     * the batch is ready.
+     * Returns every reason grading cannot start yet; empty means ready.
      *
      * @return plain sentences, one per problem
      */

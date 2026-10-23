@@ -1,14 +1,11 @@
 /*
  * File: StatusBadge.java
  *
- * Purpose: Shows a status as an icon and a text label together, so no
- * status depends on colour alone.
+ * Purpose: Shows a status as an icon and a label, so it never relies on
+ * colour alone.
  *
- * Where it fits: Every list and inspector uses these for result states,
- * anomaly severities, repair states, review decisions and import states.
- * The label uses the normal text colour; only the icon is coloured.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Lists and inspectors use it for every kind of status.
+ * Only the icon is coloured.
  */
 package gradezzy.ui.component;
 
@@ -25,8 +22,6 @@ import gradezzy.ui.backend.ReviewDecision;
 
 /**
  * An icon and a label that show one status.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class StatusBadge extends HBox {
 

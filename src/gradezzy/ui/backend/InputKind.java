@@ -1,20 +1,15 @@
 /*
  * File: InputKind.java
  *
- * Purpose: Names the four groups of files the instructor adds before
- * grading.
+ * Purpose: The four groups of files the instructor adds before grading.
  *
  * Where it fits: The Submissions screen shows one group per constant,
- * and ImportBatch keeps the chosen files apart by group.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * and ImportBatch keeps the files apart by group.
  */
 package gradezzy.ui.backend;
 
 /**
  * A group of input files.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public enum InputKind {
 

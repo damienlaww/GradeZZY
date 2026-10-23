@@ -3,13 +3,8 @@
  *
  * Purpose: Controller of the Audit Log screen.
  *
- * Where it fits: Lists every recorded instructor action and automatic
- * repair, newest first, with a search and an action filter. Other
- * screens add entries, so the list is read again each time the screen is
- * shown. Exporting the log is a proposed backend feature; until it is
- * connected, the export shows a preview and writes no file.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Lists every instructor action and automatic repair,
+ * newest first. Export is not in the backend yet, so it writes no file.
  */
 package gradezzy.ui;
 
@@ -43,8 +38,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * Controller of the audit log screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class AuditLogController extends BaseController {
 
@@ -104,7 +97,7 @@ public class AuditLogController extends BaseController {
     // The entries shown, after search and filter
     private final List<AuditEntry> shown = new ArrayList<>();
 
-    // The search text, kept while the instructor visits other screens
+    // The search text, kept when the instructor leaves the screen
     private String query = "";
 
     // The chosen action, or ALL_ACTIONS
@@ -147,8 +140,7 @@ public class AuditLogController extends BaseController {
     }
 
     /**
-     * Reads the audit log again each time the screen is shown, because
-     * other screens add entries.
+     * Reloads the log each time it is shown, as other screens add entries.
      */
     @Override
     public void onShow() {
@@ -171,8 +163,8 @@ public class AuditLogController extends BaseController {
     }
 
     /**
-     * Exports the entries shown. Until an audit export exists in the
-     * backend, this shows a CSV preview and writes no file.
+     * Previews the entries shown as CSV, or says export is not connected.
+     * It writes no file.
      */
     @FXML
     public void handleExport() {
@@ -228,8 +220,7 @@ public class AuditLogController extends BaseController {
                 + all.size() + " " + entryWord(all.size()) + ".");
     }
 
-    // Lists every action in the log as a filter choice, keeping the
-    // current choice when it is still there.
+    // Fills the action filter, keeping the current choice if it is there.
     private void fillActions(List<AuditEntry> entries) {
         TreeSet<String> actions = new TreeSet<>();
         for (AuditEntry entry : entries) {
@@ -398,8 +389,7 @@ public class AuditLogController extends BaseController {
     }
 
     /**
-     * Shows text that wraps within its column, so long details stay
-     * readable at any window width.
+     * Shows text that wraps, so long details stay readable at any width.
      */
     private static class WrapCell extends TableCell<AuditEntry, String> {
 
@@ -440,8 +430,7 @@ public class AuditLogController extends BaseController {
         }
 
         /**
-         * Returns the height the wrapped text needs at the column's
-         * width.
+         * Returns the height the wrapped text needs at the column's width.
          *
          * @param width ignored; the column's width is used
          * @return the preferred height

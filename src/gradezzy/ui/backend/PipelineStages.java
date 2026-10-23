@@ -1,13 +1,10 @@
 /*
  * File: PipelineStages.java
  *
- * Purpose: The names of the nine grading stages, in pipeline order, so
- * the Progress screen can show which stage a submission is in.
+ * Purpose: The names of the nine grading stages, in pipeline order.
  *
- * Where it fits: The names come from each stage's NAME constant, so they
- * always match what GradingPipeline reports through ProgressListener.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Used by the Progress screen. The names come from each
+ * stage's NAME constant, so they match what GradingPipeline reports.
  */
 package gradezzy.ui.backend;
 
@@ -23,8 +20,6 @@ import gradezzy.grading.ValidateStage;
 
 /**
  * The grading stages, in order.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public final class PipelineStages {
 
@@ -61,7 +56,7 @@ public final class PipelineStages {
     /**
      * Returns the position of a stage.
      *
-     * @param name the stage name reported by the pipeline
+     * @param name the stage name
      * @return the position from 0, or -1 for an unknown name
      */
     public static int indexOf(String name) {

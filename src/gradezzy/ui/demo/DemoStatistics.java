@@ -1,14 +1,10 @@
 /*
  * File: DemoStatistics.java
  *
- * Purpose: Works out the statistics of a demo run, so the Statistics
- * screen has numbers before StatisticsCalculator is written.
+ * Purpose: Works out the statistics of a demo run.
  *
- * Where it fits: Used only by DemoBackend.summarise. Live mode uses
- * StatisticsService instead. Ungraded students are left out of every
- * figure, never counted as zero.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Used only by DemoBackend.summarise; live mode uses
+ * StatisticsService. Ungraded students are left out, never counted as zero.
  */
 package gradezzy.ui.demo;
 
@@ -31,8 +27,6 @@ import gradezzy.ui.backend.ResultState;
 
 /**
  * Statistics for a demo run.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class DemoStatistics {
 
@@ -113,8 +107,7 @@ public final class DemoStatistics {
         return (sorted[middle - 1] + sorted[middle]) / HALF;
     }
 
-    // Counts the students in each mark band. The last band includes the
-    // full mark.
+    // Counts the students in each mark band; the last includes full marks.
     private static void addMarkBands(StatisticsSummary summary,
             double[] totals, double maxTotal, double bandWidthPercent) {
         for (double lower = 0.0; lower < FULL_PERCENT;

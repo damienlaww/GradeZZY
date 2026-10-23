@@ -1,17 +1,10 @@
 /*
  * File: BaseController.java
  *
- * Purpose: The parent of every screen controller. Gives each screen the
- * backend, the shared state and the window around it, and shows
- * messages the same way everywhere.
+ * Purpose: The parent of every screen controller.
  *
- * Where it fits: ScreenNavigator creates a controller from its FXML file,
- * then calls attach and onAttach. The shell calls onShow each time the
- * screen appears. Controllers hold no grading logic: they check input,
- * call one DashboardBackend method and show the result.
- *
- * AI use: attach, onAttach, onShow and the message methods drafted with
- * Claude Code, reviewed by Jun Sheng.
+ * Where it fits: ScreenNavigator creates each controller from its FXML
+ * file. Controllers check input, call DashboardBackend and show results.
  */
 package gradezzy.ui;
 
@@ -21,18 +14,16 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * The parent of every screen controller.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public abstract class BaseController {
 
-    // Every service of the application; set after the FXML is loaded
+    // Every service; set after the FXML is loaded
     private ServiceRegistry services = null;
 
-    // The backend the screen calls; set after the FXML is loaded
+    // The backend; set after the FXML is loaded
     private DashboardBackend backend = null;
 
-    // The state shared by every screen; set after the FXML is loaded
+    // The shared state; set after the FXML is loaded
     private UiState state = null;
 
     // The window around the screen; set after the FXML is loaded
@@ -46,7 +37,7 @@ public abstract class BaseController {
     }
 
     /**
-     * Gives the controller every service of the application.
+     * Gives the controller every service.
      *
      * @param services the services
      */
@@ -55,12 +46,12 @@ public abstract class BaseController {
     }
 
     /**
-     * Gives the controller the backend, the shared state and the window.
-     * Called once, after the FXML is loaded and before onAttach.
+     * Gives the controller the backend, the state and the window. Called
+     * once, before onAttach.
      *
-     * @param backend the backend the screen calls
-     * @param state the state shared by every screen
-     * @param shell the window around the screen
+     * @param backend the backend
+     * @param state the shared state
+     * @param shell the window
      */
     public void attach(DashboardBackend backend, UiState state,
             AppShell shell) {
@@ -70,34 +61,30 @@ public abstract class BaseController {
     }
 
     /**
-     * Sets up whatever needs the backend or the shared state. Called once
-     * after attach. Screens override this; the default does nothing.
+     * Sets up what needs the backend or the state. Called once after attach.
      */
     public void onAttach() {
         // nothing to set up by default
     }
 
     /**
-     * Refreshes the screen from the backend and the shared state. Called
-     * each time the screen appears. Screens override this; the default
-     * does nothing.
+     * Refreshes the screen. Called each time the screen appears.
      */
     public void onShow() {
         // nothing to refresh by default
     }
 
     /**
-     * Moves keyboard focus to the screen's search field, for the
-     * Shortcut+F key.
+     * Moves focus to the screen's search field, for Shortcut+F.
      *
-     * @return true when the screen has a search field
+     * @return true if the screen has a search field
      */
     public boolean focusSearch() {
         return false;
     }
 
     /**
-     * Returns every service of the application.
+     * Returns every service.
      *
      * @return the services
      */
@@ -106,7 +93,7 @@ public abstract class BaseController {
     }
 
     /**
-     * Returns the backend the screen calls.
+     * Returns the backend.
      *
      * @return the backend
      */
@@ -115,7 +102,7 @@ public abstract class BaseController {
     }
 
     /**
-     * Returns the state shared by every screen.
+     * Returns the shared state.
      *
      * @return the state
      */
@@ -133,7 +120,7 @@ public abstract class BaseController {
     }
 
     /**
-     * Shows a problem that stays until the instructor closes it.
+     * Shows an error that stays until the instructor closes it.
      *
      * @param message what went wrong and what to do next
      */
@@ -144,9 +131,9 @@ public abstract class BaseController {
     }
 
     /**
-     * Shows a short confirmation that disappears by itself.
+     * Shows a short message that disappears by itself.
      *
-     * @param message a plain sentence in the past tense
+     * @param message a short past-tense sentence
      */
     protected void showInfo(String message) {
         if (shell != null) {
@@ -155,12 +142,11 @@ public abstract class BaseController {
     }
 
     /**
-     * Shows the outcome of a backend action: a confirmation, a problem or
-     * a Not connected yet sheet. A successful action is also recorded in
+     * Shows the outcome of a backend action. A success is also recorded in
      * the audit log.
      *
      * @param result the outcome
-     * @param auditAction the short audit name, such as "Repair approved"
+     * @param auditAction the audit name, such as "Repair approved"
      * @return true when the action happened
      */
     protected boolean showResult(ActionResult result, String auditAction) {

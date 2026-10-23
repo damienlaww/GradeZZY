@@ -4,8 +4,6 @@
  * Purpose: Runs every validator and records what they find.
  *
  * Where it fits: Second stage. Its anomalies tell FixStage what to correct.
- *
- * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.grading;
 

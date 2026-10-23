@@ -1,17 +1,11 @@
 /*
  * File: RepairDecisions.java
  *
- * Purpose: Applies the instructor's repair decisions on the Validation
- * screen: approve, reject or undo, for the selected findings, the
- * focused one or every decided repair of the run. Rejecting and undoing
- * everything ask first.
+ * Purpose: Applies the instructor's approve, reject and undo decisions on
+ * the Validation screen.
  *
  * Where it fits: The Validation screen hands its selection here and
- * redraws afterwards. One repair shows the backend's own message; several
- * show one message and one audit entry, through ReviewDecisions. Only
- * working copies change; the original ZIP files never do.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * redraws afterwards. Outcomes are shown through ReviewDecisions.
  */
 package gradezzy.ui.view;
 
@@ -25,29 +19,27 @@ import gradezzy.ui.component.Labels;
 
 /**
  * Repair decisions with confirmations and one report per action.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class RepairDecisions {
 
     // The word before the findings named in an audit entry
     private static final String FINDINGS = "Findings";
 
-    // The backend that applies the repair decisions
+    // Applies the decisions
     private final DashboardBackend backend;
 
-    // The window that shows confirmations and sheets
+    // Shows confirmations and sheets
     private final AppShell shell;
 
     // Shows and reports the outcomes
     private final ReviewDecisions decisions;
 
     /**
-     * Creates the repair decision helper of the Validation screen.
+     * Creates the repair decision helper.
      *
-     * @param backend the backend that applies the decisions
-     * @param shell the window that shows confirmations and sheets
-     * @param decisions shows and reports the outcomes
+     * @param backend the backend
+     * @param shell the window
+     * @param decisions shows the outcomes
      */
     public RepairDecisions(DashboardBackend backend, AppShell shell,
             ReviewDecisions decisions) {
@@ -57,12 +49,11 @@ public final class RepairDecisions {
     }
 
     /**
-     * Applies an action to the selected findings that can take it, or
-     * explains why none of them can.
+     * Applies an action to the selected findings that can take it.
      *
      * @param selected the selected findings
      * @param action the decision
-     * @param afterChange redraws the screen once the decision is made
+     * @param afterChange redraws the screen
      */
     public void decideSelected(List<RepairItem> selected,
             RepairAction action, Runnable afterChange) {
@@ -75,12 +66,11 @@ public final class RepairDecisions {
     }
 
     /**
-     * Applies an action to the finding in the inspector, when it can
-     * take it.
+     * Applies an action to the finding in the inspector, if it can.
      *
-     * @param focused the focused finding as a list of zero or one
+     * @param focused the focused finding, as a list of zero or one
      * @param action the decision
-     * @param afterChange redraws the screen once the decision is made
+     * @param afterChange redraws the screen
      */
     public void decideFocused(List<RepairItem> focused, RepairAction action,
             Runnable afterChange) {
@@ -91,11 +81,10 @@ public final class RepairDecisions {
     }
 
     /**
-     * Returns every decided repair of the run to Applied, after a
-     * confirmation.
+     * Returns every decided repair of the run to Applied, after asking.
      *
      * @param repairs every finding of the run
-     * @param afterChange redraws the screen once the decisions are undone
+     * @param afterChange redraws the screen
      */
     public void undoAll(List<RepairItem> repairs, Runnable afterChange) {
         List<RepairItem> chosen = RepairAction.UNDO.keep(repairs);
@@ -114,8 +103,7 @@ public final class RepairDecisions {
                 true, () -> apply(chosen, RepairAction.UNDO, afterChange));
     }
 
-    // Applies an action, asking first when it rejects repairs, because
-    // rejecting changes the working copy.
+    // Applies an action; rejecting asks first, as it changes the working copy.
     private void decide(List<RepairItem> chosen, RepairAction action,
             Runnable afterChange) {
         if (action != RepairAction.REJECT) {
@@ -138,9 +126,7 @@ public final class RepairDecisions {
                 () -> apply(chosen, action, afterChange));
     }
 
-    // Applies one action to some repairs, then reports the outcome once:
-    // the Not connected sheet or the first problem, then one message and
-    // one audit entry for the repairs that changed.
+    // Applies one action to some repairs, then reports the outcome once.
     private void apply(List<RepairItem> chosen, RepairAction action,
             Runnable afterChange) {
         Capability capability = action.getCapability();

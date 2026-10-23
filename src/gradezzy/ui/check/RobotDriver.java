@@ -1,18 +1,14 @@
 /*
  * File: RobotDriver.java
  *
- * Purpose: Drives the real window with operating-system mouse and
- * keyboard events, finds controls by their words, waits for the
- * interface, and takes pictures of the real screen.
+ * Purpose: Drives the real window with real mouse and keyboard input and
+ * takes pictures of the screen.
  *
- * Where it fits: Used by WindowTest. The test runs on its own thread so
- * the window keeps working; every call that touches the window or the
- * robot is handed to the JavaFX thread and waited for.
+ * Where it fits: Used by WindowTest, which runs on its own thread. Every
+ * call that touches the window is handed to the JavaFX thread.
  *
  * Note on untaught Java: javafx.scene.robot.Robot sends real mouse and
  * keyboard input, and FutureTask waits for work done on another thread.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.check;
 
@@ -49,8 +45,6 @@ import javafx.stage.Window;
 
 /**
  * Real mouse and keyboard input for the window test.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class RobotDriver {
 
@@ -63,10 +57,10 @@ public final class RobotDriver {
     // The pause after a click or a key, so the window can react
     private static final long SETTLE_MILLIS = 350L;
 
-    // The width of the band around a control searched for its focus ring
+    // The width of the band searched for a focus ring
     private static final double RING_BAND = 4.0;
 
-    // The largest colour distance that still counts as the ring colour
+    // The largest colour distance that counts as the ring colour
     private static final double RING_TOLERANCE = 0.16;
 
     // The fewest ring-coloured pixels that count as a visible ring
@@ -75,11 +69,10 @@ public final class RobotDriver {
     // The space left above a control scrolled into view
     private static final double REVEAL_MARGIN = 24.0;
 
-    // The lines of the JavaFX thread's stack printed when it hangs
+    // How many stack lines to print when the JavaFX thread hangs
     private static final int STACK_LINES = 40;
 
-    // How long to wait when something covers a control, such as a
-    // message that fades after three seconds
+    // How long to wait for a covering message, which fades after 3 seconds
     private static final long COVER_WAIT_MILLIS = 3500L;
 
     /**
@@ -87,10 +80,7 @@ public final class RobotDriver {
      */
     private interface Clicker {
 
-        /**
-         * Sends the events with the pointer already over the control.
-         * Runs on the JavaFX thread.
-         */
+        /** Sends the events over the control, on the JavaFX thread. */
         void send();
     }
 
@@ -113,8 +103,7 @@ public final class RobotDriver {
     // What received the last mouse press, while a click is checked
     private Object pressed = null;
 
-    // Whether the last press reached the control, decided at the press,
-    // before the click can rebuild what was pressed
+    // Whether the press hit the control, noted before a click can rebuild it
     private boolean pressedInside = false;
 
     // The modifier of shortcuts: Command on macOS, Control elsewhere
@@ -207,9 +196,8 @@ public final class RobotDriver {
     }
 
     /**
-     * Clicks the middle of a control with the left mouse button. When
-     * something else receives the press, such as a message covering the
-     * control, it waits as a person would and clicks once more.
+     * Clicks the middle of a control. If something covers it, waits and
+     * clicks once more.
      *
      * @param node the control
      * @return true when the control received the click
@@ -233,8 +221,7 @@ public final class RobotDriver {
     }
 
     /**
-     * Clicks a control while holding the shortcut key, to add it to a
-     * selection.
+     * Clicks a control while holding the shortcut key.
      *
      * @param node the control
      * @return true when the control received the click
@@ -266,9 +253,8 @@ public final class RobotDriver {
     }
 
     /**
-     * Drags from the middle of one control to the middle of another in
-     * small steps, as a hand would, with the operating system's robot.
-     * See SystemMouse for why.
+     * Drags from one control to another in small steps with the system
+     * robot. See SystemMouse for why.
      *
      * @param from the control pressed
      * @param to the control released on
@@ -282,7 +268,7 @@ public final class RobotDriver {
     }
 
     /**
-     * Turns the mouse wheel over a control, as a person scrolls a list.
+     * Turns the mouse wheel over a control.
      *
      * @param node the control
      * @param notches the notches turned; positive scrolls down
@@ -304,8 +290,7 @@ public final class RobotDriver {
     }
 
     /**
-     * Presses the shortcut key with another key, such as Ctrl+F on
-     * Windows or Cmd+F on macOS.
+     * Presses the shortcut key (Ctrl, or Cmd on macOS) with another key.
      *
      * @param key the other key
      */
@@ -337,8 +322,8 @@ public final class RobotDriver {
     }
 
     /**
-     * Finds a visible control by its words and its user data, for
-     * buttons that share words, such as several Choose Folder buttons.
+     * Finds a visible control by its words and user data, for buttons
+     * that share words.
      *
      * @param root where to look
      * @param text the words on the control
@@ -361,8 +346,7 @@ public final class RobotDriver {
     }
 
     /**
-     * Finds a visible control by its words in any pop-up window on show,
-     * such as a menu, the list of a combo box, or a tooltip.
+     * Finds a visible control by its words in any open pop-up or tooltip.
      *
      * @param text the words on the control
      * @return the control, or null when no pop-up shows it
@@ -372,14 +356,12 @@ public final class RobotDriver {
     }
 
     /**
-     * Says whether the screen shows the focus ring around a control, by
-     * taking one picture of the real screen around it and counting the
-     * ring-coloured pixels along its top and bottom edges.
+     * Says whether the real screen shows the focus ring around a control.
      *
      * @param node the focused control
-     * @param ring the ring colour of the theme
-     * @param edge the inner edge colour of the theme
-     * @return true when enough pixels in the band have either colour
+     * @param ring the theme's ring colour
+     * @param edge the theme's inner edge colour
+     * @return true when enough pixels have either colour
      */
     public boolean showsRing(Node node, Color ring, Color edge) {
         return onFx(() -> countRingPixels(node, ring, edge)
@@ -463,8 +445,7 @@ public final class RobotDriver {
         return null;
     }
 
-    // Counts the ring-coloured pixels along the top and bottom edges of
-    // a control in one picture of the real screen.
+    // Counts ring-coloured pixels along a control's top and bottom edges.
     private int countRingPixels(Node node, Color ring, Color edge) {
         Bounds bounds = node.localToScreen(node.getBoundsInLocal());
         Image picture = robot().getScreenCapture(null,
@@ -497,8 +478,7 @@ public final class RobotDriver {
                 < RING_TOLERANCE;
     }
 
-    // Clicks a control and checks that the press reached it; tries once
-    // more after a wait when something covered it.
+    // Clicks a control, trying once more after a wait if it was covered.
     private boolean clickChecked(Node node, Clicker clicker) {
         if (clickOnce(node, clicker)) {
             return true;
@@ -637,8 +617,7 @@ public final class RobotDriver {
         return true;
     }
 
-    // Returns the middle of a control on the screen, or null when the
-    // control is not in a window on show.
+    // Returns the middle of a control on the screen, or null if not shown.
     private double[] centre(Node node) {
         Bounds bounds = node.localToScreen(node.getBoundsInLocal());
         if (bounds == null) {

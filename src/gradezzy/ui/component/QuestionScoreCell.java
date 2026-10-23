@@ -1,13 +1,10 @@
 /*
  * File: QuestionScoreCell.java
  *
- * Purpose: Shows one question's mark in a results table so that an
- * ungraded mark, a real zero, a compile failure and a timeout all look
- * different, each with words for screen readers.
+ * Purpose: Shows one question's mark so that ungraded, zero, not compiled
+ * and timed out each look different, with words for screen readers.
  *
  * Where it fits: Used by the Results table for the Q1a to Q3 columns.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.component;
 
@@ -22,8 +19,6 @@ import gradezzy.ui.backend.ResultState;
 
 /**
  * A table cell for one question's mark.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public final class QuestionScoreCell
         extends TableCell<Submission, Submission> {

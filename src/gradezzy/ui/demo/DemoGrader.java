@@ -1,17 +1,11 @@
 /*
  * File: DemoGrader.java
  *
- * Purpose: Imitates a grading run in demo mode by stepping through the
- * nine pipeline stages for each submission and reporting progress, with
- * no files, processes or threads.
+ * Purpose: Imitates a grading run in demo mode, with no files, processes
+ * or threads.
  *
- * Where it fits: DemoBackend starts one for each simulated run. It calls
- * the same ProgressListener methods as GradingPipeline, in the same
- * order, so the Progress screen has one code path for both modes. A
- * Timeline calls step() on the JavaFX thread; the self-test calls step()
- * directly.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: DemoBackend starts one per simulated run. It calls the
+ * same ProgressListener methods as GradingPipeline, in the same order.
  */
 package gradezzy.ui.demo;
 
@@ -30,8 +24,6 @@ import gradezzy.ui.backend.PipelineStages;
 
 /**
  * A simulated grading run.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class DemoGrader {
 
@@ -105,8 +97,7 @@ public class DemoGrader {
     /**
      * Starts the run.
      *
-     * @param automatic true to step on a timer, false when the caller
-     *        calls step() itself
+     * @param automatic true to step on a timer, false to call step() by hand
      */
     public void start(boolean automatic) {
         for (Submission submission : queue) {
@@ -200,8 +191,7 @@ public class DemoGrader {
         return submissionIndex;
     }
 
-    // Marks every submission that did not start as cancelled, as the
-    // pipeline does after Cancel.
+    // Marks every submission not yet started as cancelled.
     private void cancelRemaining() {
         for (int index = submissionIndex; index < queue.size(); index++) {
             Submission submission = queue.get(index);

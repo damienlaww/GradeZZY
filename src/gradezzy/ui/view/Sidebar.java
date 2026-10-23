@@ -1,14 +1,10 @@
 /*
  * File: Sidebar.java
  *
- * Purpose: Builds the source-list sidebar and the menu that replaces it
- * in a narrow window, marks the screen on show and shows count badges.
+ * Purpose: Builds the sidebar, its narrow-window menu and count badges.
  *
- * Where it fits: Created by MainController with the sidebar's FXML
- * nodes. Every item navigates through AppShell, so the sidebar knows
- * nothing about the screens themselves.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Created by MainController. Every item navigates through
+ * AppShell, so the sidebar knows nothing about the screens.
  */
 package gradezzy.ui.view;
 
@@ -34,12 +30,10 @@ import gradezzy.ui.component.Icon;
 
 /**
  * The navigation sidebar.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public final class Sidebar {
 
-    // The pseudo-class of the sidebar item of the screen on show
+    // The pseudo-class of the item of the screen on show
     private static final PseudoClass SELECTED =
             PseudoClass.getPseudoClass("selected");
 
@@ -240,8 +234,7 @@ public final class Sidebar {
         return entries;
     }
 
-    // Creates one row: a button with its icon and label, and a count
-    // badge laid over its right end.
+    // Creates one row: a button with a count badge over its right end.
     private StackPane createRow(NavEntry entry) {
         Button button = new Button(entry.label, entry.icon.create());
         button.getStyleClass().add("nav-item");

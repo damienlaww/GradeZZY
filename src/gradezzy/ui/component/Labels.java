@@ -2,13 +2,10 @@
  * File: Labels.java
  *
  * Purpose: Turns enum values, marks and times into the plain words the
- * instructor sees, in one place so every screen uses the same wording.
+ * instructor sees.
  *
- * Where it fits: Used by StatusBadge and every controller. Wording
- * follows instructor terms ("Timed out", "Needs review") and never shows
- * raw enum names, exit codes or stack traces.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Used by StatusBadge and every controller, so every screen
+ * uses the same wording and never shows raw enum names.
  */
 package gradezzy.ui.component;
 
@@ -24,8 +21,6 @@ import gradezzy.ui.backend.ReviewDecision;
 
 /**
  * Plain-language labels.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class Labels {
 

@@ -3,20 +3,11 @@
  *
  * Purpose: Controller of the results screen.
  *
- * Where it fits: Shows per-question and per-student scores with search,
- * filter and sort, multi-selection and an inspector for the selected
- * student, and starts exports of the selected or visible students.
- * Search, filter, sort and selection are kept in UiState, so they come
- * back after Student Evidence or a theme switch. The table columns are
- * built by ResultsColumns and the inspector is filled by
- * StudentInspector.
+ * Where it fits: Shows each student's scores and starts exports. Uses
+ * ResultsColumns and StudentInspector; keeps search and selection in UiState.
  *
- * Note on untaught Java: exports write files and code search reads every
- * working copy, so both run in a javafx.concurrent.Task on a background
- * thread, as GradingTask does for grading. The screen is only changed
- * when the task has finished, back on the JavaFX thread.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Note on untaught Java: exports and code search use a javafx.concurrent.Task
+ * on a background thread, so slow file work never freezes the window.
  */
 package gradezzy.ui;
 
@@ -59,8 +50,6 @@ import gradezzy.ui.view.StudentInspector;
 
 /**
  * Controller of the results screen.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class ResultsController extends BaseController {
 
@@ -163,10 +152,10 @@ public class ResultsController extends BaseController {
     // The code search running in the background, or null
     private Task<List<Submission>> codeSearch = null;
 
-    // What the status line says about the export that runs, or ""
+    // The status note about the running export, or ""
     private String exportNote = "";
 
-    // What the status line says about the code search that runs, or ""
+    // The status note about the running code search, or ""
     private String searchNote = "";
 
     /**
@@ -262,8 +251,7 @@ public class ResultsController extends BaseController {
     }
 
     /**
-     * Restores the search, filter, sort and selection and reloads the
-     * results each time the screen is shown.
+     * Restores the search, filter, sort and selection, then reloads the rows.
      */
     @Override
     public void onShow() {
@@ -280,7 +268,7 @@ public class ResultsController extends BaseController {
     /**
      * Moves keyboard focus to the search field.
      *
-     * @return true, because this screen has a search field
+     * @return true, as this screen has a search field
      */
     @Override
     public boolean focusSearch() {
@@ -290,8 +278,7 @@ public class ResultsController extends BaseController {
     }
 
     /**
-     * Exports the score sheet for the selected students, or for every
-     * student shown when none is selected.
+     * Exports the score sheet for the selected or shown students.
      */
     @FXML
     public void handleExportCsv() {
@@ -300,8 +287,6 @@ public class ResultsController extends BaseController {
 
     /**
      * Exports the results as JSON for the selected or shown students.
-     *
-     * <p>Tier: SHOULD.
      */
     @FXML
     public void handleExportJson() {
@@ -310,8 +295,6 @@ public class ResultsController extends BaseController {
 
     /**
      * Applies the search text.
-     *
-     * <p>Tier: SHOULD.
      */
     @FXML
     public void handleSearch() {
@@ -321,8 +304,6 @@ public class ResultsController extends BaseController {
 
     /**
      * Opens the evidence of the selected student.
-     *
-     * <p>Tier: SHOULD.
      */
     @FXML
     public void handleOpenStudent() {
@@ -365,8 +346,7 @@ public class ResultsController extends BaseController {
     }
 
     /**
-     * Returns the students shown, after search, filter and sort. Used by
-     * the self-test.
+     * Returns the students shown. Used by the self-test.
      *
      * @return the students in table order
      */
@@ -375,8 +355,7 @@ public class ResultsController extends BaseController {
     }
 
     /**
-     * Returns the students an export would include: the selected ones,
-     * or every student shown when none is selected.
+     * Returns the selected students, or all shown ones if none is selected.
      *
      * @return the export scope
      */
@@ -400,8 +379,7 @@ public class ResultsController extends BaseController {
         restoreSelection();
     }
 
-    // Exports the scope in the background. The export buttons are
-    // unavailable until it has finished.
+    // Exports the scope in the background, with the buttons disabled.
     private void export(String format, String previewTitle) {
         GradingRun run = currentRun();
         List<Submission> scope = getExportScope();
@@ -460,8 +438,7 @@ public class ResultsController extends BaseController {
         refreshStatus();
     }
 
-    // Searches inside the source code in the background, then shows the
-    // students that match.
+    // Searches the source code in the background, then shows the matches.
     private void startCodeSearch(GradingRun run, String query) {
         Task<List<Submission>> task = new Task<>() {
 
@@ -483,8 +460,7 @@ public class ResultsController extends BaseController {
         runInBackground(task, "gradezzy-code-search");
     }
 
-    // Shows the students a finished code search found, unless a newer
-    // search or a change of run replaced it.
+    // Shows the code search matches, unless it was cancelled or replaced.
     private void finishCodeSearch(Task<List<Submission>> task,
             GradingRun run) {
         if (task != codeSearch) {
@@ -525,8 +501,7 @@ public class ResultsController extends BaseController {
         return problem.getMessage();
     }
 
-    // Starts a task on a background thread that never keeps the
-    // application open.
+    // Starts a task on a background thread that never keeps the app open.
     private static void runInBackground(Task<?> task, String name) {
         Thread worker = new Thread(task, name);
         worker.setDaemon(true);
@@ -553,9 +528,7 @@ public class ResultsController extends BaseController {
         refresh();
     }
 
-    // Reloads the rows from the backend and applies search, filter, sort
-    // and the remembered selection. A code search runs in the background
-    // and shows its rows when it has finished.
+    // Reloads the rows, or starts a code search in the background.
     private void refresh() {
         GradingRun run = currentRun();
         String query = getState().getResultsQuery();
@@ -573,8 +546,7 @@ public class ResultsController extends BaseController {
         showMatches(run, matches);
     }
 
-    // Shows the matching students of a run after the status filter and
-    // the sort, and restores the remembered selection.
+    // Filters and sorts the matches, shows them and restores the selection.
     private void showMatches(GradingRun run, List<Submission> matches) {
         shown.clear();
         if (run != null) {
@@ -591,8 +563,7 @@ public class ResultsController extends BaseController {
 
         table.setPlaceholder(emptyStateFor(run));
         table.setItems(FXCollections.observableArrayList(shown));
-        // The same row objects may hold new marks after a retry, so every
-        // cell is drawn again.
+        // Rows may hold new marks after a retry, so redraw every cell.
         table.refresh();
         restoreSelection();
         selectAllButton.setDisable(shown.isEmpty());
@@ -601,8 +572,7 @@ public class ResultsController extends BaseController {
         refreshInspector();
     }
 
-    // Makes the export buttons available when there are students to
-    // export and no export runs.
+    // Enables the export buttons when there are rows and no export runs.
     private void refreshExportButtons() {
         boolean unavailable = shown.isEmpty() || exportsRunning > 0;
         csvButton.setDisable(unavailable);
@@ -663,9 +633,7 @@ public class ResultsController extends BaseController {
         refreshStatus();
     }
 
-    // Shows the row that has the focus in the inspector. The selected
-    // item changes after the selected items list, so it is followed on
-    // its own.
+    // Shows the selected item; JavaFX updates it after the selectedItems list.
     private void focusChanged(Submission focused) {
         if (restoring || focused == null) {
             return;

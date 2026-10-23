@@ -3,12 +3,8 @@
  *
  * Purpose: Controller of the grading progress screen.
  *
- * Where it fits: Shows the run followed by GradingMonitor: how many
- * submissions are done, the current stage, elapsed time, time left and
- * the execution issues found, with Cancel, Resume and Retry. The screen
- * can be left and opened again while the run continues.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Shows the run followed by GradingMonitor, with Cancel,
+ * Resume and Retry. It can be left and opened again during a run.
  */
 package gradezzy.ui;
 
@@ -38,8 +34,6 @@ import gradezzy.ui.component.Tone;
 
 /**
  * Controller of the grading progress screen.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class ProgressController extends BaseController {
 
@@ -196,8 +190,7 @@ public class ProgressController extends BaseController {
     }
 
     /**
-     * Asks the batch to stop after the current submission, after a
-     * confirmation that explains what is kept.
+     * Asks the batch to stop after the current submission, once confirmed.
      */
     @FXML
     public void handleCancel() {

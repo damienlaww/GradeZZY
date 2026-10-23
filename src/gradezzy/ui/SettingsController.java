@@ -3,13 +3,9 @@
  *
  * Purpose: Controller of the Settings screen.
  *
- * Where it fits: Shows the settings of config.properties in grouped
- * lists, checks each typed value with the backend as it changes, and
- * saves only the changed settings. Save is unavailable while any value
- * is invalid. The theme and animations change at once and are saved with
- * the other changes. In demo mode, changes last for the session only.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Shows the config.properties settings, checks each value
+ * with the backend and saves only the changes. In demo mode, changes last
+ * for the session only.
  */
 package gradezzy.ui;
 
@@ -40,8 +36,6 @@ import gradezzy.ui.component.Tone;
 
 /**
  * Controller of the settings page.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class SettingsController extends BaseController {
 
@@ -216,8 +210,7 @@ public class SettingsController extends BaseController {
     }
 
     /**
-     * Keeps unsaved edits and refreshes the status each time the screen
-     * is shown.
+     * Marks the theme in use and refreshes the status, keeping unsaved edits.
      */
     @Override
     public void onShow() {
@@ -225,8 +218,7 @@ public class SettingsController extends BaseController {
     }
 
     /**
-     * Saves the changed settings, together with the theme and the
-     * animation setting when they changed.
+     * Saves the changed settings, including the theme and animations.
      */
     @FXML
     public void handleSave() {
@@ -248,8 +240,7 @@ public class SettingsController extends BaseController {
     }
 
     /**
-     * Discards unsaved changes, after a confirmation, and shows the
-     * saved values again.
+     * Discards unsaved changes after a confirmation.
      */
     @FXML
     public void handleReset() {
@@ -341,8 +332,7 @@ public class SettingsController extends BaseController {
         refreshStatus();
     }
 
-    // Asks the backend whether a text setting is valid and shows its
-    // message under the field.
+    // Checks a text setting with the backend and shows any message.
     private void validate(String key) {
         TextField field = fields.get(key);
         Label error = errors.get(key);
@@ -403,8 +393,7 @@ public class SettingsController extends BaseController {
         refreshStatus();
     }
 
-    // Says where changes are kept and how many are unsaved, and enables
-    // Save only when every value is valid.
+    // Updates the status line and disables Save while a value is invalid.
     private void refreshStatus() {
         String text;
         if (getBackend().isDemo()) {

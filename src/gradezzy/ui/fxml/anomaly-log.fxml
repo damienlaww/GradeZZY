@@ -5,9 +5,7 @@
   severity and decision filters, sort, multi-selection, bulk decisions
   and an inspector for the focused flag. Flags request a review; they
   never change a mark and never claim misconduct.
-  Tier: SHOULD. Owner: Damien.
   Controller: gradezzy.ui.AnomalyLogController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.scene.control.Button?>

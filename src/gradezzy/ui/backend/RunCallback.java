@@ -4,10 +4,7 @@
  * Purpose: Tells the user interface how a background grading run ended.
  *
  * Where it fits: Passed to DashboardBackend.startGrading, resumeGrading
- * and retryFailedSubmissions. Both methods are always called on the
- * JavaFX Application Thread.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * and retryFailedSubmissions. Its two methods run on the JavaFX thread.
  */
 package gradezzy.ui.backend;
 
@@ -15,8 +12,6 @@ import gradezzy.model.GradingRun;
 
 /**
  * Receives the end of a background grading run.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public interface RunCallback {
 

@@ -1,16 +1,11 @@
 /*
  * File: EvidenceRecordsTab.java
  *
- * Purpose: Fills the three record tabs of the Student Evidence screen:
- * Repairs (what was submitted and what the working copy holds), History
- * (manual mark changes and the audit entries about the student) and
- * Anomalies (each flag with its severity and review decision).
+ * Purpose: Fills the Repairs, History and Anomalies tabs of Student
+ * Evidence.
  *
  * Where it fits: StudentReportController creates one and calls fill each
- * time the screen is shown. Every list explains itself when it is empty.
- * Repairs act on working copies only, and flags never change a mark.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * time the screen is shown. Each list explains itself when it is empty.
  */
 package gradezzy.ui.view;
 
@@ -44,8 +39,6 @@ import gradezzy.ui.component.StatusBadge;
 
 /**
  * The Repairs, History and Anomalies tabs of the Student Evidence screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class EvidenceRecordsTab {
 
@@ -97,15 +90,13 @@ public final class EvidenceRecordsTab {
     /**
      * Creates the tabs over the nodes they fill.
      *
-     * @param backend the backend, for repairs, changes, audit entries and
-     *        decisions
+     * @param backend the backend, for the records shown
      * @param repairRows holds one card per repair
      * @param historyContent holds the two History tables
      * @param adjustmentTable the manual mark changes
      * @param auditTitle the title above the audit entries
      * @param auditTable the audit entries about the student
-     * @param historyEmptyHolder replaces the History tables when both are
-     *        empty
+     * @param historyEmptyHolder shown when both History tables are empty
      * @param anomalySummary the sentence above the anomaly cards
      * @param anomalyRows holds one card per anomaly
      */
@@ -156,8 +147,7 @@ public final class EvidenceRecordsTab {
         }
     }
 
-    // Builds the card of one repair: what was submitted and what the
-    // working copy holds.
+    // Builds the card of one repair.
     private VBox repairRow(RepairItem repair) {
         Anomaly anomaly = repair.getAnomaly();
         HBox top = cardTop(anomaly, StatusBadge.forFix(
@@ -192,8 +182,7 @@ public final class EvidenceRecordsTab {
         grid.add(valueLabel, 1, row);
     }
 
-    // Lists the manual mark changes and the audit entries that mention
-    // the student.
+    // Lists the mark changes and the audit entries that mention the student.
     private void showHistory(Submission shown) {
         String username = shown.getUsername();
         List<ScoreAdjustment> changes = backend.listAdjustments(shown);

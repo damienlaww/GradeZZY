@@ -2,18 +2,13 @@
  * File: GradingMonitor.java
  *
  * Purpose: Turns progress events from a grading run into values the
- * screens can show: counts, the current student and stage, elapsed time,
- * time left and the execution issues found so far.
+ * screens can show.
  *
- * Where it fits: Kept in UiState, so the Progress screen can be left
- * and opened again while a run continues. It is the ProgressListener
- * given to both backends. Events from a background thread are moved to
- * the JavaFX thread with Platform.runLater before any value changes.
+ * Where it fits: The ProgressListener given to both backends. Kept in
+ * UiState, so the Progress screen can be left and opened during a run.
  *
- * Note on untaught Java: Platform.runLater and Timeline are JavaFX
- * threading tools. They are kept inside this class.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Note on untaught Java: Platform.runLater moves events onto the JavaFX
+ * thread, and a Timeline refreshes the clock every second.
  */
 package gradezzy.ui;
 
@@ -47,8 +42,6 @@ import gradezzy.ui.component.Tone;
 
 /**
  * Follows the grading run in the background.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class GradingMonitor implements ProgressListener {
 
@@ -101,7 +94,7 @@ public class GradingMonitor implements ProgressListener {
          * Creates a row.
          *
          * @param username the student
-         * @param status what is happening to the submission
+         * @param status the first status
          */
         public ProgressRow(String username, String status) {
             this.username = username;
@@ -145,11 +138,11 @@ public class GradingMonitor implements ProgressListener {
         }
 
         /**
-         * Sets the status and its tone together. The tone is set first,
-         * so a cell redrawn for the new status finds the new tone.
+         * Sets the status and its tone. The tone is set first, so a cell
+         * redrawn for the new status finds the new tone.
          *
-         * @param text what is happening to the submission
-         * @param newTone the grading tone of that state
+         * @param text the status
+         * @param newTone the tone of that status
          */
         public void setState(String text, Tone newTone) {
             tone.set(newTone);
@@ -233,8 +226,7 @@ public class GradingMonitor implements ProgressListener {
      * Gets ready to follow a new run. Call on the JavaFX thread before
      * the backend starts the run.
      *
-     * @param description what is starting, such as "Grading 6
-     *        submissions"
+     * @param description the first message, such as "Grading 6 submissions"
      */
     public void begin(String description) {
         total.set(0);
@@ -292,10 +284,9 @@ public class GradingMonitor implements ProgressListener {
     }
 
     /**
-     * Records that the run could not start or stopped with an error.
-     * Call on the JavaFX thread.
+     * Records that the run failed. Call on the JavaFX thread.
      *
-     * @param reason what went wrong and what to do next
+     * @param reason what went wrong and what to do
      */
     public void fail(String reason) {
         stopClock();
@@ -369,8 +360,7 @@ public class GradingMonitor implements ProgressListener {
     }
 
     /**
-     * Called by the pipeline when a submission finishes or is skipped
-     * after Cancel.
+     * Called when a submission finishes or is skipped after Cancel.
      *
      * @param submission the submission
      */

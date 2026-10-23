@@ -3,12 +3,9 @@
  *
  * Purpose: Controller of the main window that hosts every other screen.
  *
- * Where it fits: Owns navigation (Next, Back, the screen on show and the
- * keyboard shortcuts) and the theme, and is the AppShell every screen
- * uses. The sidebar, the context bar, sheets and messages are drawn by
- * Sidebar, ContextBar, SheetLayer and ToastLayer in gradezzy.ui.view.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: The AppShell every screen uses. It owns navigation, the
+ * shortcuts and the theme; classes in gradezzy.ui.view draw the sidebar,
+ * context bar, sheets and messages.
  */
 package gradezzy.ui;
 
@@ -61,8 +58,6 @@ import gradezzy.ui.view.ToastLayer;
 
 /**
  * Controller of the main window that hosts every other screen.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class MainController extends BaseController implements AppShell {
 
@@ -230,11 +225,11 @@ public class MainController extends BaseController implements AppShell {
     }
 
     /**
-     * Fills in the window and shows the first screen. Called by MainApp
-     * after the scene exists.
+     * Fills in the window and shows the first screen. Called by
+     * ShellBuilder after the scene exists.
      *
-     * @param screenNavigator loads and keeps the screens
-     * @param manager switches the theme
+     * @param screenNavigator the screen loader
+     * @param manager the theme manager
      */
     public void start(ScreenNavigator screenNavigator,
             ThemeManager manager) {
@@ -275,8 +270,7 @@ public class MainController extends BaseController implements AppShell {
     }
 
     /**
-     * Makes confirmations run without asking. Used by the self-test,
-     * which cannot press buttons.
+     * Makes confirmations run without asking. Used by the self-test.
      *
      * @param autoConfirm true to skip confirmation sheets
      */
@@ -286,8 +280,6 @@ public class MainController extends BaseController implements AppShell {
 
     /**
      * Moves to the next step of the main grading journey.
-     *
-     * <p>Tier: SHOULD.
      */
     @FXML
     public void handleNext() {
@@ -299,8 +291,6 @@ public class MainController extends BaseController implements AppShell {
 
     /**
      * Returns to the screen shown before this one.
-     *
-     * <p>Tier: SHOULD.
      */
     @FXML
     public void handleBack() {
@@ -312,10 +302,8 @@ public class MainController extends BaseController implements AppShell {
     }
 
     /**
-     * Leaves the current step after a confirmation, and returns to the
-     * Overview screen. A running batch is cancelled first.
-     *
-     * <p>Tier: SHOULD.
+     * Returns to the Overview screen. A running batch is cancelled first,
+     * after a confirmation.
      */
     @FXML
     public void handleCancel() {
@@ -335,10 +323,7 @@ public class MainController extends BaseController implements AppShell {
     }
 
     /**
-     * Switches light and dark mode. The choice lasts for this session;
-     * Save on the Settings screen keeps it in config.properties.
-     *
-     * <p>Tier: SHOULD.
+     * Switches between light and dark. Save on Settings keeps the choice.
      */
     @FXML
     public void handleToggleTheme() {
@@ -444,13 +429,12 @@ public class MainController extends BaseController implements AppShell {
     }
 
     /**
-     * Asks the instructor to confirm an action, with chosen words on the
-     * dismiss button.
+     * Asks the instructor to confirm an action, with a custom dismiss label.
      *
      * @param title the question
      * @param message what will happen and what is kept
      * @param actionLabel the verb on the confirm button
-     * @param dismissLabel the words on the button that changes nothing
+     * @param dismissLabel the words on the dismiss button
      * @param destructive true to colour the confirm button as a warning
      * @param onConfirm what to do when the instructor confirms
      */
@@ -519,8 +503,7 @@ public class MainController extends BaseController implements AppShell {
         }
         context.refreshRun();
         GradingMonitor monitor = getState().getMonitor();
-        // The Grading row stays while a run goes and while a cancelled
-        // run can be resumed; it goes once the run has finished.
+        // The Grading row shows while a run goes or can be resumed.
         boolean resumable = monitor.statusProperty().get()
                 == GradingMonitor.RunStatus.CANCELLED;
         sidebarView.setShown(Screen.PROGRESS, monitor.isActive()
@@ -619,8 +602,7 @@ public class MainController extends BaseController implements AppShell {
         fade.play();
     }
 
-    // Marks the window while animations are off, so styled motion such
-    // as a sliding switch stops too.
+    // Marks the window while animations are off, so switches stop sliding.
     private void applyMotion(boolean enabled) {
         if (enabled) {
             windowRoot.getStyleClass().remove(NO_MOTION);
@@ -660,8 +642,7 @@ public class MainController extends BaseController implements AppShell {
 
     // ----------------------------------------------------------- layout
 
-    // Narrows the sidebar, hides it, and hides context captions as the
-    // window narrows.
+    // Adapts the sidebar and the context bar to the window width.
     private void bindLayout() {
         shellRoot.widthProperty().addListener(
                 (observable, oldValue, newValue) -> applyWidth(
@@ -712,8 +693,7 @@ public class MainController extends BaseController implements AppShell {
         fitContextBar();
     }
 
-    // Moves the assessment and run to a second row of the context bar
-    // when one row would not fit, so neither is ever cut short.
+    // Moves the assessment and run to a second row when one row is full.
     private void fitContextBar() {
         double available = contextBar.getWidth();
         if (available <= 0) {
@@ -754,8 +734,7 @@ public class MainController extends BaseController implements AppShell {
 
     // ------------------------------------------------------- shortcuts
 
-    // Adds the keyboard shortcuts. SHORTCUT is Cmd on macOS and Ctrl on
-    // Windows. None works while a sheet is on show.
+    // Adds the Cmd or Ctrl shortcuts; while a sheet is shown, only Esc works.
     private void installShortcuts() {
         Scene scene = shellRoot.getScene();
         if (scene == null) {

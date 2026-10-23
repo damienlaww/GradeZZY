@@ -1,15 +1,10 @@
 /*
  * File: StatisticsMistakes.java
  *
- * Purpose: Fills the Common mistakes panel of the Statistics screen: the
- * test case failed most often and every compile error message with how
- * many times it occurred, most frequent first.
+ * Purpose: Fills the Common mistakes panel of the Statistics screen.
  *
  * Where it fits: StatisticsController creates one and calls fill when
- * statistics are available. Both lists say so plainly when they are
- * empty.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * statistics are available.
  */
 package gradezzy.ui.view;
 
@@ -31,8 +26,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * The common mistakes of the Statistics screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class StatisticsMistakes {
 
@@ -57,8 +50,7 @@ public final class StatisticsMistakes {
     }
 
     /**
-     * Shows the most failed test case and the compile errors, and adds
-     * them to the summary text.
+     * Shows the most failed test case and the compile errors.
      *
      * @param summary the statistics
      * @param text the plain-text summary, added to
@@ -109,8 +101,7 @@ public final class StatisticsMistakes {
     }
 
     /**
-     * Orders compile errors by count, most frequent first, then by
-     * message.
+     * Orders compile errors by count, most frequent first, then by message.
      */
     private static class ErrorCountComparator
             implements Comparator<Map.Entry<String, Integer>> {
