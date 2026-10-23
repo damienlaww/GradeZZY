@@ -1,25 +1,16 @@
 /*
  * File: Capability.java
  *
- * Purpose: Lists every backend feature the user interface uses, with what
- * it does for the instructor, the service method behind it, its owner and
- * how ready it is.
+ * Purpose: Lists every backend feature the interface uses and how ready it is.
  *
- * Where it fits: The single source for the Not connected yet panels and
- * the Backend connections table on the Help screen. When a teammate
- * finishes a service method, change its status here from WAITING to
- * WORKS_NOW. When a proposed contract is added to a service, give it a
- * service method and the status WAITING. The service method named here
- * is exactly the one LiveBackend calls.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Feeds the Not connected yet panels and the Help screen's
+ * Backend connections table. When a service method is done, change its
+ * status here from WAITING to WORKS_NOW.
  */
 package gradezzy.ui.backend;
 
 /**
  * A backend feature used by the user interface.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public enum Capability {
 
@@ -277,7 +268,7 @@ public enum Capability {
     // The short name shown to the instructor
     private final String title;
 
-    // What the feature does for the instructor, in one sentence
+    // What the feature does for the instructor
     private final String purpose;
 
     // The teammates whose code this feature needs
@@ -313,9 +304,7 @@ public enum Capability {
     }
 
     /**
-     * Returns what the feature does for the instructor, in one plain
-     * sentence, such as "Grades every submission of a section in one
-     * batch." The Help screen shows it beside the title.
+     * Returns what the feature does for the instructor, in one sentence.
      *
      * @return the purpose
      */
@@ -333,8 +322,7 @@ public enum Capability {
     }
 
     /**
-     * Returns the service method behind this feature, exactly as
-     * LiveBackend calls it.
+     * Returns the service method that LiveBackend calls for this feature.
      *
      * @return the method, or "None yet" when the feature is proposed
      */
@@ -364,8 +352,7 @@ public enum Capability {
     }
 
     /**
-     * Says whether a service method exists for this feature, so the live
-     * application may call it.
+     * Says whether a service method exists, so live mode may call it.
      *
      * @return true unless the feature is only proposed
      */

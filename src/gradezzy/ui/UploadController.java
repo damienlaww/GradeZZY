@@ -3,15 +3,9 @@
  *
  * Purpose: Controller of the upload screen.
  *
- * Where it fits: Where the instructor picks a section and adds the four
- * inputs of a grading run: student ZIP files (by file picker or drag and
- * drop), the roster, the testers and the starter files. It explains why
- * Start Grading is unavailable until every required input is ready, then
- * starts the run and moves to the Grading Progress screen. It never
- * opens a chosen file; the backend checks each one. The file rows are
- * drawn by ImportRows.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: The instructor picks a section, adds the ZIP files,
+ * roster, testers and starter files, and starts grading here. The backend
+ * checks each chosen file; this screen never opens one.
  */
 package gradezzy.ui;
 
@@ -49,8 +43,6 @@ import gradezzy.ui.view.ImportRows.ImportCell;
 
 /**
  * Controller of the upload screen.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class UploadController extends BaseController {
 
@@ -218,8 +210,7 @@ public class UploadController extends BaseController {
     }
 
     /**
-     * Opens the system file picker, or adds the sample files in demo
-     * mode.
+     * Opens the file picker, or adds the sample files in demo mode.
      */
     @FXML
     public void handleChooseFiles() {
@@ -246,8 +237,7 @@ public class UploadController extends BaseController {
     }
 
     /**
-     * Opens the system folder picker, or adds the sample files in demo
-     * mode.
+     * Opens the folder picker, or adds the sample files in demo mode.
      */
     @FXML
     public void handleChooseFolder() {
@@ -374,8 +364,8 @@ public class UploadController extends BaseController {
     }
 
     /**
-     * Chooses the roster, tester folder or starter folder. The button's
-     * user data names the group.
+     * Chooses the roster, tester folder or starter folder, as named by the
+     * button's user data.
      *
      * @param event the button press
      */
@@ -385,8 +375,7 @@ public class UploadController extends BaseController {
     }
 
     /**
-     * Chooses the roster, tester folder or starter folder: the system
-     * picker in live mode, a sample file in demo mode.
+     * Chooses an input with a picker, or a sample file in demo mode.
      *
      * @param kind the roster, tester or starter group
      */
@@ -399,8 +388,7 @@ public class UploadController extends BaseController {
     }
 
     /**
-     * Selects files in the ZIP list, as a click would. Used by the
-     * self-test before Replace File or Remove Selected.
+     * Selects files in the ZIP list, as a click would. Used by the self-test.
      *
      * @param items the files to select
      */

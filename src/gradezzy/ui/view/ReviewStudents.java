@@ -2,13 +2,9 @@
  * File: ReviewStudents.java
  *
  * Purpose: Remembers the students of the shown run, so the review screens
- * can show each username with the student's full name.
+ * can show each student's full name.
  *
- * Where it fits: Review Anomalies and Validation fill one each time they
- * reload. Their tables, inspectors, filters and search suggestions read
- * the names from it instead of searching the run again.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Review Anomalies and Validation fill one on each reload.
  */
 package gradezzy.ui.view;
 
@@ -23,8 +19,6 @@ import gradezzy.model.Submission;
 
 /**
  * The students of one run, by username.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class ReviewStudents {
 
@@ -48,11 +42,10 @@ public final class ReviewStudents {
     }
 
     /**
-     * Remembers the students of a run, unless it is the run remembered
-     * last with the same number of submissions.
+     * Remembers the students of a run, unless nothing changed.
      *
      * @param newRun the run, or null when the section has none
-     * @return true when the run or its number of submissions changed
+     * @return true when the run or its submission count changed
      */
     public boolean remember(GradingRun newRun) {
         int newCount = 0;

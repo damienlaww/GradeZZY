@@ -1,18 +1,11 @@
 /*
  * File: EvidenceLogsTab.java
  *
- * Purpose: Fills the Logs tab of the Student Evidence screen: a question
- * choice and the read-only compiler and tester output of that question,
- * with its length.
+ * Purpose: Fills the Logs tab of the Student Evidence screen with the
+ * compiler and tester output of one question.
  *
- * Where it fits: StudentReportController creates one, calls fill each
- * time the screen is shown and select when another question comes into
- * focus. A question chosen here becomes the question in focus in UiState.
- * The text area stays responsive and scrollable for the 100,000-character
- * sample log, because it does not wrap and is only refilled when the text
- * changes.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: StudentReportController calls fill when the screen is
+ * shown and select when another question comes into focus.
  */
 package gradezzy.ui.view;
 
@@ -34,8 +27,6 @@ import gradezzy.ui.backend.ResultState;
 
 /**
  * The Logs tab of the Student Evidence screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class EvidenceLogsTab {
 
@@ -63,8 +54,7 @@ public final class EvidenceLogsTab {
     /**
      * Creates the tab over the nodes it fills.
      *
-     * @param state the shared state, which remembers the question in
-     *        focus
+     * @param state the shared state
      * @param questionLabel the label of the question choice
      * @param questionBox the question choice
      * @param countLabel the length of the output on show
@@ -124,7 +114,7 @@ public final class EvidenceLogsTab {
         showLog(questionId);
     }
 
-    // Shows the output of one question with its length.
+    // Shows a question's output, refilled only on change to stay responsive.
     private void showLog(String questionId) {
         QuestionResult result = null;
         if (shown != null && ResultState.hasTotal(shown)) {

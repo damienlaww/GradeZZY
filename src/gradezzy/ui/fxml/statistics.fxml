@@ -6,9 +6,7 @@
   frequency and common mistakes, for one module and section. Ungraded
   students are left out, never counted as zero. Every chart has a text
   summary.
-  Tier: SHOULD. Owner: Damien.
   Controller: gradezzy.ui.StatisticsController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import gradezzy.ui.component.MetricTile?>

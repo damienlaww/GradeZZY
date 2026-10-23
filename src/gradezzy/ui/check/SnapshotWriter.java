@@ -2,19 +2,11 @@
  * File: SnapshotWriter.java
  *
  * Purpose: Saves a PNG picture of every screen, with demo data, in both
- * themes and at four window sizes, so the layout can be reviewed without
- * clicking through the application.
+ * themes and at four window sizes.
  *
- * Where it fits: Run by "sh run.sh --snapshot [folder]". The sizes are a
- * 1200 by 800 window at 100, 125, 150 and 200 percent display scaling,
- * in logical pixels. Pictures go to workspace/ui-snapshots unless
- * another folder is given; git ignores workspace/.
- *
- * With --fullpage, each screen that scrolls is also saved as tall as
- * its whole page ("-full" pictures), so content below the fold is
- * checked too. PngWriter writes the files.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Run by "sh run.sh --snapshot [folder]"; pictures go to
+ * workspace/ui-snapshots by default. --fullpage also saves each scrolling
+ * page at full height.
  */
 package gradezzy.ui.check;
 
@@ -48,8 +40,6 @@ import gradezzy.ui.demo.DemoData;
 
 /**
  * Saves pictures of every screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class SnapshotWriter {
 
@@ -179,8 +169,7 @@ public class SnapshotWriter {
         return screens;
     }
 
-    // Pictures the three kinds of sheet over the Results screen: a
-    // confirmation, a Not connected yet panel and an export preview.
+    // Pictures the confirm, not-connected and preview sheets over Results.
     private void captureSheets(ShellBuilder builder, MainController main,
             DemoBackend backend, UiState state) throws IOException {
         main.navigate(Screen.RESULTS);
@@ -252,8 +241,7 @@ public class SnapshotWriter {
         }
     }
 
-    // Saves the screen again in a window tall enough for its whole page,
-    // when the page scrolls, then restores the window.
+    // Saves a scrolling screen again, tall enough to show its whole page.
     private void saveFullPage(ShellBuilder builder, Screen screen,
             double[] size, String name) throws IOException {
         Parent view = builder.getNavigator().getView(screen);

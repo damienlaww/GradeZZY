@@ -3,13 +3,8 @@
  *
  * Purpose: Controller of the Overview screen.
  *
- * Where it fits: The first screen. It tells the instructor where they
- * are (module, section, run), what has been graded and what waits for
- * review, shows the main grading journey, groups sections under their
- * module, and lists recent activity. In live mode it also says how many
- * backend features work yet.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: The first screen. It shows the current run, what waits for
+ * review, the grading journey, the sections and recent activity.
  */
 package gradezzy.ui;
 
@@ -43,8 +38,6 @@ import gradezzy.ui.component.Responsive;
 
 /**
  * Controller of the Overview screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class OverviewController extends BaseController {
 

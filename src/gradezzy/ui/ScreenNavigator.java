@@ -1,16 +1,11 @@
 /*
  * File: ScreenNavigator.java
  *
- * Purpose: Loads the FXML file of a screen and connects its controller to
- * the application services, the backend, the shared state and the shell.
+ * Purpose: Loads each screen's FXML file and connects its controller.
  *
- * Where it fits: The only class that uses FXMLLoader. MainApp and
- * MainController ask it for a screen by its Screen constant. Each screen
- * is loaded once and kept, so its filters, scroll position and selection
- * survive navigation and theme switches.
- *
- * AI use: caching and attach drafted with Claude Code, reviewed by Jun
- * Sheng.
+ * Where it fits: The only class that uses FXMLLoader. ShellBuilder creates
+ * it and MainController asks it for screens. Each screen is loaded once
+ * and kept, so its filters and selection survive navigation.
  */
 package gradezzy.ui;
 
@@ -27,12 +22,10 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * Loads screens from their FXML files.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class ScreenNavigator {
 
-    // Every service of the application, passed to each controller
+    // Every service, passed to each controller
     private final ServiceRegistry services;
 
     // The backend every controller calls
@@ -54,9 +47,9 @@ public class ScreenNavigator {
     /**
      * Creates a new screen navigator.
      *
-     * @param services every service of the application
-     * @param backend the backend every controller calls
-     * @param state the state shared by every screen
+     * @param services every service
+     * @param backend the backend
+     * @param state the shared state
      */
     public ScreenNavigator(ServiceRegistry services,
             DashboardBackend backend, UiState state) {
@@ -76,11 +69,10 @@ public class ScreenNavigator {
     }
 
     /**
-     * Loads one screen from its file, without keeping it. Used by the
-     * screen check.
+     * Loads one screen without keeping it, for the screen check.
      *
      * @param screen the screen to load
-     * @return the root node of the screen, ready to be shown
+     * @return the root node of the screen
      * @throws IOException if the FXML file is missing or invalid
      */
     public Parent load(Screen screen) throws IOException {
@@ -115,8 +107,7 @@ public class ScreenNavigator {
     }
 
     /**
-     * Returns the controller of a screen, loading the screen the first
-     * time.
+     * Returns a screen's controller, loading the screen the first time.
      *
      * @param screen the screen
      * @return the controller, or null when the screen has none

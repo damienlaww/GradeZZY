@@ -1,13 +1,10 @@
 /*
  * File: ScoreAdjustment.java
  *
- * Purpose: One mark changed by hand, with the reason and the earlier
- * score so it can be undone.
+ * Purpose: One mark changed by hand, with the reason and the earlier mark.
  *
  * Where it fits: Created by DashboardBackend.adjustScore and shown on the
  * History tab of the Student Evidence screen.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.backend;
 
@@ -15,8 +12,6 @@ import java.time.LocalDateTime;
 
 /**
  * A mark changed by hand.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class ScoreAdjustment {
 

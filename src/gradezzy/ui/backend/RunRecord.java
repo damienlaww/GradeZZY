@@ -1,12 +1,9 @@
 /*
  * File: RunRecord.java
  *
- * Purpose: One earlier grading run as the History screen shows it, with
- * its backup state.
+ * Purpose: One earlier grading run and its backup, for the History screen.
  *
  * Where it fits: Returned by DashboardBackend.listRuns.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.backend;
 
@@ -14,8 +11,6 @@ import gradezzy.model.GradingRun;
 
 /**
  * An earlier grading run and its backup.
- *
- * <p>Tier: COULD. Owner: Damien.
  */
 public class RunRecord {
 
@@ -38,10 +33,10 @@ public class RunRecord {
      * Creates a run record.
      *
      * @param run the run itself
-     * @param stateText a short description of how far the run got
-     * @param backupText a short description of the run's backup
-     * @param restorable whether a backup of this run can be restored
-     * @param current whether this is the run the screens show now
+     * @param stateText how far the run got
+     * @param backupText the run's backup state
+     * @param restorable whether its backup can be restored
+     * @param current whether the screens show this run now
      */
     public RunRecord(GradingRun run, String stateText, String backupText,
             boolean restorable, boolean current) {

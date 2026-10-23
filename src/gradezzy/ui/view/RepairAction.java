@@ -1,17 +1,11 @@
 /*
  * File: RepairAction.java
  *
- * Purpose: The three decisions the instructor can make about a repair of
- * a working copy: approve it, reject it (which undoes it) or undo the
- * decision. Each knows which repairs it applies to, the backend call
- * behind it and how to describe itself.
+ * Purpose: The three decisions about a repair of a working copy: approve,
+ * reject (which undoes it) or undo the decision.
  *
  * Where it fits: The Validation screen applies these to the selected
- * findings or to every decided repair of the run. Findings with no
- * automatic repair never take an action. The original ZIP file is never
- * changed.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * findings. The original ZIP file is never changed.
  */
 package gradezzy.ui.view;
 
@@ -28,8 +22,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * A decision about a repair.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public enum RepairAction {
 
@@ -51,7 +43,7 @@ public enum RepairAction {
     // The backend feature the action needs
     private final Capability capability;
 
-    // Why the action does nothing when every selected repair has it
+    // Why the action does nothing when no selected repair needs it
     private final String alreadyDone;
 
     // Creates an action constant.
@@ -84,8 +76,8 @@ public enum RepairAction {
      * Says whether the action can change a repair.
      *
      * @param repair the finding and its repair
-     * @return true when the repair exists and does not have this
-     *         decision yet
+     * @return true if the repair exists and lacks this decision, or for
+     *         UNDO, if it was approved or rejected
      */
     public boolean appliesTo(RepairItem repair) {
         if (repair.isBlocked()) {

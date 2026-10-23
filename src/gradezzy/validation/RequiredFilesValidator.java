@@ -5,8 +5,6 @@
  *
  * Where it fits: Finds missing files so later stages can skip that question and
  * award zero without failing.
- *
- * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.validation;
 

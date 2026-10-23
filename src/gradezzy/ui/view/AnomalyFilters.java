@@ -1,16 +1,10 @@
 /*
  * File: AnomalyFilters.java
  *
- * Purpose: The search, filters and sort of the Review Anomalies screen:
- * fills the choices, keeps them in UiState, suggests usernames while
- * typing, and decides which flags are shown and in what order.
+ * Purpose: The search, filters and sort of the Review Anomalies screen.
  *
  * Where it fits: The Review Anomalies screen creates one in onAttach. Each
- * change the instructor makes is written to UiState at once, so the
- * choices come back after navigation or a theme switch, and the screen
- * is told to reload its table.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * choice is kept in UiState, so it comes back after navigation.
  */
 package gradezzy.ui.view;
 
@@ -36,8 +30,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * The search, filters and sort of the flag list.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class AnomalyFilters {
 
@@ -116,8 +108,7 @@ public final class AnomalyFilters {
     }
 
     /**
-     * Suggests usernames while typing, and writes every change to
-     * UiState before telling the screen.
+     * Suggests usernames and saves each change to UiState, then reloads.
      *
      * @param onChange reloads the table
      */
@@ -162,8 +153,7 @@ public final class AnomalyFilters {
     }
 
     /**
-     * Copies the search, filters and sort from UiState into the
-     * controls, without reloading the table.
+     * Copies the choices from UiState into the controls, without reloading.
      */
     public void showState() {
         restoring = true;
@@ -176,8 +166,7 @@ public final class AnomalyFilters {
     }
 
     /**
-     * Clears the search and every filter in UiState. The sort order is
-     * kept.
+     * Clears the search and filters in UiState, but keeps the sort order.
      */
     public void clear() {
         state.setAnomalyQuery("");
@@ -195,8 +184,7 @@ public final class AnomalyFilters {
     }
 
     /**
-     * Returns the flags that pass the search and every filter, in the
-     * order chosen in the Sort menu.
+     * Returns the flags that pass the search and filters, in the chosen order.
      *
      * @param anomalies every flag of the run
      * @param decisionOf returns a flag's review decision

@@ -2,14 +2,10 @@
  * File: StudentInspector.java
  *
  * Purpose: Fills the inspector beside the Results table with the focused
- * student: name, username, total, state, the mark of each question and
- * the first message that waits for review.
+ * student.
  *
  * Where it fits: Used by ResultsController with the inspector's FXML
- * nodes. It only shows data; opening the evidence stays in the
- * controller.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * nodes. It only shows data.
  */
 package gradezzy.ui.view;
 
@@ -31,8 +27,6 @@ import gradezzy.ui.component.StatusBadge;
 
 /**
  * The inspector of the Results screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class StudentInspector {
 

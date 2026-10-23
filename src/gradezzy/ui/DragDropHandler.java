@@ -4,11 +4,7 @@
  * Purpose: Lets the instructor drop files onto the window.
  *
  * Where it fits: Used by the upload screen next to the file picker. It
- * accepts ZIP files and folders only, shows the drop area as ready while
- * they are dragged over it, and tells the screen when they are dropped.
- * It never opens the dropped files.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * accepts ZIP files and folders only and never opens them.
  */
 package gradezzy.ui;
 
@@ -24,12 +20,10 @@ import javafx.scene.input.TransferMode;
 
 /**
  * Lets the instructor drop files onto the window.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class DragDropHandler {
 
-    /** The style class added to the target while files hover over it. */
+    /** The style class on the target while files hover over it. */
     public static final String DRAG_OVER_CLASS = "drag-over";
 
     // The extension of an accepted file

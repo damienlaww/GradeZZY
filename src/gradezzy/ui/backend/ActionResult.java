@@ -1,14 +1,10 @@
 /*
  * File: ActionResult.java
  *
- * Purpose: Tells a screen what happened when it asked the backend to do
- * something.
+ * Purpose: Tells a screen how a backend action went.
  *
  * Where it fits: Returned by the DashboardBackend methods that change
- * something. A screen shows the message, and shows a Not connected yet
- * panel when the outcome is NOT_CONNECTED.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * something. A screen shows the message, or a Not connected yet panel.
  */
 package gradezzy.ui.backend;
 
@@ -16,8 +12,6 @@ import java.nio.file.Path;
 
 /**
  * The outcome of one backend action.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class ActionResult {
 
@@ -42,16 +36,16 @@ public class ActionResult {
     // A plain sentence for the instructor
     private final String message;
 
-    // The missing feature, set only when the outcome is NOT_CONNECTED
+    // The missing feature, set only for NOT_CONNECTED
     private final Capability capability;
 
-    // Text to show in a preview, or an empty string
+    // Preview text, or an empty string
     private final String preview;
 
     // The file that was written, or null
     private final Path path;
 
-    // Creates a result. Use the factory methods instead.
+    // Creates a result; the factory methods call it.
     private ActionResult(Outcome outcome, String message,
             Capability capability, String preview, Path path) {
         this.outcome = outcome;
@@ -72,8 +66,7 @@ public class ActionResult {
     }
 
     /**
-     * Creates a result for an action that produced a preview instead of a
-     * file.
+     * Creates a result for an action that made a preview, not a file.
      *
      * @param message a plain sentence in the past tense
      * @param preview the text to show

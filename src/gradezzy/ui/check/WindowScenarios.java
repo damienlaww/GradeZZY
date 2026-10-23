@@ -1,15 +1,11 @@
 /*
  * File: WindowScenarios.java
  *
- * Purpose: The window-level checks of the real-window test: the window
- * opens, the sidebar and shortcuts move between screens, Tab moves the
- * focus with a visible ring, tooltips appear, files can be dragged onto
- * the drop area, and the layout adapts when the window is resized.
+ * Purpose: The window-level checks of the real-window test, such as
+ * navigation, focus, tooltips, drag and drop and resizing.
  *
  * Where it fits: Run by WindowTest before and after WindowFlows. Every
  * action is real mouse or keyboard input through RobotDriver.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.check;
 
@@ -45,24 +41,22 @@ import gradezzy.ui.view.ScreenShortcuts;
 
 /**
  * Window-level checks with real input.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class WindowScenarios {
 
-    // The focus ring colour of the light theme
+    // The light theme's focus ring colour
     private static final Color RING = Color.web("#60A5FA");
 
-    // The inner focus edge colour of the light theme
+    // The light theme's inner focus edge colour
     private static final Color EDGE = Color.web("#1E3A8A");
 
     // The number of Tab presses whose focus is checked
     private static final int TAB_PRESSES = 8;
 
-    // How long a tooltip may take to appear under a resting pointer
+    // How long a tooltip may take to appear
     private static final long TOOLTIP_WAIT_MILLIS = 3000L;
 
-    // How long the pointer stays away before coming back onto an item
+    // How long the pointer stays off an item before coming back
     private static final long HOVER_GAP_MILLIS = 600L;
 
     // The focus ring colour of the sidebar items
@@ -71,10 +65,10 @@ public class WindowScenarios {
     // How long a screen may take to appear
     private static final long SCREEN_WAIT_MILLIS = 3000L;
 
-    // The sample ZIP files the drop puts on the drop area
+    // How many sample files demo mode adds after a drop
     private static final int SAMPLE_COUNT = 6;
 
-    // The compact and narrow window sizes checked
+    // The window sizes checked
     private static final double COMPACT_WIDTH = 960.0;
     private static final double COMPACT_HEIGHT = 640.0;
     private static final double NARROW_WIDTH = 600.0;
@@ -186,8 +180,7 @@ public class WindowScenarios {
                 "Shortcut+F puts the focus in the Results search");
     }
 
-    // Tab moves the focus from control to control, each with a ring
-    // that is really drawn on the screen, and Shift+Tab goes back.
+    // Tab moves the focus with a visible ring; Shift+Tab goes back.
     private void focusOrder() {
         test.section("Tab order and visible focus on Results");
         List<Node> visited = new ArrayList<>();
@@ -240,8 +233,7 @@ public class WindowScenarios {
         Parent sidebar = (Parent) test.byId("sidebar");
         Labeled overview = driver.find(sidebar, "Overview");
         Labeled results = driver.find(sidebar, "Results");
-        // A tooltip opens when the pointer comes onto a control, so the
-        // pointer first leaves the item it may already rest on.
+        // A tooltip opens as the pointer arrives, so the pointer leaves first.
         driver.moveTo(results);
         driver.pause(HOVER_GAP_MILLIS);
         driver.moveTo(overview);
@@ -254,8 +246,7 @@ public class WindowScenarios {
         driver.moveTo(results);
     }
 
-    // ZIP files dragged from another window land on the drop area. Demo
-    // mode reads none of them and adds the sample files instead.
+    // Drags ZIP files onto the drop area; demo mode adds its samples instead.
     private void dragAndDrop() {
         test.section("Drag and drop onto the Submissions drop area");
         test.openFromSidebar("Submissions", Screen.UPLOAD);
@@ -278,8 +269,7 @@ public class WindowScenarios {
         Node handle = driver.onFx(() -> source.getScene().getRoot());
         Node dropZone = test.byId("dropZone");
 
-        // The drop area is watched rather than asked, because the system
-        // drag loop holds the JavaFX thread until the drop.
+        // A listener is used, since the drag loop holds the JavaFX thread.
         AtomicBoolean hovered = new AtomicBoolean(false);
         driver.run(() -> dropZone.getStyleClass().addListener(
                 (ListChangeListener<String>) change -> {

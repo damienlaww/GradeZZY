@@ -3,17 +3,8 @@
  *
  * Purpose: Controller of the Validation screen.
  *
- * Where it fits: Reached from Submissions and Review Anomalies. Lists the
- * validation findings of the run for the section in the context bar,
- * each with what the student submitted and the change proposed for the
- * working copy, and lets the instructor approve, reject or undo the
- * repairs, one at a time or several at once. Only working copies change;
- * the original ZIP files never do. The selection is kept in UiState, so
- * it comes back after navigation or a theme switch. The table, filters,
- * inspector and repair actions are parts in gradezzy.ui.view; this
- * controller wires them together.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Reached from Submissions and Review Anomalies. Lets the
+ * instructor approve, reject or undo the repairs made to working copies.
  */
 package gradezzy.ui;
 
@@ -48,8 +39,6 @@ import gradezzy.ui.view.ValidationTable;
 
 /**
  * Controller of the Validation screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class ValidationController extends BaseController {
 
@@ -207,8 +196,7 @@ public class ValidationController extends BaseController {
     }
 
     /**
-     * Reloads the findings and restores the selection each time the
-     * screen is shown.
+     * Reloads the findings and restores the selection each time it is shown.
      */
     @Override
     public void onShow() {
@@ -225,8 +213,7 @@ public class ValidationController extends BaseController {
     }
 
     /**
-     * Rejects the repairs of the selected findings, after a confirmation.
-     * Rejecting undoes the repair on the working copy.
+     * Rejects and undoes the selected repairs, after a confirmation.
      */
     @FXML
     public void handleRejectSelected() {
@@ -235,8 +222,7 @@ public class ValidationController extends BaseController {
     }
 
     /**
-     * Returns the decided repairs among the selected findings to Applied,
-     * waiting for review.
+     * Returns the selected decided repairs to Applied, waiting for review.
      */
     public void handleUndoSelected() {
         repairDecisions.decideSelected(selection.getSelected(),
@@ -244,8 +230,7 @@ public class ValidationController extends BaseController {
     }
 
     /**
-     * Returns every decided repair of the run to Applied, waiting for
-     * review, after a confirmation.
+     * Returns every decided repair to Applied, after a confirmation.
      */
     @FXML
     public void handleUndoAll() {
@@ -262,8 +247,7 @@ public class ValidationController extends BaseController {
     }
 
     /**
-     * Rejects the repair of the finding in the inspector, after a
-     * confirmation.
+     * Rejects the repair of the finding in the inspector, once confirmed.
      */
     @FXML
     public void handleRejectFocused() {
@@ -361,8 +345,7 @@ public class ValidationController extends BaseController {
         return getBackend().getRun(getState().getSection());
     }
 
-    // Reloads the findings, applies the filters and the remembered
-    // selection, and redraws the screen.
+    // Reloads and filters the findings, keeps the selection and redraws.
     private void refresh() {
         GradingRun run = currentRun();
         repairs.clear();
@@ -391,8 +374,7 @@ public class ValidationController extends BaseController {
         selectionChanged();
     }
 
-    // Updates the status line and the inspector after the selection
-    // changed.
+    // Updates the status line and the inspector after a selection change.
     private void selectionChanged() {
         refreshStatus();
         focusChanged();

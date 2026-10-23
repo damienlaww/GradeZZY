@@ -5,8 +5,6 @@
  *
  * Where it fits: Called by ValidateStage. Validators are registered in
  * PipelineFactory.
- *
- * AI use: drafted with Claude Code, reviewed by Seth.
  */
 package gradezzy.validation;
 

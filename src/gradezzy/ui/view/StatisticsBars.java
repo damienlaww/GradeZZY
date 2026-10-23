@@ -1,17 +1,11 @@
 /*
  * File: StatisticsBars.java
  *
- * Purpose: Fills the two bar lists of the Statistics screen: question
- * difficulty (the share of graded students who passed each question) and
- * anomaly frequency (how often each anomaly type occurred, relative to
- * the most frequent type), each with a one-sentence summary that also
- * handles ties.
+ * Purpose: Fills the question difficulty and anomaly frequency bars of the
+ * Statistics screen.
  *
- * Where it fits: StatisticsController creates one and calls fill when
- * statistics are available. The bars are ProgressBars in the primary
- * colour, never status colours, and each has an accessible text.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: StatisticsController creates one and calls fill. The bars
+ * use the primary colour, never status colours.
  */
 package gradezzy.ui.view;
 
@@ -39,8 +33,6 @@ import gradezzy.ui.component.Labels;
 
 /**
  * The question difficulty and anomaly frequency bars.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class StatisticsBars {
 
@@ -279,8 +271,7 @@ public final class StatisticsBars {
     }
 
     /**
-     * Orders anomaly types by count, most frequent first, then in the
-     * order of the AnomalyType enum.
+     * Orders anomaly types by count, most frequent first, then in enum order.
      */
     private static class TypeCountComparator
             implements Comparator<TypeCount> {

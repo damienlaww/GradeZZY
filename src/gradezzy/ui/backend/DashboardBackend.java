@@ -3,12 +3,8 @@
  *
  * Purpose: Everything the screens ask of the backend, in one interface.
  *
- * Where it fits: Controllers call only this interface, never a service.
- * LiveBackend passes each call to one service method; DemoBackend answers
- * from synthetic data in memory. A screen therefore works the same in both
- * modes, and shows real results as soon as a teammate finishes a service.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Controllers call only this interface. LiveBackend passes
+ * each call to a service; DemoBackend answers from data in memory.
  */
 package gradezzy.ui.backend;
 
@@ -30,8 +26,6 @@ import gradezzy.stats.StatisticsSummary;
 
 /**
  * The backend as the screens see it.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public interface DashboardBackend {
 
@@ -45,8 +39,8 @@ public interface DashboardBackend {
     boolean isDemo();
 
     /**
-     * Says whether a screen may offer a feature. When this returns
-     * false, the screen shows a Not connected yet panel instead.
+     * Says whether a screen may offer a feature. If not, the screen shows
+     * a Not connected yet panel.
      *
      * @param capability the feature
      * @return true when the feature can be called
@@ -119,8 +113,7 @@ public interface DashboardBackend {
     // ---------------------------------------------------------- import
 
     /**
-     * Returns stand-in files for one input group. Demo mode uses these
-     * instead of the system file picker so it never reads real files.
+     * Returns stand-in files for an input group, used in demo mode.
      *
      * @param kind the input group
      * @return synthetic paths, or an empty list in live mode
@@ -128,8 +121,7 @@ public interface DashboardBackend {
     List<Path> getSampleFiles(InputKind kind);
 
     /**
-     * Returns a stand-in for the corrected copy of an unusable file, so
-     * demo mode can show a replacement without the file picker.
+     * Returns a stand-in for a corrected file, used in demo mode.
      *
      * @param invalidItem the file to replace
      * @return a synthetic path, or null in live mode
@@ -137,17 +129,15 @@ public interface DashboardBackend {
     Path getSampleReplacement(ImportItem invalidItem);
 
     /**
-     * Returns the file or folder config.properties names for an input
-     * group.
+     * Returns the path config.properties names for an input group.
      *
      * @param kind the roster, tester or starter group
-     * @return the configured path, or null when there is none
+     * @return the configured path, or null if none
      */
     Path getConfiguredPath(InputKind kind);
 
     /**
-     * Checks whether a chosen file or folder can be used, without
-     * grading it.
+     * Checks whether a chosen file or folder can be used, without grading.
      *
      * @param kind the input group
      * @param path the chosen file or folder
@@ -161,7 +151,7 @@ public interface DashboardBackend {
      * Starts grading a batch in the background.
      *
      * @param batch the chosen files
-     * @param section the section the batch belongs to
+     * @param section the batch's section
      * @param listener told about progress, possibly on another thread
      * @param callback told how the run ended, on the JavaFX thread
      */
@@ -169,14 +159,12 @@ public interface DashboardBackend {
             ProgressListener listener, RunCallback callback);
 
     /**
-     * Asks the running batch to stop after the current submission.
-     * Completed results are kept.
+     * Stops the batch after the current submission. Results are kept.
      */
     void cancelGrading();
 
     /**
-     * Grades the submissions of a run that were cancelled before they
-     * started.
+     * Grades a run's submissions that were cancelled before they started.
      *
      * @param gradingRun the run
      * @param listener told about progress
@@ -196,8 +184,7 @@ public interface DashboardBackend {
             ProgressListener listener, RunCallback callback);
 
     /**
-     * Runs the tester of one question again and replaces only that
-     * question's result.
+     * Runs one question's tester again and replaces only that result.
      *
      * @param submission the student
      * @param questionId the question, such as Q1a
@@ -232,8 +219,7 @@ public interface DashboardBackend {
     ReviewDecision getDecision(Anomaly anomaly);
 
     /**
-     * Records a review decision about an anomaly. It never changes a
-     * mark.
+     * Records a review decision about an anomaly. It never changes a mark.
      *
      * @param anomaly the anomaly
      * @param decision the new decision
@@ -382,10 +368,8 @@ public interface DashboardBackend {
     ActionResult backupNow();
 
     /**
-     * Restores an earlier run from the list, after saving a recovery
-     * snapshot of the current one. This is the restore preview
-     * capability; a backend that does not support it returns Not
-     * connected yet.
+     * Restores an earlier run, after saving a snapshot of the current one.
+     * A backend without RESTORE_PREVIEW returns Not connected yet.
      *
      * @param record the run to restore
      * @return what happened
@@ -393,11 +377,9 @@ public interface DashboardBackend {
     ActionResult restore(RunRecord record);
 
     /**
-     * Puts the saved results back to the state stored in a backup file.
-     * The screen asks for the file with the system file picker, which
-     * demo mode never opens.
+     * Restores the saved results from a backup file.
      *
-     * @param backupFile the backup file the instructor chose
+     * @param backupFile the chosen backup file
      * @return what happened
      */
     ActionResult restoreBackup(Path backupFile);
@@ -472,8 +454,8 @@ public interface DashboardBackend {
     // ------------------------------------------------------------ demo
 
     /**
-     * Switches between six sample students and a large generated cohort.
-     * Does nothing in live mode.
+     * Switches between six sample students and a large cohort. Does
+     * nothing in live mode.
      *
      * @param large true for the large cohort
      */

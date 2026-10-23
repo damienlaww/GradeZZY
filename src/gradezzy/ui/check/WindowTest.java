@@ -1,19 +1,12 @@
 /*
  * File: WindowTest.java
  *
- * Purpose: Tests the real window with real mouse and keyboard input:
- * it opens GradeZZY on the screen, clicks, types, presses shortcuts and
- * Tab, drags files, resizes the window, reads the screen pixels and
- * prints PASS or FAIL for each check. Pictures of the real screen are
- * saved along the way.
+ * Purpose: Tests the real window with real mouse and keyboard input and
+ * prints PASS or FAIL for each check.
  *
- * Where it fits: Run by "sh run.sh --windowtest [folder]". It needs a
- * desktop session, and the mouse and keyboard must be left alone while
- * it runs (about two minutes). The demo scenarios live in
- * WindowScenarios; this class sets up the window, keeps the score, and
- * ends with a pass through every screen in live mode.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Run by "sh run.sh --windowtest [folder]"; leave the mouse
+ * and keyboard alone while it runs. The scenarios live in WindowScenarios
+ * and WindowFlows.
  */
 package gradezzy.ui.check;
 
@@ -50,8 +43,6 @@ import gradezzy.ui.demo.DemoBackend;
 
 /**
  * The real-window test.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class WindowTest {
 
@@ -83,7 +74,7 @@ public class WindowTest {
     // The most wheel notches turned to bring a row into view
     private static final int MAX_WHEEL_NOTCHES = 12;
 
-    // The style classes of lists whose rows can be scrolled into view
+    // The style classes of lists that can scroll
     private static final String[] LIST_CLASSES = {"table-view",
         "list-view"};
 
@@ -140,8 +131,7 @@ public class WindowTest {
      * Opens the window and runs the test on its own thread. Call on the
      * JavaFX thread.
      *
-     * @param onDone called on the JavaFX thread with 0 when every check
-     *        passed and 1 otherwise
+     * @param onDone called on the JavaFX thread with 0 if all passed, else 1
      * @throws IOException if the window cannot be built
      */
     public void start(IntConsumer onDone) throws IOException {
@@ -262,8 +252,7 @@ public class WindowTest {
     }
 
     /**
-     * Clicks the visible control with some words on the screen shown,
-     * leaving out the sidebar and the context bar.
+     * Clicks a visible control with some words in the screen's content area.
      *
      * @param text the words on the control
      * @return true when the control was found and clicked
@@ -431,8 +420,7 @@ public class WindowTest {
         return 1;
     }
 
-    // Opens every screen with the real services and checks that none
-    // shows an error.
+    // Opens every screen with the real services and checks for errors.
     private void livePass() {
         section("Live mode: every screen opens without an error");
         driver.run(() -> {
@@ -506,8 +494,7 @@ public class WindowTest {
         return false;
     }
 
-    // Says whether a row is wholly inside the visible part of its list,
-    // so a click on its middle reaches it.
+    // Says whether a row is wholly visible, so a click on it lands.
     private boolean fullyShown(Node row) {
         Node holder = row.getParent();
         while (holder != null
@@ -549,8 +536,7 @@ public class WindowTest {
         stage.setScene(scene);
         stage.sizeToScene();
         stage.centerOnScreen();
-        // Kept above other windows, so no click meant for the test can
-        // reach another application.
+        // Stays on top, so no test click reaches another application.
         stage.setAlwaysOnTop(true);
         stage.show();
         stage.toFront();

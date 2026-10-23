@@ -3,16 +3,8 @@
  *
  * Purpose: Controller of the Review Anomalies screen.
  *
- * Where it fits: Lists every flag of the run for the section in the
- * context bar, with search, filters, sort and multi-selection, and lets
- * the instructor mark flags reviewed, reject them or undo the decision,
- * one at a time or several at once. A flag asks for a review: it never
- * changes a mark and never claims misconduct. Search, filters, sort and
- * selection are kept in UiState, so they come back after navigation or a
- * theme switch. The table, filters, inspector and decisions are parts in
- * gradezzy.ui.view; this controller wires them together.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Lists the flags of the section in the context bar for the
+ * instructor to review, reject or undo. A flag never changes a mark.
  */
 package gradezzy.ui;
 
@@ -49,8 +41,6 @@ import gradezzy.ui.view.ReviewStudents;
 
 /**
  * Controller of the Review Anomalies screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class AnomalyLogController extends BaseController {
 
@@ -227,8 +217,8 @@ public class AnomalyLogController extends BaseController {
     }
 
     /**
-     * Restores the search, filters, sort and selection and reloads the
-     * flags each time the screen is shown.
+     * Restores the search, filters, sort and selection, and reloads the
+     * flags each time it is shown.
      */
     @Override
     public void onShow() {
@@ -269,8 +259,7 @@ public class AnomalyLogController extends BaseController {
     }
 
     /**
-     * Restores the decision the selected flags had before their latest
-     * change in this session.
+     * Undoes this session's latest decision on the selected flags.
      */
     @FXML
     public void handleUndo() {
@@ -363,8 +352,7 @@ public class AnomalyLogController extends BaseController {
     }
 
     /**
-     * Opens the Similarity Review screen for the student of the flag in
-     * the inspector.
+     * Opens Similarity Review for the student of the focused flag.
      */
     @FXML
     public void handleCompare() {
@@ -376,8 +364,8 @@ public class AnomalyLogController extends BaseController {
     }
 
     /**
-     * Opens the Validation screen. When the flag in the inspector is a
-     * validation finding, it is selected there.
+     * Opens the Validation screen, selecting the focused flag if it is a
+     * validation finding.
      */
     @FXML
     public void handleOpenValidation() {
@@ -391,8 +379,7 @@ public class AnomalyLogController extends BaseController {
     }
 
     /**
-     * Returns the flags shown, after search, filters and sort. Used by
-     * the self-test.
+     * Returns the flags shown. Used by the self-test.
      *
      * @return the flags in table order
      */
@@ -415,8 +402,7 @@ public class AnomalyLogController extends BaseController {
         return getBackend().getRun(getState().getSection());
     }
 
-    // Reloads the flags, applies search, filters and sort and the
-    // remembered selection, and redraws the screen.
+    // Reloads the flags, applies the filters and redraws the screen.
     private void refresh() {
         GradingRun run = currentRun();
         anomalies.clear();
@@ -433,8 +419,7 @@ public class AnomalyLogController extends BaseController {
         selectionChanged();
     }
 
-    // Updates the status line and the inspector after the selection
-    // changed.
+    // Updates the status line and the inspector.
     private void selectionChanged() {
         refreshStatus();
         focusChanged();
@@ -445,8 +430,7 @@ public class AnomalyLogController extends BaseController {
         flagInspector.show(selection.getFocused());
     }
 
-    // Describes what waits, is shown and is selected, and enables the
-    // buttons that act on the selection.
+    // Updates the status line and the selection buttons.
     private void refreshStatus() {
         List<Anomaly> selected = selection.getSelected();
         boolean none = selected.isEmpty();

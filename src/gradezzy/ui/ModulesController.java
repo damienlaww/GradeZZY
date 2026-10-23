@@ -3,15 +3,8 @@
  *
  * Purpose: Controller of the Modules screen.
  *
- * Where it fits: Shows one panel per module with a tile for each of its
- * sections, so sections always stay grouped under their module. Each
- * tile says how many submissions the section's run holds. Choosing a
- * tile makes that section the one in the context bar, which every other
- * screen reads. The modules come from app.module.codes; if that
- * feature were not connected, the live screen would say so instead of
- * pretending.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Shows one panel per module with a tile per section.
+ * Choosing a tile sets the section in the context bar for every screen.
  */
 package gradezzy.ui;
 
@@ -41,8 +34,6 @@ import gradezzy.ui.component.Tone;
 
 /**
  * Controller of the Modules screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class ModulesController extends BaseController {
 
@@ -78,8 +69,8 @@ public class ModulesController extends BaseController {
     }
 
     /**
-     * Shows the demo banner or the Not connected yet panel for more than
-     * one module.
+     * Shows the demo banner in demo mode, and the Not connected panel if
+     * the backend cannot handle more than one module.
      */
     @Override
     public void onAttach() {
@@ -174,8 +165,7 @@ public class ModulesController extends BaseController {
         return panel;
     }
 
-    // Builds the tile of one section: its code, its run and whether it
-    // is the chosen section.
+    // Builds the tile of one section, marked when it is chosen.
     private Button sectionTile(String moduleCode, String sectionCode) {
         Section section = new Section(moduleCode, sectionCode);
         GradingRun run = getBackend().getRun(section);
@@ -218,8 +208,7 @@ public class ModulesController extends BaseController {
                 + " for every screen.");
     }
 
-    // Chooses a module's section unless one of its sections is already
-    // chosen, then opens the Submissions screen.
+    // Opens Submissions, first choosing this module's first section if needed.
     private void addSubmissions(String moduleCode, String firstSection) {
         if (!moduleCode.equals(getState().moduleCodeProperty().get())) {
             chooseSection(moduleCode, firstSection);

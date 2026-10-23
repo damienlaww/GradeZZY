@@ -4,9 +4,7 @@
   History screen: earlier grading runs and their backups, with Back Up
   Now, Restore (after a confirmation that lists what happens) and Open
   Run. Restoring never changes original submissions or exported files.
-  Tier: COULD. Owner: Damien.
   Controller: gradezzy.ui.HistoryController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.scene.control.Button?>

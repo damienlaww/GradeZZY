@@ -1,16 +1,10 @@
 /*
  * File: AdjustScoreSheet.java
  *
- * Purpose: The Adjust Score sheet of the Student Evidence screen: a
- * question choice, the new mark beside the maximum and current mark, a
- * required reason and an inline problem message, with Cancel and Save.
+ * Purpose: The Adjust Score sheet of the Student Evidence screen.
  *
- * Where it fits: StudentReportController creates one for the student on
- * show and passes the sheet to AppShell.showSheet. Save checks the form
- * with validate and hands the values to the controller, which calls the
- * backend and records the change in the audit log.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: StudentReportController creates one and shows it with
+ * AppShell.showSheet. Save hands a valid form to the controller.
  */
 package gradezzy.ui.view;
 
@@ -37,8 +31,6 @@ import gradezzy.ui.component.Sheet;
 
 /**
  * The sheet that changes one mark by hand.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class AdjustScoreSheet {
 
@@ -143,7 +135,7 @@ public final class AdjustScoreSheet {
      * @param reasonText the reason typed
      * @param scoreText the new mark typed
      * @param max the most the question can earn
-     * @return an empty string when the form is valid, or a plain message
+     * @return an empty string if valid, or a message
      */
     public static String validate(String reasonText, String scoreText,
             double max) {

@@ -4,9 +4,7 @@
   Settings screen: grouped inset lists in the style of macOS System
   Settings, for grading, execution, detection, export, storage and
   appearance. Each text setting is checked as it is typed.
-  Tier: SHOULD. Owner: Damien.
   Controller: gradezzy.ui.SettingsController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import atlantafx.base.controls.ToggleSwitch?>

@@ -1,16 +1,10 @@
 /*
  * File: UiState.java
  *
- * Purpose: Holds everything the interface must remember while the
- * instructor moves between screens: module, section, run, filters,
- * sort, selection, theme and the animation setting.
+ * Purpose: Holds what the interface remembers between screens.
  *
- * Where it fits: One object is created by MainApp and given to every
- * controller. Screens read it when they are shown and write to it when
- * the instructor changes something, so navigation and theme switches
- * never lose context.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: ShellBuilder creates one, shared by every controller, so
+ * navigation and theme switches never lose the filters or selection.
  */
 package gradezzy.ui;
 
@@ -39,8 +33,6 @@ import gradezzy.ui.backend.ReviewDecision;
 
 /**
  * The state shared by every screen.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public class UiState {
 
@@ -161,8 +153,7 @@ public class UiState {
     }
 
     /**
-     * Records that results, decisions or the shown run changed, so every
-     * screen reloads when it is next shown.
+     * Records a data change, so every screen reloads when next shown.
      */
     public void markDataChanged() {
         dataVersion.set(dataVersion.get() + 1);
@@ -251,8 +242,7 @@ public class UiState {
     }
 
     /**
-     * Returns the assessment shown in the context bar. The context bar
-     * keeps it up to date; screens only read it.
+     * Returns the assessment in the context bar. Screens only read it.
      *
      * @return the assessment property
      */
@@ -261,9 +251,8 @@ public class UiState {
     }
 
     /**
-     * Returns the grading run of the section shown in the context bar,
-     * or null when the section has none. The context bar keeps it up to
-     * date; screens only read it.
+     * Returns the run of the section in the context bar, which holds null
+     * when there is none. Screens only read it.
      *
      * @return the run property
      */

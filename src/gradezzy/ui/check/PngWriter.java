@@ -6,11 +6,8 @@
  * Where it fits: Used by SnapshotWriter for off-screen pictures and by
  * WindowTest for pictures of the real screen.
  *
- * Note on untaught Java: javax.imageio writes the PNG file. JavaFX's own
- * image helper is in javafx-swing, which is not in lib/, so the pixels
- * are copied into a java.awt.image.BufferedImage by hand.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Note on untaught Java: javax.imageio and BufferedImage write the PNG,
+ * since the JavaFX helper for this (javafx-swing) is not in lib/.
  */
 package gradezzy.ui.check;
 
@@ -25,8 +22,6 @@ import javafx.scene.image.PixelFormat;
 
 /**
  * Writes PNG files.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class PngWriter {
 

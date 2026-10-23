@@ -3,21 +3,11 @@
  *
  * Purpose: Controller of the Similarity Review screen.
  *
- * Where it fits: Lists the pairs of submissions whose code is at or
- * above the similarity threshold, and shows the two compared files side
- * by side with the starter and tester files that were left out, so the
- * instructor can read both before deciding anything. Similarity is a
- * review aid: marking a pair reviewed records a decision on its Similar
- * code flags and never changes a mark or labels a student. The pair list
- * and the comparison are parts in gradezzy.ui.view; this controller
- * wires them together.
+ * Where it fits: Lists the pairs at or above the similarity threshold and
+ * shows both files side by side. Marking a pair reviewed changes no mark.
  *
- * Note on untaught Java: Check Again compares every submission's files,
- * so it runs in a javafx.concurrent.Task on a background thread, as
- * GradingTask does for grading. The list is only redrawn when the task
- * has finished, back on the JavaFX thread.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Note on untaught Java: Check Again runs in a javafx.concurrent.Task on a
+ * background thread, since it compares every submission's files.
  */
 package gradezzy.ui;
 
@@ -51,8 +41,6 @@ import gradezzy.ui.view.SimilarityPairList;
 
 /**
  * Controller of the Similarity Review screen.
- *
- * <p>Tier: COULD. Owner: Damien.
  */
 public class PlagiarismController extends BaseController {
 
@@ -158,8 +146,7 @@ public class PlagiarismController extends BaseController {
     // The student selected elsewhere when this screen was last shown
     private String lastHint = "";
 
-    // The run being checked in the background, or null when no check
-    // runs. The pair list must not be read or redrawn meanwhile.
+    // The run being checked, or null; the pairs must not be read meanwhile
     private GradingRun checkingRun = null;
 
     /**
@@ -195,9 +182,7 @@ public class PlagiarismController extends BaseController {
     }
 
     /**
-     * Checks the run of the section the first time it is shown, keeps
-     * the chosen pair, and refreshes the decisions each time the screen
-     * is shown.
+     * Loads the pairs the first time a run is shown, then redraws the screen.
      */
     @Override
     public void onShow() {
@@ -221,9 +206,8 @@ public class PlagiarismController extends BaseController {
     }
 
     /**
-     * Runs the similarity check on the section's run again, in the
-     * background, and reloads the pairs when it has finished. Check
-     * Again is unavailable meanwhile.
+     * Runs the similarity check again in the background and reloads the
+     * pairs when it ends. Check Again is unavailable meanwhile.
      */
     @FXML
     public void handleRunCheck() {
@@ -240,9 +224,8 @@ public class PlagiarismController extends BaseController {
         Task<Void> task = new Task<>() {
 
             /**
-             * Asks the backend for the pairs of the run, on a background
-             * thread. The pair list only keeps them; they are drawn
-             * when the task has finished.
+             * Loads the pairs of the run on a background thread. They are
+             * drawn when the task has finished.
              *
              * @return nothing
              */
@@ -262,8 +245,7 @@ public class PlagiarismController extends BaseController {
     }
 
     /**
-     * Records that the instructor reviewed the chosen pair, on the
-     * Similar code flags of both students. No mark changes.
+     * Marks the chosen pair reviewed on both students' flags. No mark changes.
      */
     @FXML
     public void handleMarkReviewed() {
@@ -298,8 +280,7 @@ public class PlagiarismController extends BaseController {
     }
 
     /**
-     * Restores the decision the chosen pair's flags had before they were
-     * last changed in this session.
+     * Restores the pair's decision from before its last change this session.
      */
     @FXML
     public void handleUndoDecision() {
@@ -324,8 +305,7 @@ public class PlagiarismController extends BaseController {
     }
 
     /**
-     * Opens the Settings screen, where the similarity check is switched
-     * on.
+     * Opens the Settings screen, where the similarity check is switched on.
      */
     @FXML
     public void handleOpenSettings() {
@@ -461,8 +441,7 @@ public class PlagiarismController extends BaseController {
                 + aid);
     }
 
-    // Shows the chosen pair: its decision, files, excerpts and left-out
-    // files, or why there is nothing to compare.
+    // Shows the chosen pair and its files, or why there is nothing to show.
     private void refreshDetail() {
         SimilarityPair pair = pairs.getSelected();
         decisionHolder.getChildren().clear();

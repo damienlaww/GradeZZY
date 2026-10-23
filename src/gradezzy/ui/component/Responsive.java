@@ -1,14 +1,11 @@
 /*
  * File: Responsive.java
  *
- * Purpose: Shows or hides a screen's inspector as the window narrows,
- * and gives it a toolbar toggle when it is hidden.
+ * Purpose: Layout rules that keep screens usable in a narrow window.
  *
- * Where it fits: Screens with an inspector call bindInspector once in
- * onAttach. Above 1100 pixels the inspector sits beside the list; below
- * that it hides behind the toggle so the list keeps its width.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Called by the screen controllers. Below 1100 pixels
+ * (UiState.COMPACT_WIDTH) the inspector hides behind a toolbar toggle so
+ * the list keeps its width.
  */
 package gradezzy.ui.component;
 
@@ -30,8 +27,6 @@ import javafx.scene.layout.Region;
 
 /**
  * Layout rules for narrow windows.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class Responsive {
 
@@ -44,14 +39,12 @@ public final class Responsive {
     }
 
     /**
-     * Shows the inspector beside the list in a wide window, and behind a
-     * toggle in a compact one.
+     * Shows the inspector in a wide window, or behind a toggle when compact.
      *
      * @param inspector the inspector pane
-     * @param toggle the toolbar button that opens it when compact
+     * @param toggle the toolbar button that opens it
      * @param compact true while the window is compact
-     * @param requested shared across screens: whether the instructor
-     *        opened the inspector
+     * @param requested whether it was opened, shared by every screen
      */
     public static void bindInspector(Node inspector, ToggleButton toggle,
             BooleanProperty compact, BooleanProperty requested) {
@@ -65,13 +58,12 @@ public final class Responsive {
     }
 
     /**
-     * Lays two panes side by side, and stacks the second under the first
-     * when the grid is narrower than a break width.
+     * Lays two panes side by side, or stacks them below a break width.
      *
-     * @param grid the grid that holds both panes
+     * @param grid the grid holding both panes
      * @param left the pane on the left, or on top when stacked
      * @param right the pane on the right, or below when stacked
-     * @param leftPercent the share of the width given to the left pane
+     * @param leftPercent the left pane's share of the width
      * @param breakWidth the width below which the panes stack
      */
     public static void twoColumns(GridPane grid, Node left, Node right,
@@ -80,9 +72,7 @@ public final class Responsive {
         ColumnConstraints second = new ColumnConstraints();
         first.setHgrow(Priority.ALWAYS);
         second.setHgrow(Priority.ALWAYS);
-        // Columns that may shrink let the grid follow a narrow window
-        // instead of holding the page wide, so it can reach the break
-        // width and stack.
+        // Columns may shrink, so the grid can get narrow enough to stack.
         first.setMinWidth(0.0);
         second.setMinWidth(0.0);
         grid.getColumnConstraints().setAll(first, second);
@@ -97,8 +87,7 @@ public final class Responsive {
         arrange(grid, right, first, second, leftPercent, gap, false);
     }
 
-    // Puts the right pane beside or under the left one. A stacked grid
-    // has one column, so it keeps no gap between columns.
+    // Puts the right pane beside the left one, or under it with no gap.
     private static void arrange(GridPane grid, Node right,
             ColumnConstraints first, ColumnConstraints second,
             double leftPercent, double gap, boolean stacked) {
@@ -117,9 +106,7 @@ public final class Responsive {
     }
 
     /**
-     * Stops every button under a node from shrinking below its text, so
-     * a narrow window wraps text around buttons instead of cutting their
-     * labels.
+     * Stops every button under a node from shrinking below its text.
      *
      * @param root the top of the tree to walk
      */
@@ -128,9 +115,7 @@ public final class Responsive {
             ((ButtonBase) root).setMinWidth(Region.USE_PREF_SIZE);
         }
 
-        // Controls without a skin yet do not list their content as
-        // children, so scroll panes, tab panes and split panes are
-        // opened by hand.
+        // Without a skin these panes list no children, so open them by hand.
         if (root instanceof ScrollPane) {
             Node content = ((ScrollPane) root).getContent();
             if (content != null) {

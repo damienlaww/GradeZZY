@@ -1,13 +1,10 @@
 /*
  * File: EmptyState.java
  *
- * Purpose: Explains why a list or panel is empty and offers the next
- * step, instead of showing a blank area.
+ * Purpose: Explains why a list or panel is empty and offers the next step.
  *
  * Where it fits: Shown by any screen with no data yet, a filter with no
  * match, or a backend that still holds a placeholder.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.component;
 
@@ -18,8 +15,6 @@ import javafx.scene.layout.VBox;
 
 /**
  * A message for an empty list.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class EmptyState extends VBox {
 
@@ -39,8 +34,8 @@ public final class EmptyState extends VBox {
      * Creates an empty state.
      *
      * @param icon the icon above the title
-     * @param titleText what is empty, such as "No results yet"
-     * @param messageText why it is empty and what to do next
+     * @param titleText what is empty
+     * @param messageText why, and what to do next
      */
     public EmptyState(Icon icon, String titleText, String messageText) {
         getStyleClass().add("empty-state");

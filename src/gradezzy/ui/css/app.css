@@ -13,8 +13,6 @@
  * (4.5:1 for text, 3:1 for icons, focus rings and control borders).
  * Green, amber, red and the information blue mean grading status only;
  * app messages and banners use the neutral raised colours.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 
 /* ------------------------------------------------------------- tokens */

@@ -1,20 +1,15 @@
 /*
  * File: SortOrder.java
  *
- * Purpose: The ways a list of students or anomalies can be sorted, with
- * the words shown in the Sort menu.
+ * Purpose: The ways a list of students or anomalies can be sorted.
  *
  * Where it fits: The Results and Review Anomalies screens offer these,
  * and UiState remembers the choice of each screen.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui;
 
 /**
  * A sort order offered on a list screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public enum SortOrder {
 

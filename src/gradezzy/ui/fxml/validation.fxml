@@ -5,9 +5,7 @@
   the student submitted and the change proposed for the working copy,
   with approve, reject and undo for one repair or several, and an
   inspector for the focused finding. The original ZIP is never changed.
-  Tier: SHOULD. Owner: Damien.
   Controller: gradezzy.ui.ValidationController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.geometry.Insets?>

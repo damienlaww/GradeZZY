@@ -1,17 +1,11 @@
 /*
  * File: ThemeManager.java
  *
- * Purpose: Switches the whole application between the light and the dark
- * theme.
+ * Purpose: Switches the application between the light and dark themes.
  *
- * Where it fits: The only class that sets the AtlantaFX theme. MainApp
- * applies the theme named in config.properties at start-up, and the
- * context bar and Settings switch it later. Switching replaces only
- * stylesheets; no screen is reloaded, so nothing the instructor chose is
- * lost.
- *
- * AI use: stylesheet handling drafted with Claude Code, reviewed by Jun
- * Sheng.
+ * Where it fits: The only class that sets the AtlantaFX theme. ShellBuilder
+ * applies it at start-up; the context bar and Settings switch it later
+ * without reloading any screen.
  */
 package gradezzy.ui;
 
@@ -29,15 +23,10 @@ import javafx.scene.text.Font;
 
 /**
  * Applies the light or dark theme.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class ThemeManager {
 
-    /**
-     * The value of the ui.theme setting that selects the dark theme. Any
-     * other value selects the light theme.
-     */
+    /** The ui.theme value for dark; any other value means light. */
     public static final String DARK_THEME = "dark";
 
     /** The value of the ui.theme setting for the light theme. */
@@ -80,13 +69,11 @@ public class ThemeManager {
     }
 
     /**
-     * Applies a theme to the application and the team's stylesheets to
-     * one scene.
+     * Applies the theme to the application and the stylesheets to a scene.
      *
      * @param scene the scene
      * @param dark true for the dark theme
-     * @throws IOException if a stylesheet is missing from the classes
-     *         folder
+     * @throws IOException if a stylesheet is missing
      */
     public void applyTo(Scene scene, boolean dark) throws IOException {
         apply(themeName(dark));
@@ -139,8 +126,7 @@ public class ThemeManager {
         return url.toExternalForm();
     }
 
-    // Builds a small stylesheet that gives .mono the best installed
-    // monospaced font, because CSS cannot list fallback fonts in JavaFX.
+    // Sets the best installed mono font, as JavaFX CSS cannot list fallbacks.
     private String monospacedStylesheet() {
         String family = MONOSPACED_FAMILIES[MONOSPACED_FAMILIES.length - 1];
         List<String> installed = Font.getFamilies();

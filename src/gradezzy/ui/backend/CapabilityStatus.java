@@ -4,34 +4,23 @@
  * Purpose: Says how far a backend feature is from working in the live
  * application.
  *
- * Where it fits: Every Capability has one status. The Help screen shows
- * it in the Backend connections table, and LiveBackend uses it to decide
- * whether a screen may call the feature at all.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Every Capability has one. The Help screen shows it, and
+ * LiveBackend uses it to decide whether a screen may call the feature.
  */
 package gradezzy.ui.backend;
 
 /**
  * How ready a backend feature is.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public enum CapabilityStatus {
 
     /** The service method is written and returns real data. */
     WORKS_NOW("Works now"),
 
-    /**
-     * The service method exists but still holds a placeholder, so the
-     * screen shows an empty state until its owner finishes it.
-     */
+    /** The service method exists but still holds a placeholder. */
     WAITING("Waiting for backend"),
 
-    /**
-     * No service method exists yet. The screen shows a Not connected yet
-     * panel instead of calling anything.
-     */
+    /** No service method exists yet, so the screen shows Not connected yet. */
     PROPOSED("Proposed, no contract yet");
 
     // The words shown on the Help screen

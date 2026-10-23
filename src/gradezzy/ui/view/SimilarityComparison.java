@@ -1,16 +1,11 @@
 /*
  * File: SimilarityComparison.java
  *
- * Purpose: Shows the two compared files of a similar pair side by side,
- * with the matching excerpts and the starter and tester files that were
- * left out of the comparison.
+ * Purpose: Shows the two files of a similar pair side by side, with the
+ * files left out of the comparison.
  *
- * Where it fits: The Similarity Review screen creates one when its FXML
- * is loaded and calls show for the chosen pair. When the backend returns
- * no excerpts, missingPanel explains why: either nothing was returned or
- * no backend describes a pair yet.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: The Similarity Review screen creates one and calls show
+ * for the chosen pair.
  */
 package gradezzy.ui.view;
 
@@ -30,8 +25,6 @@ import gradezzy.ui.component.NotConnectedPanel;
 
 /**
  * The side-by-side comparison of one similar pair.
- *
- * <p>Tier: COULD. Owner: Damien.
  */
 public final class SimilarityComparison {
 
@@ -90,7 +83,7 @@ public final class SimilarityComparison {
      * Shows both files, their excerpts and the files left out.
      *
      * @param pair the pair
-     * @param detail the evidence the backend returned for it
+     * @param detail the evidence for it
      */
     public void show(SimilarityPair pair, SimilarityDetail detail) {
         firstName.setText(pair.getFirstUsername());
@@ -125,8 +118,7 @@ public final class SimilarityComparison {
      * Explains why a pair has no excerpts to compare.
      *
      * @param backend the backend
-     * @return a Not connected panel when no backend describes a pair,
-     *         otherwise an empty state
+     * @return a Not connected panel or an empty state
      */
     public static Node missingPanel(DashboardBackend backend) {
         if (backend.supports(Capability.SIMILARITY_DETAIL)) {

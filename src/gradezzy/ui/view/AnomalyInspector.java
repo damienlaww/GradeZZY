@@ -1,16 +1,11 @@
 /*
  * File: AnomalyInspector.java
  *
- * Purpose: Fills the inspector of the Review Anomalies screen for the
- * focused flag: what it says, its severity and decision, what the
- * instructor can do, and for validation findings the state of the
- * repair. It also enables the inspector's buttons for that flag.
+ * Purpose: Fills the Review Anomalies inspector for the focused flag and
+ * enables its buttons.
  *
- * Where it fits: The Review Anomalies screen creates one in onAttach,
- * gives it the inspector's buttons, and calls show whenever the focused
+ * Where it fits: The Review Anomalies screen calls show when the focused
  * row changes. The buttons' actions stay on the screen's controller.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.view;
 
@@ -27,8 +22,6 @@ import gradezzy.ui.component.StatusBadge;
 
 /**
  * The flag inspector.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class AnomalyInspector {
 
@@ -96,8 +89,8 @@ public final class AnomalyInspector {
      * @param reject Reject Flag
      * @param undo Undo Decision
      * @param open Open Student Evidence
-     * @param compare Compare in Similarity Review, shown for similar code
-     * @param validation Open Validation, shown for validation findings
+     * @param compare Compare in Similarity Review
+     * @param validation Open Validation
      */
     public void useButtons(Button mark, Button reject, Button undo,
             Button open, Button compare, Button validation) {
@@ -110,8 +103,8 @@ public final class AnomalyInspector {
     }
 
     /**
-     * Shows one flag and enables the buttons that apply to it, or shows a
-     * hint and disables them when no flag is focused.
+     * Shows one flag and enables the buttons that apply to it. Null shows a
+     * hint and disables them.
      *
      * @param anomaly the focused flag, or null
      */

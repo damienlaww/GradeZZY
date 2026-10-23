@@ -1,16 +1,11 @@
 /*
  * File: EvidenceHeader.java
  *
- * Purpose: Fills the top of the Student Evidence screen: the username and
- * result state, the status line, the Retry button's label, one chip per
- * question with its mark, and the Saved line shown after a manual mark
- * change.
+ * Purpose: Fills the top of the Student Evidence screen: heading, status
+ * line, Retry button, mark chips and the Saved line.
  *
- * Where it fits: StudentReportController creates one and calls fill each
- * time the screen is shown. The header remembers the latest manual change
- * so the Saved line and its Undo button stay until the change is undone.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: StudentReportController calls fill each time the screen
+ * is shown. It remembers the latest manual change for the Saved line.
  */
 package gradezzy.ui.view;
 
@@ -40,8 +35,6 @@ import gradezzy.ui.component.Tone;
 
 /**
  * The header of the Student Evidence screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class EvidenceHeader {
 
@@ -90,7 +83,7 @@ public final class EvidenceHeader {
     /**
      * Creates the header over the nodes it fills.
      *
-     * @param backend the backend, for review decisions and manual changes
+     * @param backend the backend
      * @param titleLabel the username heading
      * @param stateHolder holds the result state badge
      * @param retryButton the primary Retry button
@@ -117,8 +110,7 @@ public final class EvidenceHeader {
     }
 
     /**
-     * Shows one student: heading, state, status line, buttons, chips and
-     * the Saved line when it applies.
+     * Shows one student's heading, chips and Saved line.
      *
      * @param shown the student
      * @param run the run the student is in
@@ -167,7 +159,7 @@ public final class EvidenceHeader {
     /**
      * Builds the message shown when no student can be shown.
      *
-     * @param username the student selected on Results, or an empty string
+     * @param username the selected student, or an empty string
      * @param sectionLabel the section in the context bar
      * @param onBack what Go to Results does
      * @return the empty state

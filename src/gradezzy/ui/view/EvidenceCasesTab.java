@@ -1,17 +1,11 @@
 /*
  * File: EvidenceCasesTab.java
  *
- * Purpose: Fills the Cases tab of the Student Evidence screen: one row per
- * test case of every question, with its outcome and the question's marks,
- * and the details of the selected case beside the table.
+ * Purpose: Fills the Cases tab of Student Evidence, with one row per test
+ * case and the selected case's details.
  *
- * Where it fits: StudentReportController creates one and calls fill each
- * time the screen is shown. The unfinished case of the timed-out question
- * is selected by default. When the instructor picks a row, the tab tells
- * the controller which question is in focus, so the Logs and Source tabs
- * follow.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: StudentReportController calls fill each time the screen
+ * is shown. Picking a row tells the controller, so Logs and Source follow.
  */
 package gradezzy.ui.view;
 
@@ -36,8 +30,6 @@ import gradezzy.ui.component.Responsive;
 
 /**
  * The Cases tab of the Student Evidence screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class EvidenceCasesTab {
 
@@ -80,11 +72,9 @@ public final class EvidenceCasesTab {
      * @param table the table of cases
      * @param grid the grid that holds the table and the details
      * @param tablePanel the panel around the table
-     * @param detailsPanel the panel of the details, beside or under the
-     *        table
+     * @param detailsPanel the panel of the details
      * @param details fills the details panel
-     * @param onQuestionChosen told the question of a row the instructor
-     *        picked
+     * @param onQuestionChosen told the question of a picked row
      */
     public EvidenceCasesTab(TableView<EvidenceCaseRow> table, GridPane grid,
             Node tablePanel, Node detailsPanel, EvidenceCaseDetails details,
@@ -103,9 +93,8 @@ public final class EvidenceCasesTab {
     }
 
     /**
-     * Lists every case of one student and selects the default case: the
-     * unfinished case of the question in focus, else its first failed
-     * case, else its first case.
+     * Lists every case of one student and selects the default case of the
+     * question in focus.
      *
      * @param shown the student
      * @param questionId the question in focus
@@ -129,8 +118,7 @@ public final class EvidenceCasesTab {
         details.show(chosen, !rows.isEmpty());
     }
 
-    // Picks the row shown first: the unfinished case of the question,
-    // else its first failed case, else its first case, else the first.
+    // Picks the row shown first: unfinished, else failed, else any case.
     private EvidenceCaseRow defaultRow(String questionId) {
         EvidenceCaseRow unfinished = null;
         EvidenceCaseRow failed = null;
@@ -160,8 +148,7 @@ public final class EvidenceCasesTab {
         return null;
     }
 
-    // Returns the position of a question's first row, so all its cases
-    // come into view together.
+    // Finds a question's first row, so all its cases scroll into view.
     private int firstRowOf(String questionId) {
         for (int index = 0; index < rows.size(); index++) {
             if (rows.get(index).getQuestionId().equals(questionId)) {

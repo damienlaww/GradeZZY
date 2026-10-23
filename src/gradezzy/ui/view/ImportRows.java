@@ -1,14 +1,10 @@
 /*
  * File: ImportRows.java
  *
- * Purpose: Draws the chosen input files of the Submissions screen: one
- * row per file with its name, explanation and state, and the one-line
- * summary of the ZIP files.
+ * Purpose: Draws the file rows and the ZIP summary on the Submissions screen.
  *
- * Where it fits: Used by UploadController. A later ZIP file for a student
- * who already has one is shown as a duplicate with its own explanation.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Used by UploadController. A later ZIP file for the same
+ * student is shown as a duplicate.
  */
 package gradezzy.ui.view;
 
@@ -35,8 +31,6 @@ import gradezzy.ui.component.Tone;
 
 /**
  * The rows of the Submissions screen.
- *
- * <p>Tier: MUST. Owner: Damien.
  */
 public final class ImportRows {
 
@@ -156,9 +150,7 @@ public final class ImportRows {
          */
         public ImportCell(ImportBatch batch) {
             this.batch = batch;
-            // With no preferred width the list fits each row to its own
-            // width, so a long explanation wraps instead of pushing the
-            // state badge out of view behind a sideways scroll bar.
+            // Zero preferred width wraps long text, keeping the badge in view.
             setPrefWidth(0.0);
             setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
         }

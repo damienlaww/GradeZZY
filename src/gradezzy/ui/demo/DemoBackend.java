@@ -1,15 +1,10 @@
 /*
  * File: DemoBackend.java
  *
- * Purpose: Answers every screen from synthetic data held in memory, so
- * the whole interface can be used before the backend is written.
+ * Purpose: Answers every screen from synthetic data held in memory.
  *
  * Where it fits: Chosen with "sh run.sh --demo". It never reads or
  * writes files, starts processes, opens the database or saves settings.
- * It reuses only side-effect-free service logic: SearchService search
- * and SettingsService.validate.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
  */
 package gradezzy.ui.demo;
 
@@ -61,8 +56,6 @@ import gradezzy.ui.backend.SimilarityDetail;
 
 /**
  * The backend used in demo mode.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class DemoBackend implements DashboardBackend {
 
@@ -134,7 +127,7 @@ public final class DemoBackend implements DashboardBackend {
     // The six-student run of the sample section
     private GradingRun sampleRun;
 
-    // The 240-student run, built the first time it is asked for
+    // The 240-student run, built when first needed
     private GradingRun largeRun = null;
 
     // Whether the sample section shows the large cohort
@@ -152,8 +145,7 @@ public final class DemoBackend implements DashboardBackend {
     /**
      * Creates the demo backend with its sample runs.
      *
-     * @param services every service; only side-effect-free methods are
-     *        used
+     * @param services every service; only methods that change nothing are used
      */
     public DemoBackend(ServiceRegistry services) {
         this.services = services;
@@ -178,8 +170,7 @@ public final class DemoBackend implements DashboardBackend {
     // ---------------------------------------------------- self-test hooks
 
     /**
-     * Makes simulated runs wait for stepGrading instead of a timer. Used
-     * by the self-test.
+     * Makes simulated runs wait for stepGrading instead of a timer.
      *
      * @param manual true to step by hand
      */
@@ -278,8 +269,7 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Returns the configured sections, or one section for the empty
-     * module.
+     * Returns the configured sections, or one for the empty module.
      */
     @Override
     public List<String> getSectionCodes(String moduleCode) {
@@ -320,8 +310,7 @@ public final class DemoBackend implements DashboardBackend {
     // ------------------------------------------------------------ runs
 
     /**
-     * Returns the sample run for the sample section, or the large cohort
-     * when it is switched on.
+     * Returns the run of a section, or the large cohort when it is on.
      */
     @Override
     public GradingRun getRun(Section section) {
@@ -594,8 +583,7 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Lists the validation findings with synthetic before and after
-     * values.
+     * Lists the validation findings with synthetic before and after values.
      */
     @Override
     public List<RepairItem> listRepairs(GradingRun gradingRun) {
@@ -832,8 +820,7 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Shows an earlier run again after saving a recovery snapshot of the
-     * current one.
+     * Shows an earlier run after saving a recovery snapshot of the current one.
      */
     @Override
     public ActionResult restore(RunRecord record) {
@@ -868,8 +855,7 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Restores nothing, because demo mode never reads files. The History
-     * screen restores a run from its list instead.
+     * Restores nothing, because demo mode never reads files.
      */
     @Override
     public ActionResult restoreBackup(Path backupFile) {
@@ -917,8 +903,7 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Keeps valid changes for this session. config.properties is not
-     * changed.
+     * Keeps valid changes for this session only, not in config.properties.
      */
     @Override
     public ActionResult saveSettings(Map<String, String> changes) {
@@ -957,8 +942,7 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Returns synthetic excerpts and the files left out of the
-     * comparison.
+     * Returns synthetic excerpts and the files left out of the comparison.
      */
     @Override
     public SimilarityDetail getSimilarityDetail(SimilarityPair pair) {
@@ -1060,8 +1044,7 @@ public final class DemoBackend implements DashboardBackend {
         gradeCounts.put(username, getGradeCount(username) + 1);
     }
 
-    // Approves the sample repair and reviews the sample flags, as an
-    // instructor did before the demo starts.
+    // Approves the sample repair and marks the sample flags reviewed.
     private void settleSampleDecisions(GradingRun run) {
         for (Submission submission : run.getSubmissions()) {
             for (Anomaly anomaly : submission.getAnomalies()) {

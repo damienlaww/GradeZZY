@@ -1,15 +1,10 @@
 /*
  * File: StatisticsTiles.java
  *
- * Purpose: Fills the four key numbers of the Statistics screen:
- * completion, mean, median and pass rate, each with a caption.
+ * Purpose: Fills the four key numbers of the Statistics screen.
  *
  * Where it fits: StatisticsController creates one and calls fill when
- * statistics are available. Ungraded students are left out of every
- * figure; the completion tile says how many. The pass rate caption names
- * the pass mark from the stats.pass.mark.percent setting.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * statistics are available.
  */
 package gradezzy.ui.view;
 
@@ -24,8 +19,6 @@ import gradezzy.ui.component.MetricTile;
 
 /**
  * The key numbers of the Statistics screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class StatisticsTiles {
 

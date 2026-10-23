@@ -1,15 +1,11 @@
 /*
  * File: EvidenceQuestions.java
  *
- * Purpose: Works out which question of one student's result is in focus
- * on the Student Evidence screen, and which question is worth retrying.
+ * Purpose: Finds the question in focus on Student Evidence and the one to
+ * retry.
  *
  * Where it fits: Used by StudentReportController and the Evidence tabs.
- * One tester run covers every case of one question, so the narrowest
- * retry is a question: the first that timed out, else the first that did
- * not compile, else the first with a failed case.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * One tester run covers a whole question, so a retry is per question.
  */
 package gradezzy.ui.view;
 
@@ -25,8 +21,6 @@ import gradezzy.ui.backend.ResultState;
 
 /**
  * Question choices for the Student Evidence screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class EvidenceQuestions {
 
@@ -55,12 +49,11 @@ public final class EvidenceQuestions {
     }
 
     /**
-     * Returns the question worth retrying: the first that timed out, else
-     * the first that did not compile, else the first with a failed case.
+     * Returns the question to retry: the first that timed out, else the
+     * first that did not compile, else the first with a failed case.
      *
      * @param shown the student, or null
-     * @return the question id, or null when nothing failed or the student
-     *         is not graded
+     * @return the question id, or null if ungraded or nothing failed
      */
     public static String retryQuestionOf(Submission shown) {
         if (shown == null || !ResultState.hasTotal(shown)) {
@@ -90,8 +83,7 @@ public final class EvidenceQuestions {
     }
 
     /**
-     * Returns the question in focus: the one remembered, else the
-     * question to retry, else the first question.
+     * Returns the remembered question, else the one to retry, else the first.
      *
      * @param run the run the student is in, or null
      * @param remembered the question chosen last time, or an empty string

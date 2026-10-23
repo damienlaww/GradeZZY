@@ -3,18 +3,9 @@
  *
  * Purpose: Controller of the Student Evidence screen.
  *
- * Where it fits: Opened from Results for one student. It explains the
- * result: the marks per question, every test case with its expected and
- * actual values, the working-copy source, the logs, the repairs, the
- * mark history and the anomalies. It offers Retry for the narrowest
- * failed question (one tester run covers every case of a question, so a
- * question is the narrowest retry), Retry Entire Submission, a manual
- * mark change with a required reason and Undo, and an export of the
- * student's report. Back to Results returns to the list as it was left.
- * The header, each tab and the Adjust Score sheet are filled by classes
- * in gradezzy.ui.view; this controller wires them and runs the actions.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: Opened from Results for one student. Classes in
+ * gradezzy.ui.view fill the header, the tabs and the Adjust Score sheet;
+ * this controller wires them and runs the actions.
  */
 package gradezzy.ui;
 
@@ -57,8 +48,6 @@ import gradezzy.ui.view.EvidenceSourceTab;
 
 /**
  * Controller of the Student Evidence screen.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public class StudentReportController extends BaseController {
 
@@ -244,7 +233,7 @@ public class StudentReportController extends BaseController {
     }
 
     /**
-     * Creates the parts that fill the header, the tabs and the sheet.
+     * Creates the parts that fill the header and the tabs.
      */
     @Override
     public void onAttach() {
@@ -276,11 +265,9 @@ public class StudentReportController extends BaseController {
     }
 
     /**
-     * Returns the student on show: the student selected on Results, in
-     * the run of the section in the context bar.
+     * Returns the student selected on Results, from the current run.
      *
-     * @return the submission, or null when no student is selected or the
-     *         student is not in the run
+     * @return the submission, or null when there is none to show
      */
     public Submission getSubmission() {
         return EvidenceQuestions.studentIn(currentRun(),
@@ -288,9 +275,8 @@ public class StudentReportController extends BaseController {
     }
 
     /**
-     * Returns the narrowest question worth retrying: the first question
-     * that timed out, else the first that did not compile, else the first
-     * with a failed case.
+     * Returns the question to retry: the first that timed out, else the
+     * first that did not compile, else the first with a failed case.
      *
      * @return the question id, or null when nothing failed
      */
@@ -299,8 +285,7 @@ public class StudentReportController extends BaseController {
     }
 
     /**
-     * Runs the tester of the failed question again. Only that question's
-     * result is replaced.
+     * Runs the failed question's tester again; only its result changes.
      */
     @FXML
     public void handleRetryQuestion() {
@@ -318,8 +303,7 @@ public class StudentReportController extends BaseController {
     }
 
     /**
-     * Grades the whole submission again from the start, after a
-     * confirmation that says the current marks are replaced.
+     * Grades the whole submission again, after the instructor confirms.
      */
     @FXML
     public void handleRetrySubmission() {
@@ -369,12 +353,12 @@ public class StudentReportController extends BaseController {
     }
 
     /**
-     * Changes one mark by hand, then shows the Saved line with Undo and
-     * records the change in the audit log.
+     * Changes one mark by hand, shows the Saved line with Undo and records
+     * the change in the audit log.
      *
      * @param questionId the question, such as Q1b
      * @param score the new mark
-     * @param reason why the mark changed; required
+     * @param reason the required reason
      * @return what happened
      */
     public ActionResult saveAdjustment(String questionId, double score,
@@ -417,8 +401,8 @@ public class StudentReportController extends BaseController {
      *
      * @param reasonText the reason typed
      * @param scoreText the new mark typed
-     * @param max the most the question can earn
-     * @return an empty string when the form is valid, or a plain message
+     * @param max the question's maximum mark
+     * @return an empty string, or the problem
      */
     public static String validateAdjustment(String reasonText,
             String scoreText, double max) {
@@ -450,8 +434,7 @@ public class StudentReportController extends BaseController {
     }
 
     /**
-     * Returns to Results, which restores its own search, sort, filter and
-     * selection.
+     * Returns to Results, as the instructor left it.
      */
     @FXML
     public void handleBack() {
@@ -488,7 +471,7 @@ public class StudentReportController extends BaseController {
     }
 
     /**
-     * Opens the Validation screen, where every repair can be decided.
+     * Opens the Validation screen, where repairs are decided.
      */
     @FXML
     public void handleOpenValidation() {

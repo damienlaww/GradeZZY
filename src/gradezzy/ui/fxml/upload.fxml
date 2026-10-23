@@ -3,9 +3,7 @@
 <!--
   Submissions screen: the four input groups of a grading run, with the
   reasons Start Grading is unavailable until every required input is ready.
-  Tier: MUST. Owner: Damien.
   Controller: gradezzy.ui.UploadController
-  AI use: drafted with Claude Code, reviewed by Jun Sheng.
 -->
 
 <?import javafx.scene.control.Button?>

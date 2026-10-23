@@ -1,17 +1,11 @@
 /*
  * File: RepairInspector.java
  *
- * Purpose: Fills the inspector of the Validation screen for the focused
- * finding: what it says, the state of its repair, and what the student
- * submitted next to the change proposed for the working copy. It also
- * enables the inspector's buttons for that finding.
+ * Purpose: Fills the Validation screen's inspector for the focused finding
+ * and enables its buttons.
  *
- * Where it fits: The Validation screen creates one in onAttach, gives it
- * the inspector's buttons, and calls show whenever the focused row
- * changes. Findings with no automatic repair explain that GradeZZY never
- * writes a missing answer. The buttons' actions stay on the controller.
- *
- * AI use: drafted with Claude Code, reviewed by Jun Sheng.
+ * Where it fits: ValidationController creates one in onAttach and calls
+ * show when the focused row changes. The button actions stay there.
  */
 package gradezzy.ui.view;
 
@@ -28,8 +22,6 @@ import gradezzy.ui.component.StatusBadge;
 
 /**
  * The finding inspector.
- *
- * <p>Tier: SHOULD. Owner: Damien.
  */
 public final class RepairInspector {
 
@@ -101,8 +93,7 @@ public final class RepairInspector {
     }
 
     /**
-     * Shows one finding and enables the buttons that apply to it, or
-     * shows a hint and disables them when no finding is focused.
+     * Shows one finding and enables its buttons, or shows a hint if null.
      *
      * @param repair the focused finding, or null
      */
