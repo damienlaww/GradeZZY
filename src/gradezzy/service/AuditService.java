@@ -7,11 +7,14 @@
  */
 package gradezzy.service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.AuditEntry;
+import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
 
 /**
@@ -39,23 +42,43 @@ public class AuditService {
     }
 
     /**
-     * Adds an entry with the current time.
+     * Adds an entry with the current time when the audit log is switched
+     * on. An entry that cannot be saved is dropped: the audit log never
+     * stops the action it records.
      *
      * @param action the action
      * @param detail the detail
      */
     public void record(String action, String detail) {
-        // TODO(Jing Yuan): implement: creating an AuditEntry and appending it
-        //     when AUDIT_ENABLED is true
+        if (repository == null || action == null
+                || !config.getBoolean(ConfigKeys.AUDIT_ENABLED)) {
+            return;
+        }
+
+        AuditEntry auditEntry = new AuditEntry(LocalDateTime.now(), action,
+                detail);
+        try {
+            repository.appendAudit(auditEntry);
+        } catch (PersistenceException exception) {
+            // The database is switched off or cannot be written
+        }
     }
 
     /**
      * Returns the audit log.
      *
-     * @return the audit entries, oldest first
+     * @return the audit entries, oldest first, or an empty list when the
+     *         database is switched off or cannot be read
      */
     public List<AuditEntry> listEntries() {
-        // TODO(Jing Yuan): implement: reading the entries from the repository
-        return new ArrayList<>();
+        if (repository == null) {
+            return new ArrayList<>();
+        }
+
+        try {
+            return repository.listAudit();
+        } catch (PersistenceException exception) {
+            return new ArrayList<>();
+        }
     }
 }

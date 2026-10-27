@@ -57,9 +57,9 @@ public enum Capability {
     RESUME_RUN("Resume a cancelled run",
             "Finishes a cancelled run without grading finished students "
             + "again.", "Jing Yuan, Huxley",
-            "GradingService.resume", CapabilityStatus.WAITING,
-            "Loading the run from the repository and grading the "
-            + "submissions that are still pending."),
+            "GradingService.resume", CapabilityStatus.WORKS_NOW,
+            "Nothing; a run from an earlier session uses the score sheet "
+            + "and testers in the settings."),
 
     /** Fraction done and time left while grading. */
     PROGRESS_ESTIMATE("Progress and time left",
@@ -80,9 +80,8 @@ public enum Capability {
             "Lets you accept or undo each automatic repair of a working "
             + "copy.", "Jing Yuan, Jun Sheng",
             "AnomalyService.approveFix, undoFix",
-            CapabilityStatus.WAITING,
-            "FixManager approve and undo, and the AnomalyService methods "
-            + "that call them."),
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; undo needs the run graded in this session."),
 
     /** The original and proposed value of each repair. */
     REPAIR_VALUES("Original and proposed repair values",
@@ -128,8 +127,8 @@ public enum Capability {
     EXPORT_RESULTS("Export CSV and JSON",
             "Saves the score sheet as a CSV or JSON file.",
             "Jing Yuan, Huxley", "ExportService.export",
-            CapabilityStatus.WAITING,
-            "ExportService.export and the CSV and JSON exporters."),
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; the CSV and JSON exporters work."),
 
     /** Exports only some students. */
     EXPORT_SCOPE("Export only chosen students",
@@ -142,31 +141,29 @@ public enum Capability {
     STATISTICS("Statistics",
             "Summarises the marks and common mistakes of a section.",
             "Jing Yuan, Huxley", "StatisticsService.summarise",
-            CapabilityStatus.WAITING,
-            "StatisticsService.summarise and StatisticsCalculator."),
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; it summarises the saved runs."),
 
     /** Earlier grading runs. */
     HISTORY("Earlier runs",
             "Lists earlier grading runs, so you can go back to one.",
             "Jing Yuan, Huxley", "HistoryService.listRuns",
-            CapabilityStatus.WAITING,
-            "Saved runs from the repository."),
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; it lists the saved runs."),
 
     /** Backs up the database now. */
     BACKUP("Back up now",
             "Saves a copy of the saved results that you can restore "
             + "later.", "Jing Yuan, Huxley", "HistoryService.backupNow",
-            CapabilityStatus.WAITING,
-            "BackupManager and HistoryService.backupNow."),
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; backups are written to paths.backup.dir."),
 
     /** Puts the saved results back from a chosen backup file. */
     RESTORE("Restore a backup",
             "Puts the saved results back to a backup file you choose.",
             "Jing Yuan, Huxley", "HistoryService.restore",
-            CapabilityStatus.WAITING,
-            "HistoryService.restore: close the repository, copy the "
-            + "backup over the database with BackupManager.restore, then "
-            + "open the repository again."),
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; restore when no run is being graded."),
 
     /** Shows what a backup holds before restoring it. */
     RESTORE_PREVIEW("Restore preview",
@@ -180,8 +177,9 @@ public enum Capability {
     AUDIT_LOG("Audit log",
             "Keeps a dated record of every action, so changes can be "
             + "checked later.", "Jing Yuan, Huxley",
-            "AuditService.record, listEntries", CapabilityStatus.WAITING,
-            "Saving and reading audit entries in the repository."),
+            "AuditService.record, listEntries",
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; entries are saved when audit.enabled is true."),
 
     /** Exports the audit log. */
     AUDIT_EXPORT("Export the audit log",
@@ -201,8 +199,8 @@ public enum Capability {
     SIMILARITY("Similarity review",
             "Lists pairs of submissions with very similar code for you to "
             + "review.", "Jing Yuan, Jun Sheng",
-            "PlagiarismService.check", CapabilityStatus.WAITING,
-            "TokenSimilarityDetector and PlagiarismService.check."),
+            "PlagiarismService.check", CapabilityStatus.WORKS_NOW,
+            "Nothing; it runs when plagiarism.enabled is true."),
 
     /** The compared files and excerpts of one similar pair. */
     SIMILARITY_DETAIL("Compare a similar pair",
