@@ -11,6 +11,7 @@
 package gradezzy.service;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -27,12 +28,14 @@ import gradezzy.ingest.SubmissionLoader;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
+import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
 import gradezzy.testcase.TestCaseException;
 import gradezzy.testcase.TestCaseSource;
+import gradezzy.testcase.UploadedTesterSource;
 
 /**
  * Starts, cancels, retries and resumes grading runs.
@@ -135,17 +138,7 @@ public class GradingService {
 
         // The roster for this batch is read first, so a bad score sheet
         // stops the run before any zip is extracted.
-        try {
-            RosterReader rosterReader = new RosterReader(config);
-            context.getRoster().addAll(rosterReader.readRoster(
-                    scoreSheetFile));
-        } catch (IngestException exception) {
-            throw new GradingException("The score sheet could not be "
-                    + "read: " + exception.getMessage(), exception);
-        } catch (IllegalArgumentException exception) {
-            throw new GradingException("The score sheet setting is not a "
-                    + "valid path: " + exception.getMessage(), exception);
-        }
+        readRoster(context, scoreSheetFile);
 
         try {
             SubmissionLoader loader = new SubmissionLoader(config);
@@ -262,20 +255,140 @@ public class GradingService {
     }
 
     /**
-     * Continues a run that was interrupted, using the saved state.
+     * Continues a run that was cancelled or interrupted. Only the
+     * submissions that were not finished (PENDING, RUNNING or CANCELLED)
+     * are graded; GRADED and FAILED ones are left as they are. Each
+     * unfinished submission starts from scratch, as in
+     * {@link #retryFailed}.
+     *
+     * <p>A run started in this session is continued with the score sheet
+     * and testers it was started with. A run from an earlier session is
+     * loaded from the database; the score sheet and testers chosen for
+     * that batch are not saved, so the ones in the settings
+     * (paths.score.sheet.file and paths.testers.dir) are used, with
+     * the students already matched in the saved run.
      *
      * <p>Tier: SHOULD.
      *
      * @param runId the id of the saved run
      * @param listener the object told about progress
-     * @return the resumed run, or null until this is implemented
-     * @throws GradingException if the run cannot be loaded
+     * @return the resumed run, with every submission in it
+     * @throws GradingException if the id or listener is missing, the run
+     *         is not in this session and cannot be loaded, or its score
+     *         sheet or testers cannot be read
      */
     public GradingRun resume(String runId, ProgressListener listener)
             throws GradingException {
-        // TODO(Jing Yuan): implement: load the run from the repository and
-        //     run the pipeline on the submissions that are still PENDING
-        return null;
+        if (runId == null || runId.isBlank() || listener == null) {
+            throw new GradingException("Choose a run to resume.");
+        }
+
+        if (lastRun == null || !runId.equals(lastRun.getId())) {
+            GradingRun savedRun = loadSavedRun(runId);
+            lastContext = prepareSavedContext(savedRun);
+            lastRun = savedRun;
+        }
+        GradingRun gradingRun = lastRun;
+
+        // The unfinished submissions go through the pipeline on their
+        // own, in a run that shares the id, assessment and section.
+        GradingRun resumeRun = new GradingRun(gradingRun.getId(),
+                gradingRun.getAssessment(), gradingRun.getSection(),
+                gradingRun.getStartedAt());
+
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (needsResume(submission)) {
+                resetForRetry(submission);
+                resumeRun.addSubmission(submission);
+            }
+        }
+
+        if (resumeRun.getSubmissions().isEmpty()) {
+            return gradingRun;
+        }
+
+        cancellationToken.reset();
+        GradingPipeline pipeline = pipelineFactory.createPipeline(
+                cancellationToken);
+        pipeline.run(resumeRun, lastContext,
+                new RetryProgressListener(listener, gradingRun));
+
+        saveRun(gradingRun);
+        return gradingRun;
+    }
+
+    // Reads a score sheet into the roster of a run.
+    private void readRoster(GradingContext context, Path scoreSheetFile)
+            throws GradingException {
+        try {
+            RosterReader rosterReader = new RosterReader(config);
+            context.getRoster().addAll(rosterReader.readRoster(
+                    scoreSheetFile));
+        } catch (IngestException exception) {
+            throw new GradingException("The score sheet could not be "
+                    + "read: " + exception.getMessage(), exception);
+        } catch (IllegalArgumentException exception) {
+            throw new GradingException("The score sheet setting is not a "
+                    + "valid path: " + exception.getMessage(), exception);
+        }
+    }
+
+    // Loads a run of an earlier session from the database.
+    private GradingRun loadSavedRun(String runId) throws GradingException {
+        if (repository == null
+                || !config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+            throw new GradingException("Run " + runId + " was not "
+                    + "started in this session and the database is "
+                    + "switched off, so it cannot be resumed.");
+        }
+
+        GradingRun savedRun;
+        try {
+            savedRun = repository.loadRun(runId);
+        } catch (PersistenceException exception) {
+            throw new GradingException("Run " + runId + " could not be "
+                    + "loaded: " + exception.getMessage(), exception);
+        }
+
+        if (savedRun == null) {
+            throw new GradingException("There is no saved run " + runId
+                    + ".");
+        }
+        return savedRun;
+    }
+
+    // Builds the shared information for a run loaded from the database:
+    // the students matched before, the score sheet and the testers from
+    // the settings.
+    private GradingContext prepareSavedContext(GradingRun savedRun)
+            throws GradingException {
+        Assessment assessment = savedRun.getAssessment();
+        GradingContext context = new GradingContext(config, assessment);
+        context.setRunId(savedRun.getId());
+
+        for (Submission submission : savedRun.getSubmissions()) {
+            Student student = submission.getStudent();
+            if (student != null) {
+                context.getRoster().add(student);
+            }
+        }
+        readRoster(context, Paths.get(config.getString(
+                ConfigKeys.SCORE_SHEET_FILE)));
+
+        try {
+            TestCaseSource testCaseSource = new UploadedTesterSource(
+                    Paths.get(config.getString(ConfigKeys.TESTERS_DIR)),
+                    config);
+            context.getTesters().addAll(
+                    testCaseSource.prepareTesters(assessment));
+        } catch (TestCaseException exception) {
+            throw new GradingException("The testers could not be "
+                    + "prepared: " + exception.getMessage(), exception);
+        } catch (IllegalArgumentException exception) {
+            throw new GradingException("The testers setting is not a "
+                    + "valid path: " + exception.getMessage(), exception);
+        }
+        return context;
     }
 
     // Saves the run when the database is switched on. A failure does not
@@ -352,6 +465,19 @@ public class GradingService {
         SubmissionStatus status = submission.getStatus();
 
         return status == SubmissionStatus.FAILED
+                || status == SubmissionStatus.CANCELLED;
+    }
+
+    // Says whether a submission was not finished when its run stopped.
+    // RUNNING means the application stopped while it was being graded.
+    private boolean needsResume(Submission submission) {
+        if (submission.getIngestFailure() != null) {
+            return false;
+        }
+        SubmissionStatus status = submission.getStatus();
+
+        return status == SubmissionStatus.PENDING
+                || status == SubmissionStatus.RUNNING
                 || status == SubmissionStatus.CANCELLED;
     }
 
