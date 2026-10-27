@@ -88,7 +88,7 @@ public class ApplicationContext {
                 new SettingsService(config),
                 new HistoryService(config, repository,
                         new BackupManager(config)),
-                new PlagiarismService(
+                new PlagiarismService(config,
                         new TokenSimilarityDetector(config)));
     }
 
