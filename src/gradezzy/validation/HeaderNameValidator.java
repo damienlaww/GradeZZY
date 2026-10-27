@@ -29,8 +29,6 @@ import gradezzy.util.TextUtils;
  * Checks that each Java file has the student name and email in its header
  * comment. Only the required files of the assessment are checked, as
  * agreed by the team; extra helper classes are not.
- *
- * <p>Tier: MUST. Owner: Seth.
  */
 public class HeaderNameValidator extends AbstractValidator {
 
