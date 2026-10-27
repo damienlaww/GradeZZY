@@ -615,11 +615,6 @@ chee.teo and david, all five files for jing.lim) are filled in; every fix
 shows `APPLIED`; undoing every fix restores each working copy byte for
 byte; the totals and the original zips are unchanged.
 
-Still to do by others:
-
-- Seth: `ui.FileTreeBuilder` shows the hidden `.gradezzy-backup` folder;
-  skip names that start with a dot.
-
 ### 4. Zach: compiling, running and reading scores
 
 **Packages:** `exec`, `testcase`, plus `InstallTestersStage`,

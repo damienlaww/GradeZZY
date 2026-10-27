@@ -70,8 +70,8 @@ today.
 | Capability | What it does for the instructor | Screens | DashboardBackend method | Service method | Owner | Status | Contract needed |
 |---|---|---|---|---|---|---|---|
 | Module, sections, rubric and limits | Shows the module, sections, marks and time limits set in config.properties. | Context bar, Modules, Assessments | `getModuleCodes`, `getSectionCodes`, `getAssessment`, `getRunTimeoutSeconds`, `getCompileTimeoutSeconds` | `AppConfig, AssessmentFactory.create` | Jing Yuan | Works now | None |
-| Check chosen files and folders | Tells you at once when a chosen file or folder cannot be read. | Submissions | `inspect` | `InputValidator.isReadableFile, isReadableDirectory` | Seth | Waiting | Until these return true for readable paths, every chosen file is reported as unreadable. |
-| Import and grade a batch | Grades every submission of a section in one batch. | Submissions, Grading Progress | `startGrading` | `GradingService.startGrading` | Jing Yuan, with Seth, Damien, Jun Sheng, Zach and Huxley | Waiting | The pipeline stages that load, check, fix, compile, run and score submissions. |
+| Check chosen files and folders | Tells you at once when a chosen file or folder cannot be read. | Submissions | `inspect` | `InputValidator.isReadableFile, isReadableDirectory` | Seth | Works now | None |
+| Import and grade a batch | Grades every submission of a section in one batch. | Submissions, Grading Progress | `startGrading` | `GradingService.startGrading` | Jing Yuan, with Seth, Damien, Jun Sheng, Zach and Huxley | Works now | None |
 | Cancel grading | Stops a batch early and keeps the results already finished. | Grading Progress | `cancelGrading` | `GradingService.cancel` | Jing Yuan | Works now | None |
 | Retry failed submissions | Grades the submissions that failed or were cancelled again. | Grading Progress | `retryFailedSubmissions` | `GradingService.retryFailed` | Jing Yuan | Works now | None |
 | Resume a cancelled run | Finishes a cancelled run without grading finished students again. | Grading Progress | `resumeGrading` | `GradingService.resume` | Jing Yuan, Huxley | Works now | None; a run from an earlier session uses the score sheet and testers in the settings. |
@@ -83,7 +83,7 @@ today.
 | Mark flags reviewed or rejected | Records that you looked at a flag, without changing any mark. | Review Anomalies, Similarity Review | `getDecision`, `setDecision` | None yet | Jing Yuan | Proposed | Store an Open, Reviewed or Rejected decision for each anomaly, with undo and an audit entry. |
 | Search, filter and sort | Finds students by name and orders the results table. | Results | `search` | `SearchService.search` | Jing Yuan | Works now | None |
 | Search inside source code | Finds the students whose code contains some text. | Results (Code) | `searchCode` | `SearchService.searchCode` | Jing Yuan | Works now (needs working copies) | None |
-| Show working-copy files | Shows a student's files, so you can read the code behind a mark. | Student Evidence (Source) | `getFileTree`, `readSourceFile` | `FileTreeBuilder, FileUtils.readText` | Damien | Waiting | FileUtils.readText, so a chosen source file can be shown. |
+| Show working-copy files | Shows a student's files, so you can read the code behind a mark. | Student Evidence (Source) | `getFileTree`, `readSourceFile` | `FileTreeBuilder, FileUtils.readText` | Damien | Works now | None |
 | Export CSV and JSON | Saves the score sheet as a CSV or JSON file. | Results | `export` | `ExportService.export` | Jing Yuan, Huxley | Works now | None |
 | Export only chosen students | Exports only the students you selected or filtered. | Results | `export` (scope argument) | None yet | Jing Yuan, Huxley | Proposed | An export method that takes the visible or selected students instead of the whole run. |
 | Statistics | Summarises the marks and common mistakes of a section. | Statistics | `summarise` | `StatisticsService.summarise` | Jing Yuan, Huxley | Works now | None |
@@ -96,7 +96,7 @@ today.
 | Settings | Lets you check and change the settings from the app instead of a text file. | Settings | `getSetting`, `validateSetting`, `saveSettings` | `SettingsService` | Jing Yuan | Works now | None |
 | Similarity review | Lists pairs of submissions with very similar code for you to review. | Similarity Review | `listSimilarPairs`, `isSimilarityEnabled` | `PlagiarismService.check` | Jing Yuan, Jun Sheng | Works now | None; runs when plagiarism.enabled is true. |
 | Compare a similar pair | Shows the matching code of a pair side by side. | Similarity Review | `getSimilarityDetail` | None yet | Jun Sheng | Proposed | The compared files, matching excerpts and the excluded starter and tester files of one pair. |
-| Use a tester folder | Grades with the tester files you already have in a folder. | Submissions, Assessments | `startGrading` (tester folder in the batch) | `UploadedTesterSource` | Zach | Waiting | UploadedTesterSource.prepareTesters. |
+| Use a tester folder | Grades with the tester files you already have in a folder. | Submissions, Assessments | `startGrading` (tester folder in the batch) | `UploadedTesterSource` | Zach | Works now | None |
 | Typed test cases | Builds testers from test cases you type in the app. | Assessments | `startGrading` (typed cases in the batch) | `TypedTestCaseSource, TesterGenerator` | Zach | Waiting | TypedTestCaseSource.prepareTesters and TesterGenerator. |
 | Retry one question | Runs one question's tester again without touching other marks. | Student Evidence | `retryQuestion` | None yet | Jing Yuan, Zach | Proposed | Run the tester of one question again and replace only that question's result. |
 | Retry one submission | Grades one student's submission again from the start. | Student Evidence | `retrySubmission` | None yet | Jing Yuan | Proposed | Grade one chosen submission again, even when it did not fail. |
@@ -143,12 +143,12 @@ Most `LiveBackend` methods are one service call. Three are thin glue:
 
 ## What each owner will see
 
-- **Seth.** Submissions screen. Until `InputValidator` returns true
-  for readable paths, every chosen file is reported as unreadable and
-  Start Grading stays unavailable. That is expected. Validation and
-  Review Anomalies list the anomalies the validators report.
-- **Damien.** Student Evidence (Source) shows the working-copy tree, and
-  a chosen file's text once `FileUtils.readText` works.
+- **Seth.** Submissions screen, which marks unreadable files before
+  grading. Validation and Review Anomalies list the anomalies the
+  validators report.
+- **Damien.** Student Evidence (Source) shows the working-copy tree,
+  without hidden files and folders such as `.gradezzy-backup`, and a
+  chosen file's text.
 - **Jun Sheng.** Validation (approve, reject), Review Anomalies (flags
   from the detectors), Similarity Review (pairs from
   `PlagiarismService.check`).

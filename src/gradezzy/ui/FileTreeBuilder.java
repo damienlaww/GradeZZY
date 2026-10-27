@@ -30,6 +30,9 @@ public class FileTreeBuilder {
     // The separator in relative paths
     private static final String SEPARATOR = "/";
 
+    // Names starting with this are hidden, like the fix backup folder
+    private static final String HIDDEN_PREFIX = ".";
+
     // The number of entries added to the tree being built
     private int entryCount = 0;
 
@@ -41,7 +44,7 @@ public class FileTreeBuilder {
     }
 
     /**
-     * Builds a tree of the folder and everything in it.
+     * Builds a tree of the folder and everything in it except hidden names.
      *
      * @param rootDirectory the root directory
      * @return the root item, or null when the folder cannot be read
@@ -111,6 +114,9 @@ public class FileTreeBuilder {
         for (File entry : entries) {
             // Links are skipped so a link to a parent folder cannot loop.
             if (Files.isSymbolicLink(entry.toPath())) {
+                continue;
+            }
+            if (entry.getName().startsWith(HIDDEN_PREFIX)) {
                 continue;
             }
             if (entry.isDirectory()) {

@@ -15,8 +15,6 @@ import gradezzy.model.Submission;
 
 /**
  * A way of comparing submissions for copied code.
- *
- * <p>Tier: COULD. Owner: Jun Sheng.
  */
 public interface SimilarityDetector {
 
