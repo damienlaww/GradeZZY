@@ -20,8 +20,6 @@ import gradezzy.model.Submission;
 
 /**
  * Runs every registered validator on a submission.
- *
- * <p>Tier: MUST. Owner: Seth.
  */
 public class ValidationRunner {
 

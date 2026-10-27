@@ -25,8 +25,6 @@ import gradezzy.model.Submission;
  * there under a name differing only in case, such as q1a.java, is left to
  * FileNameValidator, so each problem is reported once. A question whose
  * folder is missing is left to StructureValidator for the same reason.
- *
- * <p>Tier: MUST. Owner: Seth.
  */
 public class RequiredFilesValidator extends AbstractValidator {
 

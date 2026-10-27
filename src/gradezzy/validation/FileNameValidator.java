@@ -24,8 +24,6 @@ import gradezzy.model.Submission;
  * Checks that source files follow the naming convention. A file counts as
  * misnamed when its name matches the required name only if case is
  * ignored. Java needs the exact name, so such a file would not compile.
- *
- * <p>Tier: MUST. Owner: Seth.
  */
 public class FileNameValidator extends AbstractValidator {
 

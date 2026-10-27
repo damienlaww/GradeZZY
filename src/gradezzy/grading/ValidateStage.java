@@ -15,8 +15,6 @@ import gradezzy.validation.ValidationRunner;
 
 /**
  * Runs every validator and records what they find.
- *
- * <p>Tier: MUST. Owner: Seth.
  */
 public class ValidateStage implements GradingStage {
 

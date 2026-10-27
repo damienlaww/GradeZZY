@@ -97,9 +97,9 @@ the real window with the mouse and keyboard. Both are explained in
 | `run.sh console` | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
 | `run.sh --check` (16 screens, live and demo, both themes) | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
 | `run.sh --selftest` (7 demo flows) | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
-| `run.sh` (window opens) | Passed before the new screens; not run since | Not tested | Not tested |
-| `run.sh --snapshot`, `run.sh --windowtest` | Not tested | Not tested | Not tested |
-| `.bat` scripts | Not applicable | Not applicable | Not tested |
+| `run.sh` (window opens) | Passed before the new screens; not run since | Not tested | Passed (JDK 25.0.4) |
+| `run.sh --snapshot`, `run.sh --windowtest` | Not tested | Not tested | Passed (JDK 25.0.4) |
+| `.bat` scripts | Not applicable | Not applicable | Passed (Command Prompt, JDK 25.0.4) |
 
 **A teammate on Windows and one on an Intel Mac must run the scripts and
 report back.** The brief takes up to 50% off if the code does not compile
@@ -121,6 +121,7 @@ or run on the instructor's laptop.
 | `README.md` | This file. |
 | `docs/` | The project brief and coding style PDFs. Not in git. |
 | `samples/` | The provided testers, score sheet, starter folder and six sample submissions. Not in git. |
+| `test/` | `make-dummies.sh`, which builds the dummy submissions in `samples/dummy-submissions/` from the provided samples. |
 | `workspace/` | Created while grading: working copies, exports, database. Not in git. |
 
 Two things to know:
@@ -480,7 +481,12 @@ What to build, in order:
    `Q2` folder, a missing `Q1b.java`, a file named `q1a.java`, an empty
    zip, a file that is not a zip, and a `Q1a.java` holding
    `while (true) { }`. Share them with the team; they test everyone's
-   stage, and the brief rewards extra edge cases.
+   stage, and the brief rewards extra edge cases. Done:
+   `sh test/make-dummies.sh` builds these six plus a username folder
+   inside a username folder and the untouched starter folder, in
+   `samples/dummy-submissions/`. Only the script is in git, because the
+   dummies are built from the restricted samples. Add that folder on the
+   Submissions screen to grade them; none of them stops the batch.
 5. As each teammate finishes a service, open its screen in live mode
    (`sh run.sh`) and check that the real data looks right.
    `design/UI-INTEGRATION.md` says which screen shows which service;
