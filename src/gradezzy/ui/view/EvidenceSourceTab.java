@@ -31,6 +31,9 @@ import gradezzy.ui.component.Icon;
  */
 public final class EvidenceSourceTab {
 
+    // The separator in relative paths
+    private static final String SEPARATOR = "/";
+
     // The backend, for the tree and the file text
     private final DashboardBackend backend;
 
@@ -200,11 +203,12 @@ public final class EvidenceSourceTab {
         show(fileEmptyHolder, true);
     }
 
-    // Finds the file with a relative path in a tree.
+    // Finds the file whose path ends with the given relative path.
     private static TreeItem<String> findItem(TreeItem<String> item,
             String path) {
+        String itemPath = SEPARATOR + FileTreeBuilder.relativePath(item);
         if (item.isLeaf() && item.getParent() != null
-                && FileTreeBuilder.relativePath(item).equals(path)) {
+                && itemPath.endsWith(SEPARATOR + path)) {
             return item;
         }
         for (TreeItem<String> child : item.getChildren()) {
