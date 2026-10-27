@@ -23,8 +23,6 @@ import gradezzy.model.Submission;
 /**
  * Checks the folder layout: a username folder holding one folder per question
  * group.
- *
- * <p>Tier: MUST. Owner: Seth.
  */
 public class StructureValidator extends AbstractValidator {
 

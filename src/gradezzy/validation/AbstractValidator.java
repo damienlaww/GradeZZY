@@ -27,8 +27,6 @@ import gradezzy.model.Submission;
 
 /**
  * Shared code for all validators.
- *
- * <p>Tier: MUST. Owner: Seth.
  */
 public abstract class AbstractValidator implements Validator {
 
