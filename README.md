@@ -225,7 +225,7 @@ feature's status from `WAITING` to `WORKS_NOW` in
 and `sh run.sh --selftest`. `design/UI-INTEGRATION.md` lists which screen
 shows each service method.
 
-Owners and TODO counts (15 left). The split is a starting point;
+Owners and TODO counts (3 left). The split is a starting point;
 the team can swap areas. The next section explains each person's work in
 detail.
 
@@ -235,7 +235,7 @@ detail.
 | Seth | `validation`, `InputValidator`, one stage; looks after `ui` | 0 |
 | Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 0 |
 | Zach | `exec`, `testcase`, three stages, the score parser | 3 |
-| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 12 |
+| Jing Yuan | `app`, `config`, `model`, `service`, scoring | 0 |
 | Huxley | `report`, `stats`, `persistence`, one stage | 0 |
 
 Jun Sheng built the whole `ui` package, so on 2026-10-16 the work was
@@ -617,9 +617,6 @@ byte; the totals and the original zips are unchanged.
 
 Still to do by others:
 
-- Jing Yuan: `AnomalyService` approve and undo (find the record with
-  `fixManager.findRecord(anomaly)`), and `PlagiarismService.check`, which
-  should also honour `plagiarism.enabled`.
 - Seth: `ui.FileTreeBuilder` shows the hidden `.gradezzy-backup` folder;
   skip names that start with a dot.
 
@@ -707,7 +704,7 @@ a student's compile error; explain when throwing is appropriate.
 ### 5. Jing Yuan: scoring, services and putting it together
 
 **Packages:** `app`, `config`, `model`, `service`, plus `ScoreStage` and
-`ScoreCalculator` in `grading`. 12 TODOs left (39 at the start). You
+`ScoreCalculator` in `grading`. All 39 TODOs are done. You
 also own the wiring (`PipelineFactory`, `ApplicationContext`), so you
 are the person who checks that the slices fit together.
 
@@ -1056,31 +1053,34 @@ implemented. `[x]` means it works now.
 
 ### SHOULD
 
-- [ ] Anomaly log with action buttons; approve and undo, singly and in
-  bulk (`service.AnomalyService`, `ui.AnomalyLogController`)
+- [x] Anomaly log with action buttons; approve and undo, singly and in
+  bulk (`service.AnomalyService`, `ui.AnomalyLogController`; undo needs
+  the run graded in this session, because fix records are kept in
+  memory)
 - [x] Flag untouched starter files, empty answers and hard-coded answers
   (`detection` package)
 - [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
   `TesterGenerator`, `ui.TestCaseController`)
 - [x] Progress bar and estimated time of completion
   (`service.ProgressEstimator`, `ui.GradingMonitor`)
-- [ ] Statistics dashboard filtered by module and section (`stats`
-  package, `ui.StatisticsController`)
+- [x] Statistics dashboard filtered by module and section (`stats`
+  package, `service.StatisticsService`, `ui.StatisticsController`)
 - [x] Search, filter and sort (`service.SearchService`)
 - [x] Select one, several or all (`ui.AnomalyLogController`,
   `ResultsController`)
 - [ ] Collapse and expand panels (`ui`)
 - [x] Next, Back and Cancel (`ui.MainController`)
-- [ ] Cancel, retry and resume grading (`service.GradingService`,
-  `grading.CancellationToken`; cancel and retry work, resume waits on the
-  repository)
+- [x] Cancel, retry and resume grading (`service.GradingService`,
+  `grading.CancellationToken`; a run from an earlier session is resumed
+  with the score sheet and testers in the settings)
 - [x] Light and dark theme switch (`ui.ThemeManager`, `ui.theme`)
 - [x] Settings page backed by `config.properties`
   (`service.SettingsService`, `ui.SettingsController`)
 - [x] SQLite persistence behind `ResultRepository`
   (`persistence.SqliteResultRepository`)
 - [ ] Audit log, exportable (`service.AuditService`,
-  `report.AuditLogExporter`)
+  `report.AuditLogExporter`; the log is saved and shown, the export is
+  not registered in `ApplicationContext` yet)
 - [ ] Individual student report, exportable
   (`report.StudentReportExporter`, `ui.StudentReportController`)
 - [x] JSON export (`report.JsonExporter`, `JsonWriter`)
@@ -1089,12 +1089,11 @@ implemented. `[x]` means it works now.
 
 ### COULD
 
-- [ ] Backup and recovery of a previous grading state
+- [x] Backup and recovery of a previous grading state
   (`persistence.BackupManager`, `service.HistoryService`)
 - [x] Subtle animations (`ui`, `ui.animations.enabled`)
-- [ ] Plagiarism detection (`plagiarism` package,
-  `service.PlagiarismService`; the detector works, the service call waits
-  on Jing Yuan)
+- [x] Plagiarism detection (`plagiarism` package,
+  `service.PlagiarismService`; runs when `plagiarism.enabled` is true)
 
 ## Before submission
 

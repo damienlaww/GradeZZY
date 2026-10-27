@@ -7,6 +7,11 @@
  */
 package gradezzy.service;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import gradezzy.model.GradingRun;
+import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
 import gradezzy.stats.StatisticsCalculator;
 import gradezzy.stats.StatisticsFilter;
@@ -41,11 +46,20 @@ public class StatisticsService {
      * Summarises the saved runs that match a filter.
      *
      * @param filter the filter
-     * @return the summary for the dashboard
+     * @return the summary for the dashboard; it holds empty values when
+     *         no saved run matches or the database cannot be read
      */
     public StatisticsSummary summarise(StatisticsFilter filter) {
-        // TODO(Jing Yuan): implement: loading the runs and calling
-        //     statisticsCalculator.summarise
-        return null;
+        List<GradingRun> runs = new ArrayList<>();
+
+        if (repository != null) {
+            try {
+                runs = repository.listRuns();
+            } catch (PersistenceException exception) {
+                // An empty summary is shown instead
+            }
+        }
+
+        return statisticsCalculator.summarise(runs, filter);
     }
 }
