@@ -14,8 +14,6 @@ import gradezzy.model.Anomaly;
 
 /**
  * A record of one automatic correction and how to reverse it.
- *
- * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class FixRecord {
 

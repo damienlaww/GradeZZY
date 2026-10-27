@@ -10,8 +10,6 @@ package gradezzy.plagiarism;
 
 /**
  * Two submissions whose answer to a question is very similar.
- *
- * <p>Tier: COULD. Owner: Jun Sheng.
  */
 public class SimilarityPair {
 

@@ -9,8 +9,6 @@ package gradezzy.fix;
 
 /**
  * Signals that a fix could not be applied or undone.
- *
- * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class FixException extends Exception {
 
