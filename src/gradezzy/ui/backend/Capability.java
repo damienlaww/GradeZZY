@@ -27,17 +27,15 @@ public enum Capability {
             "Tells you at once when a chosen file or folder cannot be "
             + "read.", "Seth",
             "InputValidator.isReadableFile, isReadableDirectory",
-            CapabilityStatus.WAITING,
-            "Until these return true for readable paths, every chosen "
-            + "file is reported as unreadable."),
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; unreadable files are marked before grading."),
 
     /** Imports a batch and grades it. */
     IMPORT_AND_GRADE("Import and grade a batch",
             "Grades every submission of a section in one batch.",
             "Jing Yuan, with Seth, Damien, Jun Sheng, Zach and Huxley",
-            "GradingService.startGrading", CapabilityStatus.WAITING,
-            "The pipeline stages that load, check, fix, compile, run and "
-            + "score submissions."),
+            "GradingService.startGrading", CapabilityStatus.WORKS_NOW,
+            "Nothing; every pipeline stage works."),
 
     /** Stops a running batch after the current submission. */
     CANCEL_GRADING("Cancel grading",
@@ -120,8 +118,8 @@ public enum Capability {
     SOURCE_VIEW("Show working-copy files",
             "Shows a student's files, so you can read the code behind a "
             + "mark.", "Damien", "FileTreeBuilder, FileUtils.readText",
-            CapabilityStatus.WAITING,
-            "FileUtils.readText, so a chosen source file can be shown."),
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; files are read from the working copy."),
 
     /** Writes the score sheet CSV or JSON. */
     EXPORT_RESULTS("Export CSV and JSON",
@@ -212,8 +210,8 @@ public enum Capability {
     /** Testers from a folder. */
     TESTER_FOLDER("Use a tester folder",
             "Grades with the tester files you already have in a folder.",
-            "Zach", "UploadedTesterSource", CapabilityStatus.WAITING,
-            "UploadedTesterSource.prepareTesters."),
+            "Zach", "UploadedTesterSource", CapabilityStatus.WORKS_NOW,
+            "Nothing; testers are matched to questions by name."),
 
     /** Testers generated from typed test cases. */
     TYPED_TEST_CASES("Typed test cases",
