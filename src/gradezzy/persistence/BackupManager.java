@@ -74,7 +74,6 @@ public class BackupManager {
      * @return the path of the new backup
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public Path backup(Path databaseFile) throws PersistenceException {
         if (databaseFile == null || !Files.isRegularFile(databaseFile)) {
             throw new PersistenceException("There is no database to back "
@@ -108,7 +107,6 @@ public class BackupManager {
      * @param databaseFile the database file
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public void restore(Path backupFile,
             Path databaseFile) throws PersistenceException {
         if (backupFile == null || !Files.isRegularFile(backupFile,
@@ -145,7 +143,6 @@ public class BackupManager {
      *
      * @return the backup files; empty when there are none
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public List<Path> listBackups() {
         List<Path> backups = new ArrayList<>();
         Path backupFolder = getBackupFolder();

@@ -60,14 +60,16 @@ public class CsvScoreSheetExporter implements Exporter {
     // The application settings
     private final AppConfig config;
 
-    // The provided score sheet used as the template
+    // The score sheet from the settings, used only for a run that does
+    // not record the sheet it was graded against
     private final Path templateScoreSheet;
 
     /**
      * Creates a new csv score sheet exporter.
      *
      * @param config the application settings
-     * @param templateScoreSheet the provided score sheet used as the template
+     * @param templateScoreSheet the score sheet from the settings, used for
+     *        a run that does not record the sheet it was graded against
      */
     public CsvScoreSheetExporter(AppConfig config, Path templateScoreSheet) {
         this.config = config;
@@ -105,7 +107,6 @@ public class CsvScoreSheetExporter implements Exporter {
      * @param outputFile the output file
      * @throws ExportException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public void export(GradingRun gradingRun,
             Path outputFile) throws ExportException {
@@ -114,10 +115,11 @@ public class CsvScoreSheetExporter implements Exporter {
                     "Nothing to export: the grading run or file is missing.");
         }
 
-        List<String> lines = readTemplateLines();
+        Path template = chooseTemplate(gradingRun);
+        List<String> lines = readTemplateLines(template);
         if (lines.isEmpty()) {
             throw new ExportException("The score sheet template "
-                    + templateScoreSheet + " is empty.");
+                    + template + " is empty.");
         }
 
         // Find the two columns by name so a reordered sheet still works
@@ -147,17 +149,28 @@ public class CsvScoreSheetExporter implements Exporter {
         }
     }
 
+    // The sheet the batch was graded against, so the export lists the
+    // same students. A run saved before the sheet was recorded uses the
+    // sheet from the settings.
+    private Path chooseTemplate(GradingRun gradingRun) {
+        if (gradingRun.getScoreSheetFile() != null) {
+            return gradingRun.getScoreSheetFile();
+        }
+        return templateScoreSheet;
+    }
+
     // Reads the template and returns its lines without line endings.
     // The final line ending does not create an extra empty line.
-    private List<String> readTemplateLines() throws ExportException {
+    private List<String> readTemplateLines(Path template)
+            throws ExportException {
         String text = "";
         try {
-            text = FileUtils.readText(templateScoreSheet);
+            text = FileUtils.readText(template);
         } catch (IOException exception) {
             throw new ExportException("Could not read the score sheet "
-                    + "template " + templateScoreSheet + ". Check "
-                    + ConfigKeys.SCORE_SHEET_FILE + " in the settings.",
-                    exception);
+                    + template + " that this batch was graded against. "
+                    + "Put the file back, or grade the batch again with "
+                    + "a score sheet that exists.", exception);
         }
 
         String normalised = TextUtils.normaliseLineEndings(text);

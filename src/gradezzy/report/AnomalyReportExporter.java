@@ -79,7 +79,6 @@ public class AnomalyReportExporter implements Exporter {
      * @param outputFile the output file
      * @throws ExportException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public void export(GradingRun gradingRun,
             Path outputFile) throws ExportException {

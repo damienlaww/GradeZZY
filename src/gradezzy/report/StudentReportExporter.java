@@ -101,7 +101,6 @@ public class StudentReportExporter implements Exporter {
      * @throws ExportException if the student is not in the run or the file
      *         cannot be written
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public void export(GradingRun gradingRun,
             Path outputFile) throws ExportException {

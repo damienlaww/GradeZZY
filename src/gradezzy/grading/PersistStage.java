@@ -70,7 +70,6 @@ public class PersistStage implements GradingStage {
      * @param context the context
      * @throws GradingException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public void process(Submission submission,
             GradingContext context) throws GradingException {

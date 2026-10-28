@@ -48,7 +48,6 @@ public class JsonWriter {
      * @param text the text
      * @return the text as a JSON string, or null when the text is null
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public String quote(String text) {
         if (text == null) {
             return NULL;
@@ -72,7 +71,6 @@ public class JsonWriter {
      * @param fields the fields
      * @return the JSON object text
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public String writeObject(Map<String, String> fields) {
         List<String> pairs = new ArrayList<>();
         for (Map.Entry<String, String> field : fields.entrySet()) {
@@ -88,7 +86,6 @@ public class JsonWriter {
      * @param elements the elements
      * @return the JSON array text
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public String writeArray(List<String> elements) {
         List<String> values = new ArrayList<>();
         for (String element : elements) {
