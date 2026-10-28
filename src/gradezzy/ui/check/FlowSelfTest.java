@@ -845,10 +845,22 @@ public class FlowSelfTest {
             Node tile = SceneFinder.ancestor(label, "figure");
             if (name.equals(label.getText()) && tile != null
                     && label.getStyleClass().contains("figure-label")) {
-                return SceneFinder.text(tile, "figure-value");
+                return figureValue((Parent) tile);
             }
         }
         return "";
+    }
+
+    // Joins the parts of a figure tile's value, since a percent sign is
+    // a label of its own.
+    private String figureValue(Parent tile) {
+        StringBuilder value = new StringBuilder();
+        for (Label part : SceneFinder.ofType(tile, Label.class)) {
+            if (part.getStyleClass().contains("figure-value")) {
+                value.append(part.getText());
+            }
+        }
+        return value.toString();
     }
 
     // Picks a new value in the picker that shows an old one. Does

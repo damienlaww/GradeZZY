@@ -361,6 +361,13 @@
     -fx-font-weight: bold;
 }
 
+/* JavaFX cuts off the right edge of the bold percent sign, so a percent
+   sign next to bold text is drawn in regular weight. */
+.figure-value.regular-weight,
+.pill.regular-weight {
+    -fx-font-weight: normal;
+}
+
 .figure-unit {
     -fx-font-size: 14px;
     -fx-text-fill: -color-fg-muted;

@@ -96,6 +96,9 @@ public final class Parts {
     /** The width of the centred column of forms (Set up, Export). */
     public static final double COLUMN_WIDTH = 760.0;
 
+    /** The percent sign, drawn in regular weight next to bold text. */
+    public static final String PERCENT_SIGN = "%";
+
     /** The gap between a figure's value and its unit. */
     public static final double FIGURE_UNIT_GAP = 4.0;
 
@@ -207,6 +210,10 @@ public final class Parts {
         dot.getStyleClass().add("pill-dot");
         Label pill = new Label(text, dot);
         pill.getStyleClass().addAll("pill", tone.getStyleClass());
+        if (text.contains(PERCENT_SIGN)) {
+            // JavaFX cuts off the right edge of the bold percent sign
+            pill.getStyleClass().add("regular-weight");
+        }
         pill.setMinWidth(Region.USE_PREF_SIZE);
         return pill;
     }
@@ -361,9 +368,7 @@ public final class Parts {
     public static VBox figure(String label, String value, String unit,
             String hint) {
         Label name = styled(new Label(label), "figure-label");
-        Label number = styled(new Label(value), "figure-value");
-        number.setMinWidth(Region.USE_PREF_SIZE);
-        HBox line = new HBox(FIGURE_UNIT_GAP, number);
+        HBox line = new HBox(FIGURE_UNIT_GAP, figureValue(value));
         line.setAlignment(Pos.BASELINE_LEFT);
         if (unit != null) {
             Label after = styled(new Label(unit), "figure-unit");
@@ -444,6 +449,29 @@ public final class Parts {
             return String.valueOf((long) mark);
         }
         return String.valueOf(mark);
+    }
+
+    // Returns the large value of a figure tile. A percent sign is drawn
+    // in regular weight beside the bold number, because JavaFX cuts off
+    // the right edge of the bold percent sign at small sizes.
+    private static HBox figureValue(String value) {
+        boolean percent = value.endsWith(PERCENT_SIGN);
+        String number = value;
+        if (percent) {
+            number = value.substring(0, value.length()
+                    - PERCENT_SIGN.length());
+        }
+        Label digits = styled(new Label(number), "figure-value");
+        digits.setMinWidth(Region.USE_PREF_SIZE);
+        HBox box = new HBox(digits);
+        box.setAlignment(Pos.BASELINE_LEFT);
+        if (percent) {
+            Label sign = styled(new Label(PERCENT_SIGN), "figure-value");
+            sign.getStyleClass().add("regular-weight");
+            sign.setMinWidth(Region.USE_PREF_SIZE);
+            box.getChildren().add(sign);
+        }
+        return box;
     }
 
     // Wraps a page in a scroll pane that only scrolls up and down.
