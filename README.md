@@ -964,7 +964,7 @@ Kept to a minimum and confined to the classes named here:
 | `ProcessBuilder`, `Process`, `ProcessHandle` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and kills a run and its child processes at the time limit. |
 | `Stream.toList()` | `exec.ProcessRunner.terminate` | Turns the child processes of a run into a list so they can be killed. |
 | `Thread.sleep` | `exec.ProcessRunner.run` | Pauses between checks of a running program, instead of using a reader thread. |
-| `StackWalker` with a lambda, `System.setOut`, a `PrintStream` subclass | `exec.TesterHarness` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. |
+| `StackWalker` with a lambda, `System.setOut`, a `PrintStream` subclass | `exec.TesterHarness` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. Student code that reads the token by reflection can still fake trusted lines. |
 | Reflection (`Class.forName`, `Method.invoke`) | `exec.TesterHarness` | Starts the tester's `main` from inside the harness. |
 | `Runtime.halt`, the `jdk.lang.Process.launchMechanism` property | `exec.TesterHarness` | Ends the run without waiting for student threads, and stops student code starting other programs (macOS and Linux). |
 | `java` options `--limit-modules`, `--illegal-native-access=deny`, `-Duser.home`, `-Djava.io.tmpdir`; `UUID` | `exec.TesterRunner` | Student code gets only core Java and no native code, and its home and temp folders are its own question folder; a new random token for every tester run. |

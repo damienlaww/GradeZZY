@@ -23,8 +23,13 @@ import java.util.Locale;
  *
  * <p>The parent sends a secret token on standard input. A line printed by
  * the tester's own code, with no student code running at that moment, is
- * written with the token in front. Student code cannot add the token,
- * because it never sees it. The parent then trusts only marked lines.
+ * written with the token in front. The parent then trusts only marked
+ * lines, so a plain "Passed" printed by student code is not believed.
+ *
+ * <p>Limit: the token is kept in this process, next to student code.
+ * Student code that uses reflection to read the private token field can
+ * print lines the parent trusts. Running this class as a named module
+ * would block that reflection; that needs a separate compile step.
  *
  * <p>Tier: MUST. Owner: Zach.
  */
