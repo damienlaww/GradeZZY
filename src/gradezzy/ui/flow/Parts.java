@@ -9,6 +9,7 @@
  */
 package gradezzy.ui.flow;
 
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Node;
@@ -325,7 +326,13 @@ public final class Parts {
         column.setPrefWidth(COLUMN_WIDTH);
         StackPane centre = new StackPane(column);
         centre.setAlignment(Pos.TOP_CENTER);
-        return scroll(centre);
+        ScrollPane pane = scroll(centre);
+        // Centres the column on the window, not on the space left beside
+        // the scroll bar, so pages with and without one line up.
+        pane.viewportBoundsProperty().addListener((seen, old, bounds) ->
+                centre.setPadding(new Insets(0, 0, 0, Math.max(0,
+                pane.getWidth() - bounds.getWidth()))));
+        return pane;
     }
 
     /**
@@ -389,7 +396,7 @@ public final class Parts {
             bar.getStyleClass().add(tone.getStyleClass());
         }
         StackPane track = new StackPane(bar);
-        track.getStyleClass().add("track");
+        track.getStyleClass().add("score-track");
         track.setAlignment(Pos.CENTER_LEFT);
         bar.maxWidthProperty().bind(track.widthProperty().multiply(share));
         bar.minWidthProperty().bind(bar.maxWidthProperty());

@@ -22,7 +22,7 @@ public class ImportBatch {
     // Every chosen item, in the order it was added
     private final List<ImportItem> items = new ArrayList<>();
 
-    // Test cases typed on the Assessments screen
+    // Test cases typed on the Set up screen
     private final List<TestCase> typedTestCases = new ArrayList<>();
 
     // Whether grading uses the typed test cases instead of a folder
@@ -36,7 +36,7 @@ public class ImportBatch {
     }
 
     /**
-     * Returns the test cases typed on the Assessments screen.
+     * Returns the test cases typed on the Set up screen.
      *
      * @return the typed test cases, which may be changed
      */
@@ -235,8 +235,8 @@ public class ImportBatch {
         if (!useTypedTestCases) {
             addSingleReason(reasons, InputKind.TESTERS);
         } else if (typedTestCases.isEmpty()) {
-            reasons.add("Type at least one test case on the Assessments "
-                    + "screen, or use a tester folder instead.");
+            reasons.add("Type at least one test case, or choose a tester "
+                    + "folder instead.");
         }
         return reasons;
     }

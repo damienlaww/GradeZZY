@@ -11,6 +11,7 @@
 package gradezzy.ui.flow;
 
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
@@ -59,6 +60,7 @@ public class ActionBar extends HBox {
         backButton.setVisible(false);
         backButton.setManaged(false);
         status.setText("");
+        status.setGraphic(null);
         secondary.getChildren().clear();
         primaryButton.setVisible(false);
         primaryButton.setManaged(false);
@@ -71,6 +73,18 @@ public class ActionBar extends HBox {
      * @param action what Back does
      */
     public void setBack(Runnable action) {
+        setBack("Back", action);
+    }
+
+    /**
+     * Shows the left button with other text, such as Cancel while a
+     * batch is being graded.
+     *
+     * @param text the button text
+     * @param action what the button does
+     */
+    public void setBack(String text, Runnable action) {
+        backButton.setText(text);
         backButton.setOnAction(event -> action.run());
         backButton.setVisible(true);
         backButton.setManaged(true);
@@ -83,6 +97,16 @@ public class ActionBar extends HBox {
      */
     public void setStatus(String text) {
         status.setText(text);
+    }
+
+    /**
+     * Shows a small mark before the status sentence, such as the blue dot
+     * of an unsaved change. Cleared by reset.
+     *
+     * @param graphic the mark, or null for none
+     */
+    public void setStatusGraphic(Node graphic) {
+        status.setGraphic(graphic);
     }
 
     /**

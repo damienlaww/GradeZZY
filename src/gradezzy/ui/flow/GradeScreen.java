@@ -2,8 +2,9 @@
  * File: GradeScreen.java
  *
  * Purpose: Step 2. Shows grading as it happens: how many students are
- * done, about how long is left, what is happening now, and a status for
- * each student. Offers Cancel, and Resume after a cancel.
+ * done, about how long is left, what is happening now, a small bell
+ * curve of the marks so far and a count of each result. Offers Cancel,
+ * and Resume after a cancel.
  *
  * Where it fits: Replaces the old Grading Progress screen. It is the
  * ProgressListener and RunCallback of every run it starts, and moves to
@@ -11,26 +12,35 @@
  */
 package gradezzy.ui.flow;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import javafx.application.Platform;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
-import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
+import gradezzy.config.ConfigKeys;
 import gradezzy.grading.ProgressListener;
+import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.PipelineStages;
+import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.RunCallback;
 
 /**
@@ -39,12 +49,12 @@ import gradezzy.ui.backend.RunCallback;
 public class GradeScreen extends FlowScreen
         implements ProgressListener, RunCallback {
 
-    // What each pipeline stage means, in the order of PipelineStages
-    private static final String[] STAGE_WORDS = {"Unzipping",
-        "Checking the folders and files", "Fixing small mistakes",
-        "Looking for answers to flag", "Copying the testers",
-        "Compiling", "Running the tests", "Adding up the marks",
-        "Saving"};
+    // What each step of grading means, in the order of PipelineStages
+    private static final String[] STAGE_WORDS = {"unzipping",
+        "checking the folders and files", "fixing small mistakes",
+        "looking for answers to flag", "copying the testers",
+        "compiling", "running the tests", "adding up the marks",
+        "saving"};
 
     // Milliseconds in a second
     private static final double MILLIS_PER_SECOND = 1000.0;
@@ -52,11 +62,20 @@ public class GradeScreen extends FlowScreen
     // Seconds in a minute
     private static final int SECONDS_PER_MINUTE = 60;
 
-    // The width of one student tile
-    private static final double TILE_WIDTH = 230.0;
+    // The share of the row for each of the two small cards
+    private static final double HALF = 50.0;
+
+    // The separator between parts of a line
+    private static final String DOT = " · ";
+
+    // The rows of the "So far" card, top to bottom
+    private static final int GRADED = 0;
+    private static final int REVIEW = 1;
+    private static final int FAILED = 2;
+    private static final int WAITING = 3;
 
     // The scrolling page
-    private final ScrollPane view = new ScrollPane();
+    private final ScrollPane view;
 
     // The heading
     private final Label heading = Parts.heading("Grading");
@@ -64,28 +83,39 @@ public class GradeScreen extends FlowScreen
     // The line under the heading
     private final Label subtitle = Parts.subtitle("");
 
-    // "12 of 38 students"
-    private final Label count = new Label();
+    // How many students are done, such as "27"
+    private final Label done = new Label("0");
+
+    // " of 42 students"
+    private final Label ofTotal = new Label();
 
     // "About 1 minute left"
     private final Label timeLeft = Parts.muted("");
 
-    // The progress bar
-    private final ProgressBar bar = new ProgressBar(0);
-
     // What is happening now
     private final Label now = Parts.muted("");
 
-    // One tile per student
-    private final FlowPane tiles = new FlowPane(Parts.GAP, Parts.GAP);
+    // The share of students done, from 0 to 1
+    private final DoubleProperty progress = new SimpleDoubleProperty(0);
 
-    // The tile of each username, in the order they were added
-    private final Map<String, HBox> tileByUser = new LinkedHashMap<>();
+    // The bell curve of the marks so far
+    private final BellCurveChart chart = new BellCurveChart(true);
 
-    // How many students the run will grade
+    // Shown instead of the chart until a student is graded
+    private final Label noMarks = Parts.muted("Marks appear here as "
+            + "students finish.");
+
+    // The pill and count of each row of "So far"
+    private final Label[] pills = new Label[WAITING + 1];
+    private final Label[] counts = new Label[WAITING + 1];
+
+    // Every student of the run that has a result, by username
+    private final Map<String, Submission> results = new LinkedHashMap<>();
+
+    // How many students this run grades
     private int total = 0;
 
-    // How many are finished
+    // How many of them are finished
     private int finished = 0;
 
     // When the run started, in milliseconds
@@ -104,20 +134,14 @@ public class GradeScreen extends FlowScreen
      */
     public GradeScreen(FlowWindow window) {
         super(window);
-        count.getStyleClass().add("big-number");
-        bar.setMaxWidth(Double.MAX_VALUE);
-        bar.getStyleClass().add("grade-bar");
-        HBox countRow = Parts.row(Parts.GAP, count, Parts.grow(), timeLeft);
-        countRow.setAlignment(Pos.BASELINE_LEFT);
-        VBox progress = Parts.card(null, countRow, bar, now);
-        tiles.getStyleClass().add("tiles");
-        VBox column = new VBox(Parts.GAP,
-                new VBox(heading, subtitle), progress,
-                Parts.card("Students", tiles));
-        column.getStyleClass().add("wide-column");
-        view.setContent(column);
-        view.setFitToWidth(true);
-        view.getStyleClass().add("page-scroll");
+        GridPane cards = new GridPane();
+        cards.setHgap(Parts.CARD_GAP);
+        cards.getColumnConstraints().addAll(half(), half());
+        cards.add(createMarksCard(), 0, 0);
+        cards.add(createSoFarCard(), 1, 0);
+        VBox header = new VBox(heading, subtitle);
+        header.getStyleClass().add("screen-header");
+        view = Parts.narrowPage(header, createProgressCard(), cards);
     }
 
     @Override
@@ -138,10 +162,9 @@ public class GradeScreen extends FlowScreen
         for (ImportItem item : getState().getBatch().getItems(
                 InputKind.SUBMISSION)) {
             if (getState().getBatch().getEffectiveState(item).isUsable()) {
-                addTile(item.getUsername(), item.getUsername());
+                total++;
             }
         }
-        total = tileByUser.size();
         updateCount();
         getState().setGrading(true);
         getBackend().recordAudit("Grading started", "Grading "
@@ -162,13 +185,12 @@ public class GradeScreen extends FlowScreen
     public void continueRun(GradingRun run, boolean retryFailed) {
         prepare(run.getSection().getLabel());
         for (Submission submission : run.getSubmissions()) {
-            addTile(submission.getUsername(), Students.name(submission));
             boolean again = retryFailed
                     && submission.getStatus() == SubmissionStatus.FAILED;
             if (isUnfinished(submission) || again) {
                 total++;
             } else {
-                setTile(submission);
+                results.put(submission.getUsername(), submission);
             }
         }
         updateCount();
@@ -179,6 +201,74 @@ public class GradeScreen extends FlowScreen
             getBackend().resumeGrading(run, this, this);
         }
         refreshActions();
+    }
+
+    // ------------------------------------------------------------ build
+
+    // Returns a column that takes half of a grid's width.
+    private ColumnConstraints half() {
+        ColumnConstraints column = new ColumnConstraints();
+        column.setPercentWidth(HALF);
+        column.setHgrow(Priority.ALWAYS);
+        column.setFillWidth(true);
+        return column;
+    }
+
+    // Builds the count, time left, what is happening now and the bar.
+    private VBox createProgressCard() {
+        done.getStyleClass().add("grade-count");
+        ofTotal.getStyleClass().add("grade-of");
+        HBox count = new HBox(Parts.GAP_SMALL / 2, done, ofTotal);
+        count.setAlignment(Pos.BASELINE_LEFT);
+        VBox left = new VBox(count, timeLeft);
+        now.getStyleClass().add("small-text");
+        now.setMinWidth(0);
+        HBox top = new HBox(Parts.GAP, left, Parts.grow(), now);
+        top.setAlignment(Pos.BOTTOM_LEFT);
+
+        Region fill = new Region();
+        fill.getStyleClass().add("track-fill");
+        StackPane bar = new StackPane(fill);
+        bar.getStyleClass().add("score-track");
+        bar.setAlignment(Pos.CENTER_LEFT);
+        fill.maxWidthProperty().bind(bar.widthProperty().multiply(progress));
+        fill.minWidthProperty().bind(fill.maxWidthProperty());
+        return Parts.card(null, top, bar);
+    }
+
+    // Builds the card with the small bell curve.
+    private VBox createMarksCard() {
+        StackPane box = new StackPane(chart, noMarks);
+        box.setMinHeight(BellCurveChart.SMALL_HEIGHT);
+        VBox card = Parts.card("Marks so far", box);
+        card.setMaxHeight(Double.MAX_VALUE);
+        return card;
+    }
+
+    // Builds the card with one row per kind of result.
+    private VBox createSoFarCard() {
+        String[] words = {"Graded", "Needs review", "Did not compile",
+            "Waiting"};
+        Tone[] tones = {Tone.GOOD, Tone.WARN, Tone.BAD, Tone.NEUTRAL};
+        VBox rows = new VBox();
+        for (int index = 0; index < words.length; index++) {
+            pills[index] = Parts.pill(words[index], tones[index]);
+            counts[index] = Parts.strong("0");
+            counts[index].getStyleClass().add("count-value");
+            HBox row = Parts.row(Parts.GAP, pills[index], Parts.grow(),
+                    counts[index]);
+            row.getStyleClass().add("card-row");
+            if (index == 0) {
+                row.getStyleClass().add("first");
+            }
+            if (index == words.length - 1) {
+                row.getStyleClass().add("last");
+            }
+            rows.getChildren().add(row);
+        }
+        VBox card = Parts.card("So far", rows);
+        card.setMaxHeight(Double.MAX_VALUE);
+        return card;
     }
 
     // ------------------------------------------------ progress listener
@@ -193,24 +283,20 @@ public class GradeScreen extends FlowScreen
 
     @Override
     public void onSubmissionStarted(Submission submission) {
-        Platform.runLater(() -> {
-            now.setText("Now: " + Students.name(submission));
-            HBox tile = tileFor(submission);
-            replacePill(tile, Parts.pill("Grading", Tone.NEUTRAL));
-            tile.getStyleClass().add("active");
-        });
+        Platform.runLater(() -> now.setText("Now: "
+                + Students.name(submission)));
     }
 
     @Override
     public void onStageStarted(Submission submission, String stageName) {
         Platform.runLater(() -> {
             int index = PipelineStages.indexOf(stageName);
-            String words = "Working";
+            String words = "working";
             if (index >= 0 && index < STAGE_WORDS.length) {
                 words = STAGE_WORDS[index];
             }
-            now.setText("Now: " + Students.name(submission)
-                    + "  ·  " + words);
+            now.setText("Now: " + Students.name(submission) + DOT
+                    + words);
         });
     }
 
@@ -218,7 +304,7 @@ public class GradeScreen extends FlowScreen
     public void onSubmissionFinished(Submission submission) {
         Platform.runLater(() -> {
             finished++;
-            setTile(submission);
+            results.put(submission.getUsername(), submission);
             updateCount();
         });
     }
@@ -236,22 +322,29 @@ public class GradeScreen extends FlowScreen
         getState().setRun(gradingRun);
         if (gradingRun != null) {
             for (Submission submission : gradingRun.getSubmissions()) {
-                setTile(submission);
+                if (!isUnfinished(submission)) {
+                    results.put(submission.getUsername(), submission);
+                }
             }
+            updateCount();
         }
         if (gradingRun != null && hasUnfinished(gradingRun)) {
             heading.setText("Grading stopped");
-            now.setText("Graded " + finished + " of " + total
-                    + ". The rest are waiting; press Resume to grade them.");
+            now.setText("The rest are waiting; press Resume to grade "
+                    + "them.");
             refreshActions();
             return;
         }
+        heading.setText("Grading finished");
+        now.setText("");
         getWindow().notify("Grading finished.");
         getState().reach(Step.REVIEW);
         if (getWindow().getCurrentStep() == Step.GRADE
                 && getWindow().getCurrentPage() == Page.MARKING) {
             getWindow().show(Step.REVIEW);
+            return;
         }
+        refreshActions();
     }
 
     @Override
@@ -267,77 +360,89 @@ public class GradeScreen extends FlowScreen
 
     // Empties the screen for a new run.
     private void prepare(String sectionLabel) {
-        tileByUser.clear();
-        tiles.getChildren().clear();
+        results.clear();
         total = 0;
         finished = 0;
         cancelling = false;
         failure = null;
         startedAt = System.currentTimeMillis();
-        heading.setText("Grading " + sectionLabel);
-        subtitle.setText("Each submission is unzipped, checked, compiled "
-                + "and tested. You can open History or Settings while "
-                + "you wait.");
+        heading.setText("Grading");
+        String about = sectionLabel;
+        Assessment assessment = getBackend().getAssessment();
+        if (assessment != null) {
+            about = about + DOT + assessment.getName();
+        }
+        subtitle.setText(about + ". You can leave this tab; grading "
+                + "carries on.");
         now.setText("Starting");
         timeLeft.setText("");
     }
 
-    // Adds a waiting tile for a student.
-    private void addTile(String username, String name) {
-        Label nameLabel = Parts.strong(name);
-        HBox tile = Parts.row(Parts.GAP_SMALL, nameLabel, Parts.grow(),
-                Parts.pill("Waiting", Tone.NEUTRAL));
-        tile.getStyleClass().add("student-tile");
-        tile.setPrefWidth(TILE_WIDTH);
-        tileByUser.put(username, tile);
-        tiles.getChildren().add(tile);
-    }
-
-    // Returns the tile of a student, adding one if needed.
-    private HBox tileFor(Submission submission) {
-        HBox tile = tileByUser.get(submission.getUsername());
-        if (tile == null) {
-            addTile(submission.getUsername(), Students.name(submission));
-            tile = tileByUser.get(submission.getUsername());
-        }
-        return tile;
-    }
-
-    // Shows a finished student's name and status.
-    private void setTile(Submission submission) {
-        HBox tile = tileFor(submission);
-        tile.getStyleClass().remove("active");
-        ((Label) tile.getChildren().get(0)).setText(
-                Students.name(submission));
-        if (isUnfinished(submission)) {
-            replacePill(tile, Parts.pill("Waiting", Tone.NEUTRAL));
-        } else {
-            replacePill(tile, Students.pill(submission, getBackend()));
-        }
-    }
-
-    // Puts a new pill at the end of a tile.
-    private void replacePill(HBox tile, Label pill) {
-        int last = tile.getChildren().size() - 1;
-        tile.getChildren().set(last, pill);
-    }
-
-    // Updates the count, the bar and the time left.
+    // Updates the count, the bar, the time left, the chart and the rows.
     private void updateCount() {
-        count.setText(finished + " of " + Parts.plural(total, "student"));
-        if (total > 0) {
-            bar.setProgress((double) finished / total);
-        } else {
-            bar.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
+        done.setText(String.valueOf(finished));
+        ofTotal.setText("of " + Parts.plural(total, "student"));
+        progress.set(total > 0 ? (double) finished / total : 0);
+        updateTimeLeft();
+        updateChart();
+        updateRows();
+    }
+
+    // Works out about how long is left from the time taken so far.
+    private void updateTimeLeft() {
+        if (total > 0 && finished >= total) {
+            timeLeft.setText("Done");
+            return;
         }
-        if (finished == 0 || finished >= total) {
-            timeLeft.setText(finished >= total && total > 0 ? "Done" : "");
+        if (finished == 0) {
+            timeLeft.setText("Working out the time left");
             return;
         }
         double elapsed = (System.currentTimeMillis() - startedAt)
                 / MILLIS_PER_SECOND;
         long seconds = Math.round(elapsed / finished * (total - finished));
         timeLeft.setText("About " + describe(seconds) + " left");
+    }
+
+    // Redraws the bell curve of the graded students.
+    private void updateChart() {
+        Assessment assessment = getBackend().getAssessment();
+        if (assessment == null) {
+            return;
+        }
+        MarkStats stats = MarkStats.of(new ArrayList<>(
+                results.values()), assessment.getMaxTotal(),
+                MarkStats.parsePassPercent(getBackend().getSetting(
+                ConfigKeys.PASS_MARK_PERCENT)));
+        boolean empty = stats.isEmpty();
+        chart.setStats(empty ? null : stats);
+        noMarks.setVisible(empty);
+    }
+
+    // Counts each kind of result.
+    private void updateRows() {
+        int[] tally = new int[WAITING + 1];
+        boolean onlyCompile = true;
+        for (Submission submission : results.values()) {
+            ResultState state = Students.state(submission, getBackend());
+            if (state == ResultState.NEEDS_REVIEW) {
+                tally[REVIEW]++;
+            } else if (Students.isFailed(state)) {
+                tally[FAILED]++;
+                onlyCompile = onlyCompile
+                        && state == ResultState.COMPILE_ERROR;
+            } else if (state == ResultState.UNGRADED) {
+                tally[WAITING]++;
+            } else {
+                tally[GRADED]++;
+            }
+        }
+        tally[WAITING] += Math.max(0, total - finished);
+        pills[FAILED].setText(onlyCompile ? "Did not compile"
+                : "Could not grade");
+        for (int index = 0; index < tally.length; index++) {
+            counts[index].setText(String.valueOf(tally[index]));
+        }
     }
 
     // Says a number of seconds in words.
@@ -374,10 +479,11 @@ public class GradeScreen extends FlowScreen
         actions.reset();
         GradingRun run = getState().getRun();
         if (getState().isGrading()) {
-            actions.addSecondary(Parts.secondary("Cancel grading",
-                    () -> askCancel()));
+            actions.setBack("Cancel", () -> askCancel());
             actions.setStatus(cancelling ? "Stopping after the current "
-                    + "student." : "");
+                    + "student." : "Results open in Review when grading "
+                    + "finishes.");
+            actions.setPrimary("Review results", () -> { }, false);
             return;
         }
         actions.setBack(() -> getWindow().show(Step.SET_UP));
@@ -386,12 +492,13 @@ public class GradeScreen extends FlowScreen
             return;
         }
         if (run != null && hasUnfinished(run)) {
+            actions.setStatus("Students already graded keep their marks.");
             actions.setPrimary("Resume", () -> continueRun(run, false),
                     true);
             return;
         }
         if (run != null) {
-            actions.setPrimary("Continue to review", () -> getWindow()
+            actions.setPrimary("Review results", () -> getWindow()
                     .advanceTo(Step.REVIEW), true);
         }
     }

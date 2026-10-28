@@ -2,12 +2,12 @@
  * File: SetUpScreen.java
  *
  * Purpose: Step 1. The instructor chooses the module and section, adds
- * the students' zip files and checks the score sheet and tester files,
- * then starts grading.
+ * the students' zip files, checks the score sheet and tester files, sees
+ * the grading settings this run will use, then starts grading.
  *
  * Where it fits: Replaces the old Modules, Assessments, Submissions and
  * Validation screens. Calls DashboardBackend.inspect for every file and
- * hands the batch to GradeScreen.
+ * hands the batch to GradeScreen. TestCasesSheet edits typed test cases.
  */
 package gradezzy.ui.flow;
 
@@ -16,20 +16,28 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+import javafx.geometry.HPos;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.ui.DragDropHandler;
+import gradezzy.ui.backend.Capability;
+import gradezzy.ui.backend.CapabilityStatus;
 import gradezzy.ui.backend.ImportBatch;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.ImportState;
@@ -46,20 +54,35 @@ public class SetUpScreen extends FlowScreen {
     // The file name pattern of a score sheet
     private static final String CSV_PATTERN = "*.csv";
 
+    // The text a true setting holds
+    private static final String TRUE = "true";
+
+    // The separator between a file and what is known about it
+    private static final String DOT = "  ·  ";
+
     // The size of the icon in the drop area
-    private static final double DROP_ICON_SIZE = 22.0;
+    private static final double DROP_ICON_SIZE = 20.0;
 
     // The size of a file icon in a list row
-    private static final double ROW_ICON_SIZE = 18.0;
+    private static final double ROW_ICON_SIZE = 16.0;
 
-    // The most file rows shown before the list scrolls
-    private static final double LIST_MAX_HEIGHT = 176.0;
+    // The width of the Remove and Change links, so they line up
+    private static final double ROW_LINK_WIDTH = 52.0;
 
-    // The width of the module and section boxes
-    private static final double CHOICE_WIDTH = 150.0;
+    // The share of the class row for Module and for Section
+    private static final double CHOICE_PERCENT = 27.8;
+
+    // The share of the class row for the assessment
+    private static final double ASSESSMENT_PERCENT = 44.4;
+
+    // How many facts the settings card shows
+    private static final int FACT_COUNT = 4;
+
+    // The share of the facts row for each fact
+    private static final double FACT_PERCENT = 100.0 / FACT_COUNT;
 
     // The scrolling page
-    private final ScrollPane view = new ScrollPane();
+    private final ScrollPane view;
 
     // The module choice
     private final ComboBox<String> moduleBox = new ComboBox<>();
@@ -67,23 +90,29 @@ public class SetUpScreen extends FlowScreen {
     // The section choice
     private final ComboBox<String> sectionBox = new ComboBox<>();
 
+    // The assessment, which cannot be changed here
+    private final Label assessmentText = new Label();
+
     // A note when the chosen section was graded before
     private final HBox earlierRun = Parts.row(Parts.GAP_SMALL);
 
     // The drop area
-    private final VBox dropArea = new VBox(Parts.GAP_SMALL);
+    private final HBox dropArea = Parts.row(Parts.GAP);
+
+    // How many files there are and how many are ready
+    private final HBox fileSummary = Parts.row(Parts.GAP);
 
     // The chosen zip files
     private final VBox fileList = new VBox();
 
-    // Scrolls the file list when it is long
-    private final ScrollPane listScroll = new ScrollPane(fileList);
-
-    // The line under the file list
-    private final HBox summary = Parts.row(Parts.GAP_SMALL);
-
     // The score sheet, tester and starter rows
-    private final VBox classFiles = new VBox(Parts.GAP);
+    private final VBox classFiles = new VBox();
+
+    // The four facts of the grading settings
+    private final GridPane facts = new GridPane();
+
+    // The line about the checks that flag students
+    private final Label checksLine = new Label();
 
     // Reads files dropped on the drop area
     private final DragDropHandler dropHandler = new DragDropHandler();
@@ -101,17 +130,12 @@ public class SetUpScreen extends FlowScreen {
      */
     public SetUpScreen(FlowWindow window) {
         super(window);
-        VBox column = new VBox(Parts.GAP,
+        view = Parts.narrowPage(
                 Parts.header("Set up a grading run", "Choose the class, "
                 + "add the students' zip files, then start grading."),
                 createClassCard(), createSubmissionCard(),
-                Parts.card("Class files", classFiles));
-        column.getStyleClass().add("narrow-column");
-        VBox centre = new VBox(column);
-        centre.setAlignment(Pos.TOP_CENTER);
-        view.setContent(centre);
-        view.setFitToWidth(true);
-        view.getStyleClass().add("page-scroll");
+                Parts.card("Class files", classFiles),
+                createSettingsCard());
     }
 
     @Override
@@ -129,54 +153,89 @@ public class SetUpScreen extends FlowScreen {
         refresh();
     }
 
+    /**
+     * Opens the sheet where the instructor types test cases. Does nothing
+     * when typed test cases cannot be used.
+     */
+    public void openTestCases() {
+        if (!canTypeTestCases()) {
+            return;
+        }
+        getWindow().showSheet(TestCasesSheet.create(getWindow(),
+                () -> refresh()));
+    }
+
     // ------------------------------------------------------------ build
 
     // Builds the module, section and assessment row.
     private VBox createClassCard() {
-        moduleBox.setPrefWidth(CHOICE_WIDTH);
-        sectionBox.setPrefWidth(CHOICE_WIDTH);
+        moduleBox.setMaxWidth(Double.MAX_VALUE);
+        sectionBox.setMaxWidth(Double.MAX_VALUE);
         moduleBox.setOnAction(event -> chooseModule());
         sectionBox.setOnAction(event -> chooseSection());
-
-        Assessment assessment = getBackend().getAssessment();
-        String about = "Not set";
-        if (assessment != null) {
-            about = assessment.getName() + "  ·  "
-                    + Parts.plural(assessment.getQuestions().size(),
-                    "question") + ", "
-                    + Parts.mark(assessment.getMaxTotal()) + " marks";
-        }
-        Label assessmentText = new Label(about);
         assessmentText.getStyleClass().add("read-only-field");
         assessmentText.setMaxWidth(Double.MAX_VALUE);
 
-        VBox assessmentField = field("Assessment", assessmentText);
-        HBox.setHgrow(assessmentField, Priority.ALWAYS);
-        HBox fields = new HBox(Parts.GAP, field("Module", moduleBox),
-                field("Section", sectionBox), assessmentField);
+        GridPane fields = new GridPane();
+        fields.setHgap(Parts.GAP);
+        fields.getColumnConstraints().addAll(column(CHOICE_PERCENT),
+                column(CHOICE_PERCENT), column(ASSESSMENT_PERCENT));
+        fields.add(field("Module", moduleBox), 0, 0);
+        fields.add(field("Section", sectionBox), 1, 0);
+        fields.add(field("Assessment", assessmentText), 2, 0);
         return Parts.card("Class", fields, earlierRun);
     }
 
-    // Builds the drop area, the file list and its summary line.
+    // Builds the drop area and the file list.
     private VBox createSubmissionCard() {
-        Label drop = Parts.strong("Drop the zip files or their folder here");
-        HBox choose = Parts.row(0, Parts.muted("or "),
-                Parts.link("choose files", () -> chooseSubmissions()));
-        choose.setAlignment(Pos.CENTER);
-        VBox iconCircle = new VBox(Parts.icon(Parts.UPLOAD, DROP_ICON_SIZE));
-        iconCircle.getStyleClass().add("drop-icon");
-        dropArea.getChildren().addAll(iconCircle, drop, choose);
+        StackPane circle = new StackPane(Parts.icon(Parts.UPLOAD,
+                DROP_ICON_SIZE));
+        circle.getStyleClass().add("drop-icon");
+        Label choose = Parts.muted("or ");
+        choose.getStyleClass().add("small-text");
+        Hyperlink chooseLink = Parts.link("choose files",
+                () -> chooseSubmissions());
+        chooseLink.getStyleClass().add("small-text");
+        VBox words = new VBox(Parts.strong("Drop zip files or a folder "
+                + "here"), Parts.row(0, choose, chooseLink));
+        words.setAlignment(Pos.CENTER_LEFT);
+        dropArea.getChildren().addAll(circle, words);
         dropArea.getStyleClass().add("drop-area");
         dropArea.setAlignment(Pos.CENTER);
+        dropArea.setFillHeight(false);
         dropHandler.install(dropArea);
         dropHandler.setOnDropped(() -> addSubmissions(
                 dropHandler.getDroppedPaths()));
 
-        listScroll.setFitToWidth(true);
-        listScroll.setMaxHeight(LIST_MAX_HEIGHT);
-        listScroll.getStyleClass().add("file-scroll");
         fileList.getStyleClass().add("file-list");
-        return Parts.card("Submissions", dropArea, summary, listScroll);
+        HBox top = Parts.row(Parts.GAP, Parts.title("Submissions"),
+                Parts.grow(), fileSummary);
+        VBox card = Parts.card(null, top, dropArea, fileList);
+        return card;
+    }
+
+    // Builds the card that shows the settings this run will use.
+    private VBox createSettingsCard() {
+        facts.getStyleClass().add("facts");
+        for (int index = 0; index < FACT_COUNT; index++) {
+            facts.getColumnConstraints().add(column(FACT_PERCENT));
+        }
+        checksLine.getStyleClass().addAll("muted", "small-text");
+        checksLine.setWrapText(true);
+        HBox top = Parts.row(Parts.GAP, Parts.title("Grading settings"),
+                Parts.grow(), smallLink("Change in Settings",
+                () -> getWindow().showPage(Page.SETTINGS)));
+        return Parts.card(null, top, facts, checksLine);
+    }
+
+    // Returns a column that takes a share of a grid's width.
+    private ColumnConstraints column(double percent) {
+        ColumnConstraints constraints = new ColumnConstraints();
+        constraints.setPercentWidth(percent);
+        constraints.setHgrow(Priority.ALWAYS);
+        constraints.setFillWidth(true);
+        constraints.setHalignment(HPos.LEFT);
+        return constraints;
     }
 
     // Puts a small label above a control.
@@ -184,6 +243,31 @@ public class SetUpScreen extends FlowScreen {
         Label name = Parts.muted(label);
         name.getStyleClass().add("field-label");
         VBox box = new VBox(Parts.GAP_SMALL / 2, name, control);
+        box.setMaxWidth(Double.MAX_VALUE);
+        return box;
+    }
+
+    // Returns a small blue link.
+    private Hyperlink smallLink(String text, Runnable action) {
+        Hyperlink link = Parts.link(text, action);
+        link.getStyleClass().add("small-text");
+        return link;
+    }
+
+    // Returns a link of fixed width with its text on the right, so the
+    // links of a list line up.
+    private Hyperlink rowLink(String text, Runnable action) {
+        Hyperlink link = smallLink(text, action);
+        link.setMinWidth(ROW_LINK_WIDTH);
+        link.setPrefWidth(ROW_LINK_WIDTH);
+        link.setAlignment(Pos.CENTER_RIGHT);
+        return link;
+    }
+
+    // Puts an icon in the fixed 20-pixel icon column.
+    private StackPane iconColumn(String path) {
+        StackPane box = new StackPane(Parts.icon(path, ROW_ICON_SIZE));
+        box.getStyleClass().add("icon-column");
         return box;
     }
 
@@ -265,7 +349,7 @@ public class SetUpScreen extends FlowScreen {
 
     // Checks each path and adds it to the batch.
     private void addSubmissions(List<Path> paths) {
-        if (getBackend().isDemo() && paths.isEmpty()) {
+        if (paths.isEmpty()) {
             return;
         }
         ImportBatch batch = getState().getBatch();
@@ -280,6 +364,12 @@ public class SetUpScreen extends FlowScreen {
     // Removes one zip file from the batch.
     private void removeSubmission(ImportItem item) {
         getState().getBatch().remove(item);
+        refresh();
+    }
+
+    // Removes every zip file from the batch.
+    private void clearSubmissions() {
+        getState().getBatch().clear(InputKind.SUBMISSION);
         refresh();
     }
 
@@ -312,31 +402,7 @@ public class SetUpScreen extends FlowScreen {
 
     // Asks for a new score sheet, tester or starter folder.
     private void changeClassFile(InputKind kind) {
-        Path path = null;
-        if (getBackend().isDemo()) {
-            List<Path> samples = getBackend().getSampleFiles(kind);
-            if (!samples.isEmpty()) {
-                path = samples.get(0);
-            }
-        } else if (kind == InputKind.ROSTER) {
-            FileChooser chooser = new FileChooser();
-            chooser.setTitle("Choose the score sheet");
-            chooser.getExtensionFilters().add(
-                    new FileChooser.ExtensionFilter("CSV files",
-                    CSV_PATTERN));
-            File file = chooser.showOpenDialog(getWindow().getWindow());
-            if (file != null) {
-                path = file.toPath();
-            }
-        } else {
-            DirectoryChooser chooser = new DirectoryChooser();
-            chooser.setTitle("Choose the " + kind.getTitle().toLowerCase()
-                    + " folder");
-            File folder = chooser.showDialog(getWindow().getWindow());
-            if (folder != null) {
-                path = folder.toPath();
-            }
-        }
+        Path path = chooseClassFile(kind);
         if (path == null) {
             return;
         }
@@ -349,21 +415,81 @@ public class SetUpScreen extends FlowScreen {
         refresh();
     }
 
+    // Asks for a file or folder of a kind, or returns the demo sample.
+    private Path chooseClassFile(InputKind kind) {
+        if (getBackend().isDemo()) {
+            List<Path> samples = getBackend().getSampleFiles(kind);
+            if (samples.isEmpty()) {
+                return null;
+            }
+            return samples.get(0);
+        }
+        if (kind == InputKind.ROSTER) {
+            FileChooser chooser = new FileChooser();
+            chooser.setTitle("Choose the score sheet");
+            chooser.getExtensionFilters().add(
+                    new FileChooser.ExtensionFilter("CSV files",
+                    CSV_PATTERN));
+            File file = chooser.showOpenDialog(getWindow().getWindow());
+            if (file == null) {
+                return null;
+            }
+            return file.toPath();
+        }
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Choose the " + kind.getTitle().toLowerCase()
+                + " folder");
+        File folder = chooser.showDialog(getWindow().getWindow());
+        if (folder == null) {
+            return null;
+        }
+        return folder.toPath();
+    }
+
+    // Says whether the instructor may type test cases. Live mode needs
+    // the tester generator to be finished, not only declared.
+    private boolean canTypeTestCases() {
+        Capability typed = Capability.TYPED_TEST_CASES;
+        if (!getBackend().supports(typed)) {
+            return false;
+        }
+        return getBackend().isDemo()
+                || typed.getStatus() == CapabilityStatus.WORKS_NOW;
+    }
+
     // ---------------------------------------------------------- refresh
 
-    // Redraws the lists and the action bar.
+    // Redraws the lists, the settings and the action bar.
     private void refresh() {
+        refreshAssessment();
         refreshEarlierRun();
         refreshFiles();
         refreshClassFiles();
+        refreshSettings();
         refreshActions();
+    }
+
+    // Shows the assessment's name, questions and marks.
+    private void refreshAssessment() {
+        Assessment assessment = getBackend().getAssessment();
+        if (assessment == null) {
+            assessmentText.setText("Not set in the settings");
+            return;
+        }
+        assessmentText.setText(assessment.getName() + DOT
+                + Parts.plural(assessment.getQuestions().size(),
+                "question") + DOT
+                + Parts.mark(assessment.getMaxTotal()) + " marks");
     }
 
     // Offers the results of an earlier run of the chosen section.
     private void refreshEarlierRun() {
         earlierRun.getChildren().clear();
         GradingRun run = getBackend().getRun(getState().getSection());
-        if (run == null || run.getSubmissions().isEmpty()) {
+        boolean show = run != null && !run.getSubmissions().isEmpty();
+        earlierRun.setVisible(show);
+        earlierRun.setManaged(show);
+        if (!show) {
             return;
         }
         earlierRun.getChildren().addAll(
@@ -375,81 +501,89 @@ public class SetUpScreen extends FlowScreen {
                 .openRun(run)));
     }
 
-    // Redraws the zip file list and the summary line.
+    // Redraws the zip file list and the count above it.
     private void refreshFiles() {
         ImportBatch batch = getState().getBatch();
         List<ImportItem> items = batch.getItems(InputKind.SUBMISSION);
         fileList.getChildren().clear();
-        for (ImportItem item : items) {
-            fileList.getChildren().add(createFileRow(item));
+        for (int index = 0; index < items.size(); index++) {
+            HBox row = createFileRow(items.get(index));
+            markRow(row, index, items.size());
+            fileList.getChildren().add(row);
         }
-        listScroll.setVisible(!items.isEmpty());
-        listScroll.setManaged(!items.isEmpty());
-        dropArea.getStyleClass().remove("compact");
-        if (!items.isEmpty()) {
-            dropArea.getStyleClass().add("compact");
-        }
+        fileList.setVisible(!items.isEmpty());
+        fileList.setManaged(!items.isEmpty());
 
-        summary.getChildren().clear();
+        fileSummary.getChildren().clear();
         if (items.isEmpty()) {
-            summary.setVisible(false);
-            summary.setManaged(false);
             return;
         }
-        summary.setVisible(true);
-        summary.setManaged(true);
         int unusable = batch.count(InputKind.SUBMISSION,
                 ImportState.INVALID) + batch.count(InputKind.SUBMISSION,
                 ImportState.DUPLICATE);
         int ready = items.size() - unusable;
-        Node tick = Parts.icon(Parts.CHECK, ROW_ICON_SIZE);
-        tick.getStyleClass().add("good-icon");
-        summary.getChildren().addAll(tick,
-                Parts.strong(Parts.plural(ready, "zip file") + " ready."));
-        if (unusable > 0) {
-            summary.getChildren().add(Parts.muted(unusable
-                    + " cannot be used; remove or replace "
-                    + (unusable == 1 ? "it." : "them.")));
+        Label count = Parts.muted(Parts.plural(items.size(), "file")
+                + DOT + ready + " ready");
+        count.getStyleClass().add("small-text");
+        fileSummary.getChildren().addAll(count,
+                smallLink("Clear all", () -> clearSubmissions()));
+    }
+
+    // Gives a list row the hairline rules: a line between rows only.
+    private void markRow(HBox row, int index, int count) {
+        row.getStyleClass().add("card-row");
+        if (index == 0) {
+            row.getStyleClass().add("first");
         }
-        summary.getChildren().addAll(Parts.grow(),
-                Parts.link("Clear all", () -> {
-                    getState().getBatch().clear(InputKind.SUBMISSION);
-                    refresh();
-                }));
+        if (index == count - 1) {
+            row.getStyleClass().add("last");
+        }
     }
 
     // Builds one row of the zip file list.
     private HBox createFileRow(ImportItem item) {
         ImportState state = getState().getBatch().getEffectiveState(item);
-        VBox text = new VBox(Parts.strong(item.getName()));
-        if (!item.getMessage().isEmpty() && !state.isUsable()) {
-            text.getChildren().add(Parts.muted(item.getMessage()));
-        } else if (!item.getUsername().isEmpty()) {
-            text.getChildren().add(Parts.muted(item.getUsername()));
+        Label name = Parts.strong(item.getName());
+        name.setMinWidth(0);
+        HBox line = Parts.row(0, name);
+        if (!item.getUsername().isEmpty()) {
+            Label who = Parts.muted(DOT + item.getUsername());
+            who.setMinWidth(0);
+            line.getChildren().add(who);
         }
+        VBox text = new VBox(line);
+        if (!state.isUsable() && !item.getMessage().isEmpty()) {
+            Label message = Parts.muted(item.getMessage());
+            message.getStyleClass().add("small-text");
+            message.setWrapText(true);
+            text.getChildren().add(message);
+        }
+        text.setMinWidth(0);
         HBox.setHgrow(text, Priority.ALWAYS);
-        HBox row = Parts.row(Parts.GAP,
-                Parts.icon(Parts.FILE, ROW_ICON_SIZE), text,
+        return Parts.row(Parts.GAP, iconColumn(Parts.FILE), text,
                 Parts.pill(stateText(state), toneOf(state)),
-                Parts.link("Remove", () -> removeSubmission(item)));
-        row.getStyleClass().add("file-row");
-        return row;
+                rowLink("Remove", () -> removeSubmission(item)));
     }
 
     // Redraws the score sheet, tester and starter rows.
     private void refreshClassFiles() {
-        classFiles.getChildren().setAll(
-                createClassFileRow(InputKind.ROSTER, "Score sheet"),
-                createClassFileRow(InputKind.TESTERS, "Tester files"),
-                createClassFileRow(InputKind.STARTER,
-                "Starter files (optional)"));
+        HBox[] rows = {
+            createClassFileRow(InputKind.ROSTER, "Score sheet", null),
+            createTesterRow(),
+            createClassFileRow(InputKind.STARTER, "Starter files", null)};
+        classFiles.getChildren().clear();
+        for (int index = 0; index < rows.length; index++) {
+            markRow(rows[index], index, rows.length);
+            classFiles.getChildren().add(rows[index]);
+        }
     }
 
-    // Builds one class file row.
-    private HBox createClassFileRow(InputKind kind, String title) {
+    // Builds one class file row, with an optional link after the detail.
+    private HBox createClassFileRow(InputKind kind, String title,
+            Hyperlink extra) {
         List<ImportItem> items = getState().getBatch().getItems(kind);
         String detail;
-        Node status;
+        Label status;
         if (items.isEmpty()) {
             detail = kind.isRequired() ? "Not chosen yet."
                     : "Not chosen. The untouched-answer check is skipped.";
@@ -460,23 +594,149 @@ public class SetUpScreen extends FlowScreen {
             ImportItem item = items.get(0);
             ImportState state = getState().getBatch()
                     .getEffectiveState(item);
-            detail = item.getName() + "  ·  " + item.getMessage();
+            detail = item.getName() + DOT + item.getMessage();
             status = Parts.pill(stateText(state), toneOf(state));
         }
         String iconPath = Parts.FOLDER;
         if (kind == InputKind.ROSTER) {
             iconPath = Parts.FILE;
         }
-        VBox text = new VBox(Parts.strong(title), Parts.muted(detail));
+        HBox line = detailLine(detail);
+        if (extra != null) {
+            line.getChildren().add(extra);
+        }
+        return classFileRow(iconPath, title, line, status,
+                rowLink("Change", () -> changeClassFile(kind)));
+    }
+
+    // Builds the tester row: a folder, or the typed test cases.
+    private HBox createTesterRow() {
+        ImportBatch batch = getState().getBatch();
+        boolean canType = canTypeTestCases();
+        if (!canType) {
+            return createClassFileRow(InputKind.TESTERS, "Tester files",
+                    null);
+        }
+        if (!batch.isUsingTypedTestCases()) {
+            return createClassFileRow(InputKind.TESTERS, "Tester files",
+                    smallLink("or type test cases", () -> openTestCases()));
+        }
+
+        int cases = batch.getTypedTestCases().size();
+        HBox detail = detailLine(Parts.plural(cases, "test case")
+                + " typed in the app");
+        detail.getChildren().add(smallLink("Edit test cases",
+                () -> openTestCases()));
+        Label status = cases > 0 ? Parts.pill("Ready", Tone.GOOD)
+                : Parts.pill("Missing", Tone.BAD);
+        return classFileRow(Parts.CODE, "Tester files", detail, status,
+                rowLink("Change", () -> changeClassFile(
+                InputKind.TESTERS)));
+    }
+
+    // Returns the grey line under a class file's name.
+    private HBox detailLine(String text) {
+        Label label = Parts.muted(text);
+        label.getStyleClass().add("small-text");
+        label.setMinWidth(0);
+        return Parts.row(Parts.GAP_SMALL, label);
+    }
+
+    // Lays out a class file row: icon, name and detail, status, link.
+    private HBox classFileRow(String iconPath, String title, HBox detail,
+            Label status, Hyperlink change) {
+        VBox text = new VBox(Parts.strong(title), detail);
+        text.setMinWidth(0);
         HBox.setHgrow(text, Priority.ALWAYS);
-        HBox row = Parts.row(Parts.GAP, Parts.icon(iconPath, ROW_ICON_SIZE),
-                text, status, Parts.link("Change",
-                () -> changeClassFile(kind)));
-        return row;
+        return Parts.row(Parts.GAP, iconColumn(iconPath), text, status,
+                change);
+    }
+
+    // Fills the four facts and the line about the checks.
+    private void refreshSettings() {
+        facts.getChildren().clear();
+        String fixes = isOn(ConfigKeys.AUTO_FIX_ENABLED)
+                ? "On, you approve" : "Off";
+        String similar = isOn(ConfigKeys.PLAGIARISM_ENABLED) ? "On"
+                : "Off";
+        facts.add(fact("Time limit per test",
+                getBackend().getRunTimeoutSeconds() + " s", true), 0, 0);
+        facts.add(fact("Compile time limit",
+                getBackend().getCompileTimeoutSeconds() + " s", false),
+                1, 0);
+        facts.add(fact("Fix common mistakes", fixes, false), 2, 0);
+        facts.add(fact("Similar code check", similar, false), 3, 0);
+        checksLine.setText(describeChecks());
+    }
+
+    // Builds one cell of the facts row.
+    private VBox fact(String name, String value, boolean first) {
+        Label key = Parts.muted(name);
+        key.getStyleClass().add("small-text");
+        Label text = Parts.strong(value);
+        text.getStyleClass().add("fact-value");
+        VBox cell = new VBox(key, text);
+        cell.getStyleClass().add("fact");
+        if (first) {
+            cell.getStyleClass().add("first");
+        }
+        cell.setMaxWidth(Double.MAX_VALUE);
+        return cell;
+    }
+
+    // Says which checks that flag students are on.
+    private String describeChecks() {
+        String[] keys = {ConfigKeys.DETECT_UNTOUCHED_ENABLED,
+            ConfigKeys.DETECT_EMPTY_ENABLED,
+            ConfigKeys.DETECT_HARD_CODED_ENABLED};
+        String[] words = {"untouched", "empty", "hard-coded"};
+        List<String> on = new ArrayList<>();
+        List<String> off = new ArrayList<>();
+        for (int index = 0; index < keys.length; index++) {
+            if (isOn(keys[index])) {
+                on.add(words[index]);
+            } else {
+                off.add(words[index]);
+            }
+        }
+        if (on.isEmpty()) {
+            return "Checks for untouched, empty and hard-coded answers are "
+                    + "off.";
+        }
+        String text = "Checks for " + join(on) + " answers "
+                + (on.size() == 1 ? "is" : "are") + " on";
+        if (!off.isEmpty()) {
+            text = text + "; " + join(off) + " "
+                    + (off.size() == 1 ? "is" : "are") + " off";
+        }
+        return text + ". They only flag students; marks never change.";
+    }
+
+    // Joins words as "a", "a and b" or "a, b and c".
+    private String join(List<String> words) {
+        StringBuilder text = new StringBuilder();
+        for (int index = 0; index < words.size(); index++) {
+            if (index > 0 && index == words.size() - 1) {
+                text.append(" and ");
+            } else if (index > 0) {
+                text.append(", ");
+            }
+            text.append(words.get(index));
+        }
+        return text.toString();
+    }
+
+    // Says whether an on or off setting is on.
+    private boolean isOn(String key) {
+        String value = getBackend().getSetting(key);
+        return value != null && TRUE.equalsIgnoreCase(value.trim());
     }
 
     // Fills the action bar.
     private void refreshActions() {
+        if (!isOnScreen()) {
+            return;
+        }
         ImportBatch batch = getState().getBatch();
         ActionBar actions = getActions();
         actions.reset();
@@ -493,8 +753,8 @@ public class SetUpScreen extends FlowScreen {
             int count = batch.count(InputKind.SUBMISSION,
                     ImportState.ACCEPTED) + batch.count(
                     InputKind.SUBMISSION, ImportState.WARNING);
-            actions.setStatus("Ready to grade "
-                    + Parts.plural(count, "student") + " in "
+            actions.setStatus(Parts.plural(count, "student")
+                    + " ready to grade in "
                     + getState().getSection().getLabel() + ".");
         }
     }
