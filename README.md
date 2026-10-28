@@ -53,8 +53,8 @@ Run every command from the `GradeZZY` folder.
 ```sh
 sh compile.sh            # compile everything into classes/
 sh run.sh                # open the window
-sh run.sh --demo         # the same screens with synthetic data only
-sh run.sh --check        # load every screen once and exit, no window
+sh run.sh --demo         # the same window with synthetic data only
+sh run.sh --check        # open every tab, step and sheet once and exit
 sh run.sh --selftest     # run the seven demo flows, print PASS or FAIL
 sh run.sh console        # grade from the terminal, without JavaFX
 sh run.sh console G2     # the same, for section G2
@@ -81,9 +81,10 @@ clean.bat
 The `.sh` scripts are also written to work in Git Bash on Windows.
 
 Two more developer options exist for checking the screens:
-`--snapshot` saves a picture of every screen, and `--windowtest` drives
-the real window with the mouse and keyboard. Both are explained in
-`design/UI-INTEGRATION.md`.
+`--snapshot [folder]` saves a picture of every screen, and
+`--windowtest` drives the real window with the mouse and keyboard (on
+macOS, allow the app that runs java under Accessibility and Screen
+Recording first). Both are explained in `design/UI-INTEGRATION.md`.
 
 `compile.sh core` empties `classes/` before it compiles, so run
 `compile.sh` again before `run.sh`.
@@ -95,10 +96,11 @@ the real window with the mouse and keyboard. Both are explained in
 | `compile.sh`, zero errors and warnings | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
 | `compile.sh core` (no JavaFX) | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
 | `run.sh console` | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
-| `run.sh --check` (16 screens, live and demo, both themes) | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
-| `run.sh --selftest` (7 demo flows) | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
-| `run.sh` (window opens) | Passed before the new screens; not run since | Not tested | Passed (JDK 25.0.4) |
-| `run.sh --snapshot`, `run.sh --windowtest` | Not tested | Not tested | Passed (JDK 25.0.4) |
+| `run.sh --check` (every tab and step, live and demo, both themes, two sizes) | Passed (new window, 2026-10-28) | Not tested | Not tested since the redesign |
+| `run.sh --selftest` (7 demo flows) | Passed (new window, 2026-10-28) | Not tested | Not tested since the redesign |
+| `run.sh` (window opens) | Opened off screen by `--check`; not clicked through by hand | Not tested | Not tested since the redesign |
+| `run.sh --snapshot` | Passed (new window, 2026-10-28) | Not tested | Not tested since the redesign |
+| `run.sh --windowtest` | Not run: macOS blocked the robot's clicks (needs Accessibility and Screen Recording permission) | Not tested | Not tested since the redesign |
 | `.bat` scripts | Not applicable | Not applicable | Passed (Command Prompt, JDK 25.0.4) |
 
 **A teammate on Windows and one on an Intel Mac must run the scripts and
@@ -109,15 +111,15 @@ or run on the instructor's laptop.
 
 | Folder or file | What it holds |
 |---|---|
-| `compile.sh`, `compile.bat` | Compile all sources into `classes/` and copy the `.fxml` and `.css` files. |
+| `compile.sh`, `compile.bat` | Compile all sources into `classes/` and copy the `.css` file. |
 | `run.sh`, `run.bat` | Run the window, the demo, the screen checks or the console. |
 | `clean.sh`, `clean.bat` | Empty `classes/` and remove `workspace/`. |
 | `config.properties` | Every setting of the application. |
-| `src/` | All Java source files, plus the FXML and CSS files of the `ui` package. |
+| `src/` | All Java source files, plus the stylesheet of the `ui` package (`ui/css/flow.css`). |
 | `classes/` | Compiled classes. Created by the compile script, not in git, and must be empty at submission. |
 | `lib/` | The library jars. `lib/javafx/<platform>/` holds JavaFX for each platform. |
 | `media/` | Images and audio used by the application. Empty for now. |
-| `design/` | `gradezzy-design.html`, the clickable design (open it in a browser); `UI-INTEGRATION.md`, how each backend method reaches the screens; `UI-REVIEW.md`, the design and accessibility review; `concept/`, Damien's design concept and its handoff notes. |
+| `design/` | `redesign/`, the design of the current window and its decisions; `UI-INTEGRATION.md`, how each backend method reaches the screens; `gradezzy-design.html` and `UI-REVIEW.md`, the design and review of the earlier 16-screen window, kept for reference; `concept/`, Damien's design concept and its handoff notes. |
 | `README.md` | This file. |
 | `docs/` | The project brief and coding style PDFs. Not in git. |
 | `samples/` | The provided testers, score sheet, starter folder and six sample submissions. Not in git. |
@@ -156,12 +158,11 @@ The base package is `gradezzy`. Each package has one job.
 | `stats` | Statistics for the dashboard. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
 | `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ProgressEstimator`, `ServiceRegistry` |
-| `ui` | JavaFX only: FXML files, controllers and the window. | `MainApp`, `Screen`, `ScreenNavigator`, `ShellBuilder`, `UiState`, `BaseController`, `ThemeManager`, `GradingTask`, `GradingMonitor`, sixteen `...Controller` classes, `FileTreeBuilder`, `DragDropHandler` |
+| `ui` | JavaFX only: starting the window and small shared helpers. | `MainApp`, `ThemeManager`, `GradingTask`, `FileTreeBuilder`, `DragDropHandler` |
+| `ui.flow` | The window: tabs Marking (Set up, Grade, Review, Export), Statistics, Runs and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts` |
 | `ui.backend` | The one interface the screens call, and its live version that calls the services. | `DashboardBackend`, `LiveBackend`, `Capability`, small view classes such as `RepairItem` and `RunRecord` |
 | `ui.demo` | Synthetic data for `--demo`. Never reads, grades or saves real files. | `DemoBackend`, `DemoData`, `DemoGrader` |
-| `ui.component` | Reusable parts of screens. | `StatusBadge`, `EmptyState`, `NotConnectedPanel`, `MetricTile`, `Sheet` |
-| `ui.view` | Parts of single screens, so each controller stays short. | `Sidebar`, `ContextBar`, `ResultsColumns`, the `Evidence...` tabs, the `Statistics...` charts |
-| `ui.check` | Developer checks behind the `--check`, `--selftest`, `--snapshot` and `--windowtest` options. Not used when grading. | `ScreenCheck`, `SelfTest`, `SnapshotWriter`, `WindowTest` |
+| `ui.check` | Developer checks behind the `--check`, `--selftest`, `--snapshot` and `--windowtest` options. Not used when grading. | `FlowCheck`, `FlowSelfTest`, `FlowWindowTest`, `RobotDriver` |
 | `util` | Small shared helpers. | `FileUtils`, `TextUtils`, `InputValidator` |
 
 ### How the pieces fit
@@ -304,11 +305,12 @@ demo backends, and the developer checks. So are the `fix`, `detection` and
   `PipelineFactory.createDetectors()`.
 - **Stage:** implement `GradingStage`, add it at the right position in
   `PipelineFactory.createPipeline(...)`.
-- **Screen:** add a constant to `Screen`, an FXML file in
-  `src/gradezzy/ui/fxml/` and a controller that extends `BaseController`.
-  Anything it needs from a service goes through a new
+- **Screen:** add a class in `src/gradezzy/ui/flow/` that extends
+  `FlowScreen`, build it from the pieces in `Parts`, style it in
+  `css/flow.css`, and show it from `FlowWindow` (a step of Marking or a
+  tab). Anything it needs from a service goes through a new
   `DashboardBackend` method, written in both `LiveBackend` and
-  `DemoBackend`. `run.sh --check` then confirms that it loads.
+  `DemoBackend`. Add it to `FlowCheck` so `run.sh --check` opens it.
 - **Package:** add its folder to `CORE_SOURCES` in both `compile.sh` and
   `compile.bat`, or to `UI_SOURCES` for a package under `ui`.
 
@@ -469,7 +471,7 @@ What to build, in order:
 
 1. `InputValidator`: section code, username, readable file, readable
    folder, positive whole number. The brief takes up to 10% off for
-   missing input validation, and the Submissions screen reports every
+   missing input validation, and the Set up step reports every
    chosen file as unreadable until `isReadableFile` and
    `isReadableDirectory` work.
 2. `AbstractValidator.createAnomaly`, then the four validators
@@ -486,7 +488,7 @@ What to build, in order:
    inside a username folder and the untouched starter folder, in
    `samples/dummy-submissions/`. Only the script is in git, because the
    dummies are built from the restricted samples. Add that folder on the
-   Submissions screen to grade them; none of them stops the batch.
+   Set up step to grade them; none of them stops the batch.
 5. As each teammate finishes a service, open its screen in live mode
    (`sh run.sh`) and check that the real data looks right.
    `design/UI-INTEGRATION.md` says which screen shows which service;
@@ -532,9 +534,8 @@ None of the dummy submissions may stop the batch.
 
 Rules that matter for the screens:
 
-- Controllers hold no grading logic. A controller calls
-  `DashboardBackend`, and `LiveBackend` passes the call to one service
-  method.
+- Screens hold no grading logic. A screen calls `DashboardBackend`, and
+  `LiveBackend` passes the call to one service method.
 - Grading runs on a background thread. A `ProgressListener` is called on
   that thread, so every change to a control is wrapped in
   `Platform.runLater`.
@@ -923,9 +924,9 @@ from Maven Central.
 
 | Library | Version | Licence | Why it was chosen |
 |---|---|---|---|
-| JavaFX (`javafx-base`, `-graphics`, `-controls`, `-fxml`) | 25.0.4 | GPL v2 with Classpath Exception | The desktop window. It matches JDK 25, separates layout (FXML) from logic (controllers), and has built-in charts, tables, tree views, file pickers and drag and drop. |
+| JavaFX (`javafx-base`, `-graphics`, `-controls`, `-fxml`) | 25.0.4 | GPL v2 with Classpath Exception | The desktop window. It matches JDK 25 and has tables, shapes for the charts, file pickers and drag and drop. The screens are plain JavaFX code; `javafx-fxml` stays on the module path but no screen uses FXML any more. |
 | AtlantaFX (`atlantafx-base`) | 3.0.0 | MIT | Modern themes for JavaFX. Its Cupertino Light and Dark themes give light and dark mode with one line of code. |
-| ControlsFX (`controlsfx`) | 11.2.5 | BSD 3-Clause | Extra controls JavaFX lacks. Used for the auto-completing search fields (`TextFields.bindAutoCompletion`) in `ui.ResultsController` and `ui.view.AnomalyFilters`. |
+| ControlsFX (`controlsfx`) | 11.2.5 | BSD 3-Clause | Extra controls JavaFX lacks. It was used by the earlier window's search fields; the current window does not use it, and it stays on the classpath with its run flags. |
 | SQLite JDBC (`sqlite-jdbc`) | 3.53.4.0 | Apache 2.0 | A database in a single file with no server to install, for saved state, history, resume and backup. |
 
 Notes:
@@ -946,19 +947,19 @@ Kept to a minimum and confined to the classes named here:
 
 | Construct | Where | Why |
 |---|---|---|
-| JavaFX, FXML | `ui` package only | The window. |
-| Lambdas and method references (`->`, `::`) | 49 files in `ui` | Button handlers, table cells and callbacks. |
-| `java.util.function` (`Function`, `Consumer`, `IntConsumer`) | `ui.HelpController`, several `ui.view` classes, `ui.check.WindowTest` | Passing a small piece of behaviour to a shared table or filter part. |
+| JavaFX | `ui` package only | The window. |
+| Lambdas and method references (`->`, `::`) | 31 files in `ui` | Button handlers, table cells and callbacks. |
+| `java.util.function` (`Consumer`, `IntConsumer`) | `ui.flow.StepBar`, `ui.flow.TabBar`, `ui.check.FlowWindowTest` | Telling the window which step or tab was clicked. |
 | `javafx.concurrent.Task` (a background thread) | `ui.GradingTask` | Keeps the window responsive while grading. |
-| `new Thread`, `Platform.runLater` | `ui.backend.LiveBackend`, `ui.ResultsController`, `ui.PlagiarismController`, `ui.HistoryController`, `ui.GradingTask`, `ui.GradingMonitor` | Grading, exports, backups and the similarity check run off the window's thread; screen updates go back to it. |
+| `new Thread`, `Platform.runLater` | `ui.backend.LiveBackend`, `ui.GradingTask`, `ui.flow.GradeScreen`, `ui.check` | Grading, exports, backups and the similarity check run off the window's thread; screen updates go back to it. |
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. |
-| `javafx.animation` (`Timeline`, `FadeTransition` and others) | `ui.MainController`, `ui.GradingMonitor`, `ui.view.SheetLayer`, `ui.view.ToastLayer`, `ui.demo.DemoGrader` | Subtle animations and timers. Turned off by `ui.animations.enabled`. |
+| `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | Timers: how long a notice stays, the pause before a code search, the demo grader's pace. |
 | `java.awt.Robot`, `javax.imageio.ImageIO`, `java.util.concurrent`, `java.util.zip.ZipOutputStream` | `ui.check` only | The `--snapshot` and `--windowtest` developer checks. Not used when grading. |
 | `synchronized` | `grading.CancellationToken`, `fix.FixManager` | The Cancel button and the grading thread share one flag; the grading threads and the anomaly log share one list of fixes. |
 | `java.nio.file` (`Files.move`, `Files.copy`, `Files.createTempDirectory`, `DirectoryStream`, `StandardCopyOption`) | `fix` package | Moves and renames folders in the working copy and keeps a backup of each file a fix changes. |
 | `HashSet`, `String.join`, `List.subList` | `plagiarism.TokenSimilarityDetector` | Holds each answer's runs of three tokens for the similarity measure. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. |
-| `enum` | `model`, `ui.Screen` | Fixed lists of values. |
+| `enum` | `model`, `ui.backend`, `ui.flow` (`Page`, `Step`, `Tone`) | Fixed lists of values. |
 | JDBC (`Connection`, `PreparedStatement`, `ResultSet`), try-with-resources | `persistence.SqliteResultRepository` | Talks to SQLite and closes each statement even when a query fails. |
 | `ProcessBuilder`, `Process`, `ProcessHandle` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and kills a run and its child processes at the time limit. |
 | `Stream.toList()` | `exec.ProcessRunner.terminate` | Turns the child processes of a run into a list so they can be killed. |
@@ -1021,7 +1022,7 @@ implemented. `[x]` means it works now.
 ### MUST (brief section 4)
 
 - [ ] Batch upload of zips or many files (`ingest.SubmissionLoader`,
-  `ui.UploadController`)
+  `ui.flow.SetUpScreen`)
 - [x] Batch grading loop with no per-submission clicking
   (`grading.GradingPipeline`, `service.GradingService`)
 - [ ] Unzip submissions (`ingest.ZipExtractor`,
@@ -1047,7 +1048,7 @@ implemented. `[x]` means it works now.
 - [x] Configuration in an external file (`config.properties`,
   `config.AppConfig`)
 - [ ] Screens that show progress, errors and results
-  (`ui.ProgressController`, `AnomalyLogController`, `ResultsController`;
+  (`ui.flow.GradeScreen`, `ReviewScreen`, `StatisticsScreen`;
   the screens are built and work in demo mode, real results wait on the
   pipeline stages)
 - [ ] Input validation everywhere (`util.InputValidator`)
@@ -1055,35 +1056,34 @@ implemented. `[x]` means it works now.
 ### SHOULD
 
 - [x] Anomaly log with action buttons; approve and undo, singly and in
-  bulk (`service.AnomalyService`, `ui.AnomalyLogController`; undo needs
+  bulk (`service.AnomalyService`, `ui.flow.ReviewScreen`; undo needs
   the run graded in this session, because fix records are kept in
   memory)
 - [x] Flag untouched starter files, empty answers and hard-coded answers
   (`detection` package)
 - [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
-  `TesterGenerator`, `ui.TestCaseController`)
+  `TesterGenerator`, `ui.flow.TestCasesSheet`)
 - [x] Progress bar and estimated time of completion
   (`service.ProgressEstimator`, `ui.GradingMonitor`)
 - [x] Statistics dashboard filtered by module and section (`stats`
-  package, `service.StatisticsService`, `ui.StatisticsController`)
+  package, `service.StatisticsService`, `ui.flow.StatisticsScreen`)
 - [x] Search, filter and sort (`service.SearchService`)
-- [x] Select one, several or all (`ui.AnomalyLogController`,
-  `ResultsController`)
+- [x] Select one, several or all (`ui.flow.ReviewScreen`)
 - [ ] Collapse and expand panels (`ui`)
-- [x] Next, Back and Cancel (`ui.MainController`)
+- [x] Next, Back and Cancel (`ui.flow.ActionBar`)
 - [x] Cancel, retry and resume grading (`service.GradingService`,
   `grading.CancellationToken`; a run from an earlier session is resumed
   with the score sheet and testers in the settings)
 - [x] Light and dark theme switch (`ui.ThemeManager`, `ui.theme`)
 - [x] Settings page backed by `config.properties`
-  (`service.SettingsService`, `ui.SettingsController`)
+  (`service.SettingsService`, `ui.flow.SettingsScreen`)
 - [x] SQLite persistence behind `ResultRepository`
   (`persistence.SqliteResultRepository`)
 - [ ] Audit log, exportable (`service.AuditService`,
   `report.AuditLogExporter`; the log is saved and shown, the export is
   not registered in `ApplicationContext` yet)
 - [ ] Individual student report, exportable
-  (`report.StudentReportExporter`, `ui.StudentReportController`)
+  (`report.StudentReportExporter`; no screen yet)
 - [x] JSON export (`report.JsonExporter`, `JsonWriter`)
 - [ ] Nielsen's 10 usability heuristics, reviewed screen by screen:
   https://www.nngroup.com/articles/ten-usability-heuristics/

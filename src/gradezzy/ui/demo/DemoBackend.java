@@ -84,9 +84,9 @@ public final class DemoBackend implements DashboardBackend {
     // Sample audit entries, oldest first: action, then detail
     private static final String[][] AUDIT_SEED = {
         {"Run created", "CS102 G1, Lab Test, 6 submissions"},
-        {"Repair applied automatically",
+        {"Fix applied automatically",
             "learner.bravo: folder renamed from RenameToYourUsername"},
-        {"Repair approved", "learner.alpha: wrapper folder added"},
+        {"Fix approved", "learner.alpha: wrapper folder added"},
         {"Flag reviewed", "learner.delta: untouched starter file"},
         {"Grading cancelled", "Run 024 stopped before learner.foxtrot"}};
 
@@ -602,11 +602,11 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public ActionResult approveRepair(RepairItem repair) {
         if (repair.isBlocked()) {
-            return ActionResult.failed("No automatic repair exists for "
+            return ActionResult.failed("No automatic fix exists for "
                     + "this finding. Handle it by hand.");
         }
         repair.getAnomaly().setFixStatus(FixStatus.APPROVED);
-        return ActionResult.done("Approved the repair for "
+        return ActionResult.done("Approved the fix for "
                 + repair.getAnomaly().getUsername() + ".");
     }
 
@@ -616,11 +616,11 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public ActionResult rejectRepair(RepairItem repair) {
         if (repair.isBlocked()) {
-            return ActionResult.failed("No automatic repair exists for "
+            return ActionResult.failed("No automatic fix exists for "
                     + "this finding. Handle it by hand.");
         }
         repair.getAnomaly().setFixStatus(FixStatus.UNDONE);
-        return ActionResult.done("Rejected the repair for "
+        return ActionResult.done("Rejected the fix for "
                 + repair.getAnomaly().getUsername() + ". The working copy "
                 + "was put back. The original ZIP was never changed.");
     }
@@ -631,11 +631,11 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public ActionResult undoRepairDecision(RepairItem repair) {
         if (repair.isBlocked()) {
-            return ActionResult.failed("This finding has no repair to "
+            return ActionResult.failed("This finding has no fix to "
                     + "undo.");
         }
         repair.getAnomaly().setFixStatus(FixStatus.APPLIED);
-        return ActionResult.done("The repair for "
+        return ActionResult.done("The fix for "
                 + repair.getAnomaly().getUsername() + " waits for review "
                 + "again.");
     }
@@ -1075,7 +1075,7 @@ public final class DemoBackend implements DashboardBackend {
     private RepairItem createRepair(Anomaly anomaly) {
         String username = anomaly.getUsername();
         AnomalyType type = anomaly.getType();
-        String noRepair = "No automatic repair. Ask for a corrected "
+        String noRepair = "No automatic fix. Ask for a corrected "
                 + "submission.";
 
         if (type == AnomalyType.MISSING_WRAPPER_FOLDER) {
@@ -1094,7 +1094,7 @@ public final class DemoBackend implements DashboardBackend {
             Path folder = DemoData.workingCopyPath(username).resolve("Q2");
             return new RepairItem(anomaly,
                     folder.resolve("q2b.java").toString(),
-                    "No automatic repair. Rename by hand to "
+                    "No automatic fix. Rename by hand to "
                     + folder.resolve("Q2b.java") + ".");
         } else if (type == AnomalyType.MISSING_FILE) {
             return new RepairItem(anomaly, "Q1/Q1b.java not found",

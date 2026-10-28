@@ -7,7 +7,7 @@ rem   compile.bat         compile the whole application
 rem   compile.bat core    compile only the grading core, without JavaFX
 rem
 rem javac does not copy resource files, so this script also copies the
-rem .fxml and .css files of the ui package into classes\.
+rem .css files of the ui package into classes\.
 rem
 rem When you add a new package, add its folder to CORE_SOURCES below and
 rem to compile.sh.
@@ -35,9 +35,8 @@ set CORE_SOURCES=%CORE_SOURCES% src\gradezzy\util\*.java
 set CORE_SOURCES=%CORE_SOURCES% src\gradezzy\validation\*.java
 set UI_SOURCES=src\gradezzy\ui\*.java src\gradezzy\ui\backend\*.java
 set UI_SOURCES=%UI_SOURCES% src\gradezzy\ui\check\*.java
-set UI_SOURCES=%UI_SOURCES% src\gradezzy\ui\component\*.java
 set UI_SOURCES=%UI_SOURCES% src\gradezzy\ui\demo\*.java
-set UI_SOURCES=%UI_SOURCES% src\gradezzy\ui\view\*.java
+set UI_SOURCES=%UI_SOURCES% src\gradezzy\ui\flow\*.java
 
 rem Start from an empty classes folder so no old class file is left behind.
 if exist classes rmdir /s /q classes
@@ -52,10 +51,7 @@ javac -encoding UTF-8 -d classes --module-path "%JAVAFX_DIR%" ^
 if errorlevel 1 goto failed
 
 rem Copy the resources javac leaves behind.
-mkdir classes\gradezzy\ui\fxml
 mkdir classes\gradezzy\ui\css
-copy /y src\gradezzy\ui\fxml\*.fxml classes\gradezzy\ui\fxml\ >nul
-if errorlevel 1 goto failed
 copy /y src\gradezzy\ui\css\*.css classes\gradezzy\ui\css\ >nul
 if errorlevel 1 goto failed
 

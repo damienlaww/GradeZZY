@@ -1,0 +1,1312 @@
+/*
+ * File: flow.css
+ *
+ * Purpose: The look of the guided window, on top of the AtlantaFX
+ * Cupertino theme. Colours come from AtlantaFX's own tokens (-color-...),
+ * so the dark theme needs no second stylesheet.
+ *
+ * Where it fits: FlowWindow adds it to the scene. Colour means status;
+ * the only other colour is the accent blue of the one primary button,
+ * links, the current tab and step, selection and chart marks.
+ *
+ * Rules: nothing that sits on the page has a shadow; only things that
+ * float above it (sheets, menus, tooltips) do. Spacing uses 4, 8, 12,
+ * 16, 20, 24 and 32 pixels.
+ */
+
+/* ---------------------------------------------------------------- frame */
+
+.flow-root {
+    -fx-background-color: -color-bg-subtle;
+    -fx-font-size: 13px;
+}
+
+.flow-root.dark {
+    -fx-background-color: -color-bg-inset;
+}
+
+/* The theme gives buttons, switches and pickers a soft shadow; nothing on
+   the page should have one. */
+.flow-root .button,
+.flow-root .toggle-button,
+.flow-root .menu-button,
+.flow-root .split-menu-button,
+.flow-root .combo-box-base,
+.flow-root .choice-box,
+.flow-root .text-input,
+.flow-root .table-view,
+.flow-root .list-view,
+.flow-root .scroll-pane,
+.flow-root .tab-pane {
+    -fx-effect: none;
+}
+
+.top-bar {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: transparent transparent -color-border-muted transparent;
+    -fx-pref-height: 52px;
+    -fx-min-height: 52px;
+    -fx-max-height: 52px;
+    -fx-padding: 0 20px;
+}
+
+.tab-bar {
+    -fx-fill-height: true;
+}
+
+.page-tab {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 0;
+    -fx-border-color: transparent transparent transparent transparent;
+    -fx-border-width: 0 0 2px 0;
+    -fx-padding: 0 14px;
+    -fx-pref-height: 51px;
+    -fx-min-height: 51px;
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-weight: bold;
+    -fx-graphic-text-gap: 7px;
+    -fx-cursor: hand;
+}
+
+.page-tab:hover {
+    -fx-text-fill: -color-fg-default;
+}
+
+.page-tab.selected {
+    -fx-text-fill: -color-fg-default;
+    -fx-border-color: transparent transparent -color-accent-emphasis
+        transparent;
+}
+
+.page-tab .icon {
+    -fx-stroke: -color-fg-muted;
+}
+
+.page-tab.selected .icon {
+    -fx-stroke: -color-fg-default;
+}
+
+.step-row {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: transparent transparent -color-border-muted transparent;
+    -fx-pref-height: 48px;
+    -fx-min-height: 48px;
+    -fx-max-height: 48px;
+}
+
+.logo-mark {
+    -fx-background-color: -color-fg-default;
+    -fx-background-radius: 6px;
+    -fx-text-fill: -color-bg-default;
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+    -fx-min-width: 22px;
+    -fx-min-height: 22px;
+    -fx-alignment: center;
+}
+
+.logo-name {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.top-link {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-weight: bold;
+    -fx-padding: 6px 8px;
+    -fx-background-radius: 8px;
+    -fx-graphic-text-gap: 6px;
+}
+
+.top-link:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.action-bar {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-muted transparent transparent transparent;
+    -fx-pref-height: 64px;
+    -fx-min-height: 64px;
+    -fx-max-height: 64px;
+    -fx-padding: 0 24px;
+    -fx-alignment: center-left;
+}
+
+/* ------------------------------------------------------------ step bar */
+
+.step-bar {
+    -fx-spacing: 0;
+}
+
+.step-item {
+    -fx-padding: 4px 6px;
+    -fx-background-radius: 8px;
+}
+
+.step-item.clickable {
+    -fx-cursor: hand;
+}
+
+.step-item.clickable:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.step-dot {
+    -fx-min-width: 24px;
+    -fx-min-height: 24px;
+    -fx-max-width: 24px;
+    -fx-max-height: 24px;
+    -fx-background-radius: 12px;
+}
+
+.step-dot .label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.step-dot.current {
+    -fx-background-color: -color-accent-emphasis;
+}
+
+.step-dot.current .label {
+    -fx-text-fill: -color-fg-emphasis;
+}
+
+.step-dot.done {
+    -fx-background-color: -color-success-subtle;
+}
+
+.step-dot.done .icon {
+    -fx-stroke: -color-success-fg;
+    -fx-stroke-width: 2.6;
+}
+
+.step-dot.later {
+    -fx-background-color: -color-bg-subtle;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 12px;
+}
+
+.step-dot.later .label,
+.step-name.later {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.step-name {
+    -fx-font-weight: 500;
+}
+
+.step-name.current {
+    -fx-font-weight: bold;
+}
+
+.step-line {
+    -fx-background-color: -color-border-default;
+    -fx-min-width: 40px;
+    -fx-pref-width: 40px;
+    -fx-max-height: 1px;
+    -fx-min-height: 1px;
+}
+
+/* -------------------------------------------------------------- layout */
+
+.page-scroll,
+.page-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.narrow-column {
+    -fx-padding: 28px 0 40px 0;
+}
+
+.wide-column {
+    -fx-padding: 24px 32px 32px 32px;
+}
+
+.screen-header {
+    -fx-padding: 0 0 8px 0;
+    -fx-spacing: 4px;
+}
+
+.heading {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+}
+
+.subtitle {
+    -fx-font-size: 14px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.small-text {
+    -fx-font-size: 12px;
+}
+
+.card-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.muted {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.strong {
+    -fx-font-weight: bold;
+}
+
+.flow-card {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 12px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 12px;
+    -fx-padding: 20px;
+    -fx-spacing: 14px;
+}
+
+/* A row inside a card, with a hairline between rows only. */
+.card-row {
+    -fx-padding: 10px 0;
+    -fx-border-color: -color-border-muted transparent transparent transparent;
+}
+
+.card-row.first {
+    -fx-border-color: transparent;
+    -fx-padding: 0 0 10px 0;
+}
+
+.card-row.last {
+    -fx-padding: 10px 0 0 0;
+}
+
+.card-row.first.last {
+    -fx-padding: 0;
+}
+
+/* Icons in lists sit in a fixed 20-pixel column so text lines up. */
+.icon-column {
+    -fx-min-width: 20px;
+    -fx-pref-width: 20px;
+    -fx-max-width: 20px;
+    -fx-alignment: center;
+}
+
+.icon {
+    -fx-fill: transparent;
+    -fx-stroke: -color-fg-muted;
+    -fx-stroke-width: 1.8;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+
+.good-icon .icon {
+    -fx-stroke: -color-success-fg;
+    -fx-stroke-width: 2.4;
+}
+
+/* ------------------------------------------------------------- buttons */
+
+.button.primary-pill {
+    -fx-background-radius: 999px;
+    -fx-border-radius: 999px;
+    -fx-padding: 9px 22px;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.button.small {
+    -fx-padding: 4px 10px;
+    -fx-font-size: 12px;
+}
+
+.icon-button {
+    -fx-padding: 4px;
+}
+
+.flow-link {
+    -fx-text-fill: -color-accent-fg;
+    -fx-padding: 0 2px;
+    -fx-border-width: 0;
+    -fx-underline: false;
+}
+
+.flow-link:visited {
+    -fx-text-fill: -color-accent-fg;
+}
+
+/* ------------------------------------------------- figures, bars, charts */
+
+.figure {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 12px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 12px;
+    -fx-padding: 14px 16px;
+    -fx-spacing: 4px;
+}
+
+.figure-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.figure-value {
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+}
+
+.figure-unit {
+    -fx-font-size: 14px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.figure-hint {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+/* Named score-track, not track: .track would also match every scroll
+   bar's track. */
+.score-track {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 4px;
+    -fx-min-height: 8px;
+    -fx-pref-height: 8px;
+    -fx-max-height: 8px;
+}
+
+.track-fill {
+    -fx-background-color: -color-accent-emphasis;
+    -fx-background-radius: 4px;
+    -fx-min-height: 8px;
+    -fx-max-height: 8px;
+}
+
+.track-fill.good {
+    -fx-background-color: -color-success-emphasis;
+}
+
+.track-fill.warn {
+    -fx-background-color: -color-warning-emphasis;
+}
+
+.track-fill.bad {
+    -fx-background-color: -color-danger-emphasis;
+}
+
+.track-fill.neutral {
+    -fx-background-color: -color-fg-subtle;
+}
+
+.chart-grid {
+    -fx-stroke: -color-border-muted;
+    -fx-stroke-width: 1;
+}
+
+.chart-axis {
+    -fx-stroke: -color-border-default;
+    -fx-stroke-width: 1;
+}
+
+.chart-band {
+    -fx-fill: -color-fg-default;
+    -fx-opacity: 0.05;
+}
+
+.chart-bar {
+    -fx-fill: -color-accent-emphasis;
+    -fx-opacity: 0.32;
+}
+
+.chart-bar:hover {
+    -fx-opacity: 0.55;
+}
+
+.chart-curve {
+    -fx-fill: transparent;
+    -fx-stroke: -color-accent-emphasis;
+    -fx-stroke-width: 2;
+    -fx-stroke-line-join: round;
+}
+
+.chart-mean {
+    -fx-stroke: -color-fg-default;
+    -fx-stroke-width: 1;
+}
+
+.chart-pass {
+    -fx-stroke: -color-fg-subtle;
+    -fx-stroke-width: 1;
+    -fx-stroke-dash-array: 3 3;
+}
+
+.chart-tick {
+    -fx-font-size: 11px;
+    -fx-fill: -color-fg-subtle;
+}
+
+.chart-note {
+    -fx-font-size: 11px;
+    -fx-fill: -color-fg-muted;
+}
+
+.chart-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-fill: -color-fg-default;
+}
+
+/* --------------------------------------------------------------- pills */
+
+.pill {
+    -fx-background-radius: 999px;
+    -fx-padding: 2px 10px;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-graphic-text-gap: 6px;
+}
+
+.pill.good {
+    -fx-background-color: -color-success-subtle;
+    -fx-text-fill: -color-success-fg;
+}
+
+.pill.good .pill-dot {
+    -fx-fill: -color-success-emphasis;
+}
+
+.pill.warn {
+    -fx-background-color: -color-warning-subtle;
+    -fx-text-fill: -color-warning-fg;
+}
+
+.pill.warn .pill-dot {
+    -fx-fill: -color-warning-emphasis;
+}
+
+.pill.bad {
+    -fx-background-color: -color-danger-subtle;
+    -fx-text-fill: -color-danger-fg;
+}
+
+.pill.bad .pill-dot {
+    -fx-fill: -color-danger-emphasis;
+}
+
+.pill.neutral {
+    -fx-background-color: -color-bg-subtle;
+    -fx-text-fill: -color-fg-default;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 999px;
+}
+
+.pill.neutral .pill-dot {
+    -fx-fill: -color-fg-subtle;
+}
+
+/* ---- marking: set up, grade, export ---- */
+
+/* Set up: labels above the class fields */
+.field-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.read-only-field {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 7px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 7px;
+    -fx-padding: 0 10px;
+    -fx-min-height: 32px;
+    -fx-pref-height: 32px;
+}
+
+/* Set up: the drop area, one row with the icon in a circle */
+.drop-area {
+    -fx-background-color: -color-accent-subtle;
+    -fx-background-radius: 12px;
+    -fx-border-color: -color-accent-emphasis;
+    -fx-border-style: segments(6, 5);
+    -fx-border-width: 1.5px;
+    -fx-border-radius: 12px;
+    -fx-pref-height: 84px;
+    -fx-min-height: 84px;
+}
+
+.drop-area.drag-over {
+    -fx-border-style: solid;
+}
+
+.drop-icon {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 20px;
+    -fx-min-width: 40px;
+    -fx-min-height: 40px;
+    -fx-max-width: 40px;
+    -fx-max-height: 40px;
+}
+
+.drop-icon .icon {
+    -fx-stroke: -color-accent-fg;
+    -fx-stroke-width: 2;
+}
+
+/* Set up: the grading settings facts, four cells in one outlined box */
+.facts {
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 10px;
+}
+
+.fact {
+    -fx-padding: 10px 14px;
+    -fx-spacing: 2px;
+    -fx-border-color: transparent transparent transparent
+        -color-border-muted;
+}
+
+.fact.first {
+    -fx-border-color: transparent;
+}
+
+.fact-value {
+    -fx-font-size: 14px;
+}
+
+/* Grade: the big count and the progress bar */
+.grade-count {
+    -fx-font-size: 30px;
+    -fx-font-weight: bold;
+}
+
+.grade-of {
+    -fx-font-size: 16px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.count-value {
+    -fx-alignment: center-right;
+}
+
+/* Export: compact figure tiles beside the small bell curve */
+.glance-figure {
+    -fx-padding: 10px 14px;
+    -fx-spacing: 2px;
+}
+
+.glance-figure .figure-value {
+    -fx-font-size: 22px;
+}
+
+.arrow-link {
+    -fx-graphic-text-gap: 4px;
+}
+
+.arrow-link .icon {
+    -fx-stroke: -color-accent-fg;
+    -fx-stroke-width: 2.2;
+}
+
+/* Export: a disabled choice keeps readable text and says why */
+.export-choices .radio-button:disabled {
+    -fx-opacity: 1;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.export-choices .radio-button:disabled .radio {
+    -fx-opacity: 0.6;
+}
+
+.choice-reason {
+    -fx-text-fill: -color-fg-subtle;
+}
+
+/* Typed test cases sheet */
+.code-text {
+    -fx-font-family: "Menlo", "Consolas", monospace;
+    -fx-font-size: 12px;
+}
+
+.case-list {
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 10px;
+    -fx-padding: 0 12px;
+}
+
+.case-row {
+    -fx-padding: 8px 0;
+    -fx-border-color: -color-border-muted transparent transparent
+        transparent;
+}
+
+.case-row.first {
+    -fx-border-color: transparent;
+}
+
+.case-empty {
+    -fx-padding: 16px 0;
+}
+
+/* ---- marking: review ---- */
+
+.review-main {
+    -fx-padding: 24px 32px 24px 32px;
+}
+
+/* All / Needs review / Failed, and Names / Code: the count sits after
+   the name in a lighter grey. */
+.segmented .toggle-button {
+    -fx-padding: 5px 12px;
+    -fx-graphic-text-gap: 6px;
+}
+
+.segmented .count {
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.segmented .toggle-button:selected .count {
+    -fx-text-fill: rgba(255, 255, 255, 0.75);
+}
+
+.search-mode .toggle-button {
+    -fx-padding: 5px 10px;
+}
+
+.review-search .icon {
+    -fx-stroke: -color-fg-subtle;
+}
+
+.banner {
+    -fx-background-color: -color-danger-subtle;
+    -fx-background-radius: 10px;
+    -fx-padding: 8px 12px;
+}
+
+/* The results table: a white box with a hairline border, no shadow,
+   hairlines between rows only, and the columns to the right edge. */
+.results-table {
+    -color-cell-border: -color-border-muted;
+    -color-cell-bg-selected: -color-accent-subtle;
+    -color-cell-bg-selected-focused: -color-accent-subtle;
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 12px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 12px;
+}
+
+/* The rows sit in a group the virtual flow names "sheet"; the dialog
+   rule .sheet would otherwise give them a drop shadow. */
+.results-table .sheet,
+.code-questions .sheet {
+    -fx-effect: null;
+}
+
+.results-table > .column-header-background {
+    -fx-background-color: -color-border-muted, -color-bg-default;
+    -fx-background-insets: 0, 0 0 1 0;
+}
+
+.results-table > .column-header-background > .filler {
+    -fx-border-width: 0;
+}
+
+.results-table .column-header {
+    -fx-size: 36px;
+    -fx-border-width: 0;
+    -fx-font-size: 12px;
+}
+
+.results-table .column-header .label {
+    -fx-padding: 0 10px;
+}
+
+.results-table .centred.column-header > .label {
+    -fx-alignment: center;
+}
+
+.results-table .table-row-cell:last-row {
+    -fx-background-insets: 0, 0;
+}
+
+.results-table .table-cell {
+    -fx-padding: 0 10px;
+}
+
+.results-table .table-cell.zero {
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.results-table .table-cell.total {
+    -fx-font-weight: bold;
+}
+
+.results-table .placeholder > .label {
+    -fx-text-fill: -color-fg-muted;
+}
+
+
+/* The student panel beside the table. */
+.student-panel,
+.student-panel > .viewport {
+    -fx-background-color: -color-bg-default;
+    -fx-background-insets: 0;
+}
+
+.student-panel {
+    -fx-padding: 0;
+    -fx-border-color: transparent transparent transparent
+        -color-border-muted;
+}
+
+.student-panel-body {
+    -fx-padding: 20px;
+}
+
+.panel-name {
+    -fx-font-size: 17px;
+}
+
+.big-total {
+    -fx-font-size: 34px;
+    -fx-font-weight: bold;
+}
+
+.question-top {
+    -fx-min-height: 30px;
+    -fx-pref-height: 30px;
+}
+
+.question-row.clickable .question-top {
+    -fx-cursor: hand;
+}
+
+.question-top .hyperlink,
+.panel-links .hyperlink {
+    -fx-padding: 0;
+}
+
+/* The theme underlines every link; the draft's links are plain. */
+.review-main .flow-link,
+.student-panel .flow-link {
+    -fx-underline: false;
+}
+
+.review-main .flow-link:hover,
+.student-panel .flow-link:hover {
+    -fx-underline: true;
+}
+
+.question-details {
+    -fx-padding: 0 0 8px 50px;
+}
+
+.test-squares {
+    -fx-padding: 2px 0;
+}
+
+.test-square {
+    -fx-min-width: 12px;
+    -fx-min-height: 12px;
+    -fx-max-width: 12px;
+    -fx-max-height: 12px;
+    -fx-background-radius: 3px;
+}
+
+.test-square.passed {
+    -fx-background-color: -color-success-emphasis;
+}
+
+.test-square.failed {
+    -fx-background-color: -color-danger-emphasis;
+}
+
+.fix-card {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 10px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 10px;
+    -fx-padding: 12px;
+}
+
+.fix-card > .pill {
+    -fx-padding: 1px 8px;
+}
+
+.card-buttons {
+    -fx-padding: 2px 0 0 0;
+}
+
+/* Flat small buttons: a thin border, no shadow, no gradient. */
+.student-panel .button.small {
+    -fx-background-color: -color-border-default, -color-bg-default;
+    -fx-background-insets: 0, 1px;
+    -fx-background-radius: 7px, 6px;
+    -fx-border-width: 0;
+    -fx-padding: 4px 10px;
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-default;
+}
+
+.student-panel .button.small:hover {
+    -fx-background-color: -color-border-default, -color-bg-subtle;
+}
+
+.student-panel .button.small:pressed {
+    -fx-background-color: -color-border-default, -color-border-muted;
+}
+
+.change-text {
+    -fx-font-family: "Menlo", "Consolas", monospace;
+    -fx-font-size: 12px;
+}
+
+.panel-links {
+    -fx-padding: 2px 0 0 0;
+}
+
+/* The code sheet: the question list, the code and the output line up
+   under their captions. */
+.code-area {
+    -fx-font-family: "Menlo", "Consolas", monospace;
+    -fx-font-size: 12px;
+}
+
+.code-questions {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 8px;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 8px;
+    -fx-padding: 1px;
+}
+
+.empty-state {
+    -fx-padding: 40px;
+}
+
+/* -------------------------------------------------------------- sheets */
+
+.field-problem {
+    -fx-text-fill: -color-danger-fg;
+    -fx-font-size: 12px;
+}
+
+.sheet-dim {
+    -fx-background-color: rgba(0, 0, 0, 0.30);
+}
+
+/* Only the dialog box: a table's or list's own rows sit in a Group that
+   is also called "sheet". */
+.sheet-dim > .sheet {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16px;
+    -fx-padding: 22px 24px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.30), 40, 0, 0, 12);
+}
+
+.notice {
+    -fx-background-color: -color-fg-default;
+    -fx-text-fill: -color-bg-default;
+    -fx-background-radius: 10px;
+    -fx-padding: 10px 16px;
+    -fx-translate-y: -18px;
+    -fx-font-weight: bold;
+}
+
+/* ---- runs ---- */
+
+/* The Runs, Backups and Activity switch */
+.runs-switch .toggle-button {
+    -fx-padding: 5px 14px;
+}
+
+/* A plain table: white box, hairline border, no shadow, hairlines
+   between rows only. */
+.plain-table {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 12px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 12px;
+}
+
+.plain-header,
+.plain-row {
+    -fx-padding: 0 4px;
+}
+
+.plain-header {
+    -fx-min-height: 36px;
+    -fx-pref-height: 36px;
+}
+
+.plain-table.compact .plain-header {
+    -fx-min-height: 30px;
+    -fx-pref-height: 30px;
+}
+
+.plain-header-text {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.plain-row {
+    -fx-border-color: -color-border-muted transparent transparent
+        transparent;
+}
+
+.plain-cell {
+    -fx-padding: 0 10px;
+}
+
+.plain-empty {
+    -fx-padding: 32px 16px;
+    -fx-border-color: -color-border-muted transparent transparent
+        transparent;
+}
+
+/* ---- settings ---- */
+
+.settings-page {
+    -fx-padding: 24px 0 0 32px;
+}
+
+.settings-header {
+    -fx-padding: 0 32px 0 0;
+}
+
+.settings-cards {
+    -fx-padding: 0 32px 32px 0;
+}
+
+.settings-index-item {
+    -fx-padding: 6px 10px;
+    -fx-background-radius: 7px;
+    -fx-border-radius: 7px;
+    -fx-border-color: transparent;
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.settings-index-item:hover {
+    -fx-text-fill: -color-fg-default;
+}
+
+.settings-index-item.selected {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-muted;
+    -fx-text-fill: -color-fg-default;
+}
+
+/* One setting: name column on the left, control on the right, every
+   row the same minimum height, hairlines between rows only. */
+.setting-row {
+    -fx-min-height: 52px;
+    -fx-padding: 10px 0;
+    -fx-border-color: -color-border-muted transparent transparent
+        transparent;
+}
+
+.setting-row.first {
+    -fx-border-color: transparent;
+    -fx-padding: 0 0 10px 0;
+}
+
+.setting-row.last {
+    -fx-padding: 10px 0 0 0;
+}
+
+.setting-row.first.last {
+    -fx-padding: 0;
+}
+
+.setting-dot {
+    -fx-fill: -color-accent-emphasis;
+}
+
+.setting-problem {
+    -fx-text-fill: -color-danger-fg;
+    -fx-font-size: 12px;
+}
+
+.settings-no-match {
+    -fx-padding: 40px 0;
+}
+
+.help-step {
+    -fx-padding: 0 0 0 16px;
+}
+
+/* ---- statistics ---- */
+
+/* The three section colours of Compare sections. They passed a
+   colour-blindness check in both themes; dark mode has its own set. */
+.statistics-page {
+    series-one: #007aff;
+    series-two: #eb6834;
+    series-three: #1baf7a;
+}
+
+.flow-root.dark .statistics-page {
+    series-one: #0a84ff;
+    series-two: #d95926;
+    series-three: #199e70;
+}
+
+.stats-header {
+    -fx-padding: 0 0 8px 0;
+}
+
+.stats-card {
+    -fx-spacing: 14px;
+}
+
+.stats-empty {
+    -fx-padding: 40px;
+}
+
+.stats-subtle {
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.stats-note {
+    -fx-padding: 8px 0 0 0;
+}
+
+.stats-note-text {
+    -fx-font-size: 12px;
+    -fx-fill: -color-fg-muted;
+}
+
+.stats-note-text.stats-note-strong {
+    -fx-fill: -color-fg-default;
+    -fx-font-weight: bold;
+}
+
+/* Legend swatches: a bar, a line and the "most students" band. */
+.legend-swatch {
+    -fx-min-width: 10px;
+    -fx-pref-width: 10px;
+    -fx-max-width: 10px;
+    -fx-min-height: 10px;
+    -fx-pref-height: 10px;
+    -fx-max-height: 10px;
+    -fx-background-radius: 3px;
+}
+
+.legend-swatch.legend-bar {
+    -fx-background-color: -color-accent-emphasis;
+    -fx-opacity: 0.32;
+}
+
+.legend-swatch.legend-band {
+    -fx-background-color: -color-fg-default;
+    -fx-opacity: 0.08;
+}
+
+.legend-swatch.legend-line,
+.legend-swatch.legend-series {
+    -fx-min-width: 16px;
+    -fx-pref-width: 16px;
+    -fx-max-width: 16px;
+    -fx-min-height: 2px;
+    -fx-pref-height: 2px;
+    -fx-max-height: 2px;
+    -fx-background-radius: 1px;
+    -fx-background-color: -color-accent-emphasis;
+}
+
+/* The status ring and its legend dots. */
+.ring-part {
+    -fx-fill: transparent;
+    -fx-stroke-width: 16;
+    -fx-stroke-line-cap: butt;
+}
+
+.ring-part.good,
+.ring-dot.good {
+    -fx-stroke: -color-success-emphasis;
+    -fx-fill: -color-success-emphasis;
+}
+
+.ring-part.warn,
+.ring-dot.warn {
+    -fx-stroke: -color-warning-emphasis;
+    -fx-fill: -color-warning-emphasis;
+}
+
+.ring-part.bad,
+.ring-dot.bad {
+    -fx-stroke: -color-danger-emphasis;
+    -fx-fill: -color-danger-emphasis;
+}
+
+.ring-part.neutral,
+.ring-dot.neutral {
+    -fx-stroke: -color-fg-subtle;
+    -fx-fill: -color-fg-subtle;
+}
+
+.ring-part.good,
+.ring-part.warn,
+.ring-part.bad,
+.ring-part.neutral {
+    -fx-fill: transparent;
+}
+
+.ring-dot {
+    -fx-stroke-width: 0;
+}
+
+.ring-total {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-fill: -color-fg-default;
+}
+
+/* Compare sections: chips, curves and the table. */
+.section-chip {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 999px;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 999px;
+    -fx-min-height: 28px;
+    -fx-pref-height: 28px;
+    -fx-max-height: 28px;
+    -fx-padding: 0 4px 0 12px;
+}
+
+.section-chip.alone {
+    -fx-padding: 0 12px;
+}
+
+.chip-remove {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 999px;
+    -fx-padding: 4px;
+}
+
+.chip-remove:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.add-chip {
+    -fx-background-color: transparent;
+    -fx-background-radius: 999px;
+    -fx-border-color: -color-border-default;
+    -fx-border-style: segments(4, 3);
+    -fx-border-radius: 999px;
+    -fx-min-height: 28px;
+    -fx-pref-height: 28px;
+    -fx-max-height: 28px;
+    -fx-padding: 0 12px;
+}
+
+.add-chip > .label {
+    -fx-text-fill: -color-fg-muted;
+    -fx-padding: 0;
+}
+
+.add-chip > .arrow-button {
+    -fx-padding: 0;
+}
+
+.add-chip > .arrow-button > .arrow {
+    -fx-padding: 0;
+    -fx-shape: null;
+}
+
+.series-dot,
+.compare-dot {
+    -fx-stroke-width: 0;
+}
+
+.compare-dot {
+    -fx-stroke: -color-bg-default;
+    -fx-stroke-width: 2;
+}
+
+.series-dot.series-1,
+.compare-dot.series-1,
+.compare-fill.series-1 {
+    -fx-fill: series-one;
+}
+
+.series-dot.series-2,
+.compare-dot.series-2,
+.compare-fill.series-2 {
+    -fx-fill: series-two;
+}
+
+.series-dot.series-3,
+.compare-dot.series-3,
+.compare-fill.series-3 {
+    -fx-fill: series-three;
+}
+
+.compare-fill {
+    -fx-opacity: 0.07;
+}
+
+.compare-curve {
+    -fx-fill: transparent;
+    -fx-stroke-width: 2;
+    -fx-stroke-line-join: round;
+}
+
+.compare-curve.series-1 {
+    -fx-stroke: series-one;
+}
+
+.compare-curve.series-2 {
+    -fx-stroke: series-two;
+}
+
+.compare-curve.series-3 {
+    -fx-stroke: series-three;
+}
+
+.legend-swatch.legend-series.series-1 {
+    -fx-background-color: series-one;
+}
+
+.legend-swatch.legend-series.series-2 {
+    -fx-background-color: series-two;
+}
+
+.legend-swatch.legend-series.series-3 {
+    -fx-background-color: series-three;
+}
+
+/* A plain table: no shadow, hairlines between rows only. */
+.compare-table {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 12px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 12px;
+    -fx-padding: 0 4px;
+}
+
+.compare-head {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-muted;
+    -fx-min-height: 36px;
+    -fx-pref-height: 36px;
+    -fx-padding: 0 10px;
+}
+
+.compare-cell {
+    -fx-min-height: 44px;
+    -fx-pref-height: 44px;
+    -fx-padding: 0 10px;
+    -fx-border-color: -color-border-muted transparent transparent
+        transparent;
+}
