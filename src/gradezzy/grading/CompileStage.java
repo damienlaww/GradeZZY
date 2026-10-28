@@ -11,9 +11,13 @@ package gradezzy.grading;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
+import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.exec.ProcessExecutionException;
 import gradezzy.exec.ProcessResult;
 import gradezzy.exec.SourceCompiler;
@@ -26,6 +30,7 @@ import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 import gradezzy.testcase.QuestionFolderFinder;
 import gradezzy.testcase.TesterFile;
+import gradezzy.util.FileUtils;
 
 /**
  * Compiles the student's code and the testers, one question at a time.
@@ -58,8 +63,23 @@ public class CompileStage implements GradingStage {
     private static final String COMPILE_ERROR_ACTION =
             "Read the compiler output on the Logs tab.";
 
+    // What the instructor can do about a tester that does not compile
+    private static final String BROKEN_TESTER_ACTION =
+            "Fix the tester file, then grade again.";
+
+    // Start of the name of the temporary folder for the tester check
+    private static final String CHECK_FOLDER_PREFIX = "gradezzy-tester-check-";
+
+    // Stands for "the tester compiled, or could not be checked"
+    private static final String NO_TESTER_ERROR = "";
+
     // The helper that runs javac
     private final SourceCompiler sourceCompiler;
+
+    // For each tester class, its compile error against the starter code,
+    // or NO_TESTER_ERROR. One stage is made per run, so each tester is
+    // checked once per run.
+    private final HashMap<String, String> testerErrors = new HashMap<>();
 
     /**
      * Creates a new compile stage.
@@ -84,7 +104,10 @@ public class CompileStage implements GradingStage {
      * Compiles the student's code and the testers, one question at a time.
      * A question that does not compile gets a COMPILE_ERROR anomaly and the
      * others are still compiled. A question with no tester, folder or file
-     * is skipped: the validators already reported what is missing.
+     * is skipped: the validators already reported what is missing. A
+     * question whose tester does not compile even with the starter code
+     * is not graded, and gets an INTERNAL_ERROR instead of a
+     * COMPILE_ERROR, so the student is not blamed.
      *
      * @param submission the submission
      * @param context the context
@@ -103,10 +126,106 @@ public class CompileStage implements GradingStage {
             if (tester != null && folder != null
                     && Files.isRegularFile(
                             folder.resolve(question.getFileName()))) {
-                submission.addQuestionResult(compileQuestion(submission,
-                        question, tester, folder));
+                String testerError = checkTester(context.getConfig(),
+                        question, tester);
+                if (testerError.isEmpty()) {
+                    submission.addQuestionResult(compileQuestion(
+                            submission, question, tester, folder));
+                } else {
+                    reportBrokenTester(submission, question, tester,
+                            testerError);
+                }
             }
         }
+    }
+
+    /**
+     * Returns the compile error of a tester against the starter code,
+     * checking each tester only once. The worker threads share this
+     * stage, so only one of them checks a tester at a time.
+     *
+     * @param config the application settings
+     * @param question the question
+     * @param tester the tester of the question
+     * @return the first error line, or NO_TESTER_ERROR
+     * @throws GradingException if javac cannot be run
+     */
+    private synchronized String checkTester(AppConfig config,
+            Question question, TesterFile tester) throws GradingException {
+        String className = tester.getClassName();
+        if (!testerErrors.containsKey(className)) {
+            testerErrors.put(className,
+                    compileWithStarter(config, question, tester));
+        }
+        return testerErrors.get(className);
+    }
+
+    /**
+     * Compiles a tester with the starter code in a temporary copy. Every
+     * provided tester compiles with the starter, so a tester that does
+     * not is itself broken, and the students must not be blamed for it.
+     *
+     * @param config the application settings
+     * @param question the question
+     * @param tester the tester of the question
+     * @return the first error line, or NO_TESTER_ERROR if it compiled or
+     *         could not be checked
+     * @throws GradingException if javac cannot be run
+     */
+    private String compileWithStarter(AppConfig config, Question question,
+            TesterFile tester) throws GradingException {
+        Path starterFolder = Path.of(config.getString(
+                ConfigKeys.STARTER_DIR)).resolve(question.getFolderName());
+        if (!Files.isRegularFile(
+                starterFolder.resolve(question.getFileName()))) {
+            return NO_TESTER_ERROR;
+        }
+
+        String testerSource = tester.getClassName() + JAVA_EXTENSION;
+        try {
+            // The real path, because copyDirectory refuses linked folders
+            // and the macOS temp folder sits behind one
+            Path checkFolder = Files.createTempDirectory(
+                    CHECK_FOLDER_PREFIX).toRealPath();
+            try {
+                Path copy = checkFolder.resolve(question.getFolderName());
+                FileUtils.copyDirectory(starterFolder, copy);
+                Files.copy(tester.getSourceFile(),
+                        copy.resolve(testerSource),
+                        StandardCopyOption.REPLACE_EXISTING);
+                ProcessResult result = runCompiler(copy,
+                        List.of(question.getFileName(), testerSource));
+                if (result.getExitCode() == SUCCESS_EXIT_CODE
+                        || result.isTimedOut()) {
+                    return NO_TESTER_ERROR;
+                }
+                return firstLine(result.getStandardError());
+            } finally {
+                FileUtils.deleteDirectory(checkFolder);
+            }
+        } catch (IOException exception) {
+            // The check could not be done, so grade as before
+            return NO_TESTER_ERROR;
+        }
+    }
+
+    /**
+     * Records that a question was not graded because its tester is broken.
+     *
+     * @param submission the submission
+     * @param question the question
+     * @param tester the tester of the question
+     * @param testerError the first compile error of the tester
+     */
+    private void reportBrokenTester(Submission submission, Question question,
+            TesterFile tester, String testerError) {
+        String message = question.getId() + " was not graded: "
+                + tester.getClassName() + JAVA_EXTENSION
+                + " does not compile even with the starter code ("
+                + testerError + "). This is not the student's error.";
+        submission.addAnomaly(new Anomaly(ID_PREFIX + UUID.randomUUID(),
+                AnomalyType.INTERNAL_ERROR, Severity.ERROR,
+                submission.getUsername(), message, BROKEN_TESTER_ACTION));
     }
 
     /**

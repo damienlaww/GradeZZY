@@ -954,8 +954,9 @@ Kept to a minimum and confined to the classes named here:
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. |
 | `javafx.animation` (`Timeline`, `FadeTransition` and others) | `ui.MainController`, `ui.GradingMonitor`, `ui.view.SheetLayer`, `ui.view.ToastLayer`, `ui.demo.DemoGrader` | Subtle animations and timers. Turned off by `ui.animations.enabled`. |
 | `java.awt.Robot`, `javax.imageio.ImageIO`, `java.util.concurrent`, `java.util.zip.ZipOutputStream` | `ui.check` only | The `--snapshot` and `--windowtest` developer checks. Not used when grading. |
-| `synchronized` | `grading.CancellationToken`, `fix.FixManager` | The Cancel button and the grading thread share one flag; the grading threads and the anomaly log share one list of fixes. |
+| `synchronized` | `grading.CancellationToken`, `fix.FixManager`, `grading.CompileStage` | The Cancel button and the grading thread share one flag; the grading threads and the anomaly log share one list of fixes; the grading threads check each tester only once. |
 | `java.nio.file` (`Files.move`, `Files.copy`, `Files.createTempDirectory`, `DirectoryStream`, `StandardCopyOption`) | `fix` package | Moves and renames folders in the working copy and keeps a backup of each file a fix changes. |
+| `Files.createTempDirectory`, `Path.toRealPath` | `grading.CompileStage` | Compiles each tester with a temporary copy of the starter code, so a broken tester is not blamed on the students. |
 | `HashSet`, `String.join`, `List.subList` | `plagiarism.TokenSimilarityDetector` | Holds each answer's runs of three tokens for the similarity measure. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. |
 | `enum` | `model`, `ui.Screen` | Fixed lists of values. |
