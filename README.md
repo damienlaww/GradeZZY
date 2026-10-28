@@ -966,7 +966,8 @@ Kept to a minimum and confined to the classes named here:
 | `StackWalker` with a lambda, `System.setOut`, a `PrintStream` subclass | `exec.TesterHarness` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. |
 | Reflection (`Class.forName`, `Method.invoke`) | `exec.TesterHarness` | Starts the tester's `main` from inside the harness. |
 | `Runtime.halt`, the `jdk.lang.Process.launchMechanism` property | `exec.TesterHarness` | Ends the run without waiting for student threads, and stops student code starting other programs (macOS and Linux). |
-| `java` options `--limit-modules`, `--illegal-native-access=deny`; `UUID` | `exec.TesterRunner` | Student code gets only core Java and no native code; a new random token for every tester run. |
+| `java` options `--limit-modules`, `--illegal-native-access=deny`, `-Duser.home`, `-Djava.io.tmpdir`; `UUID` | `exec.TesterRunner` | Student code gets only core Java and no native code, and its home and temp folders are its own question folder; a new random token for every tester run. |
+| macOS `sandbox-exec` (`/usr/bin/sandbox-exec -p <rules>`) | `exec.TesterRunner` | Student code may write only in its own question folder and may not read the other working copies, the backups or the submissions folder. JDK 24 removed the `SecurityManager`, so Java cannot do this itself. Windows and Linux have no built-in sandbox: there a note is printed once per run and student code keeps the instructor's file permissions. |
 | `java.util.zip` (to be written) | `ingest.ZipExtractor` | Unzips submissions. |
 | `java.util.regex.Pattern` | `service.SettingsService` | Checks that the zip name pattern setting is a valid regular expression. |
 | `java.nio.file.Files` (`readString`, `writeString`, `move`, `isSymbolicLink`) | `service.SettingsService`, `service.SearchService` | Saves `config.properties` through a temporary copy; reads source files for the code search. |
