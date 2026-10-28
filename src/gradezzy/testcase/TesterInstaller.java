@@ -9,6 +9,7 @@
 package gradezzy.testcase;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -118,7 +119,10 @@ public class TesterInstaller {
     // changed.
     private void flagMissingDataFiles(Path testerFile, Path questionFolder,
             Submission submission) throws IOException {
-        String testerSource = Files.readString(testerFile);
+        // ISO-8859-1 reads any bytes, so a tester saved in another
+        // encoding cannot stop grading; the names searched are ASCII
+        String testerSource = Files.readString(testerFile,
+                StandardCharsets.ISO_8859_1);
         List<String> dataFileNames = config.getList(
                 ConfigKeys.TESTER_DATA_FILES);
 

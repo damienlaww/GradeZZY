@@ -199,7 +199,13 @@ public class CompileStage implements GradingStage {
                         || result.isTimedOut()) {
                     return NO_TESTER_ERROR;
                 }
-                return firstLine(result.getStandardError());
+                // An error in the starter file says nothing about the
+                // tester, so the students are graded as before
+                String errorLine = firstLine(result.getStandardError());
+                if (!errorLine.startsWith(testerSource)) {
+                    return NO_TESTER_ERROR;
+                }
+                return errorLine;
             } finally {
                 FileUtils.deleteDirectory(checkFolder);
             }

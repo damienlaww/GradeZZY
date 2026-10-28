@@ -79,6 +79,10 @@ public class TesterRunner {
     private static final String SANDBOX_COMMAND = "/usr/bin/sandbox-exec";
     private static final String PROFILE_OPTION = "-p";
 
+    // The smallest rule set and command used to test the sandbox once
+    private static final String PROBE_RULES = "(version 1)(allow default)";
+    private static final String VERSION_OPTION = "-version";
+
     // Printed once per run where no sandbox exists
     private static final String NO_SANDBOX_NOTE = "Note: student code is "
             + "not sandboxed on this system and can reach any file the "
@@ -112,9 +116,33 @@ public class TesterRunner {
     public TesterRunner(AppConfig config, ProcessRunner processRunner) {
         this.config = config;
         this.processRunner = processRunner;
-        this.sandboxed = Files.isExecutable(Path.of(SANDBOX_COMMAND));
+        this.sandboxed = sandboxWorks();
         if (!sandboxed) {
             System.err.println(NO_SANDBOX_NOTE);
+        }
+    }
+
+    /**
+     * Says whether java can run inside the macOS sandbox. It is tried
+     * once, because the tool can exist and still refuse to start, and
+     * then every tester would fail.
+     *
+     * @return true if testers can run inside the sandbox
+     */
+    private boolean sandboxWorks() {
+        if (!Files.isExecutable(Path.of(SANDBOX_COMMAND))) {
+            return false;
+        }
+        List<String> command = List.of(SANDBOX_COMMAND, PROFILE_OPTION,
+                PROBE_RULES, config.getString(ConfigKeys.JAVA_COMMAND),
+                VERSION_OPTION);
+        try {
+            ProcessResult probe = processRunner.run(command,
+                    Path.of(CURRENT_FOLDER),
+                    config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS));
+            return probe.getExitCode() == SUCCESS_EXIT_CODE;
+        } catch (ProcessExecutionException exception) {
+            return false;
         }
     }
 
