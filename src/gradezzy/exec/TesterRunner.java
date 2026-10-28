@@ -71,6 +71,10 @@ public class TesterRunner {
     private static final String HOME_OPTION = "-Duser.home=";
     private static final String TEMP_OPTION = "-Djava.io.tmpdir=";
 
+    // Student prints may use half the output limit; the other half is
+    // kept for the tester's own lines, so they are never cut off
+    private static final int STUDENT_SHARE_DIVISOR = 2;
+
     // The macOS sandbox tool and its option for an inline rule set
     private static final String SANDBOX_COMMAND = "/usr/bin/sandbox-exec";
     private static final String PROFILE_OPTION = "-p";
@@ -132,6 +136,8 @@ public class TesterRunner {
         String classPath = harnessLocation() + File.pathSeparator
                 + CURRENT_FOLDER;
         String folder = questionFolder.toAbsolutePath().toString();
+        int studentLimit = config.getInt(ConfigKeys.MAX_OUTPUT_CHARACTERS)
+                / STUDENT_SHARE_DIVISOR;
         List<String> command = new ArrayList<>();
         if (sandboxed) {
             command.add(SANDBOX_COMMAND);
@@ -143,7 +149,8 @@ public class TesterRunner {
                 LIMIT_MODULES_OPTION, NO_NATIVE_OPTION,
                 HOME_OPTION + folder, TEMP_OPTION + folder,
                 CLASSPATH_OPTION, classPath,
-                TesterHarness.class.getName(), testerClassName));
+                TesterHarness.class.getName(), testerClassName,
+                String.valueOf(studentLimit)));
         long timeoutSeconds = config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS);
         // A new random token for every run, sent where only the harness
         // reads it before any student code starts

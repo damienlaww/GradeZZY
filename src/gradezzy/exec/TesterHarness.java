@@ -61,7 +61,8 @@ public final class TesterHarness {
     /**
      * Reads the token, then runs the tester named in the first argument.
      *
-     * @param args the tester class name
+     * @param args the tester class name, then the most bytes of student
+     *             output to pass on
      * @throws IOException if the token cannot be read
      * @throws ReflectiveOperationException if the tester cannot be found
      */
@@ -70,13 +71,14 @@ public final class TesterHarness {
         String token = new String(System.in.readAllBytes(),
                 StandardCharsets.UTF_8).trim();
         blockNewPrograms();
+        long studentLimit = Long.parseLong(args[1]);
 
         // Loaded without running its static code, so the student's static
         // code runs later, after the marking stream is in place
         Class<?> tester = Class.forName(args[0], false,
                 TesterHarness.class.getClassLoader());
         TrustedPrintStream trusted = new TrustedPrintStream(System.out,
-                token, Thread.currentThread(), tester);
+                token, Thread.currentThread(), tester, studentLimit);
         System.setOut(trusted);
 
         Method testerMain = tester.getMethod("main", String[].class);
@@ -121,6 +123,9 @@ public final class TesterHarness {
      * Standard output that marks the lines printed by the tester itself.
      * Only the calls the provided testers use for test headers, verdicts
      * and the total are marked; every other line passes through unmarked.
+     * Unmarked output stops once it reaches its limit, so a student who
+     * prints a lot cannot push the tester's later lines past the output
+     * limit of ProcessRunner.
      */
     private static final class TrustedPrintStream extends PrintStream {
 
@@ -137,6 +142,15 @@ public final class TesterHarness {
         private final StackWalker walker = StackWalker.getInstance(
                 StackWalker.Option.RETAIN_CLASS_REFERENCE);
 
+        // The most bytes of unmarked output passed on
+        private final long studentLimit;
+
+        // Bytes of unmarked output passed on so far
+        private long studentBytes = 0;
+
+        // True while a marked line is being written
+        private boolean writingMarked = false;
+
         /**
          * Creates a stream over the real standard output.
          *
@@ -144,13 +158,48 @@ public final class TesterHarness {
          * @param token the secret token
          * @param testerThread the thread that runs the tester
          * @param tester the tester class
+         * @param studentLimit the most bytes of unmarked output to pass on
          */
         TrustedPrintStream(PrintStream out, String token,
-                Thread testerThread, Class<?> tester) {
+                Thread testerThread, Class<?> tester, long studentLimit) {
             super(out, true);
             this.token = token;
             this.testerThread = testerThread;
             this.tester = tester;
+            this.studentLimit = studentLimit;
+        }
+
+        /**
+         * Every print ends here as bytes. Marked lines always pass;
+         * unmarked bytes pass only while they are under the limit.
+         *
+         * @param buffer the bytes
+         * @param offset where the bytes start
+         * @param length how many bytes
+         */
+        @Override
+        public synchronized void write(byte[] buffer, int offset,
+                int length) {
+            if (writingMarked) {
+                super.write(buffer, offset, length);
+                return;
+            }
+            long room = studentLimit - studentBytes;
+            int kept = (int) Math.min(Math.max(room, 0), length);
+            if (kept > 0) {
+                super.write(buffer, offset, kept);
+                studentBytes += kept;
+            }
+        }
+
+        /**
+         * Writes one byte, under the same limit as the other writes.
+         *
+         * @param oneByte the byte
+         */
+        @Override
+        public void write(int oneByte) {
+            write(new byte[] {(byte) oneByte}, 0, 1);
         }
 
         @Override
@@ -202,8 +251,14 @@ public final class TesterHarness {
          *
          * @param line the line, without a line break
          */
-        void printMarked(String line) {
-            super.print(token + line + System.lineSeparator());
+        synchronized void printMarked(String line) {
+            writingMarked = true;
+            try {
+                super.print(token + line + System.lineSeparator());
+                super.flush();
+            } finally {
+                writingMarked = false;
+            }
         }
 
         /**

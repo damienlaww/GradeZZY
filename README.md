@@ -888,7 +888,7 @@ file: `java -Dgradezzy.config=other.properties ...`.
 | `exec.compile.timeout.seconds` | `30` | Time limit for compiling one question folder. |
 | `exec.run.timeout.seconds` | `10` | Time limit for one tester run. |
 | `exec.thread.count` | `4` | Submissions graded at the same time. |
-| `exec.max.output.characters` | `100000` | Longest program output kept. |
+| `exec.max.output.characters` | `100000` | Longest program output kept. In a tester run, student prints may use half of it, so the tester's own lines are never cut off. |
 | `grading.tester.class.suffix` | `Tester` | `Q1a` becomes `Q1aTester`. |
 | `grading.pass.marker` | `Passed` | Line a tester prints for a passed test. |
 | `grading.fail.marker` | `Failed` | Start of the line for a failed test. |
