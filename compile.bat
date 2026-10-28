@@ -38,6 +38,7 @@ set UI_SOURCES=%UI_SOURCES% src\gradezzy\ui\check\*.java
 set UI_SOURCES=%UI_SOURCES% src\gradezzy\ui\component\*.java
 set UI_SOURCES=%UI_SOURCES% src\gradezzy\ui\demo\*.java
 set UI_SOURCES=%UI_SOURCES% src\gradezzy\ui\view\*.java
+set UI_SOURCES=%UI_SOURCES% src\gradezzy\ui\flow\*.java
 
 rem Start from an empty classes folder so no old class file is left behind.
 if exist classes rmdir /s /q classes

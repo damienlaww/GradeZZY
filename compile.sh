@@ -52,7 +52,8 @@ CORE_SOURCES="src/gradezzy/app/*.java
     src/gradezzy/validation/*.java"
 UI_SOURCES="src/gradezzy/ui/*.java src/gradezzy/ui/backend/*.java
     src/gradezzy/ui/check/*.java src/gradezzy/ui/component/*.java
-    src/gradezzy/ui/demo/*.java src/gradezzy/ui/view/*.java"
+    src/gradezzy/ui/demo/*.java src/gradezzy/ui/view/*.java
+    src/gradezzy/ui/flow/*.java"
 
 # Start from an empty classes folder so no old class file is left behind.
 rm -rf classes

@@ -51,6 +51,7 @@ public class ScreenCheck {
     public int run() {
         int problems = check(new LiveBackend(services), "live");
         problems += check(new DemoBackend(services), "demo");
+        problems += new FlowCheck(services, null).run();
 
         if (problems == 0) {
             System.out.println("All " + Screen.values().length

@@ -27,11 +27,13 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.LiveBackend;
+import gradezzy.ui.check.FlowCheck;
 import gradezzy.ui.check.ScreenCheck;
 import gradezzy.ui.check.SelfTest;
 import gradezzy.ui.check.SnapshotWriter;
 import gradezzy.ui.check.WindowTest;
 import gradezzy.ui.demo.DemoBackend;
+import gradezzy.ui.flow.FlowWindow;
 
 /**
  * The JavaFX application class and graphical entry point.
@@ -40,6 +42,16 @@ public class MainApp extends Application {
 
     /** Command line argument that loads every screen once and exits. */
     public static final String CHECK_ARGUMENT = "--check";
+
+    /** Command line argument that saves pictures of the guided window. */
+    public static final String FLOW_SHOTS_ARGUMENT = "--flowshots";
+
+    /** Where --flowshots saves pictures by default. */
+    public static final String DEFAULT_FLOW_SHOTS_FOLDER =
+            "workspace/flow-shots";
+
+    /** Command line argument that opens the old window, until Phase 2. */
+    public static final String CLASSIC_ARGUMENT = "--classic";
 
     /** Command line argument that shows synthetic demo data. */
     public static final String DEMO_ARGUMENT = "--demo";
@@ -97,7 +109,8 @@ public class MainApp extends Application {
         boolean tool = args.contains(CHECK_ARGUMENT)
                 || args.contains(SELF_TEST_ARGUMENT)
                 || args.contains(SNAPSHOT_ARGUMENT)
-                || args.contains(WINDOW_TEST_ARGUMENT);
+                || args.contains(WINDOW_TEST_ARGUMENT)
+                || args.contains(FLOW_SHOTS_ARGUMENT);
 
         try {
             AppConfig config = AppConfig.loadDefault();
@@ -106,6 +119,11 @@ public class MainApp extends Application {
 
             if (args.contains(CHECK_ARGUMENT)) {
                 exitCode = new ScreenCheck(services).run();
+                Platform.exit();
+            } else if (args.contains(FLOW_SHOTS_ARGUMENT)) {
+                exitCode = new FlowCheck(services, folderAfter(args,
+                        FLOW_SHOTS_ARGUMENT, DEFAULT_FLOW_SHOTS_FOLDER))
+                        .run();
                 Platform.exit();
             } else if (args.contains(SELF_TEST_ARGUMENT)) {
                 exitCode = new SelfTest(services).run();
@@ -156,11 +174,20 @@ public class MainApp extends Application {
             backend = new LiveBackend(services);
         }
 
-        UiState state = ShellBuilder.createState(config);
-        ShellBuilder builder = new ShellBuilder(services, backend, state,
-                new ThemeManager());
-        Scene scene = builder.build(config.getInt(ConfigKeys.WINDOW_WIDTH),
-                config.getInt(ConfigKeys.WINDOW_HEIGHT));
+        Scene scene;
+        if (getParameters().getRaw().contains(CLASSIC_ARGUMENT)) {
+            UiState state = ShellBuilder.createState(config);
+            ShellBuilder builder = new ShellBuilder(services, backend, state,
+                    new ThemeManager());
+            scene = builder.build(config.getInt(ConfigKeys.WINDOW_WIDTH),
+                    config.getInt(ConfigKeys.WINDOW_HEIGHT));
+        } else {
+            boolean dark = ThemeManager.DARK_THEME.equalsIgnoreCase(
+                    config.getString(ConfigKeys.UI_THEME));
+            FlowWindow window = new FlowWindow(backend, dark);
+            scene = window.build(config.getInt(ConfigKeys.WINDOW_WIDTH),
+                    config.getInt(ConfigKeys.WINDOW_HEIGHT));
+        }
 
         stage.setTitle(title);
         stage.setMinWidth(MIN_WIDTH);

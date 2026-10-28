@@ -1,0 +1,342 @@
+/*
+ * File: Parts.java
+ *
+ * Purpose: Builds the small pieces every screen of the guided window
+ * uses: headings, cards, status pills, buttons, links and icons.
+ *
+ * Where it fits: Every screen in gradezzy.ui.flow calls these, so the
+ * look is set in one place and in flow.css.
+ */
+package gradezzy.ui.flow;
+
+import javafx.geometry.Pos;
+import javafx.scene.Group;
+import javafx.scene.Node;
+import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
+import javafx.scene.control.Label;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.SVGPath;
+
+/**
+ * Factory methods for the shared pieces of the guided window.
+ */
+public final class Parts {
+
+    /** Upload arrow. */
+    public static final String UPLOAD = "M12 15V4M7 9l5-5 5 5"
+            + "M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4";
+
+    /** Tick. */
+    public static final String CHECK = "M5 12.5l4.5 4.5L19 7.5";
+
+    /** Arrow pointing right. */
+    public static final String ARROW = "M5 12h14M13 6l6 6-6 6";
+
+    /** Clock, for History. */
+    public static final String CLOCK = "M12 3a9 9 0 1 0 0.01 0Z"
+            + "M12 7v5l3 2";
+
+    /** Gear, for Settings. */
+    public static final String GEAR = "M12 9a3 3 0 1 0 0.01 0Z"
+            + "M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1"
+            + "M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1";
+
+    /** Question mark in a circle, for Help. */
+    public static final String HELP = "M12 3a9 9 0 1 0 0.01 0Z"
+            + "M9.5 9.5a2.5 2.5 0 0 1 4.9 0.6c0 1.7-2.4 2.2-2.4 3.4"
+            + "M12 17h0.01";
+
+    /** A file. */
+    public static final String FILE = "M14 3H7a1 1 0 0 0-1 1v16"
+            + "a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7zM14 3v4h4";
+
+    /** A folder. */
+    public static final String FOLDER = "M3 7a1 1 0 0 1 1-1h5l2 2h9"
+            + "a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z";
+
+    /** Code brackets. */
+    public static final String CODE = "M8 8l-4 4 4 4M16 8l4 4-4 4";
+
+    /** A cross, for closing. */
+    public static final String CLOSE = "M6 6l12 12M18 6L6 18";
+
+    /** Magnifying glass. */
+    public static final String SEARCH = "M11 4.5a6.5 6.5 0 1 0 0.01 0Z"
+            + "M20 20l-4.2-4.2";
+
+    /** Download arrow. */
+    public static final String DOWNLOAD = "M12 4v11M7 10l5 5 5-5"
+            + "M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4";
+
+    /** The usual gap between parts of a row or card. */
+    public static final double GAP = 12.0;
+
+    /** A smaller gap, between an icon and its text. */
+    public static final double GAP_SMALL = 8.0;
+
+    /** The widest a paragraph in a sheet may be. */
+    public static final double TEXT_WIDTH = 420.0;
+
+    // The size of the square the icon paths are drawn in
+    private static final double ICON_BOX = 24.0;
+
+    // The radius of the dot inside a status pill
+    private static final double DOT_RADIUS = 3.5;
+
+    // Not used: every method is static.
+    private Parts() {
+    }
+
+    /**
+     * Returns the large heading of a screen.
+     *
+     * @param text the heading
+     * @return the label
+     */
+    public static Label heading(String text) {
+        return styled(new Label(text), "heading");
+    }
+
+    /**
+     * Returns the one line of help under a heading.
+     *
+     * @param text the help
+     * @return the label
+     */
+    public static Label subtitle(String text) {
+        Label label = styled(new Label(text), "subtitle");
+        label.setWrapText(true);
+        return label;
+    }
+
+    /**
+     * Returns a heading and its line of help, stacked.
+     *
+     * @param heading the heading
+     * @param help the line under it
+     * @return the box
+     */
+    public static VBox header(String heading, String help) {
+        VBox box = new VBox(heading(heading), subtitle(help));
+        box.getStyleClass().add("screen-header");
+        return box;
+    }
+
+    /**
+     * Returns the title of a card or section.
+     *
+     * @param text the title
+     * @return the label
+     */
+    public static Label title(String text) {
+        return styled(new Label(text), "card-title");
+    }
+
+    /**
+     * Returns grey secondary text.
+     *
+     * @param text the text
+     * @return the label
+     */
+    public static Label muted(String text) {
+        return styled(new Label(text), "muted");
+    }
+
+    /**
+     * Returns bold body text.
+     *
+     * @param text the text
+     * @return the label
+     */
+    public static Label strong(String text) {
+        return styled(new Label(text), "strong");
+    }
+
+    /**
+     * Returns a white card with an optional title.
+     *
+     * @param title the title, or null for none
+     * @param content what the card holds
+     * @return the card
+     */
+    public static VBox card(String title, Node... content) {
+        VBox card = new VBox();
+        card.getStyleClass().add("flow-card");
+        if (title != null) {
+            card.getChildren().add(title(title));
+        }
+        card.getChildren().addAll(content);
+        return card;
+    }
+
+    /**
+     * Returns a status pill: a coloured dot and the status in words, so
+     * the status never relies on colour alone.
+     *
+     * @param text the status in words
+     * @param tone the status colour
+     * @return the pill
+     */
+    public static Label pill(String text, Tone tone) {
+        Circle dot = new Circle(DOT_RADIUS);
+        dot.getStyleClass().add("pill-dot");
+        Label pill = new Label(text, dot);
+        pill.getStyleClass().addAll("pill", tone.getStyleClass());
+        pill.setMinWidth(Region.USE_PREF_SIZE);
+        return pill;
+    }
+
+    /**
+     * Returns the blue pill button that moves to the next step.
+     *
+     * @param text the button text
+     * @return the button
+     */
+    public static Button primary(String text) {
+        Button button = new Button(text);
+        button.getStyleClass().addAll("accent", "primary-pill");
+        button.setDefaultButton(false);
+        button.setMinWidth(Region.USE_PREF_SIZE);
+        return button;
+    }
+
+    /**
+     * Returns a plain secondary button.
+     *
+     * @param text the button text
+     * @param action what it does
+     * @return the button
+     */
+    public static Button secondary(String text, Runnable action) {
+        Button button = new Button(text);
+        button.getStyleClass().add("secondary");
+        button.setMinWidth(Region.USE_PREF_SIZE);
+        button.setOnAction(event -> action.run());
+        return button;
+    }
+
+    /**
+     * Returns a small secondary button, for actions inside a card.
+     *
+     * @param text the button text
+     * @param action what it does
+     * @return the button
+     */
+    public static Button small(String text, Runnable action) {
+        Button button = secondary(text, action);
+        button.getStyleClass().add("small");
+        return button;
+    }
+
+    /**
+     * Returns a blue text link.
+     *
+     * @param text the link text
+     * @param action what it does
+     * @return the link
+     */
+    public static Hyperlink link(String text, Runnable action) {
+        Hyperlink link = new Hyperlink(text);
+        link.getStyleClass().add("flow-link");
+        link.setMinWidth(Region.USE_PREF_SIZE);
+        link.setOnAction(event -> action.run());
+        return link;
+    }
+
+    /**
+     * Returns an empty region that takes the spare width of a row.
+     *
+     * @return the region
+     */
+    public static Region grow() {
+        Region region = new Region();
+        HBox.setHgrow(region, Priority.ALWAYS);
+        VBox.setVgrow(region, Priority.ALWAYS);
+        return region;
+    }
+
+    /**
+     * Returns a row of nodes, centred vertically.
+     *
+     * @param spacing the gap between nodes
+     * @param nodes the nodes
+     * @return the row
+     */
+    public static HBox row(double spacing, Node... nodes) {
+        HBox row = new HBox(spacing, nodes);
+        row.setAlignment(Pos.CENTER_LEFT);
+        return row;
+    }
+
+    /**
+     * Returns a line icon drawn from a path in a 24 by 24 box.
+     *
+     * @param path one of the path constants of this class
+     * @param size the width and height in pixels
+     * @return the icon
+     */
+    public static Node icon(String path, double size) {
+        SVGPath shape = new SVGPath();
+        shape.setContent(path);
+        shape.getStyleClass().add("icon");
+        double scale = size / ICON_BOX;
+        shape.setScaleX(scale);
+        shape.setScaleY(scale);
+        Group group = new Group(shape);
+        group.getStyleClass().add("icon-box");
+        return group;
+    }
+
+    /**
+     * Returns a count and a word, adding "s" when the count is not one.
+     *
+     * @param count the count
+     * @param word the singular word
+     * @return the text, such as "3 files"
+     */
+    public static String plural(int count, String word) {
+        if (count == 1) {
+            return count + " " + word;
+        }
+        return count + " " + word + "s";
+    }
+
+    /**
+     * Returns a count and a word, with an irregular plural.
+     *
+     * @param count the count
+     * @param word the singular word
+     * @param words the plural word
+     * @return the text, such as "3 fixes"
+     */
+    public static String plural(int count, String word, String words) {
+        if (count == 1) {
+            return count + " " + word;
+        }
+        return count + " " + words;
+    }
+
+    /**
+     * Formats a mark without a needless ".0".
+     *
+     * @param mark the mark
+     * @return the text, such as "12" or "2.5"
+     */
+    public static String mark(double mark) {
+        if (mark == Math.rint(mark)) {
+            return String.valueOf((long) mark);
+        }
+        return String.valueOf(mark);
+    }
+
+    // Adds a style class to a label and returns it.
+    private static Label styled(Label label, String styleClass) {
+        label.getStyleClass().add(styleClass);
+        return label;
+    }
+}
