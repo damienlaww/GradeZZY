@@ -1,6 +1,43 @@
 # GradeZZY UI redesign: Guided steps
 
-Date: 2026-10-28. Status: draft for approval.
+Date: 2026-10-28. Status: built (round 2 approved and implemented the
+same day).
+
+## Round 2 (2026-10-28): what changed after the user tried Phase 1
+
+The user approved browser drafts of round 2 before any code was
+written. Where this section and the older text below disagree, this
+section wins.
+
+- **The four steps are for marking only.** The top bar holds four tabs:
+  Marking, Statistics, Runs and Settings, with Help on the right. The
+  step row (Set up, Grade, Review, Export) sits under the tabs, centred
+  on the window, and only on Marking.
+- **Settings are always visible.** Settings is a full tab listing every
+  setting in `config.properties`, grouped (Course, Files and folders,
+  Assessment, Checks and fixes, Running code, Similar code, Statistics,
+  Saved data, Appearance, Advanced), with a search, switches for on/off
+  values and an unsaved-changes bar. Set up shows a "Grading settings"
+  card with what the run will use.
+- **Statistics with pictures.** A Statistics tab with a bell curve of the
+  totals (bars per mark, the curve, the band where most students fall,
+  the average and the pass mark), a chart per question, a ring of where
+  students are, the most failed test, common compile errors, and a
+  comparison of up to three sections (curves in colours checked for
+  colour blindness, with a table). Grade and Export show a small bell
+  curve.
+- **Runs** replaces History: every run with its average, plus Backups and
+  Activity.
+- **Alignment and shadows.** No shadow on anything that sits on the
+  page (only dialogs, menus and tooltips float); icons in a fixed 20 px
+  column; hairlines only between rows; one spacing scale; forms in a
+  centred 760 px column, tables and charts full width with 32 px
+  margins.
+- **The old window is deleted** (controllers, `ui.view`,
+  `ui.component`, FXML, `app.css`, `--classic`). The checks were
+  rewritten for the new window: `FlowCheck` (`--check`, `--snapshot`),
+  `FlowSelfTest` (`--selftest`, the seven demo flows) and
+  `FlowWindowTest` (`--windowtest`).
 
 ## Why
 
@@ -281,9 +318,8 @@ keyboard shortcuts, and where files are saved.
   JavaFX thread and updates the screen through `Platform.runLater`.
 - `MainApp` keeps its command-line options (`--demo`, `--check`,
   `--selftest`, `--snapshot`, `--windowtest`).
-- The work stays uncommitted in the working folder until the user
-  decides to commit; no branch is created, pushed or opened as a pull
-  request unless the user asks.
+- Round 2 was committed on branch `jingyuan/ui-redesign` and merged
+  into `main` through a pull request, as the user asked.
 
 ## Phases
 
@@ -293,7 +329,7 @@ History, Settings and Help in a simple form. The old screen classes stay
 in place (unused) so the build and the existing checks keep compiling.
 The user runs `sh run.sh --demo`, tries it and gives feedback.
 
-**Phase 2: complete.** After the user approves Phase 1: every remaining
+**Phase 2: complete (done in round 2).** After the user approves Phase 1: every remaining
 feature from the table above, the sheets, the old screen classes
 deleted, `ScreenCheck`, `SelfTest` and the snapshot and window tests
 rewritten for the new screens (the same seven demo flows), README,
@@ -311,14 +347,11 @@ question counts only what the instructor can actually settle.
 
 - Screens are built in Java code with one stylesheet, not FXML: one
   readable class per screen and nothing to keep in sync.
-- The new code lives in `gradezzy.ui.flow` during Phase 1 so the old
-  screens still compile beside it; `sh run.sh --classic` opens the old
-  window until Phase 2 removes it.
+- The new code lives in `gradezzy.ui.flow`. The old screens were deleted
+  in round 2 at the user's request.
 - The 6,000-line figure is a goal, not a limit. Keeping every feature
   wins over it.
-- Phase 2 (deleting the old screens) waits for the user's approval of
-  the prototype and agreement from the teammates who own the `ui`
-  package.
+- Phase 2 was done at the user's request on 2026-10-28.
 
 ## Left to the builder
 

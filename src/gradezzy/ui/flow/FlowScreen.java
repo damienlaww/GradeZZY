@@ -56,6 +56,16 @@ public abstract class FlowScreen {
     }
 
     /**
+     * Called when Esc is pressed and no sheet is open, so the screen can
+     * close a panel of its own.
+     *
+     * @return true when the screen used the key
+     */
+    public boolean onEscape() {
+        return false;
+    }
+
+    /**
      * Returns the window that shows this screen.
      *
      * @return the window

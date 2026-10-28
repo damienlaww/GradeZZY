@@ -654,6 +654,20 @@ public class ReviewScreen extends FlowScreen {
         panel.setManaged(true);
     }
 
+    /**
+     * Closes the student panel when Esc is pressed.
+     *
+     * @return true when the panel was open
+     */
+    @Override
+    public boolean onEscape() {
+        if (!panel.isVisible()) {
+            return false;
+        }
+        closePanel();
+        return true;
+    }
+
     // Hides the panel and forgets the clicked row, so it can be clicked
     // again.
     private void closePanel() {

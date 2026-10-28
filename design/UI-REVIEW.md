@@ -1,5 +1,10 @@
 # GradeZZY UI: design, accessibility and verification review
 
+> **Superseded (2026-10-28).** This review covers the earlier 16-screen
+> window, which has been replaced by the window in `gradezzy.ui.flow`
+> (design: `design/redesign/2026-10-28-ui-redesign-design.md`). It is
+> kept for reference only.
+
 For the team and the CS102 markers. It records the final design tokens,
 how the interface meets Nielsen's ten heuristics, the accessibility and
 consistency review, where the build differs from Damien's concept

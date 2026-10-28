@@ -525,6 +525,14 @@ public class FlowWindow {
         screen.onShow();
     }
 
+    // Returns the screen on display.
+    private FlowScreen currentScreen() {
+        if (currentPage == Page.MARKING) {
+            return getScreen(currentStep);
+        }
+        return getPageScreen(currentPage);
+    }
+
     // Returns the Grade screen, creating it if needed.
     private GradeScreen gradeScreen() {
         return (GradeScreen) getScreen(Step.GRADE);
@@ -594,6 +602,9 @@ public class FlowWindow {
                 event.consume();
             } else if (event.getCode() == KeyCode.ESCAPE && sheet != null) {
                 closeSheet();
+                event.consume();
+            } else if (event.getCode() == KeyCode.ESCAPE
+                    && currentScreen().onEscape()) {
                 event.consume();
             } else if (event.isShortcutDown() && sheet == null) {
                 for (int i = 0; i < numbers.length; i++) {

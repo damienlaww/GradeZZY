@@ -157,7 +157,8 @@ public class ImportBatch {
             }
             if (other.getKind() == InputKind.SUBMISSION
                     && other.getState().isUsable()
-                    && other.getUsername().equalsIgnoreCase(item.getUsername())) {
+                    && other.getUsername().equalsIgnoreCase(
+                            item.getUsername())) {
                 return ImportState.DUPLICATE;
             }
         }

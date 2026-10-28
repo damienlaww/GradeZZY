@@ -499,7 +499,7 @@ public final class DemoData {
                 AnomalyType.MISSING_WRAPPER_FOLDER, Severity.INFO,
                 submission.getUsername(), "Q1, Q2 and Q3 were at the top of "
                 + "the ZIP file instead of inside a learner.alpha folder.",
-                "Approve the repair if the new folder is right.");
+                "Approve the fix if the new folder is right.");
         wrapper.setFixStatus(FixStatus.APPLIED);
         submission.addAnomaly(wrapper);
     }
@@ -566,7 +566,7 @@ public final class DemoData {
                 AnomalyType.WRONG_FILE_NAME, Severity.WARNING, username,
                 "Q2/q2b.java should be named Q2/Q2b.java. Working copy "
                 + "file: " + found,
-                "Rename the file by hand. No automatic repair exists for "
+                "Rename the file by hand. No automatic fix exists for "
                 + "file names."));
     }
 
