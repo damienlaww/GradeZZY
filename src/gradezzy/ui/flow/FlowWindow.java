@@ -1,9 +1,10 @@
 /*
  * File: FlowWindow.java
  *
- * Purpose: The guided window: a top bar with the four steps, one screen
- * at a time in the middle, and the action bar at the bottom. Moves
- * between steps and opens History, Settings, Help and small sheets.
+ * Purpose: The window: a top bar with the tabs Marking, Statistics, Runs
+ * and Settings; under it, on Marking only, the row of four steps; one
+ * screen at a time in the middle; and the action bar at the bottom on the
+ * screens that use it. Opens Help and small sheets over the screen.
  *
  * Where it fits: MainApp builds one and shows its scene. Every screen
  * reaches the backend, the shared state and the action bar through it.
@@ -26,6 +27,7 @@ import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
@@ -36,7 +38,7 @@ import gradezzy.ui.ThemeManager;
 import gradezzy.ui.backend.DashboardBackend;
 
 /**
- * The window of the guided steps design.
+ * The window of GradeZZY.
  */
 public class FlowWindow {
 
@@ -46,11 +48,8 @@ public class FlowWindow {
     // How long a notice stays on screen
     private static final Duration NOTICE_TIME = Duration.seconds(3.5);
 
-    // The size of the icons in the top bar
+    // The size of the icon of the Help button
     private static final double TOP_ICON_SIZE = 16.0;
-
-    // The gap between items in the top bar
-    private static final double TOP_GAP = 4.0;
 
     // The backend every screen calls
     private final DashboardBackend backend;
@@ -70,8 +69,14 @@ public class FlowWindow {
     // Holds the current screen
     private final StackPane content = new StackPane();
 
+    // The tabs along the top
+    private final TabBar tabBar = new TabBar(page -> showPage(page));
+
     // The four steps
     private final StepBar stepBar = new StepBar(step -> show(step));
+
+    // The row that holds the steps, shown on Marking only
+    private final HBox stepRow = new HBox(stepBar);
 
     // The bottom bar
     private final ActionBar actionBar = new ActionBar();
@@ -79,14 +84,18 @@ public class FlowWindow {
     // The step screens, created when first shown
     private final Map<Step, FlowScreen> screens = new EnumMap<>(Step.class);
 
+    // The screens of Statistics, Runs and Settings, created when first
+    // shown
+    private final Map<Page, FlowScreen> pages = new EnumMap<>(Page.class);
+
     // The notice that fades in at the bottom
     private final Label notice = new Label();
 
-    // The step on screen, or under the open page
+    // The step Marking shows
     private Step currentStep = Step.SET_UP;
 
-    // The open page (History or Settings), or null
-    private FlowScreen page = null;
+    // The tab on screen
+    private Page currentPage = Page.MARKING;
 
     // The open sheet, or null
     private Node sheet = null;
@@ -118,8 +127,9 @@ public class FlowWindow {
     public Scene build(double width, double height) {
         themes.apply(themeName());
         frame.getStyleClass().add("flow-root");
-        frame.setTop(createTopBar());
-        frame.setBottom(actionBar);
+        stepRow.getStyleClass().add("step-row");
+        stepRow.setAlignment(Pos.CENTER);
+        frame.setTop(new VBox(createTopBar(), stepRow));
 
         content.getStyleClass().add("flow-content");
         notice.getStyleClass().add("notice");
@@ -141,7 +151,7 @@ public class FlowWindow {
     }
 
     /**
-     * Shows a step, if the instructor may open it.
+     * Shows a step on the Marking tab, if the instructor may open it.
      *
      * @param step the step
      */
@@ -149,18 +159,45 @@ public class FlowWindow {
         if (step.ordinal() > state.getFurthest().ordinal()) {
             return;
         }
-        closeSheet();
-        page = null;
         currentStep = step;
-        FlowScreen screen = screens.get(step);
-        if (screen == null) {
-            screen = createScreen(step);
-            screens.put(step, screen);
+        currentPage = Page.MARKING;
+        display(getScreen(step));
+    }
+
+    /**
+     * Shows a tab. Marking shows the step the instructor was on.
+     *
+     * @param page the tab
+     */
+    public void showPage(Page page) {
+        if (page == Page.MARKING) {
+            show(currentStep);
+            return;
         }
-        actionBar.reset();
-        content.getChildren().setAll(screen.getView());
-        screen.onShow();
-        stepBar.update(currentStep, state.getFurthest(), false);
+        currentPage = page;
+        display(getPageScreen(page));
+    }
+
+    /**
+     * Returns the tab on screen.
+     *
+     * @return the tab
+     */
+    public Page getCurrentPage() {
+        return currentPage;
+    }
+
+    /**
+     * Opens the Statistics tab on one section.
+     *
+     * @param moduleCode the module, such as CS102
+     * @param sectionCode the section, such as G1
+     */
+    public void openStatistics(String moduleCode, String sectionCode) {
+        StatisticsScreen statistics =
+                (StatisticsScreen) getPageScreen(Page.STATISTICS);
+        statistics.selectSection(moduleCode, sectionCode);
+        showPage(Page.STATISTICS);
     }
 
     /**
@@ -172,6 +209,7 @@ public class FlowWindow {
         state.reach(step);
         show(step);
     }
+
 
     /**
      * Starts grading the batch chosen on Set up and shows the Grade
@@ -230,33 +268,19 @@ public class FlowWindow {
      * @return true when on screen
      */
     public boolean isOnScreen(FlowScreen screen) {
-        if (page != null) {
-            return page == screen;
+        if (currentPage != Page.MARKING) {
+            return pages.get(currentPage) == screen;
         }
         return screens.get(currentStep) == screen;
     }
 
     /**
-     * Returns the step on screen, or under the open page.
+     * Returns the step the Marking tab shows.
      *
      * @return the step
      */
     public Step getCurrentStep() {
         return currentStep;
-    }
-
-    /**
-     * Opens History over the current step.
-     */
-    public void showHistory() {
-        openPage(new HistoryScreen(this));
-    }
-
-    /**
-     * Opens Settings over the current step.
-     */
-    public void showSettings() {
-        openPage(new SettingsScreen(this));
     }
 
     /**
@@ -267,19 +291,10 @@ public class FlowWindow {
     }
 
     /**
-     * Closes History or Settings and returns to the step.
+     * Returns to the Marking tab, on the step the instructor was on.
      */
     public void closePage() {
         show(currentStep);
-    }
-
-    /**
-     * Says whether History or Settings is open.
-     *
-     * @return true while a page is open
-     */
-    public boolean isPageOpen() {
-        return page != null;
     }
 
     /**
@@ -302,6 +317,7 @@ public class FlowWindow {
         });
         sheet = dim;
         layers.getChildren().add(layers.getChildren().size() - 1, dim);
+        actionBar.setDisable(true);
     }
 
     /**
@@ -312,6 +328,7 @@ public class FlowWindow {
             layers.getChildren().remove(sheet);
             sheet = null;
         }
+        actionBar.setDisable(false);
     }
 
     /**
@@ -417,6 +434,24 @@ public class FlowWindow {
     }
 
     /**
+     * Returns the tabs, for the developer checks.
+     *
+     * @return the tab bar
+     */
+    public TabBar getTabBar() {
+        return tabBar;
+    }
+
+    /**
+     * Says whether a sheet is open, for the developer checks.
+     *
+     * @return true while a sheet is open
+     */
+    public boolean isSheetOpen() {
+        return sheet != null;
+    }
+
+    /**
      * Returns the root of the scene, for the developer checks.
      *
      * @return the root
@@ -456,6 +491,40 @@ public class FlowWindow {
         return screen;
     }
 
+    /**
+     * Returns the screen of a tab other than Marking, creating it if
+     * needed. Used by the developer checks.
+     *
+     * @param page Statistics, Runs or Settings
+     * @return the screen
+     */
+    public FlowScreen getPageScreen(Page page) {
+        FlowScreen screen = pages.get(page);
+        if (screen == null) {
+            screen = createPage(page);
+            pages.put(page, screen);
+        }
+        return screen;
+    }
+
+    // Puts a screen in the middle of the window and fills the bars.
+    private void display(FlowScreen screen) {
+        closeSheet();
+        actionBar.reset();
+        content.getChildren().setAll(screen.getView());
+        boolean marking = currentPage == Page.MARKING;
+        stepRow.setVisible(marking);
+        stepRow.setManaged(marking);
+        tabBar.select(currentPage);
+        stepBar.update(currentStep, state.getFurthest(), false);
+        if (screen.usesActionBar()) {
+            frame.setBottom(actionBar);
+        } else {
+            frame.setBottom(null);
+        }
+        screen.onShow();
+    }
+
     // Returns the Grade screen, creating it if needed.
     private GradeScreen gradeScreen() {
         return (GradeScreen) getScreen(Step.GRADE);
@@ -473,31 +542,34 @@ public class FlowWindow {
         return new SetUpScreen(this);
     }
 
-    // Shows History or Settings in place of the step.
-    private void openPage(FlowScreen newPage) {
-        closeSheet();
-        page = newPage;
-        actionBar.reset();
-        content.getChildren().setAll(newPage.getView());
-        newPage.onShow();
-        stepBar.update(currentStep, state.getFurthest(), true);
+    // Creates the screen of a tab other than Marking.
+    private FlowScreen createPage(Page page) {
+        if (page == Page.STATISTICS) {
+            return new StatisticsScreen(this);
+        } else if (page == Page.RUNS) {
+            return new RunsScreen(this);
+        }
+        return new SettingsScreen(this);
     }
 
-    // Builds the logo, step bar and the three links on the right.
-    private HBox createTopBar() {
+    // Builds the logo on the left, the tabs in the exact middle of the
+    // window and Help on the right.
+    private StackPane createTopBar() {
         Label mark = new Label("G");
         mark.getStyleClass().add("logo-mark");
         Label name = new Label("GradeZZY");
         name.getStyleClass().add("logo-name");
         HBox logo = Parts.row(Parts.GAP_SMALL, mark, name);
+        logo.setMaxWidth(Region.USE_PREF_SIZE);
+        StackPane.setAlignment(logo, Pos.CENTER_LEFT);
 
-        HBox links = Parts.row(TOP_GAP,
-                topLink("History", Parts.CLOCK, () -> showHistory()),
-                topLink("Settings", Parts.GEAR, () -> showSettings()),
-                topLink("Help", Parts.HELP, () -> showHelp()));
+        tabBar.setMaxWidth(Region.USE_PREF_SIZE);
+        StackPane.setAlignment(tabBar, Pos.CENTER);
 
-        HBox bar = Parts.row(0, logo, Parts.grow(), stepBar, Parts.grow(),
-                links);
+        Button help = topLink("Help", Parts.HELP, () -> showHelp());
+        StackPane.setAlignment(help, Pos.CENTER_RIGHT);
+
+        StackPane bar = new StackPane(logo, tabBar, help);
         bar.getStyleClass().add("top-bar");
         return bar;
     }
@@ -523,10 +595,7 @@ public class FlowWindow {
             } else if (event.getCode() == KeyCode.ESCAPE && sheet != null) {
                 closeSheet();
                 event.consume();
-            } else if (event.getCode() == KeyCode.ESCAPE && page != null) {
-                closePage();
-                event.consume();
-            } else if (event.isShortcutDown()) {
+            } else if (event.isShortcutDown() && sheet == null) {
                 for (int i = 0; i < numbers.length; i++) {
                     if (event.getCode() == numbers[i]) {
                         show(Step.values()[i]);

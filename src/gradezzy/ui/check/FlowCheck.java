@@ -29,6 +29,7 @@ import gradezzy.ui.backend.LiveBackend;
 import gradezzy.ui.demo.DemoBackend;
 import gradezzy.ui.demo.DemoData;
 import gradezzy.ui.flow.FlowWindow;
+import gradezzy.ui.flow.Page;
 import gradezzy.ui.flow.ReviewScreen;
 import gradezzy.ui.flow.Step;
 
@@ -121,13 +122,19 @@ public class FlowCheck {
                     window.show(step);
                 }
             }
-            window.showHistory();
-            shoot(scene, tag, "7-history");
-            window.showSettings();
-            shoot(scene, tag, "8-settings");
-            window.closePage();
+            markingExtras(window, backend, scene, tag);
+            window.showPage(Page.STATISTICS);
+            shoot(scene, tag, "7-statistics");
+            statisticsExtras(window, backend, scene, tag);
+            window.showPage(Page.RUNS);
+            shoot(scene, tag, "8-runs");
+            runsExtras(window, backend, scene, tag);
+            window.showPage(Page.SETTINGS);
+            shoot(scene, tag, "9-settings");
+            settingsExtras(window, backend, scene, tag);
+            window.showPage(Page.MARKING);
             window.showHelp();
-            shoot(scene, tag, "9-help");
+            shoot(scene, tag, "10-help");
             window.closeSheet();
             shootGrading(window, backend, scene, tag);
         } catch (RuntimeException exception) {
@@ -142,6 +149,31 @@ public class FlowCheck {
         }
         System.out.println("Loaded guided window (" + tag + ")");
         return 0;
+    }
+
+    // Opens more states of the Marking steps, such as sheets and filters.
+    private void markingExtras(FlowWindow window, DashboardBackend backend,
+            Scene scene, String tag) throws IOException {
+        // Pictures are named "5x-..." so they sort after Review
+    }
+
+    // Opens more states of the Statistics tab, such as Compare sections.
+    private void statisticsExtras(FlowWindow window,
+            DashboardBackend backend, Scene scene, String tag)
+            throws IOException {
+        // Pictures are named "7x-..."
+    }
+
+    // Opens more states of the Runs tab, such as Backups and Activity.
+    private void runsExtras(FlowWindow window, DashboardBackend backend,
+            Scene scene, String tag) throws IOException {
+        // Pictures are named "8x-..."
+    }
+
+    // Opens more states of the Settings tab, such as a changed setting.
+    private void settingsExtras(FlowWindow window, DashboardBackend backend,
+            Scene scene, String tag) throws IOException {
+        // Pictures are named "9x-..."
     }
 
     // Starts grading the usable sample files and takes one picture.

@@ -15,9 +15,11 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.SVGPath;
@@ -73,11 +75,28 @@ public final class Parts {
     public static final String DOWNLOAD = "M12 4v11M7 10l5 5 5-5"
             + "M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4";
 
+    /** A tick in a box, for the Marking tab. */
+    public static final String MARKING = "M9 11l3 3L21 4"
+            + "M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11";
+
+    /** Axes with a curve, for the Statistics tab. */
+    public static final String CHART = "M4 4v16h16"
+            + "M7 16c2-5 3.5-8 5.5-8s3 4 6.5 8";
+
     /** The usual gap between parts of a row or card. */
     public static final double GAP = 12.0;
 
     /** A smaller gap, between an icon and its text. */
     public static final double GAP_SMALL = 8.0;
+
+    /** The gap between cards. */
+    public static final double CARD_GAP = 12.0;
+
+    /** The width of the centred column of forms (Set up, Export). */
+    public static final double COLUMN_WIDTH = 760.0;
+
+    /** The gap between a figure's value and its unit. */
+    public static final double FIGURE_UNIT_GAP = 4.0;
 
     /** The widest a paragraph in a sheet may be. */
     public static final double TEXT_WIDTH = 420.0;
@@ -293,6 +312,92 @@ public final class Parts {
     }
 
     /**
+     * Returns a scrolling page with a centred column of fixed width, for
+     * forms such as Set up and Export.
+     *
+     * @param content the header and cards, top to bottom
+     * @return the page
+     */
+    public static ScrollPane narrowPage(Node... content) {
+        VBox column = new VBox(CARD_GAP, content);
+        column.getStyleClass().add("narrow-column");
+        column.setMaxWidth(COLUMN_WIDTH);
+        column.setPrefWidth(COLUMN_WIDTH);
+        StackPane centre = new StackPane(column);
+        centre.setAlignment(Pos.TOP_CENTER);
+        return scroll(centre);
+    }
+
+    /**
+     * Returns a scrolling page that uses the full width with even
+     * margins, for tables and charts such as Statistics and Runs.
+     *
+     * @param content the header and cards, top to bottom
+     * @return the page
+     */
+    public static ScrollPane widePage(Node... content) {
+        VBox column = new VBox(CARD_GAP, content);
+        column.getStyleClass().add("wide-column");
+        return scroll(column);
+    }
+
+    /**
+     * Returns a figure tile: a small label, a large value with an
+     * optional unit, and an optional line under it.
+     *
+     * @param label the label, such as "Average"
+     * @param value the value, such as "12.4"
+     * @param unit the unit after the value, such as "/ 20", or null
+     * @param hint the line under the value, or null
+     * @return the tile
+     */
+    public static VBox figure(String label, String value, String unit,
+            String hint) {
+        Label name = styled(new Label(label), "figure-label");
+        Label number = styled(new Label(value), "figure-value");
+        number.setMinWidth(Region.USE_PREF_SIZE);
+        HBox line = new HBox(FIGURE_UNIT_GAP, number);
+        line.setAlignment(Pos.BASELINE_LEFT);
+        if (unit != null) {
+            Label after = styled(new Label(unit), "figure-unit");
+            after.setMinWidth(Region.USE_PREF_SIZE);
+            line.getChildren().add(after);
+        }
+        VBox tile = new VBox(name, line);
+        tile.getStyleClass().add("figure");
+        if (hint != null) {
+            tile.getChildren().add(styled(new Label(hint), "figure-hint"));
+        }
+        HBox.setHgrow(tile, Priority.ALWAYS);
+        tile.setMaxWidth(Double.MAX_VALUE);
+        return tile;
+    }
+
+    /**
+     * Returns a thin bar that fills a share of its width, such as a
+     * score out of the maximum.
+     *
+     * @param fraction the share to fill, from 0 to 1
+     * @param tone the colour, or null for the accent blue
+     * @return the bar
+     */
+    public static StackPane track(double fraction, Tone tone) {
+        double share = Math.max(0, Math.min(1, fraction));
+        Region bar = new Region();
+        bar.getStyleClass().add("track-fill");
+        if (tone != null) {
+            bar.getStyleClass().add(tone.getStyleClass());
+        }
+        StackPane track = new StackPane(bar);
+        track.getStyleClass().add("track");
+        track.setAlignment(Pos.CENTER_LEFT);
+        bar.maxWidthProperty().bind(track.widthProperty().multiply(share));
+        bar.minWidthProperty().bind(bar.maxWidthProperty());
+        HBox.setHgrow(track, Priority.ALWAYS);
+        return track;
+    }
+
+    /**
      * Returns a count and a word, adding "s" when the count is not one.
      *
      * @param count the count
@@ -332,6 +437,15 @@ public final class Parts {
             return String.valueOf((long) mark);
         }
         return String.valueOf(mark);
+    }
+
+    // Wraps a page in a scroll pane that only scrolls up and down.
+    private static ScrollPane scroll(Node content) {
+        ScrollPane pane = new ScrollPane(content);
+        pane.setFitToWidth(true);
+        pane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        pane.getStyleClass().add("page-scroll");
+        return pane;
     }
 
     // Adds a style class to a label and returns it.

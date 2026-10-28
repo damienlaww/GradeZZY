@@ -45,6 +45,17 @@ public abstract class FlowScreen {
     public abstract void onShow();
 
     /**
+     * Says whether the screen fills the action bar at the bottom. Pages
+     * without a next step, such as Statistics and Runs, return false so
+     * the bar is hidden.
+     *
+     * @return true to show the action bar
+     */
+    public boolean usesActionBar() {
+        return true;
+    }
+
+    /**
      * Returns the window that shows this screen.
      *
      * @return the window

@@ -1,5 +1,5 @@
 /*
- * File: HistoryScreen.java
+ * File: RunsScreen.java
  *
  * Purpose: Earlier grading runs (open, resume or restore one), backups,
  * and the activity log of what instructors did.
@@ -34,7 +34,7 @@ import gradezzy.ui.backend.RunRecord;
 /**
  * The History page.
  */
-public class HistoryScreen extends FlowScreen {
+public class RunsScreen extends FlowScreen {
 
     // How dates are shown
     private static final DateTimeFormatter WHEN =
@@ -63,7 +63,7 @@ public class HistoryScreen extends FlowScreen {
      *
      * @param window the window
      */
-    public HistoryScreen(FlowWindow window) {
+    public RunsScreen(FlowWindow window) {
         super(window);
         activitySearch.setPromptText("Search the activity");
         activitySearch.textProperty().addListener((observable, before,

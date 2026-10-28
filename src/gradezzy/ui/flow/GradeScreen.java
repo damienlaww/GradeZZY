@@ -249,7 +249,7 @@ public class GradeScreen extends FlowScreen
         getWindow().notify("Grading finished.");
         getState().reach(Step.REVIEW);
         if (getWindow().getCurrentStep() == Step.GRADE
-                && !getWindow().isPageOpen()) {
+                && getWindow().getCurrentPage() == Page.MARKING) {
             getWindow().show(Step.REVIEW);
         }
     }
