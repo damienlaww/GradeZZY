@@ -66,7 +66,8 @@ public class SqliteResultRepository implements ResultRepository {
                 + "section_code TEXT, "
                 + "assessment_name TEXT, "
                 + "assessment_module TEXT, "
-                + "placeholder_folders TEXT)",
+                + "placeholder_folders TEXT, "
+                + "score_sheet_file TEXT)",
         "CREATE TABLE IF NOT EXISTS run_questions ("
                 + "run_id TEXT NOT NULL, "
                 + "position INTEGER NOT NULL, "
@@ -128,10 +129,20 @@ public class SqliteResultRepository implements ResultRepository {
                 + "detail TEXT)"
     };
 
+    // The score sheet column was added after the first release. A database
+    // made before it has no such column, so open adds it.
+    private static final String SCORE_SHEET_COLUMN = "score_sheet_file";
+
+    // Lists the columns of the runs table, one row per column
+    private static final String LIST_RUN_COLUMNS = "PRAGMA table_info(runs)";
+
+    private static final String ADD_SCORE_SHEET_COLUMN = "ALTER TABLE runs "
+            + "ADD COLUMN score_sheet_file TEXT";
+
     private static final String INSERT_RUN = "INSERT OR REPLACE INTO runs "
             + "(run_id, started_at, module_code, section_code, "
-            + "assessment_name, assessment_module, placeholder_folders) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?)";
+            + "assessment_name, assessment_module, placeholder_folders, "
+            + "score_sheet_file) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String INSERT_QUESTION = "INSERT INTO "
             + "run_questions (run_id, position, question_id, folder_name, "
@@ -179,8 +190,8 @@ public class SqliteResultRepository implements ResultRepository {
 
     private static final String SELECT_RUN = "SELECT started_at, "
             + "module_code, section_code, assessment_name, "
-            + "assessment_module, placeholder_folders FROM runs "
-            + "WHERE run_id = ?";
+            + "assessment_module, placeholder_folders, score_sheet_file "
+            + "FROM runs WHERE run_id = ?";
 
     // Newest first; a run without a start time comes last
     private static final String SELECT_RUN_IDS = "SELECT run_id FROM runs "
@@ -259,7 +270,6 @@ public class SqliteResultRepository implements ResultRepository {
      *
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public synchronized void open() throws PersistenceException {
         if (connection != null) {
@@ -297,7 +307,6 @@ public class SqliteResultRepository implements ResultRepository {
     /**
      * Closes the store. Safe to call twice.
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public synchronized void close() {
         if (connection == null) {
@@ -322,7 +331,6 @@ public class SqliteResultRepository implements ResultRepository {
      * @param gradingRun the grading run
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public synchronized void saveRun(GradingRun gradingRun)
             throws PersistenceException {
@@ -365,7 +373,6 @@ public class SqliteResultRepository implements ResultRepository {
      * @return the run, or null if the id is unknown
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public synchronized GradingRun loadRun(String runId)
             throws PersistenceException {
@@ -408,7 +415,6 @@ public class SqliteResultRepository implements ResultRepository {
      * @return the saved runs
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public synchronized List<GradingRun> listRuns()
             throws PersistenceException {
@@ -443,7 +449,6 @@ public class SqliteResultRepository implements ResultRepository {
      * @param submission the submission
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public synchronized void saveSubmission(String runId,
             Submission submission) throws PersistenceException {
@@ -489,7 +494,6 @@ public class SqliteResultRepository implements ResultRepository {
      * @param fixStatus the fix status
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public synchronized void updateFixStatus(String anomalyId,
             FixStatus fixStatus) throws PersistenceException {
@@ -517,7 +521,6 @@ public class SqliteResultRepository implements ResultRepository {
      * @param auditEntry the audit entry
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public synchronized void appendAudit(AuditEntry auditEntry)
             throws PersistenceException {
@@ -545,7 +548,6 @@ public class SqliteResultRepository implements ResultRepository {
      * @return the audit entries
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     @Override
     public synchronized List<AuditEntry> listAudit()
             throws PersistenceException {
@@ -577,18 +579,35 @@ public class SqliteResultRepository implements ResultRepository {
      *
      * @throws PersistenceException if the operation fails
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     private void createTables() throws PersistenceException {
         // Fixed text with no values in it, so a plain Statement is safe
         try (Statement statement = connection.createStatement()) {
             for (String sql : CREATE_TABLES) {
                 statement.executeUpdate(sql);
             }
+            if (!hasScoreSheetColumn(statement)) {
+                statement.executeUpdate(ADD_SCORE_SHEET_COLUMN);
+            }
         } catch (SQLException exception) {
             throw new PersistenceException("The tables of " + databaseFile
                     + " could not be created: " + exception.getMessage(),
                     exception);
         }
+    }
+
+    // Says whether the runs table already has the score sheet column. A
+    // database made before the column existed does not.
+    private boolean hasScoreSheetColumn(Statement statement)
+            throws SQLException {
+        boolean found = false;
+        try (ResultSet columns = statement.executeQuery(LIST_RUN_COLUMNS)) {
+            while (columns.next()) {
+                if (SCORE_SHEET_COLUMN.equals(columns.getString("name"))) {
+                    found = true;
+                }
+            }
+        }
+        return found;
     }
 
     // Fails with a clear message when open was not called or failed
@@ -637,6 +656,7 @@ public class SqliteResultRepository implements ResultRepository {
             statement.setString(7, assessment == null ? null
                     : String.join(LIST_SEPARATOR,
                             assessment.getPlaceholderFolderNames()));
+            statement.setString(8, textOf(gradingRun.getScoreSheetFile()));
             statement.executeUpdate();
         }
     }
@@ -785,6 +805,7 @@ public class SqliteResultRepository implements ResultRepository {
         Assessment assessment = null;
         Section section = null;
         LocalDateTime startedAt = null;
+        Path scoreSheetFile = null;
         try (PreparedStatement statement =
                 connection.prepareStatement(SELECT_RUN)) {
             statement.setString(1, runId);
@@ -800,6 +821,7 @@ public class SqliteResultRepository implements ResultRepository {
                         rows.getString("assessment_module"));
                 addPlaceholders(assessment,
                         rows.getString("placeholder_folders"));
+                scoreSheetFile = toPath(rows.getString(SCORE_SHEET_COLUMN));
             }
         }
 
@@ -816,7 +838,10 @@ public class SqliteResultRepository implements ResultRepository {
                 }
             }
         }
-        return new GradingRun(runId, assessment, section, startedAt);
+        GradingRun gradingRun = new GradingRun(runId, assessment, section,
+                startedAt);
+        gradingRun.setScoreSheetFile(scoreSheetFile);
+        return gradingRun;
     }
 
     // Splits the saved placeholder names back into the assessment

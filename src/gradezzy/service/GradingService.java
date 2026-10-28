@@ -90,7 +90,6 @@ public class GradingService {
      * @param repository the store runs are saved to, or null to save
      *        nothing
      */
-    // Added by Claude Opus 5.5 for Huxley's repository; reviewed by Huxley
     public GradingService(AppConfig config, PipelineFactory pipelineFactory,
             AssessmentFactory assessmentFactory,
             ResultRepository repository) {
@@ -133,6 +132,9 @@ public class GradingService {
         String runId = RUN_ID_PREFIX + System.currentTimeMillis();
         GradingRun gradingRun = new GradingRun(runId, assessment, section,
                 LocalDateTime.now());
+        // Kept on the run so the CSV export and Resume use this roster,
+        // not the one in the settings
+        gradingRun.setScoreSheetFile(scoreSheetFile);
         GradingContext context = new GradingContext(config, assessment);
         context.setRunId(runId);
 
@@ -372,8 +374,15 @@ public class GradingService {
                 context.getRoster().add(student);
             }
         }
-        readRoster(context, Paths.get(config.getString(
-                ConfigKeys.SCORE_SHEET_FILE)));
+
+        // Resume reads the roster the run was graded against. A run saved
+        // before the roster was recorded falls back to the settings.
+        Path scoreSheetFile = savedRun.getScoreSheetFile();
+        if (scoreSheetFile == null) {
+            scoreSheetFile = Paths.get(config.getString(
+                    ConfigKeys.SCORE_SHEET_FILE));
+        }
+        readRoster(context, scoreSheetFile);
 
         try {
             TestCaseSource testCaseSource = new UploadedTesterSource(
@@ -395,7 +404,6 @@ public class GradingService {
     // stop grading: the results stay in memory, and PersistStage reports
     // a database that cannot be written on each submission, so it is not
     // reported twice here.
-    // Added by Claude Opus 5.5 for Huxley's repository; reviewed by Huxley
     private void saveRun(GradingRun gradingRun) {
         if (repository == null
                 || !config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {

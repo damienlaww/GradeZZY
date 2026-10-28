@@ -68,7 +68,6 @@ public class StatisticsCalculator {
      * @param filter the filter
      * @return the summary; empty values when no run matches
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public StatisticsSummary summarise(List<GradingRun> gradingRuns,
             StatisticsFilter filter) {
         StatisticsSummary summary = new StatisticsSummary();
@@ -112,7 +111,6 @@ public class StatisticsCalculator {
      * @param scores the scores
      * @return the mean, or 0 for an empty list
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public double mean(List<Double> scores) {
         if (scores == null || scores.isEmpty()) {
             return 0.0;
@@ -131,7 +129,6 @@ public class StatisticsCalculator {
      * @param scores the scores
      * @return the median, or 0 for an empty list
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public double median(List<Double> scores) {
         if (scores == null || scores.isEmpty()) {
             return 0.0;
@@ -154,7 +151,6 @@ public class StatisticsCalculator {
      * @param maxScore the max score
      * @return the pass rate, from 0 to 1
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public double passRate(List<Double> scores, double maxScore) {
         if (scores == null || scores.isEmpty() || maxScore <= 0.0) {
             return 0.0;
@@ -179,7 +175,6 @@ public class StatisticsCalculator {
      * @param maxScore the max score
      * @return the bands, lowest first
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public List<MarkBand> markBands(List<Double> scores, double maxScore) {
         List<MarkBand> bands = new ArrayList<>();
         double bandWidth =

@@ -8,6 +8,7 @@
  */
 package gradezzy.model;
 
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +34,9 @@ public class GradingRun {
 
     // The submissions in this run
     private final List<Submission> submissions = new ArrayList<>();
+
+    // The score sheet the batch was graded against, or null if unknown
+    private Path scoreSheetFile = null;
 
     /**
      * Creates a new grading run.
@@ -102,5 +106,25 @@ public class GradingRun {
      */
     public void addSubmission(Submission submission) {
         submissions.add(submission);
+    }
+
+    /**
+     * Returns the score sheet the batch was graded against. The CSV
+     * export fills in this sheet.
+     *
+     * @return the score sheet, or null for a run saved before this was
+     *         recorded
+     */
+    public Path getScoreSheetFile() {
+        return scoreSheetFile;
+    }
+
+    /**
+     * Sets the score sheet the batch was graded against.
+     *
+     * @param scoreSheetFile the score sheet
+     */
+    public void setScoreSheetFile(Path scoreSheetFile) {
+        this.scoreSheetFile = scoreSheetFile;
     }
 }

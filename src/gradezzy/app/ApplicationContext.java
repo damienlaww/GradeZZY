@@ -118,7 +118,6 @@ public class ApplicationContext {
      *
      * @return the problem, or an empty string when there is none
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public String getStartupProblem() {
         return startupProblem;
     }
@@ -126,7 +125,6 @@ public class ApplicationContext {
     // Opens the database when it is switched on. A failure is reported
     // on the error stream and returned, but does not stop the app: grading
     // still works, only saving does not.
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     private String openRepository() {
         if (!config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
             return "";

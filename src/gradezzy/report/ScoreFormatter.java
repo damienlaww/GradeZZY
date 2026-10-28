@@ -25,7 +25,6 @@ public final class ScoreFormatter {
      * @param score the score
      * @return the score as text
      */
-    // Generated with Claude Opus 5.5; reviewed by Huxley
     public static String format(double score) {
         if (score == Math.floor(score) && !Double.isInfinite(score)) {
             return String.valueOf((long) score);
