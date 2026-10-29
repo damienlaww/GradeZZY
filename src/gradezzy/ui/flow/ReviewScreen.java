@@ -72,8 +72,9 @@ public class ReviewScreen extends FlowScreen {
     // The width of the total column
     private static final double TOTAL_WIDTH = 60.0;
 
-    // The width of the status column
-    private static final double STATUS_WIDTH = 160.0;
+    // The width of the status column, room for "Q1a, Q1b, Q2a did not
+    // compile"
+    private static final double STATUS_WIDTH = 220.0;
 
     // The smallest width of the student column
     private static final double STUDENT_WIDTH = 190.0;
@@ -543,8 +544,11 @@ public class ReviewScreen extends FlowScreen {
         banner.getChildren().clear();
         int couldNot = 0;
         for (Submission submission : rows) {
+            // A file rejected on loading, such as one with no username,
+            // cannot be retried
             if (Students.state(submission, getBackend())
-                    == ResultState.COULD_NOT_GRADE) {
+                    == ResultState.COULD_NOT_GRADE
+                    && submission.getIngestFailure() == null) {
                 couldNot++;
             }
         }
@@ -556,9 +560,23 @@ public class ReviewScreen extends FlowScreen {
             banner.getChildren().addAll(Parts.pill("Could not grade",
                     Tone.BAD), Parts.strong(Parts.plural(couldNot,
                     "submission") + " did not finish."),
-                    Parts.link("Retry " + (couldNot == 1 ? "it" : "them"),
-                    () -> getWindow().retryRun(run)));
+                    retryAction(run, couldNot));
         }
+    }
+
+    // Returns the Retry link, or why this run cannot be retried.
+    private Node retryAction(GradingRun run, int couldNot) {
+        String them = couldNot == 1 ? "it" : "them";
+        if (getBackend().canRetryFailed(run)) {
+            return Parts.link("Retry " + them,
+                    () -> getWindow().retryRun(run));
+        }
+        Label reason = Parts.muted("Only the last run graded since "
+                + "GradeZZY opened can be retried, so grade " + them
+                + " again from Set up.");
+        reason.setWrapText(true);
+        reason.setMinWidth(0);
+        return reason;
     }
 
     // ----------------------------------------------------------- search

@@ -15,6 +15,7 @@ import java.nio.file.Paths;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.fix.CaseNameFixer;
 import gradezzy.fix.FixManager;
 import gradezzy.fix.FolderHierarchyFixer;
 import gradezzy.fix.FolderNameFixer;
@@ -154,8 +155,9 @@ public class ApplicationContext {
     private FixManager createFixManager() {
         FixManager fixManager = new FixManager();
 
-        fixManager.addFixer(new FolderHierarchyFixer());
+        fixManager.addFixer(new FolderHierarchyFixer(config));
         fixManager.addFixer(new FolderNameFixer());
+        fixManager.addFixer(new CaseNameFixer(config));
         fixManager.addFixer(new HeaderNameFixer(config));
 
         return fixManager;

@@ -357,8 +357,7 @@ public class RunsScreen extends FlowScreen {
         if (!shown) {
             if (record.isRestorable()
                     && getBackend().supports(Capability.RESTORE_PREVIEW)) {
-                buttons.getChildren().add(Parts.small("Restore",
-                        () -> restore(record)));
+                buttons.getChildren().add(restoreButton(record));
             }
             return buttons;
         }
@@ -399,18 +398,51 @@ public class RunsScreen extends FlowScreen {
                 && current.getId().equals(run.getId());
     }
 
+    // Returns the Restore button of a run, which waits while a batch is
+    // being graded.
+    private Button restoreButton(RunRecord record) {
+        Button button = Parts.small("Restore", () -> restore(record));
+        button.setDisable(getState().isGrading());
+        return button;
+    }
+
     // Asks, then shows an earlier run in place of the one shown now.
     private void restore(RunRecord record) {
+        if (blockedByGrading()) {
+            return;
+        }
         String section = labelOf(record.getRun());
         getWindow().confirm("Restore this run?", "It is shown for "
                 + section + " instead of the run shown now. A copy of "
                 + "the run shown now is kept, so you can restore it to go "
                 + "back. Original zip files and exports are not changed.",
                 "Restore", () -> {
+                    if (blockedByGrading()) {
+                        return;
+                    }
                     ActionResult result = getBackend().restore(record);
-                    getWindow().notify(result.getMessage());
-                    refresh();
+                    afterRestore(result);
                 });
+    }
+
+    // Says what a restore did. After a restore the run on Review may no
+    // longer be saved, so Marking starts again on Set up.
+    private void afterRestore(ActionResult result) {
+        getWindow().notify(result.getMessage());
+        if (result.isDone()) {
+            getWindow().forgetRun();
+        }
+        refresh();
+    }
+
+    // Says so and returns true while a batch is being graded. Backing up
+    // or restoring then would mix the batch into other saved results.
+    private boolean blockedByGrading() {
+        if (!getState().isGrading()) {
+            return false;
+        }
+        getWindow().notify("Wait for the current batch to finish first.");
+        return true;
     }
 
     // Counts the students of a run still waiting to be graded.
@@ -475,12 +507,13 @@ public class RunsScreen extends FlowScreen {
             where = where + " Backups are saved in " + folder + ", and the "
                     + "newest " + keep + " are kept.";
         }
-        Label text = Parts.muted(where);
+        Label text = Parts.muted(where + gradingNote());
         text.setWrapText(true);
         VBox words = new VBox(Parts.GAP_SMALL / 2,
                 Parts.strong("Back up the saved results"), text);
-        HBox row = Parts.row(Parts.GAP, words, Parts.grow(),
-                Parts.secondary("Back up now", () -> backUp()));
+        Button backUp = Parts.secondary("Back up now", () -> backUp());
+        backUp.setDisable(getState().isGrading());
+        HBox row = Parts.row(Parts.GAP, words, Parts.grow(), backUp);
         return Parts.card(null, row);
     }
 
@@ -488,13 +521,23 @@ public class RunsScreen extends FlowScreen {
     private VBox restoreFileCard() {
         Label text = Parts.muted("Puts back the saved results from a "
                 + "backup file. The results saved now are not backed up "
-                + "first, so back up before you restore.");
+                + "first, so back up before you restore." + gradingNote());
         text.setWrapText(true);
         VBox words = new VBox(Parts.GAP_SMALL / 2,
                 Parts.strong("Restore from a backup file"), text);
-        HBox row = Parts.row(Parts.GAP, words, Parts.grow(),
-                Parts.secondary("Choose a backup", () -> chooseBackup()));
+        Button choose = Parts.secondary("Choose a backup",
+                () -> chooseBackup());
+        choose.setDisable(getState().isGrading());
+        HBox row = Parts.row(Parts.GAP, words, Parts.grow(), choose);
         return Parts.card(null, row);
+    }
+
+    // Returns a sentence saying why the buttons wait, while grading.
+    private String gradingNote() {
+        if (getState().isGrading()) {
+            return " Available when the batch being graded finishes.";
+        }
+        return "";
     }
 
     // Builds the table of runs with a saved copy that can be restored.
@@ -537,8 +580,7 @@ public class RunsScreen extends FlowScreen {
         if (shown) {
             shownCell = Parts.pill("Shown now", Tone.NEUTRAL);
         } else {
-            buttons.getChildren().add(Parts.small("Restore",
-                    () -> restore(record)));
+            buttons.getChildren().add(restoreButton(record));
         }
         table.addRow(Parts.strong(module), Parts.strong(sectionCode),
                 Parts.muted(run.getStartedAt().format(WHEN)),
@@ -547,6 +589,9 @@ public class RunsScreen extends FlowScreen {
 
     // Backs up the saved results now.
     private void backUp() {
+        if (blockedByGrading()) {
+            return;
+        }
         ActionResult result = getBackend().backupNow();
         getWindow().notify(result.getMessage());
         refresh();
@@ -554,9 +599,7 @@ public class RunsScreen extends FlowScreen {
 
     // Asks for a backup file, then restores it once confirmed.
     private void chooseBackup() {
-        if (getState().isGrading()) {
-            getWindow().notify("Wait for the current batch to finish "
-                    + "first.");
+        if (blockedByGrading()) {
             return;
         }
         FileChooser chooser = new FileChooser();
@@ -576,10 +619,12 @@ public class RunsScreen extends FlowScreen {
                 + "The results saved now are not backed up first. "
                 + "Original zip files and exports are not changed.",
                 "Restore", () -> {
+                    if (blockedByGrading()) {
+                        return;
+                    }
                     ActionResult result = getBackend().restoreBackup(
                             backupFile);
-                    getWindow().notify(result.getMessage());
-                    refresh();
+                    afterRestore(result);
                 });
     }
 

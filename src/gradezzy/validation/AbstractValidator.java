@@ -43,13 +43,13 @@ public abstract class AbstractValidator implements Validator {
     private static final String FOLDER_NAME_ACTION =
             "Approve the rename to the username, or reject it.";
     private static final String QUESTION_FOLDER_ACTION =
-            "Ask for a corrected submission, or keep the questions in "
-            + "that folder at 0.";
+            "Approve the move or rename if the folder was found elsewhere. "
+            + "If it is truly missing, ask for a corrected submission, or "
+            + "keep its questions at 0.";
     private static final String MISSING_FILE_ACTION =
             "Ask for a corrected submission, or keep the question at 0.";
     private static final String FILE_NAME_ACTION =
-            "Rename the file by hand. No automatic repair exists for file "
-            + "names.";
+            "Approve the rename to the required name, or reject it.";
     private static final String HEADER_ACTION =
             "Approve the name taken from the roster, or reject it.";
     private static final String UNREADABLE_ACTION =

@@ -86,6 +86,20 @@ public class PipelineFactory {
      */
     public GradingPipeline createPipeline(
             CancellationToken cancellationToken) {
+        return createPipeline(cancellationToken, null);
+    }
+
+    /**
+     * Creates a pipeline whose checks compare answers with the starter
+     * folder chosen for the batch.
+     *
+     * @param cancellationToken the flag that stops the batch when set
+     * @param starterDirectory the starter folder, or null to use
+     *        paths.starter.dir
+     * @return the pipeline, ready to run
+     */
+    public GradingPipeline createPipeline(
+            CancellationToken cancellationToken, Path starterDirectory) {
         GradingPipeline pipeline = new GradingPipeline(cancellationToken);
         ProcessRunner processRunner = new ProcessRunner(config);
         WorkingCopyManager workingCopyManager = new WorkingCopyManager(
@@ -96,8 +110,10 @@ public class PipelineFactory {
         pipeline.addStage(new ExtractStage(workingCopyManager,
                 new RosterReader(config)));
         pipeline.addStage(new ValidateStage(createValidationRunner()));
-        pipeline.addStage(new FixStage(fixManager));
-        pipeline.addStage(new DetectStage(createDetectors()));
+        pipeline.addStage(new FixStage(fixManager,
+                createFileCheckRunner()));
+        pipeline.addStage(new DetectStage(createDetectors(
+                starterDirectory)));
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
         pipeline.addStage(new CompileStage(new SourceCompiler(config,
@@ -123,12 +139,26 @@ public class PipelineFactory {
         return runner;
     }
 
+    // The per-file checks that FixStage runs again after a move or rename.
+    private ValidationRunner createFileCheckRunner() {
+        ValidationRunner runner = new ValidationRunner();
+
+        runner.addValidator(new FileNameValidator());
+        runner.addValidator(new RequiredFilesValidator());
+        runner.addValidator(new HeaderNameValidator(config));
+
+        return runner;
+    }
+
     // To add a detector, write a class that implements Detector and add
-    // it here.
-    private List<Detector> createDetectors() {
+    // it here. A null starter folder means the one in the settings.
+    private List<Detector> createDetectors(Path chosenStarter) {
         List<Detector> detectors = new ArrayList<>();
-        Path starterDirectory = Paths.get(
-                config.getString(ConfigKeys.STARTER_DIR));
+        Path starterDirectory = chosenStarter;
+        if (starterDirectory == null) {
+            starterDirectory = Paths.get(
+                    config.getString(ConfigKeys.STARTER_DIR));
+        }
         boolean untouchedOn = config.getBoolean(
                 ConfigKeys.DETECT_UNTOUCHED_ENABLED);
 

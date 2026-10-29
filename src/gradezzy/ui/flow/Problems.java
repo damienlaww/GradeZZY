@@ -58,6 +58,10 @@ public final class Problems {
             return "The answer may be hard-coded";
         } else if (type == AnomalyType.SIMILAR_CODE) {
             return "Very similar to another student's code";
+        } else if (type == AnomalyType.DUPLICATE_SUBMISSION) {
+            return "More than one file for this student";
+        } else if (type == AnomalyType.INTERNAL_ERROR) {
+            return "GradeZZY could not finish grading this student";
         }
         return "Something to check";
     }

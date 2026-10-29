@@ -37,6 +37,11 @@ public class TokenSimilarityDetector implements SimilarityDetector {
     // The number of tokens in a row that are compared as one unit
     private static final int TRIGRAM_LENGTH = 3;
 
+    // The fewest new trigrams each answer needs before a pair is scored.
+    // Short correct answers (about 30 to 45) are often written the same
+    // way by honest students, so a match on them proves nothing.
+    private static final int MIN_OWN_TRIGRAMS = 50;
+
     // The text placed between the tokens of a trigram
     private static final String TOKEN_SEPARATOR = " ";
 
@@ -90,7 +95,7 @@ public class TokenSimilarityDetector implements SimilarityDetector {
     }
 
     /**
-     * Compares every pair of submissions.
+     * Compares every pair of submissions whose answers hold enough new code.
      *
      * @param submissions the submissions
      * @param assessment the assessment
@@ -143,7 +148,8 @@ public class TokenSimilarityDetector implements SimilarityDetector {
                 Set<String> secondAnswer = answers.get(j);
                 double score = jaccard(firstAnswer, secondAnswer);
 
-                if (!firstAnswer.isEmpty() && !secondAnswer.isEmpty()
+                if (firstAnswer.size() >= MIN_OWN_TRIGRAMS
+                        && secondAnswer.size() >= MIN_OWN_TRIGRAMS
                         && score >= threshold) {
                     pairs.add(new SimilarityPair(
                             submissions.get(i).getUsername(),

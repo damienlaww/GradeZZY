@@ -55,6 +55,11 @@ public enum AnomalyType {
     INVALID_ARCHIVE,
 
     /**
+     * Another file with the same username was chosen and not graded.
+     */
+    DUPLICATE_SUBMISSION,
+
+    /**
      * The student's code does not compile.
      */
     COMPILE_ERROR,

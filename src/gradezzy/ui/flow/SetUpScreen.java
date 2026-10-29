@@ -13,6 +13,7 @@ package gradezzy.ui.flow;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,6 +43,7 @@ import gradezzy.ui.backend.ImportBatch;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.ImportState;
 import gradezzy.ui.backend.InputKind;
+import gradezzy.ui.backend.RunRecord;
 
 /**
  * The Set up step.
@@ -57,8 +59,19 @@ public class SetUpScreen extends FlowScreen {
     // The text a true setting holds
     private static final String TRUE = "true";
 
+    // When a run was graded, such as "28 Oct 2026, 14:05"
+    private static final DateTimeFormatter WHEN =
+            DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm");
+
     // The separator between a file and what is known about it
     private static final String DOT = "  ·  ";
+
+    // How grading picks one file when a student has several
+    private static final String ONE_FILE_RULE = "Only one file per "
+            + "student is graded: the one without a copy number such as "
+            + "(1), else the lowest number, else the one named in lower "
+            + "case, else the first chosen. The others are not graded and "
+            + "are noted on that student.";
 
     // The size of the icon in the drop area
     private static final double DROP_ICON_SIZE = 20.0;
@@ -104,6 +117,9 @@ public class SetUpScreen extends FlowScreen {
 
     // The chosen zip files
     private final VBox fileList = new VBox();
+
+    // The students found in more than one chosen file or folder
+    private final Label duplicateNote = Parts.muted("");
 
     // The score sheet, tester and starter rows
     private final VBox classFiles = new VBox();
@@ -208,9 +224,12 @@ public class SetUpScreen extends FlowScreen {
                 dropHandler.getDroppedPaths()));
 
         fileList.getStyleClass().add("file-list");
+        duplicateNote.getStyleClass().add("small-text");
+        duplicateNote.setWrapText(true);
         HBox top = Parts.row(Parts.GAP, Parts.title("Submissions"),
                 Parts.grow(), fileSummary);
-        VBox card = Parts.card(null, top, dropArea, fileList);
+        VBox card = Parts.card(null, top, dropArea, fileList,
+                duplicateNote);
         return card;
     }
 
@@ -276,6 +295,9 @@ public class SetUpScreen extends FlowScreen {
     // Fills the module and section boxes from the backend.
     private void fillChoices() {
         filling = true;
+        if (getState().getSectionCode().isEmpty()) {
+            startOnNewestRun();
+        }
         List<String> modules = getBackend().getModuleCodes();
         moduleBox.getItems().setAll(modules);
         String module = getState().getModuleCode();
@@ -299,6 +321,24 @@ public class SetUpScreen extends FlowScreen {
         }
         sectionBox.setValue(section);
         getState().setSectionCode(section);
+    }
+
+    // Starts on the module and section of the newest graded run, so the
+    // results shown first are the latest ones. listRuns is newest first.
+    private void startOnNewestRun() {
+        if (!getBackend().supports(Capability.HISTORY)) {
+            return;
+        }
+        for (RunRecord record : getBackend().listRuns()) {
+            GradingRun run = record.getRun();
+            if (run.getSection() != null
+                    && StatisticsScreen.isGraded(run)) {
+                getState().setModuleCode(run.getSection().getModuleCode());
+                getState().setSectionCode(
+                        run.getSection().getSectionCode());
+                return;
+            }
+        }
     }
 
     // Handles a new module.
@@ -492,9 +532,13 @@ public class SetUpScreen extends FlowScreen {
         if (!show) {
             return;
         }
+        String when = " before";
+        if (run.getStartedAt() != null) {
+            when = " on " + run.getStartedAt().format(WHEN);
+        }
         earlierRun.getChildren().addAll(
                 Parts.muted(getState().getSection().getLabel()
-                + " was graded before ("
+                + " was graded" + when + " ("
                 + Parts.plural(run.getSubmissions().size(), "student")
                 + ")."),
                 Parts.link("Open its results", () -> getWindow()
@@ -513,20 +557,30 @@ public class SetUpScreen extends FlowScreen {
         }
         fileList.setVisible(!items.isEmpty());
         fileList.setManaged(!items.isEmpty());
+        refreshDuplicateNote(batch);
 
         fileSummary.getChildren().clear();
         if (items.isEmpty()) {
             return;
         }
-        int unusable = batch.count(InputKind.SUBMISSION,
-                ImportState.INVALID) + batch.count(InputKind.SUBMISSION,
-                ImportState.DUPLICATE);
-        int ready = items.size() - unusable;
         Label count = Parts.muted(Parts.plural(items.size(), "file")
-                + DOT + ready + " ready");
+                + DOT + Parts.plural(batch.countStudents(), "student")
+                + " ready");
         count.getStyleClass().add("small-text");
         fileSummary.getChildren().addAll(count,
                 smallLink("Clear all", () -> clearSubmissions()));
+    }
+
+    // Names the students found in more than one chosen file or folder.
+    private void refreshDuplicateNote(ImportBatch batch) {
+        List<String> duplicates = batch.listDuplicateUsernames();
+        duplicateNote.setVisible(!duplicates.isEmpty());
+        duplicateNote.setManaged(!duplicates.isEmpty());
+        if (duplicates.isEmpty()) {
+            return;
+        }
+        duplicateNote.setText("More than one file for " + join(duplicates)
+                + ". " + ONE_FILE_RULE);
     }
 
     // Gives a list row the hairline rules: a line between rows only.
@@ -546,14 +600,19 @@ public class SetUpScreen extends FlowScreen {
         Label name = Parts.strong(item.getName());
         name.setMinWidth(0);
         HBox line = Parts.row(0, name);
-        if (!item.getUsername().isEmpty()) {
-            Label who = Parts.muted(DOT + item.getUsername());
-            who.setMinWidth(0);
-            line.getChildren().add(who);
+        String who = item.getUsername();
+        if (who.isEmpty() && item.getStudentCount() > 0) {
+            who = Parts.plural(item.getStudentCount(), "student");
+        }
+        if (!who.isEmpty()) {
+            Label whoLabel = Parts.muted(DOT + who);
+            whoLabel.setMinWidth(0);
+            line.getChildren().add(whoLabel);
         }
         VBox text = new VBox(line);
-        if (!state.isUsable() && !item.getMessage().isEmpty()) {
-            Label message = Parts.muted(item.getMessage());
+        String note = noteFor(item, state);
+        if (!note.isEmpty()) {
+            Label message = Parts.muted(note);
             message.getStyleClass().add("small-text");
             message.setWrapText(true);
             text.getChildren().add(message);
@@ -563,6 +622,29 @@ public class SetUpScreen extends FlowScreen {
         return Parts.row(Parts.GAP, iconColumn(Parts.FILE), text,
                 Parts.pill(stateText(state), toneOf(state)),
                 rowLink("Remove", () -> removeSubmission(item)));
+    }
+
+    // Returns the note under a file: why it cannot be used, what to
+    // check, or what a folder holds. A plain student zip has none.
+    private String noteFor(ImportItem item, ImportState state) {
+        if (state == ImportState.DUPLICATE) {
+            return describeDuplicate(item);
+        } else if (state == ImportState.ACCEPTED
+                && !item.getUsername().isEmpty()) {
+            return "";
+        }
+        return item.getMessage();
+    }
+
+    // Names the file graded in place of a duplicate, in the words
+    // grading notes on that student.
+    private String describeDuplicate(ImportItem item) {
+        ImportBatch batch = getState().getBatch();
+        if (batch.isChosenAgain(item)) {
+            return "This was chosen more than once. It is graded once.";
+        }
+        return "Not graded: " + batch.findGradedInstead(item).getName()
+                + " is graded instead. " + ONE_FILE_RULE;
     }
 
     // Redraws the score sheet, tester and starter rows.
@@ -586,9 +668,9 @@ public class SetUpScreen extends FlowScreen {
         Label status;
         if (items.isEmpty()) {
             detail = kind.isRequired() ? "Not chosen yet."
-                    : "Not chosen. The untouched-answer check is skipped.";
+                    : "Not chosen. The starter folder in Settings is used.";
             status = Parts.pill(kind.isRequired() ? "Missing"
-                    : "Skipped", kind.isRequired() ? Tone.BAD
+                    : "From Settings", kind.isRequired() ? Tone.BAD
                     : Tone.NEUTRAL);
         } else {
             ImportItem item = items.get(0);
@@ -634,11 +716,13 @@ public class SetUpScreen extends FlowScreen {
                 InputKind.TESTERS)));
     }
 
-    // Returns the grey line under a class file's name.
+    // Returns the grey line under a class file's name. It wraps, so a
+    // long note about a folder is read in full.
     private HBox detailLine(String text) {
         Label label = Parts.muted(text);
         label.getStyleClass().add("small-text");
         label.setMinWidth(0);
+        label.setWrapText(true);
         return Parts.row(Parts.GAP_SMALL, label);
     }
 
@@ -750,11 +834,8 @@ public class SetUpScreen extends FlowScreen {
             actions.setStatus(reasons.isEmpty() ? ""
                     : reasons.get(0));
         } else {
-            int count = batch.count(InputKind.SUBMISSION,
-                    ImportState.ACCEPTED) + batch.count(
-                    InputKind.SUBMISSION, ImportState.WARNING);
-            actions.setStatus(Parts.plural(count, "student")
-                    + " ready to grade in "
+            actions.setStatus(Parts.plural(batch.countStudents(),
+                    "student") + " ready to grade in "
                     + getState().getSection().getLabel() + ".");
         }
     }

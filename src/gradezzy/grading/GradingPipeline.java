@@ -13,6 +13,7 @@ package gradezzy.grading;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Anomaly;
@@ -31,10 +32,10 @@ import gradezzy.model.SubmissionStatus;
  * only {@code Thread}, {@code Runnable} and {@code synchronized}. Each
  * submission is graded in its own working-copy folder and writes only to
  * its own {@code Submission} object, so the submissions do not interfere.
- * The two pieces of state the workers share, the handout of the next
- * submission and the failure counter, are guarded by {@code synchronized},
- * and every call to the progress listener goes through one lock so the
- * listener is never touched by two threads at once.
+ * The state the workers share, the handout of the next submission, is
+ * guarded by {@code synchronized}, and every call to the progress listener
+ * goes through one lock so the listener is never touched by two threads at
+ * once.
  *
  * <p>Tier: MUST. Owner: Jing Yuan.
  */
@@ -58,9 +59,6 @@ public class GradingPipeline {
 
     // The flag checked before each submission
     private final CancellationToken cancellationToken;
-
-    // How many failures were recorded, used to number their anomalies
-    private int failureCount = 0;
 
     /**
      * Creates an empty pipeline.
@@ -233,14 +231,10 @@ public class GradingPipeline {
         }
     }
 
-    // Turns a failure into an anomaly on the submission. Synchronized
-    // because workers share the failure counter; the submission itself is
-    // touched by only one worker.
-    private synchronized void recordFailure(Submission submission,
-            Exception exception) {
-        failureCount++;
+    // Turns a failure into an anomaly with an id unique across runs.
+    private void recordFailure(Submission submission, Exception exception) {
         String message = "Grading stopped early: " + exception.getMessage();
-        Anomaly anomaly = new Anomaly(FAILURE_ID_PREFIX + failureCount,
+        Anomaly anomaly = new Anomaly(FAILURE_ID_PREFIX + UUID.randomUUID(),
                 AnomalyType.INTERNAL_ERROR, Severity.ERROR,
                 submission.getUsername(), message, FAILURE_ACTION);
 

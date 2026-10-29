@@ -26,6 +26,9 @@ public class FixRecord {
     // What was changed, in plain words
     private final String description;
 
+    // The working copy the fix changed
+    private final Path workingCopy;
+
     // The path before the fix
     private final Path originalPath;
 
@@ -41,15 +44,18 @@ public class FixRecord {
      * @param anomaly the anomaly that was fixed
      * @param fixerName the name of the fixer that did it
      * @param description what was changed, in plain words
+     * @param workingCopy the working copy the fix changed
      * @param originalPath the path before the fix
      * @param fixedPath the path after the fix
      * @param backupPath the backup needed to undo the fix
      */
     public FixRecord(Anomaly anomaly, String fixerName, String description,
-            Path originalPath, Path fixedPath, Path backupPath) {
+            Path workingCopy, Path originalPath, Path fixedPath,
+            Path backupPath) {
         this.anomaly = anomaly;
         this.fixerName = fixerName;
         this.description = description;
+        this.workingCopy = workingCopy;
         this.originalPath = originalPath;
         this.fixedPath = fixedPath;
         this.backupPath = backupPath;
@@ -80,6 +86,15 @@ public class FixRecord {
      */
     public String getDescription() {
         return description;
+    }
+
+    /**
+     * Returns the working copy the fix changed.
+     *
+     * @return the working copy the fix changed
+     */
+    public Path getWorkingCopy() {
+        return workingCopy;
     }
 
     /**

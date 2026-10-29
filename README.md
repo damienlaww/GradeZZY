@@ -278,7 +278,13 @@ demo backends, and the developer checks. So are the `fix`, `detection` and
    `discardBackup`. A move or rename is undone by moving back and needs no
    backup. Keep no fields that change after the constructor: one fixer is
    shared by every grading thread.
-3. Register it in `ApplicationContext.createFixManager()`:
+3. Decide from the working copy on disk where you can; use the anomaly's
+   message only to tell which file it is about, as the file name and
+   header fixers do. If the disk shows nothing to do, `apply` returns
+   null. If the fix cannot be done, throw a `FixException` whose message
+   tells the instructor why: `FixManager.getFailureReason` keeps it for
+   the screens.
+4. Register it in `ApplicationContext.createFixManager()`:
    `fixManager.addFixer(new MyFixer());`. Fixers run in the order they are
    added, so folder fixes come before header fixes.
 
@@ -414,10 +420,40 @@ Then the submissions. What to build, in order:
 1. `SubmissionLoader.loadSubmissions`: accept a list of paths, each a zip
    file or a folder that holds zip files. Create one `Submission` per zip
    with the section it was uploaded for. Skip the names in
-   `ingest.ignored.file.names`.
+   `ingest.ignored.file.names`. Done, with these rules:
+   - A folder that holds a question folder is one student (a submission
+     unzipped by hand).
+   - In any other folder, each `.zip` directly inside is one student, and
+     so is each sub-folder that holds a question folder, directly or in
+     its only sub-folder. Other files and folders are skipped. A folder
+     with no student stops grading with a message, which names a
+     sub-folder that holds zips if there is one. A sub-folder named in
+     `assessment.placeholder.folder.names` (the starter folder) is
+     skipped.
+   - A chosen zip is a bulk zip when it holds at least one zip that is
+     not named like a question folder and not inside one (a zip inside
+     `Q3/` is part of an answer), holds no question folder at its top or
+     one folder down, and its own name does not start with the student
+     prefix. It is unpacked into `workspace/working/.batch-*`, each such
+     zip inside is one student, and other files in it are skipped.
+   - One file per username, in any case, is graded: the one without a
+     copy number, else the lowest copy number; on a tie, the one whose
+     username is already in lower case, as on the roster, else the first
+     chosen. The other files are not graded; the student gets a
+     `DUPLICATE_SUBMISSION` warning naming each of them. The score sheet
+     export also matches usernames in any case.
+   - An upload without a username cannot be graded. The first one stays
+     in the run as a failed submission; each other one is named in a
+     warning on it, so no two submissions share the empty username.
+   - `listCandidates`, `listSkipped`, `isBatchArchive`,
+     `listBatchEntries` and `listBatchSkipped` show the same rules
+     without unpacking, so the Set up step can list the students, and
+     what is skipped, before grading starts.
 2. `SubmissionLoader.extractUsername`: remove the prefix matched by
    `ingest.zip.name.prefix.pattern` and the `.zip` ending, so
-   `2023-2024-ping.lee.2023.zip` gives `ping.lee.2023`.
+   `2023-2024-ping.lee.2023.zip` gives `ping.lee.2023`. A browser's copy
+   number is removed too, so `2023-2024-ping.lee.2023 (1).zip` also gives
+   `ping.lee.2023`.
 3. `ZipExtractor.extract` and `isSafeEntry`: unzip with `java.util.zip`.
    Refuse entries that would land outside the target folder (names with
    `..`), and stop at the size and entry limits from the configuration.
@@ -571,23 +607,48 @@ How the fixes work:
   unless `fix.auto.apply.enabled` is false. Each fixer whose `canFix`
   matches an anomaly fixes the working copy and returns a `FixRecord`, and
   the anomaly becomes `APPLIED`. Fixers run in the order they are
-  registered, so folder fixes come before header fixes. A fix that fails
-  is skipped and its anomaly stays for the instructor.
+  registered: `FolderHierarchyFixer`, `FolderNameFixer`, `CaseNameFixer`,
+  then `HeaderNameFixer`, so the folders are in place before names and
+  headers are fixed. A fix that fails is skipped and its anomaly stays
+  for the instructor, with the reason from `getFailureReason`. An anomaly
+  already fixed is not offered to a later fixer.
+- After a fix that moved or renamed something, `FixStage` runs the file
+  name, required file and header checks again on the working copy, adds
+  only the problems that are new, and fixes those with
+  `FixManager.applyTo`, which keeps the earlier fixes. So a blank header
+  inside a folder that was one level too deep is still filled in.
 - `FolderHierarchyFixer` moves everything visible at the top of the
   working copy (the Q folders and any other files) into a new username
-  folder. `FolderNameFixer` renames the only top folder to the username,
-  including a change of letter case only. Both are undone by moving back.
-- `HeaderNameFixer` reads the file named at the start of the header
-  anomaly's message, such as `Q1/Q1a.java`. It copies the file into the
-  hidden `.gradezzy-backup` folder of the working copy, then writes the
-  roster name and email after the blank `Name:` and `Email ID:` labels.
-  Undo restores the copy. If the student is not on the roster, or the
-  header cannot be completed (for example it has no `Name:` line), the
-  file is left unchanged for the instructor.
+  folder. It also fixes question folders one level too deep, such as a
+  username folder inside the username folder. The k-th missing-folder
+  anomaly belongs to the k-th question folder still missing, in question
+  order (the order the validator reports them), so each anomaly moves its
+  own folder up out of the one extra folder that holds question folders,
+  correcting its letter case on the way. Other files and folders stay
+  where they are, the extra folder is removed once empty, and a folder
+  that is truly missing is left reported. `FolderNameFixer` renames the
+  only top folder to the username, including a change of letter case
+  only. Both are undone by moving back.
+- `CaseNameFixer` renames a question folder or a required file whose name
+  differs only in letter case, such as `q3` or `q1a.java`. Windows and
+  macOS ignore case, so the rename goes through a temporary name. Without
+  it a `q3` folder scores 0 on that question.
+- Every undo finds its folder or file as the working copy is now, so the
+  fixes of one student can be undone in any order.
+- `HeaderNameFixer` finds the file named at the start of the header
+  anomaly's message, such as `Q1/Q1a.java`, among the configured answer
+  files. It copies the file into the hidden `.gradezzy-backup` folder of
+  the working copy, then writes the roster name and email after the blank
+  `Name:` and `Email ID:` labels. A file that is not UTF-8 (such as one
+  saved in Windows-1252) is read and written byte for byte as
+  ISO-8859-1. Undo restores the copy. If the student is not on the
+  roster, or the header cannot be completed (for example it has no
+  `Name:` line), the file is left unchanged and the reason is kept.
 - `FixManager` is shared by the grading threads, so its public methods
   are `synchronized`. `findRecord(anomaly)` returns the fix for an
-  anomaly. `approve` turns an applied fix into `APPROVED`; `undo` reverses
-  an applied or approved fix and sets `UNDONE`.
+  anomaly, and `getFailureReason(anomaly)` why a fix could not be made.
+  `approve` turns an applied fix into `APPROVED`; `undo` reverses an
+  applied or approved fix and sets `UNDONE`.
 
 How the flags work (never a change of mark):
 
@@ -597,13 +658,19 @@ How the flags work (never a change of mark):
   original resource folder was submitted); otherwise one flag per
   unchanged file.
 - `EmptyAnswerDetector` flags an answer method whose body, without
-  comments and spaces, is still the starter's body. A wholly unchanged
-  file is left to the untouched check when that check is on.
+  comments and spaces, is still the starter's body. Every overload of the
+  method is checked. A wholly unchanged file is left to the untouched
+  check when that check is on.
 - `HardCodedAnswerDetector` flags an answer method with 3 or more `if` or
   `case` branches that compare a value with a fixed literal, such as
-  `s.equals("cat")`. Common values (0, 1, -1 and `""`) do not count. It
+  `s.equals("cat")` or `s.contains("cat")`. Common values (0, 1 and -1),
+  separators with no letter or digit (such as `","` or `""`) and a
+  number inside a calculation (the `2` in `i % 2 == 0`) do not count.
+  Every overload is checked, and so is a method with an annotation. It
   can still flag honest code with many such checks, and misses answers
   hidden in arrays or maps.
+- The starter folder is the one chosen on the Set up step, or
+  `paths.starter.dir` when none is chosen.
 - `DetectStage` runs each detector that is switched on
   (`detection.*.enabled`). If one fails, it adds a warning saying the
   check could not run; it never fails a submission.
@@ -614,7 +681,14 @@ of three tokens. It removes the starter file's runs, so the shared
 skeleton does not count, then compares two students with the Jaccard
 measure (shared runs divided by all runs). Pairs at or above
 `plagiarism.similarity.threshold` are reported. Renaming variables or
-reordering code lowers the score.
+reordering code lowers the score. A pair is only compared when both
+answers have at least 50 runs of their own beyond the starter
+(`MIN_OWN_TRIGRAMS`): short correct answers, such as most Q1b answers,
+look alike even when written separately. A copy of only a short answer
+is therefore not reported; a copy of a whole submission still is,
+through the longer questions. The starter's runs come from
+`paths.starter.dir`, even when another starter folder was chosen on the
+Set up step.
 
 Checked on the six samples: chee.teo and jing.lim get a username folder;
 david's and fen.lai's folders are renamed; the blank headers (Q3 for
@@ -864,7 +938,7 @@ file: `java -Dgradezzy.config=other.properties ...`.
 | `paths.submissions.dir` | `samples/student-submission` | Folder graded by the console entry point. |
 | `paths.testers.dir` | `samples/Tester-Files` | Folder holding the tester files. |
 | `paths.score.sheet.file` | `samples/IS442-ScoreSheet.csv` | The roster and the template for the CSV export. |
-| `paths.starter.dir` | `samples/RenameToYourUsername` | Starter files, used to spot untouched answers. |
+| `paths.starter.dir` | `samples/RenameToYourUsername` | Starter files, used to spot untouched answers when no starter folder is chosen on the Set up step, and by the similarity check. Set up warns when a chosen starter folder lacks some question files. |
 | `paths.working.dir` | `workspace/working` | Where working copies are created. |
 | `paths.output.dir` | `workspace/output` | Where exports are written. |
 | `paths.backup.dir` | `workspace/backup` | Where database backups are kept. |
@@ -950,13 +1024,15 @@ Kept to a minimum and confined to the classes named here:
 | JavaFX | `ui` package only | The window. |
 | Lambdas and method references (`->`, `::`) | 31 files in `ui` | Button handlers, table cells and callbacks. |
 | `java.util.function` (`Consumer`, `IntConsumer`) | `ui.flow.StepBar`, `ui.flow.TabBar`, `ui.check.FlowWindowTest` | Telling the window which step or tab was clicked. |
-| `javafx.concurrent.Task` (a background thread) | `ui.GradingTask` | Keeps the window responsive while grading. |
-| `new Thread`, `Platform.runLater` | `ui.backend.LiveBackend`, `ui.GradingTask`, `ui.flow.GradeScreen`, `ui.check` | Grading, exports, backups and the similarity check run off the window's thread; screen updates go back to it. |
-| `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. |
+| `javafx.concurrent.Task` (a background thread) | `ui.GradingTask`, `ui.flow.SimilarityCheck`, `ui.flow.ExportScreen` | Keeps the window responsive while grading and while the similarity check runs; Export keeps each run's check and reads whether it is still running. |
+| `new Thread`, `Platform.runLater` | `ui.backend.LiveBackend`, `ui.GradingTask`, `ui.flow.GradeScreen`, `ui.flow.ExportScreen`, `ui.check` | Grading, exports, backups and the similarity check run off the window's thread; screen updates go back to it. |
+| `ConcurrentHashMap`, `ConcurrentHashMap.newKeySet()` | `ui.backend.LiveBackend` | The last run of each section, which a finished grading task fills and a restore clears (both on the JavaFX thread); the instructor's flag decisions for this session; the anomalies and runs graded in this session. |
+| `CopyOnWriteArrayList` | `model.Submission` | The window reads a submission's anomalies and results while a grading thread clears and refills them for Retry or Resume. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | Timers: how long a notice stays, the pause before a code search, the demo grader's pace. |
 | `java.awt.Robot`, `javax.imageio.ImageIO`, `java.util.concurrent`, `java.util.zip.ZipOutputStream` | `ui.check` only | The `--snapshot` and `--windowtest` developer checks. Not used when grading. |
-| `synchronized` | `grading.CancellationToken`, `fix.FixManager`, `grading.CompileStage`, `exec.TesterHarness` | The Cancel button and the grading thread share one flag; the grading threads and the anomaly log share one list of fixes; the grading threads check each tester only once; student threads and the tester take turns writing to standard output. |
+| `synchronized` | `grading.CancellationToken`, `fix.FixManager`, `grading.CompileStage`, `exec.TesterHarness`, `ui.backend.LiveBackend`, `service.PlagiarismService` | The Cancel button and the grading thread share one flag; the grading threads and the anomaly log share one list of fixes and their failure reasons; the grading threads check each tester only once; student threads and the tester take turns writing to standard output; the window and grading threads share the cached list of saved runs; two similarity checks of one run cannot both add their flags. |
 | `java.nio.file` (`Files.move`, `Files.copy`, `Files.createTempDirectory`, `DirectoryStream`, `StandardCopyOption`) | `fix` package | Moves and renames folders in the working copy and keeps a backup of each file a fix changes. |
+| `java.nio.charset` (`Charset`, `StandardCharsets`), `Files.readAllBytes` | `fix.HeaderNameFixer` | Fills the header of a file saved in Windows-1252 without changing any other byte. |
 | `Files.createTempDirectory`, `Path.toRealPath` | `grading.CompileStage` | Compiles each tester with a temporary copy of the starter code, so a broken tester is not blamed on the students. |
 | `HashSet`, `String.join`, `List.subList` | `plagiarism.TokenSimilarityDetector` | Holds each answer's runs of three tokens for the similarity measure. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. |
@@ -970,7 +1046,8 @@ Kept to a minimum and confined to the classes named here:
 | `Runtime.halt`, the `jdk.lang.Process.launchMechanism` property | `exec.TesterHarness` | Ends the run without waiting for student threads, and stops student code starting other programs (macOS and Linux). |
 | `java` options `--limit-modules`, `--illegal-native-access=deny`, `-Duser.home`, `-Djava.io.tmpdir`; `UUID` | `exec.TesterRunner` | Student code gets only core Java and no native code, and its home and temp folders are its own question folder; a new random token for every tester run. |
 | macOS `sandbox-exec` (`/usr/bin/sandbox-exec -p <rules>`) | `exec.TesterRunner` | Student code may write only in its own question folder and may not read the other working copies, the backups or the submissions folder. JDK 24 removed the `SecurityManager`, so Java cannot do this itself. Windows and Linux have no built-in sandbox, and the sandbox is tried once per run in case it cannot start: without it a note is printed and student code keeps the instructor's file permissions. |
-| `java.util.zip` (to be written) | `ingest.ZipExtractor` | Unzips submissions. |
+| `java.util.zip` (`ZipFile`, `ZipEntry`) | `ingest.ZipExtractor` | Unzips submissions and lists the zips inside a bulk zip. |
+| `String.replaceFirst`, `String.replaceAll` with a regular expression | `ingest.SubmissionLoader` | Removes the zip name prefix and a browser's copy number such as ` (1)`, and reads that number to choose which copy to grade. |
 | `java.util.regex.Pattern` | `service.SettingsService` | Checks that the zip name pattern setting is a valid regular expression. |
 | `java.nio.file.Files` (`readString`, `writeString`, `move`, `isSymbolicLink`) | `service.SettingsService`, `service.SearchService` | Saves `config.properties` through a temporary copy; reads source files for the code search. |
 | `java.nio.file` (`Path`, `Paths`, `Files`) | About 20 files in `ui` | The files and folders the instructor chooses or drops on the window. |

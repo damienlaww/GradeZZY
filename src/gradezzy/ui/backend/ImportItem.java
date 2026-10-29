@@ -9,6 +9,8 @@
 package gradezzy.ui.backend;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * One chosen input file or folder.
@@ -30,8 +32,13 @@ public class ImportItem {
     // Why the file has this state, in plain words
     private final String message;
 
+    // The usernames of the students the file holds: one for a student
+    // zip, several for a folder of zips or a zip of student zips
+    private final List<String> students = new ArrayList<>();
+
     /**
-     * Creates an import item.
+     * Creates an import item for one student's file, or for a file that
+     * holds no student when the username is empty.
      *
      * @param kind the group of the file
      * @param path the chosen file or folder
@@ -46,6 +53,29 @@ public class ImportItem {
         this.username = username;
         this.state = state;
         this.message = message;
+        if (!username.isEmpty()) {
+            students.add(username);
+        }
+    }
+
+    /**
+     * Creates an import item for a folder or zip that holds several
+     * students. Its own username is empty.
+     *
+     * @param kind the group of the file
+     * @param path the chosen file or folder
+     * @param state whether the file can be used
+     * @param message why the file has this state
+     * @param students the usernames of the students inside, in order
+     */
+    public ImportItem(InputKind kind, Path path, ImportState state,
+            String message, List<String> students) {
+        this.kind = kind;
+        this.path = path;
+        this.username = "";
+        this.state = state;
+        this.message = message;
+        this.students.addAll(students);
     }
 
     /**
@@ -104,5 +134,24 @@ public class ImportItem {
      */
     public String getMessage() {
         return message;
+    }
+
+    /**
+     * Returns the usernames of the students the file holds.
+     *
+     * @return a copy of the usernames, in order, each once, as grading
+     *         grades one file per student
+     */
+    public List<String> getStudents() {
+        return new ArrayList<>(students);
+    }
+
+    /**
+     * Returns how many students the file holds.
+     *
+     * @return one for a student zip, more for a folder or a zip of zips
+     */
+    public int getStudentCount() {
+        return students.size();
     }
 }
