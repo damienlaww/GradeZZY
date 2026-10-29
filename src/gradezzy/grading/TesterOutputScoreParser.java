@@ -86,6 +86,14 @@ public class TesterOutputScoreParser implements ScoreParser {
                 verdict = "";
             } else if (line.equals(passMarker)
                     || line.startsWith(failMarker)) {
+                // A verdict with no open case, as from a tester that
+                // prints no headers, is a case of its own
+                if (testNumber == 0 || !verdict.isEmpty()) {
+                    if (testNumber > 0) {
+                        addCase(result, testNumber, verdict, passMarker);
+                    }
+                    testNumber++;
+                }
                 verdict = line;
             }
 
@@ -102,32 +110,35 @@ public class TesterOutputScoreParser implements ScoreParser {
         result.setCompiled(true);
         result.setTimedOut(processResult.isTimedOut());
         result.setOutput(buildLog(processResult));
-        result.setScore(readScore(processResult, lastLine, passCount));
+        result.setScore(readScore(processResult, lastLine, passCount,
+                question.getMaxScore()));
         return result;
     }
 
     /**
-     * Reads the total from the tester's last line, capped at the number of
-     * passed cases. A run that was stopped, crashed or ended early never
-     * printed its total, so the passes printed so far are counted instead,
-     * one mark each, as the provided testers award.
+     * Reads the total from the tester's last line, capped at the question's
+     * maximum score. Only the tester can print that line, so a tester that
+     * gives more than one mark per case is believed. A run that was
+     * stopped, crashed or ended early never printed its total, so the
+     * passes printed so far are counted instead, one mark each, as the
+     * provided testers award.
      *
      * @param processResult the finished run
      * @param lastLine the last line that was not blank
      * @param passCount the number of passed test cases
+     * @param maxScore the question's maximum score
      * @return the score
      */
     private double readScore(ProcessResult processResult, String lastLine,
-            int passCount) {
+            int passCount, double maxScore) {
         if (!finishedNormally(processResult)) {
-            return passCount;
+            return Math.min(passCount, maxScore);
         }
 
-        // The total is never more than one mark per passed case
         try {
-            return Math.min(Double.parseDouble(lastLine), passCount);
+            return Math.min(Double.parseDouble(lastLine), maxScore);
         } catch (NumberFormatException exception) {
-            return passCount;
+            return Math.min(passCount, maxScore);
         }
     }
 
