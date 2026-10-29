@@ -102,18 +102,28 @@ public class EmptyAnswerDetector implements Detector {
                 JavaSourceText.findAnswerMethodNames(starterCode);
 
         for (String methodName : methodNames) {
-            String studentBody = JavaSourceText.findMethodBody(studentCode,
-                    methodName);
             String starterBody = JavaSourceText.findMethodBody(starterCode,
                     methodName);
 
-            if (studentBody != null && JavaSourceText.sameIgnoringSpaces(
-                    studentBody, starterBody)) {
+            if (holdsStarterBody(studentCode, methodName, starterBody)) {
                 flags.add(createFlag(submission,
                         JavaSourceText.describeFile(question) + ": "
                         + methodName + " still holds only the starter code."));
             }
         }
+    }
+
+    // Says whether any method with that name still holds the starter body.
+    private boolean holdsStarterBody(String studentCode, String methodName,
+            String starterBody) {
+        for (String studentBody : JavaSourceText.findMethodBodies(
+                studentCode, methodName)) {
+            if (JavaSourceText.sameIgnoringSpaces(studentBody, starterBody)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Builds one flag for the instructor. It never changes a score.
