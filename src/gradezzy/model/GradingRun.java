@@ -38,6 +38,9 @@ public class GradingRun {
     // The score sheet the batch was graded against, or null if unknown
     private Path scoreSheetFile = null;
 
+    // The starter folder chosen for the batch, or null for the settings
+    private Path starterDirectory = null;
+
     /**
      * Creates a new grading run.
      *
@@ -126,5 +129,24 @@ public class GradingRun {
      */
     public void setScoreSheetFile(Path scoreSheetFile) {
         this.scoreSheetFile = scoreSheetFile;
+    }
+
+    /**
+     * Returns the starter folder chosen for the batch. The untouched and
+     * empty answer checks compare each answer with its files.
+     *
+     * @return the starter folder, or null to use the one in the settings
+     */
+    public Path getStarterDirectory() {
+        return starterDirectory;
+    }
+
+    /**
+     * Sets the starter folder chosen for the batch.
+     *
+     * @param starterDirectory the starter folder, or null for the settings
+     */
+    public void setStarterDirectory(Path starterDirectory) {
+        this.starterDirectory = starterDirectory;
     }
 }

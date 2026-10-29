@@ -56,6 +56,9 @@ public class GradingTask extends Task<GradingRun> {
     // The roster chosen for this batch, or null to use the config
     private Path scoreSheetFile;
 
+    // The starter folder chosen for this batch, or null to use the config
+    private Path starterDirectory;
+
     // The section the batch belongs to
     private final Section section;
 
@@ -98,6 +101,16 @@ public class GradingTask extends Task<GradingRun> {
         this.scoreSheetFile = scoreSheetFile;
     }
 
+    /** Creates a task with the roster and starter folder from Set up. */
+    public GradingTask(GradingService gradingService, List<Path> inputPaths,
+            Section section, TestCaseSource testCaseSource,
+            ProgressListener listener, Path scoreSheetFile,
+            Path starterDirectory) {
+        this(gradingService, inputPaths, section, testCaseSource, listener,
+                scoreSheetFile);
+        this.starterDirectory = starterDirectory;
+    }
+
     /**
      * Creates a task that retries or resumes an existing run.
      *
@@ -130,11 +143,8 @@ public class GradingTask extends Task<GradingRun> {
         } else if (kind == Kind.RESUME) {
             return gradingService.resume(gradingRun.getId(), listener);
         }
-        if (scoreSheetFile != null) {
-            return gradingService.startGrading(inputPaths, section,
-                    testCaseSource, listener, scoreSheetFile);
-        }
+        // A null roster or starter folder means the one in the settings
         return gradingService.startGrading(inputPaths, section,
-                testCaseSource, listener);
+                testCaseSource, listener, scoreSheetFile, starterDirectory);
     }
 }

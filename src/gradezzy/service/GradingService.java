@@ -13,7 +13,11 @@ package gradezzy.service;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
@@ -25,9 +29,12 @@ import gradezzy.grading.ProgressListener;
 import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.ingest.SubmissionLoader;
+import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
+import gradezzy.model.Severity;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
@@ -47,6 +54,21 @@ public class GradingService {
     // Start of the id given to every run
     private static final String RUN_ID_PREFIX = "RUN-";
 
+    // Start of the id of the warning added when a run cannot be saved
+    private static final String SAVE_WARNING_ID_PREFIX = "save-";
+
+    // The audit log actions this service records
+    private static final String GRADING_STARTED = "Grading started";
+    private static final String GRADING_NOT_STARTED =
+            "Grading could not start";
+    private static final String SAVE_FAILED = "Save failed";
+
+    // What the instructor can do when a run cannot be saved. PersistStage
+    // gives its warning the same text, so both are found as save warnings.
+    private static final String SAVE_FAILED_ACTION = "Export the results "
+            + "before closing the app, then check database.file in the "
+            + "settings.";
+
     // The application settings
     private final AppConfig config;
 
@@ -59,6 +81,9 @@ public class GradingService {
     // The store runs are saved to, or null to save nothing
     private final ResultRepository repository;
 
+    // The log of instructor actions, kept in the same store
+    private final AuditService auditService;
+
     // The flag that stops the current run
     private final CancellationToken cancellationToken =
             new CancellationToken();
@@ -68,6 +93,10 @@ public class GradingService {
 
     // The shared information of the last run started, kept for Retry
     private GradingContext lastContext = null;
+
+    // The ids of the runs whose failed save is already in the audit log,
+    // so a run that fails to save again is not logged twice
+    private final Set<String> unsavedRunIds = new HashSet<>();
 
     /**
      * Creates a new grading service.
@@ -97,6 +126,7 @@ public class GradingService {
         this.pipelineFactory = pipelineFactory;
         this.assessmentFactory = assessmentFactory;
         this.repository = repository;
+        this.auditService = new AuditService(config, repository);
     }
 
     /**
@@ -124,8 +154,67 @@ public class GradingService {
     public GradingRun startGrading(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener,
             Path scoreSheetFile) throws GradingException {
+        return startGrading(inputPaths, section, testCaseSource, listener,
+                scoreSheetFile, null);
+    }
+
+    /**
+     * Starts a run using the roster and the starter folder chosen for
+     * this batch; null means the score sheet or the starter folder in the
+     * settings. The starter folder is kept on the run, so Retry, and
+     * Resume while this is still the last run, use it too. A start that
+     * fails is written to the audit log with its reason.
+     */
+    public GradingRun startGrading(List<Path> inputPaths, Section section,
+            TestCaseSource testCaseSource, ProgressListener listener,
+            Path scoreSheetFile, Path starterDirectory)
+            throws GradingException {
+        GradingRun gradingRun = null;
+        try {
+            gradingRun = prepareRun(inputPaths, section, testCaseSource,
+                    listener, scoreSheetFile, starterDirectory);
+        } catch (GradingException exception) {
+            auditService.record(GRADING_NOT_STARTED, exception.getMessage());
+            throw exception;
+        }
+
+        // Written once the files are loaded, so it counts the students,
+        // not the zips and folders chosen
+        auditService.record(GRADING_STARTED, "Grading "
+                + gradingRun.getSubmissions().size() + " submission(s) for "
+                + section.getLabel() + ".");
+
+        // Saved before grading so every submission is on record as PENDING
+        // and the run can be resumed after a crash. A failure is not
+        // logged yet: the save after grading tries again and logs it.
+        saveRun(gradingRun, false);
+
+        // The pipeline grades exec.thread.count submissions at a time.
+        // prepareRun kept the run's shared information in lastContext.
+        GradingPipeline pipeline = createPipeline(gradingRun);
+        pipeline.run(gradingRun, lastContext, listener);
+
+        // Saved again so FAILED and CANCELLED submissions, which never
+        // reach PersistStage, are on record too
+        saveRun(gradingRun, true);
+        return gradingRun;
+    }
+
+    // Checks the arguments, reads the roster, loads the submissions and
+    // prepares the testers, then keeps the run for Retry. Nothing is
+    // graded yet.
+    private GradingRun prepareRun(List<Path> inputPaths, Section section,
+            TestCaseSource testCaseSource, ProgressListener listener,
+            Path scoreSheetFile, Path starterDirectory)
+            throws GradingException {
         checkArguments(inputPaths, section, testCaseSource, listener);
         cancellationToken.reset();
+
+        Path rosterFile = scoreSheetFile;
+        if (rosterFile == null) {
+            rosterFile = Path.of(config.getString(
+                    ConfigKeys.SCORE_SHEET_FILE));
+        }
 
         Assessment assessment = assessmentFactory.create(
                 section.getModuleCode());
@@ -134,13 +223,14 @@ public class GradingService {
                 LocalDateTime.now());
         // Kept on the run so the CSV export and Resume use this roster,
         // not the one in the settings
-        gradingRun.setScoreSheetFile(scoreSheetFile);
+        gradingRun.setScoreSheetFile(rosterFile);
+        gradingRun.setStarterDirectory(starterDirectory);
         GradingContext context = new GradingContext(config, assessment);
         context.setRunId(runId);
 
         // The roster for this batch is read first, so a bad score sheet
         // stops the run before any zip is extracted.
-        readRoster(context, scoreSheetFile);
+        readRoster(context, rosterFile);
 
         try {
             SubmissionLoader loader = new SubmissionLoader(config);
@@ -168,19 +258,6 @@ public class GradingService {
 
         lastRun = gradingRun;
         lastContext = context;
-
-        // Saved before grading so every submission is on record as PENDING
-        // and the run can be resumed after a crash
-        saveRun(gradingRun);
-
-        // The pipeline grades exec.thread.count submissions at a time.
-        GradingPipeline pipeline = pipelineFactory.createPipeline(
-                cancellationToken);
-        pipeline.run(gradingRun, context, listener);
-
-        // Saved again so FAILED and CANCELLED submissions, which never
-        // reach PersistStage, are on record too
-        saveRun(gradingRun);
         return gradingRun;
     }
 
@@ -247,12 +324,11 @@ public class GradingService {
         }
 
         cancellationToken.reset();
-        GradingPipeline pipeline = pipelineFactory.createPipeline(
-                cancellationToken);
+        GradingPipeline pipeline = createPipeline(gradingRun);
         pipeline.run(retryRun, lastContext,
                 new RetryProgressListener(listener, gradingRun));
 
-        saveRun(gradingRun);
+        saveRun(gradingRun, true);
         return gradingRun;
     }
 
@@ -263,12 +339,13 @@ public class GradingService {
      * unfinished submission starts from scratch, as in
      * {@link #retryFailed}.
      *
-     * <p>A run started in this session is continued with the score sheet
-     * and testers it was started with. A run from an earlier session is
-     * loaded from the database; the score sheet and testers chosen for
-     * that batch are not saved, so the ones in the settings
-     * (paths.score.sheet.file and paths.testers.dir) are used, with
-     * the students already matched in the saved run.
+     * <p>The last run started or resumed in this session is continued
+     * with the score sheet, testers and starter folder it was started
+     * with. Any other run, even an earlier one of this session, is loaded
+     * from the database; the testers and starter folder chosen for that
+     * batch are not saved, so the ones in the settings (paths.testers.dir
+     * and paths.starter.dir) are used, with the students already matched
+     * in the saved run.
      *
      * <p>Tier: SHOULD.
      *
@@ -276,7 +353,7 @@ public class GradingService {
      * @param listener the object told about progress
      * @return the resumed run, with every submission in it
      * @throws GradingException if the id or listener is missing, the run
-     *         is not in this session and cannot be loaded, or its score
+     *         is not the last one and cannot be loaded, or its score
      *         sheet or testers cannot be read
      */
     public GradingRun resume(String runId, ProgressListener listener)
@@ -310,13 +387,24 @@ public class GradingService {
         }
 
         cancellationToken.reset();
-        GradingPipeline pipeline = pipelineFactory.createPipeline(
-                cancellationToken);
+        GradingPipeline pipeline = createPipeline(gradingRun);
         pipeline.run(resumeRun, lastContext,
                 new RetryProgressListener(listener, gradingRun));
 
-        saveRun(gradingRun);
+        saveRun(gradingRun, true);
         return gradingRun;
+    }
+
+    // Builds the pipeline for a run. The one-argument factory method,
+    // which uses the starter folder in the settings, is kept for a run
+    // with no starter folder of its own.
+    private GradingPipeline createPipeline(GradingRun gradingRun) {
+        Path starterDirectory = gradingRun.getStarterDirectory();
+        if (starterDirectory == null) {
+            return pipelineFactory.createPipeline(cancellationToken);
+        }
+        return pipelineFactory.createPipeline(cancellationToken,
+                starterDirectory);
     }
 
     // Reads a score sheet into the roster of a run.
@@ -401,20 +489,57 @@ public class GradingService {
     }
 
     // Saves the run when the database is switched on. A failure does not
-    // stop grading: the results stay in memory, and PersistStage reports
-    // a database that cannot be written on each submission, so it is not
-    // reported twice here.
-    private void saveRun(GradingRun gradingRun) {
+    // stop grading: the results stay in memory. The save warnings always
+    // describe the latest save: the old ones are removed first, and a
+    // failed save gives each submission one warning, so the console and
+    // the window both show it. When logFailure is true, a failure is also
+    // written to the audit log, once per run.
+    private void saveRun(GradingRun gradingRun, boolean logFailure) {
         if (repository == null
                 || !config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
             return;
         }
 
+        removeSaveWarnings(gradingRun);
         try {
             repository.saveRun(gradingRun);
+            unsavedRunIds.remove(gradingRun.getId());
         } catch (PersistenceException exception) {
-            // Reported by PersistStage, as explained above
+            String message = "This run could not be saved to the "
+                    + "database, so it is not in the list of runs: "
+                    + exception.getMessage() + " The marks are kept until "
+                    + "the app is closed.";
+            // add returns false when this run's failure is already logged
+            if (logFailure && unsavedRunIds.add(gradingRun.getId())) {
+                auditService.record(SAVE_FAILED, message);
+            }
+            for (Submission submission : gradingRun.getSubmissions()) {
+                submission.addAnomaly(new Anomaly(SAVE_WARNING_ID_PREFIX
+                        + UUID.randomUUID(), AnomalyType.INTERNAL_ERROR,
+                        Severity.WARNING, submission.getUsername(),
+                        message, SAVE_FAILED_ACTION));
+            }
         }
+    }
+
+    // Removes the warnings of earlier saves, from this service or from
+    // PersistStage, from every submission of a run.
+    private void removeSaveWarnings(GradingRun gradingRun) {
+        for (Submission submission : gradingRun.getSubmissions()) {
+            List<Anomaly> saveWarnings = new ArrayList<>();
+            for (Anomaly anomaly : submission.getAnomalies()) {
+                if (isSaveWarning(anomaly)) {
+                    saveWarnings.add(anomaly);
+                }
+            }
+            submission.getAnomalies().removeAll(saveWarnings);
+        }
+    }
+
+    // Says whether an anomaly says that marks could not be saved.
+    private boolean isSaveWarning(Anomaly anomaly) {
+        return anomaly.getType() == AnomalyType.INTERNAL_ERROR
+                && SAVE_FAILED_ACTION.equals(anomaly.getSuggestedAction());
     }
 
     // Stops a run that is missing an argument or names a module or
@@ -490,10 +615,20 @@ public class GradingService {
     }
 
     // Clears what the earlier attempt left, because every stage runs
-    // again from the start and would otherwise add duplicates.
+    // again from the start and would otherwise add duplicates. The window
+    // may be reading these lists; Submission makes that safe. A warning
+    // about a duplicate file is kept, because loading is not repeated.
     private void resetForRetry(Submission submission) {
+        List<Anomaly> loadingWarnings = new ArrayList<>();
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            if (anomaly.getType() == AnomalyType.DUPLICATE_SUBMISSION) {
+                loadingWarnings.add(anomaly);
+            }
+        }
+
         submission.setStatus(SubmissionStatus.PENDING);
         submission.getAnomalies().clear();
+        submission.getAnomalies().addAll(loadingWarnings);
         submission.getQuestionResults().clear();
         submission.setWorkingCopyPath(null);
     }
