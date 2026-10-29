@@ -193,10 +193,15 @@ public class StudentPanel extends ScrollPane {
         total.getStyleClass().add("big-total");
         total.setMinWidth(Region.USE_PREF_SIZE);
         Label max = Parts.muted("");
+        max.setMinWidth(Region.USE_PREF_SIZE);
         if (assessment != null) {
             max.setText("out of " + Parts.mark(assessment.getMaxTotal()));
         }
         Label pill = Students.pill(submission, window.getBackend());
+        // A long status, such as three questions that did not compile,
+        // may be shortened here; its tooltip keeps the whole text
+        pill.setMinWidth(0);
+        pill.setTooltip(new Tooltip(pill.getText()));
         HBox row = new HBox(Parts.GAP_SMALL, total, max, Parts.grow(),
                 pill);
         row.setAlignment(Pos.BASELINE_LEFT);
@@ -303,10 +308,14 @@ public class StudentPanel extends ScrollPane {
             Region square = new Region();
             square.getStyleClass().addAll("test-square",
                     test.isPassed() ? "passed" : "failed");
-            String detail = "Test " + test.getTestNumber() + ": "
-                    + (test.isPassed() ? "passed" : "failed");
-            if (test.getDetail() != null && !test.getDetail().isEmpty()) {
-                detail = detail + "\n" + test.getDetail();
+            String verdict = test.isPassed() ? "passed" : "failed";
+            String detail = "Test " + test.getTestNumber() + ": " + verdict;
+            String output = test.getDetail();
+            // The tester's line is shown only when it says more, such as
+            // why a test failed
+            if (output != null && !output.trim().isEmpty()
+                    && !output.trim().equalsIgnoreCase(verdict)) {
+                detail = detail + "\n" + output;
             }
             Tooltip.install(square, new Tooltip(detail));
             tests.getChildren().add(square);
@@ -329,8 +338,11 @@ public class StudentPanel extends ScrollPane {
 
     // Returns the short reason for a question's mark.
     private String reasonFor(QuestionResult result) {
-        if (!result.isCompiled()) {
+        if (Students.didNotCompile(result)) {
             return "Did not compile.";
+        } else if (!result.isCompiled()) {
+            return "Not compiled, because the file or its tester is "
+                    + "missing.";
         }
         if (result.isTimedOut()) {
             return "A test ran too long and was stopped.";
@@ -454,8 +466,9 @@ public class StudentPanel extends ScrollPane {
 
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         if (repair.isBlocked()) {
-            Label note = Parts.muted("This fix cannot be changed now.");
+            Label note = Parts.muted(repair.getNote());
             note.getStyleClass().add("small-text");
+            note.setWrapText(true);
             buttons.getChildren().add(note);
         } else if (status == FixStatus.APPLIED) {
             buttons.getChildren().addAll(

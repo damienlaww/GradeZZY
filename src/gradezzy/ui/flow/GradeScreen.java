@@ -4,7 +4,8 @@
  * Purpose: Step 2. Shows grading as it happens: how many students are
  * done, about how long is left, what is happening now, a small bell
  * curve of the marks so far and a count of each result. Offers Cancel,
- * and Resume after a cancel.
+ * Resume after a cancel, and the way back to Set up when grading could
+ * not run.
  *
  * Where it fits: Replaces the old Grading Progress screen. It is the
  * ProgressListener and RunCallback of every run it starts, and moves to
@@ -37,8 +38,6 @@ import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
-import gradezzy.ui.backend.ImportItem;
-import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.PipelineStages;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.RunCallback;
@@ -95,6 +94,9 @@ public class GradeScreen extends FlowScreen
     // What is happening now
     private final Label now = Parts.muted("");
 
+    // Why grading could not run, shown only after a failure
+    private final Label reason = Parts.muted("");
+
     // The share of students done, from 0 to 1
     private final DoubleProperty progress = new SimpleDoubleProperty(0);
 
@@ -123,6 +125,12 @@ public class GradeScreen extends FlowScreen
 
     // True after Cancel was pressed
     private boolean cancelling = false;
+
+    // True once the run has finished, stopped or failed
+    private boolean ended = false;
+
+    // The section and assessment, such as "CS102 G1 · Lab Test"
+    private String about = "";
 
     // The message of the last failure, or null
     private String failure = null;
@@ -159,17 +167,11 @@ public class GradeScreen extends FlowScreen
      */
     public void start() {
         prepare(getState().getSection().getLabel());
-        for (ImportItem item : getState().getBatch().getItems(
-                InputKind.SUBMISSION)) {
-            if (getState().getBatch().getEffectiveState(item).isUsable()) {
-                total++;
-            }
-        }
+        // Students, not files: a bulk zip or a folder holds several
+        total = getState().getBatch().countStudents();
         updateCount();
         getState().setGrading(true);
-        getBackend().recordAudit("Grading started", "Grading "
-                + Parts.plural(total, "submission") + " for "
-                + getState().getSection().getLabel() + ".");
+        // The backend records "Grading started" with the real count
         getBackend().startGrading(getState().getBatch(),
                 getState().getSection(), this, this);
         refreshActions();
@@ -214,10 +216,15 @@ public class GradeScreen extends FlowScreen
         return column;
     }
 
-    // Builds the count, time left, what is happening now and the bar.
+    // Builds the count, time left, what is happening now, the reason a
+    // run failed and the bar.
     private VBox createProgressCard() {
         done.getStyleClass().add("grade-count");
         ofTotal.getStyleClass().add("grade-of");
+        // The count and time keep their width; "now" is cut instead
+        done.setMinWidth(Label.USE_PREF_SIZE);
+        ofTotal.setMinWidth(Label.USE_PREF_SIZE);
+        timeLeft.setMinWidth(Label.USE_PREF_SIZE);
         HBox count = new HBox(Parts.GAP_SMALL / 2, done, ofTotal);
         count.setAlignment(Pos.BASELINE_LEFT);
         VBox left = new VBox(count, timeLeft);
@@ -225,6 +232,9 @@ public class GradeScreen extends FlowScreen
         now.setMinWidth(0);
         HBox top = new HBox(Parts.GAP, left, Parts.grow(), now);
         top.setAlignment(Pos.BOTTOM_LEFT);
+        reason.setWrapText(true);
+        reason.setVisible(false);
+        reason.setManaged(false);
 
         Region fill = new Region();
         fill.getStyleClass().add("track-fill");
@@ -233,7 +243,7 @@ public class GradeScreen extends FlowScreen
         bar.setAlignment(Pos.CENTER_LEFT);
         fill.maxWidthProperty().bind(bar.widthProperty().multiply(progress));
         fill.minWidthProperty().bind(fill.maxWidthProperty());
-        return Parts.card(null, top, bar);
+        return Parts.card(null, top, reason, bar);
     }
 
     // Builds the card with the small bell curve.
@@ -320,6 +330,7 @@ public class GradeScreen extends FlowScreen
     public void onFinished(GradingRun gradingRun) {
         getState().setGrading(false);
         getState().setRun(gradingRun);
+        end();
         if (gradingRun != null) {
             for (Submission submission : gradingRun.getSubmissions()) {
                 if (!isUnfinished(submission)) {
@@ -332,28 +343,35 @@ public class GradeScreen extends FlowScreen
             heading.setText("Grading stopped");
             now.setText("The rest are waiting; press Resume to grade "
                     + "them.");
-            refreshActions();
+            refreshAfterGrading();
             return;
         }
         heading.setText("Grading finished");
         now.setText("");
         getWindow().notify("Grading finished.");
         getState().reach(Step.REVIEW);
-        if (getWindow().getCurrentStep() == Step.GRADE
-                && getWindow().getCurrentPage() == Page.MARKING) {
+        if (isOnScreen()) {
             getWindow().show(Step.REVIEW);
             return;
         }
-        refreshActions();
+        refreshAfterGrading();
     }
 
     @Override
     public void onFailed(String message) {
         getState().setGrading(false);
         failure = message;
+        end();
         heading.setText("Grading could not run");
-        now.setText(message);
-        refreshActions();
+        now.setText("");
+        reason.setText(message);
+        reason.setVisible(true);
+        reason.setManaged(true);
+        updateCount();
+        if (!isOnScreen()) {
+            getWindow().notify("Grading could not run. See step 2.");
+        }
+        refreshAfterGrading();
     }
 
     // ---------------------------------------------------------- helpers
@@ -364,10 +382,11 @@ public class GradeScreen extends FlowScreen
         total = 0;
         finished = 0;
         cancelling = false;
+        ended = false;
         failure = null;
         startedAt = System.currentTimeMillis();
         heading.setText("Grading");
-        String about = sectionLabel;
+        about = sectionLabel;
         Assessment assessment = getBackend().getAssessment();
         if (assessment != null) {
             about = about + DOT + assessment.getName();
@@ -376,6 +395,14 @@ public class GradeScreen extends FlowScreen
                 + "carries on.");
         now.setText("Starting");
         timeLeft.setText("");
+        reason.setVisible(false);
+        reason.setManaged(false);
+    }
+
+    // Marks the run as over, so the screen no longer says it carries on.
+    private void end() {
+        ended = true;
+        subtitle.setText(about + ".");
     }
 
     // Updates the count, the bar, the time left, the chart and the rows.
@@ -392,6 +419,10 @@ public class GradeScreen extends FlowScreen
     private void updateTimeLeft() {
         if (total > 0 && finished >= total) {
             timeLeft.setText("Done");
+            return;
+        }
+        if (ended) {
+            timeLeft.setText("Stopped");
             return;
         }
         if (finished == 0) {
@@ -437,7 +468,10 @@ public class GradeScreen extends FlowScreen
                 tally[GRADED]++;
             }
         }
-        tally[WAITING] += Math.max(0, total - finished);
+        // After a failure nobody is waiting: the rest are not graded
+        if (failure == null) {
+            tally[WAITING] += Math.max(0, total - finished);
+        }
         pills[FAILED].setText(onlyCompile ? "Did not compile"
                 : "Could not grade");
         for (int index = 0; index < tally.length; index++) {
@@ -470,6 +504,16 @@ public class GradeScreen extends FlowScreen
         return false;
     }
 
+    // Redraws the action bar here, or the screen on display when the
+    // instructor is elsewhere, so no screen shows what it was before.
+    private void refreshAfterGrading() {
+        if (isOnScreen()) {
+            refreshActions();
+        } else {
+            getWindow().refreshScreen();
+        }
+    }
+
     // Fills the action bar for the current situation.
     private void refreshActions() {
         if (!isOnScreen()) {
@@ -486,11 +530,13 @@ public class GradeScreen extends FlowScreen
             actions.setPrimary("Review results", () -> { }, false);
             return;
         }
-        actions.setBack(() -> getWindow().show(Step.SET_UP));
         if (failure != null) {
             actions.setStatus("Check the files on Set up and try again.");
+            actions.setPrimary("Back to Set up",
+                    () -> getWindow().show(Step.SET_UP), true);
             return;
         }
+        actions.setBack(() -> getWindow().show(Step.SET_UP));
         if (run != null && hasUnfinished(run)) {
             actions.setStatus("Students already graded keep their marks.");
             actions.setPrimary("Resume", () -> continueRun(run, false),

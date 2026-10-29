@@ -8,14 +8,18 @@
  * Where it fits: Replaces the old Statistics and Similarity Review
  * screens and the export buttons of Results. The figures come from
  * MarkStats, like the Statistics tab, so the two always agree. Calls
- * export and listSimilarPairs on DashboardBackend; SimilaritySheet
+ * export and listSimilarPairs on DashboardBackend; SimilarityCheck runs
+ * the live similar code check in the background and SimilaritySheet
  * compares one pair.
  */
 package gradezzy.ui.flow;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import javafx.concurrent.Worker;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.CheckBox;
@@ -111,6 +115,16 @@ public class ExportScreen extends FlowScreen {
     // The similar code card
     private final VBox similar = new VBox();
 
+    // The pairs listed in the similar code card
+    private final List<SimilarityPair> shownPairs = new ArrayList<>();
+
+    // The similar code check of each run, by run id: still running, or
+    // ended with its result. Showing the step again reuses it.
+    private final Map<String, SimilarityCheck> checks = new HashMap<>();
+
+    // How many gradings had started when the checks above began
+    private int checksFromGrading = 0;
+
     // True after a successful export
     private boolean exported = false;
 
@@ -168,12 +182,11 @@ public class ExportScreen extends FlowScreen {
                 || !getBackend().supports(Capability.SIMILARITY_DETAIL)) {
             return false;
         }
-        List<SimilarityPair> pairs = getBackend().listSimilarPairs(run);
-        if (index < 0 || index >= pairs.size()) {
+        if (index < 0 || index >= shownPairs.size()) {
             return false;
         }
         getWindow().showSheet(SimilaritySheet.create(getWindow(), run,
-                pairs.get(index)));
+                shownPairs.get(index)));
         return true;
     }
 
@@ -287,8 +300,12 @@ public class ExportScreen extends FlowScreen {
     }
 
     // Fills the similar code card, or hides it when the check is off.
+    // Demo pairs are in memory, so they are shown at once; the live
+    // check reads every answer, so it runs in the background, once per
+    // run until grading starts again or the instructor asks.
     private void refreshSimilar(GradingRun run) {
         similar.getChildren().clear();
+        shownPairs.clear();
         boolean show = run != null
                 && getBackend().supports(Capability.SIMILARITY)
                 && getBackend().isSimilarityEnabled();
@@ -297,8 +314,80 @@ public class ExportScreen extends FlowScreen {
         if (!show) {
             return;
         }
-        similar.getChildren().add(Parts.title("Similar code"));
-        List<SimilarityPair> pairs = getBackend().listSimilarPairs(run);
+        if (getBackend().isDemo()) {
+            showPairs(run, getBackend().listSimilarPairs(run));
+            return;
+        }
+        if (getState().getGradingCount() != checksFromGrading) {
+            // Grading may have changed the answers, so check them again
+            checks.clear();
+            checksFromGrading = getState().getGradingCount();
+        }
+        SimilarityCheck check = checks.get(run.getId());
+        // A run read again from the database is a new object without the
+        // flags of the earlier check, so it is checked again
+        if (check == null || check.getRun() != run) {
+            check = startSimilarityCheck(run);
+        }
+        showCheck(check);
+    }
+
+    // Starts the similar code check of a run on a background thread and
+    // keeps it, so the card can show it until it ends.
+    private SimilarityCheck startSimilarityCheck(GradingRun run) {
+        SimilarityCheck check = new SimilarityCheck(getBackend(), run);
+        check.setOnSucceeded(event -> showCheck(check));
+        check.setOnFailed(event -> showCheck(check));
+        checks.put(run.getId(), check);
+        Thread worker = new Thread(check, "gradezzy-similarity");
+        worker.setDaemon(true);
+        worker.start();
+        return check;
+    }
+
+    // Checks the run shown again, when the instructor asks.
+    private void checkAgain() {
+        GradingRun run = getState().getRun();
+        if (run == null) {
+            return;
+        }
+        showCheck(startSimilarityCheck(run));
+    }
+
+    // Shows a check in the card: running, its pairs, or that it failed.
+    // Does nothing when another run or a newer check is shown since.
+    private void showCheck(SimilarityCheck check) {
+        GradingRun run = getState().getRun();
+        if (!similar.isVisible() || run != check.getRun()
+                || checks.get(run.getId()) != check) {
+            return;
+        }
+        if (check.getState() == Worker.State.SUCCEEDED) {
+            showPairs(run, check.getValue());
+        } else if (check.getState() == Worker.State.FAILED) {
+            similar.getChildren().setAll(Parts.title("Similar code"),
+                    Parts.muted("The check for similar code did not "
+                    + "finish."), Parts.link("Try again",
+                    () -> checkAgain()));
+        } else {
+            similar.getChildren().setAll(Parts.title("Similar code"),
+                    Parts.muted("Comparing the students' answers. This "
+                    + "can take a moment."));
+        }
+    }
+
+    // Fills the similar code card with the pairs found for a run. Live
+    // mode offers to check again, as the files may have changed.
+    private void showPairs(GradingRun run, List<SimilarityPair> pairs) {
+        HBox top = Parts.row(Parts.GAP, Parts.title("Similar code"));
+        if (!getBackend().isDemo()) {
+            Hyperlink again = Parts.link("Check again", () -> checkAgain());
+            again.getStyleClass().add("small-text");
+            top.getChildren().addAll(Parts.grow(), again);
+        }
+        similar.getChildren().setAll(top);
+        shownPairs.clear();
+        shownPairs.addAll(pairs);
         if (pairs.isEmpty()) {
             similar.getChildren().add(Parts.muted("No two students' "
                     + "answers are unusually similar."));
