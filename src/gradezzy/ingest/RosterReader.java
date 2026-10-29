@@ -119,7 +119,8 @@ public class RosterReader {
             return null;
         }
         for (Student student : roster) {
-            if (student != null && username.equalsIgnoreCase(student.getUsername())) {
+            if (student != null
+                    && username.equalsIgnoreCase(student.getUsername())) {
                 return student;
             }
         }

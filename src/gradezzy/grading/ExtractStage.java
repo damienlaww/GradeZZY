@@ -77,7 +77,8 @@ public class ExtractStage implements GradingStage {
         submission.setStudent(rosterReader.findByUsername(
                 context.getRoster(), submission.getUsername()));
         if (submission.getStudent() == null) {
-            submission.addAnomaly(new Anomaly("UNKNOWN-" + java.util.UUID.randomUUID(),
+            submission.addAnomaly(new Anomaly("UNKNOWN-"
+                    + java.util.UUID.randomUUID(),
                     AnomalyType.UNKNOWN_STUDENT, Severity.WARNING,
                     submission.getUsername(), submission.getUsername()
                             + " is not on the roster.",
