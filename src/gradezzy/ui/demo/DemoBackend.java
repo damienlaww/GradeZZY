@@ -417,7 +417,8 @@ public final class DemoBackend implements DashboardBackend {
     // --------------------------------------------------------- grading
 
     /**
-     * Starts a simulated run of the batch.
+     * Starts a simulated run of the batch and records it in the audit
+     * log, as GradingService does in live mode.
      */
     @Override
     public void startGrading(ImportBatch batch, Section section,
@@ -435,6 +436,9 @@ public final class DemoBackend implements DashboardBackend {
                 run.addSubmission(submission);
             }
         }
+        recordAudit("Grading started", "Grading "
+                + run.getSubmissions().size() + " submission(s) for "
+                + section.getLabel() + ".");
         startGrader(run, run.getSubmissions(), listener, callback, true);
     }
 
@@ -482,6 +486,15 @@ public final class DemoBackend implements DashboardBackend {
             }
         }
         startGrader(gradingRun, retried, listener, callback, false);
+    }
+
+    /**
+     * Returns true for any run, because the simulated grader can grade
+     * any run again.
+     */
+    @Override
+    public boolean canRetryFailed(GradingRun gradingRun) {
+        return gradingRun != null;
     }
 
     /**

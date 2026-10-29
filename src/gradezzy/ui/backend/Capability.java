@@ -97,9 +97,11 @@ public enum Capability {
     /** Records a review decision on a flag. */
     FLAG_REVIEW("Mark flags reviewed or rejected",
             "Records that you looked at a flag, without changing any "
-            + "mark.", "Jing Yuan", null, CapabilityStatus.PROPOSED,
-            "Store an Open, Reviewed or Rejected decision for each "
-            + "anomaly, with undo and an audit entry."),
+            + "mark.", "Jing Yuan",
+            "LiveBackend.setDecision, kept until GradeZZY closes",
+            CapabilityStatus.WORKS_NOW,
+            "Nothing for one session. To keep decisions after a restart, "
+            + "a service that saves each decision with an audit entry."),
 
     /** Searches, filters and sorts students. */
     SEARCH("Search, filter and sort",

@@ -5,6 +5,7 @@
  *
  * Where it fits: The default backend, used by "sh run.sh". Each method
  * calls one service or reads a setting, else returns Not connected yet.
+ * Review decisions on flags are kept here, in memory, for one session.
  */
 package gradezzy.ui.backend;
 
@@ -14,6 +15,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javafx.scene.control.TreeItem;
@@ -26,6 +28,7 @@ import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Question;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
@@ -50,15 +53,15 @@ import gradezzy.util.InputValidator;
  */
 public class LiveBackend implements DashboardBackend {
 
-    // The extension of a student submission file
-    private static final String ZIP_EXTENSION = ".zip";
-
     // The extension of a score sheet file
     private static final String CSV_EXTENSION = ".csv";
 
     // The folder for generated testers, inside the output folder
     private static final String GENERATED_TESTERS_FOLDER =
             "generated-testers";
+
+    // The separator between a question's folder and file, as in Q1/Q1a.java
+    private static final String FOLDER_SEPARATOR = "/";
 
     // Every service of the application
     private final ServiceRegistry services;
@@ -69,9 +72,35 @@ public class LiveBackend implements DashboardBackend {
     // The assessment, built once from the configuration
     private final Assessment assessment;
 
-    // Latest run per section; a restore clears it on a background thread
+    // Says what grading will do with a chosen zip file or folder
+    private final SubmissionPreview preview;
+
+    // Latest run per section, filled when a grading task ends; a restore
+    // clears it. Both happen on the JavaFX thread.
     private final Map<String, GradingRun> runsBySection =
             new ConcurrentHashMap<>();
+
+    // The saved runs, newest first, read once from the database and read
+    // again after anything that changes them; null until first needed
+    private List<GradingRun> savedRuns = null;
+
+    // The id of the run being graded again in the background, or null
+    private String runGradedAgainId = null;
+
+    // The last run this session started or resumed, the only run whose
+    // testers GradingService keeps for Retry; null until one finishes
+    private GradingRun lastRunStarted = null;
+
+    // The review decisions of this session, by student and anomaly id
+    private final Map<String, ReviewDecision> decisions =
+            new ConcurrentHashMap<>();
+
+    // The ids of the anomalies found by runs started in this session
+    private final Set<String> anomaliesFoundNow =
+            ConcurrentHashMap.newKeySet();
+
+    // The ids of the runs started in this session
+    private final Set<String> runsStartedNow = ConcurrentHashMap.newKeySet();
 
     /**
      * Creates a live backend.
@@ -82,6 +111,7 @@ public class LiveBackend implements DashboardBackend {
         this.services = services;
         this.config = services.getConfig();
         this.assessment = new AssessmentFactory(config).create();
+        this.preview = new SubmissionPreview(config);
     }
 
     /**
@@ -150,6 +180,8 @@ public class LiveBackend implements DashboardBackend {
 
     /**
      * Returns this session's run for the section, else its newest saved run.
+     * A run being graded again is never returned, because the grading
+     * threads are changing it; its saved copy is returned instead.
      */
     @Override
     public GradingRun getRun(Section section) {
@@ -158,28 +190,26 @@ public class LiveBackend implements DashboardBackend {
         }
 
         GradingRun recent = runsBySection.get(section.getLabel());
-        if (recent != null) {
+        if (recent != null && !isGradedAgainNow(recent)) {
             return recent;
         }
-
-        for (GradingRun saved : services.getHistoryService().listRuns()) {
-            if (saved.getSection() != null && section.getLabel().equals(
-                    saved.getSection().getLabel())) {
-                return saved;
-            }
-        }
-        return null;
+        return findNewestSavedRun(section.getLabel());
     }
 
     /**
-     * Lists the runs from HistoryService.listRuns.
+     * Lists the runs from HistoryService.listRuns, giving this session's
+     * run in place of its saved copy, so Retry works on a run opened from
+     * the Runs tab. A run is current when getRun shows it for its
+     * section. No run is restorable on its own, because no service
+     * restores one run, so no backup is described.
      */
     @Override
     public List<RunRecord> listRuns() {
         List<RunRecord> records = new ArrayList<>();
-        for (GradingRun run : services.getHistoryService().listRuns()) {
-            records.add(new RunRecord(run, describeRun(run),
-                    "Backup list not connected yet", false, false));
+        for (GradingRun saved : getSavedRuns()) {
+            GradingRun run = findSessionRun(saved);
+            records.add(new RunRecord(run, describeRun(run), "", false,
+                    isShownNow(run)));
         }
         return records;
     }
@@ -216,14 +246,16 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Checks the path with InputValidator and its file name.
+     * Checks the path with InputValidator and its file name. Student zips
+     * and folders are checked with SubmissionPreview, and a starter folder
+     * for the starter file of each question.
      */
     @Override
     public ImportItem inspect(InputKind kind, Path path) {
         String name = String.valueOf(path.getFileName());
 
         if (kind == InputKind.SUBMISSION) {
-            return inspectSubmission(path, name);
+            return inspectSubmission(path);
         }
 
         if (kind == InputKind.ROSTER) {
@@ -241,12 +273,17 @@ public class LiveBackend implements DashboardBackend {
         if (!InputValidator.isReadableDirectory(path)) {
             return unreadable(kind, path);
         }
+        if (kind == InputKind.STARTER) {
+            return inspectStarter(path);
+        }
         return new ImportItem(kind, path, "", ImportState.ACCEPTED,
                 "Folder found.");
     }
 
     /**
-     * Starts GradingService.startGrading in a GradingTask.
+     * Starts GradingService.startGrading in a GradingTask. A starter
+     * folder that cannot be used is not passed, so grading uses the one
+     * in Settings, as its row on Set up says.
      */
     @Override
     public void startGrading(ImportBatch batch, Section section,
@@ -254,7 +291,8 @@ public class LiveBackend implements DashboardBackend {
         GradingTask task = new GradingTask(services.getGradingService(),
                 batch.getSubmissionPaths(), section,
                 createTestCaseSource(batch), listener,
-                batch.getSinglePath(InputKind.ROSTER));
+                batch.getSinglePath(InputKind.ROSTER),
+                findUsableStarter(batch));
         runInBackground(task, callback, Capability.IMPORT_AND_GRADE);
     }
 
@@ -274,6 +312,7 @@ public class LiveBackend implements DashboardBackend {
             ProgressListener listener, RunCallback callback) {
         GradingTask task = new GradingTask(services.getGradingService(),
                 GradingTask.Kind.RESUME, gradingRun, listener);
+        setRunGradedAgain(gradingRun.getId());
         runInBackground(task, callback, Capability.RESUME_RUN);
     }
 
@@ -285,7 +324,18 @@ public class LiveBackend implements DashboardBackend {
             ProgressListener listener, RunCallback callback) {
         GradingTask task = new GradingTask(services.getGradingService(),
                 GradingTask.Kind.RETRY_FAILED, gradingRun, listener);
+        setRunGradedAgain(gradingRun.getId());
         runInBackground(task, callback, Capability.RETRY_FAILED);
+    }
+
+    /**
+     * Says whether the run is the last one this session started or
+     * resumed. GradingService.retryFailed refuses any other run, because
+     * its testers are not loaded.
+     */
+    @Override
+    public synchronized boolean canRetryFailed(GradingRun gradingRun) {
+        return gradingRun != null && gradingRun == lastRunStarted;
     }
 
     /**
@@ -314,20 +364,34 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns OPEN, because no service stores review decisions yet.
+     * Returns the decision recorded in this session, or OPEN.
      */
     @Override
     public ReviewDecision getDecision(Anomaly anomaly) {
-        return ReviewDecision.OPEN;
+        return decisions.getOrDefault(decisionKey(anomaly),
+                ReviewDecision.OPEN);
     }
 
     /**
-     * Returns Not connected yet: no service stores review decisions.
+     * Records the decision in memory until GradeZZY closes. No service
+     * saves review decisions, so they are not kept after a restart.
      */
     @Override
     public ActionResult setDecision(Anomaly anomaly,
             ReviewDecision decision) {
-        return ActionResult.notConnected(Capability.FLAG_REVIEW);
+        if (anomaly == null || decision == null) {
+            return ActionResult.failed("Choose a flag and a decision.");
+        }
+
+        if (decision == ReviewDecision.OPEN) {
+            decisions.remove(decisionKey(anomaly));
+        } else {
+            decisions.put(decisionKey(anomaly), decision);
+        }
+        return ActionResult.done("Marked the flag for "
+                + anomaly.getUsername() + " as "
+                + decision.getLabel().toLowerCase() + ". No mark changed. "
+                + "This is kept until GradeZZY closes.");
     }
 
     /**
@@ -347,7 +411,7 @@ public class LiveBackend implements DashboardBackend {
         for (Anomaly anomaly : listAnomalies(gradingRun)) {
             if (ReviewRules.isValidationFinding(anomaly.getType())) {
                 repairs.add(new RepairItem(anomaly, "Not recorded yet",
-                        "Not recorded yet"));
+                        "Not recorded yet", describeNoRepair(anomaly)));
             }
         }
         return repairs;
@@ -360,20 +424,40 @@ public class LiveBackend implements DashboardBackend {
     public ActionResult approveRepair(RepairItem repair) {
         Anomaly anomaly = repair.getAnomaly();
         services.getAnomalyService().approveFix(anomaly);
-        return checkFixStatus(anomaly, FixStatus.APPROVED,
-                "Approved the repair for " + anomaly.getUsername() + ".");
+        // The new status is saved, so saved copies of the run are stale
+        forgetSavedRuns();
+
+        if (anomaly.getFixStatus() == FixStatus.APPROVED) {
+            return ActionResult.done("Approved the repair for "
+                    + anomaly.getUsername() + ".");
+        }
+        return ActionResult.failed("The repair for " + anomaly.getUsername()
+                + " was not approved, because it is "
+                + describeFixStatus(anomaly.getFixStatus()) + ".");
     }
 
     /**
-     * Calls AnomalyService.undoFix and checks the fix status changed.
+     * Calls AnomalyService.undoFix for an applied or approved repair and
+     * checks the fix status changed. Any other repair is left alone.
      */
     @Override
     public ActionResult rejectRepair(RepairItem repair) {
         Anomaly anomaly = repair.getAnomaly();
+        FixStatus before = anomaly.getFixStatus();
+        if (before != FixStatus.APPLIED && before != FixStatus.APPROVED) {
+            return ActionResult.failed("The repair for "
+                    + anomaly.getUsername() + " was not undone, because "
+                    + "it is " + describeFixStatus(before) + ".");
+        }
+
         services.getAnomalyService().undoFix(anomaly);
-        return checkFixStatus(anomaly, FixStatus.UNDONE,
-                "Rejected the repair for " + anomaly.getUsername()
-                + ". The working copy was put back.");
+        forgetSavedRuns();
+        if (anomaly.getFixStatus() == FixStatus.UNDONE) {
+            return ActionResult.done("Rejected the repair for "
+                    + anomaly.getUsername()
+                    + ". The working copy was put back.");
+        }
+        return ActionResult.failed(explainUndoFailure(anomaly));
     }
 
     /**
@@ -508,7 +592,7 @@ public class LiveBackend implements DashboardBackend {
     public ActionResult backupNow() {
         Path backup = services.getHistoryService().backupNow();
         if (backup == null) {
-            return ActionResult.failed(waitingMessage(Capability.BACKUP));
+            return ActionResult.failed(explainBackupFailure());
         }
         return ActionResult.saved("Backed up the saved results to "
                 + backup + ".", backup);
@@ -528,22 +612,31 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public ActionResult restoreBackup(Path backupFile) {
+        if (!config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+            return ActionResult.failed("Saving results is switched off in "
+                    + "Settings, so there is nothing to restore into. "
+                    + "Switch it on, then restore again.");
+        }
+
         try {
             services.getHistoryService().restore(backupFile);
         } catch (UnsupportedOperationException exception) {
             return ActionResult.notConnected(Capability.RESTORE);
         } catch (RuntimeException exception) {
+            // A restore that failed half way may still have changed them
+            forgetSavedRuns();
             return ActionResult.failed("The restore of "
                     + backupFile.getFileName() + " did not finish ("
-                    + exception + "). Check the History screen before "
-                    + "grading again.");
+                    + exception.getMessage() + "). Check the Runs tab "
+                    + "before grading again.");
         }
 
+        // Forget every run so getRun reads the restored history.
+        runsBySection.clear();
+        forgetSavedRuns();
         if (Capability.RESTORE.getStatus() != CapabilityStatus.WORKS_NOW) {
             return ActionResult.notConnected(Capability.RESTORE);
         }
-        // Forget session runs so getRun reads the restored history.
-        runsBySection.clear();
         return ActionResult.done("Restored the saved results from "
                 + backupFile.getFileName() + ".");
     }
@@ -603,6 +696,8 @@ public class LiveBackend implements DashboardBackend {
             services.getSettingsService().updateSetting(change.getKey(),
                     change.getValue());
         }
+        // Switching the database off or on changes the saved runs shown
+        forgetSavedRuns();
 
         try {
             services.getSettingsService().save();
@@ -649,41 +744,96 @@ public class LiveBackend implements DashboardBackend {
         // live mode has no sample cohort
     }
 
-    // Checks one submission file without opening it.
-    private ImportItem inspectSubmission(Path path, String name) {
-        boolean isFolder = InputValidator.isReadableDirectory(path);
-        if (!isFolder && !InputValidator.isReadableFile(path)) {
-            return unreadable(InputKind.SUBMISSION, path);
+    // Checks one chosen zip or folder with the SubmissionLoader methods
+    // grading uses, so Set up says what grading will really do.
+    private ImportItem inspectSubmission(Path path) {
+        if (InputValidator.isReadableDirectory(path)) {
+            return preview.inspectFolder(path);
+        } else if (InputValidator.isReadableFile(path)) {
+            return preview.inspectFile(path);
         }
-        if (!isFolder && !name.toLowerCase().endsWith(ZIP_EXTENSION)) {
-            return new ImportItem(InputKind.SUBMISSION, path, name,
-                    ImportState.INVALID, "This is not a ZIP file.");
+        return unreadable(InputKind.SUBMISSION, path);
+    }
+
+    // Checks that a starter folder holds each question's starter file,
+    // which the untouched and empty answer checks compare answers with.
+    private ImportItem inspectStarter(Path folder) {
+        List<String> missingFiles = new ArrayList<>();
+        List<String> missingIds = new ArrayList<>();
+        for (Question question : assessment.getQuestions()) {
+            Path file = folder.resolve(question.getFolderName())
+                    .resolve(question.getFileName());
+            if (!InputValidator.isReadableFile(file)) {
+                missingFiles.add(question.getFolderName()
+                        + FOLDER_SEPARATOR + question.getFileName());
+                missingIds.add(question.getId());
+            }
         }
-        return new ImportItem(InputKind.SUBMISSION, path,
-                usernameOf(name), ImportState.ACCEPTED, "Ready to grade.");
+
+        if (missingFiles.isEmpty()) {
+            return new ImportItem(InputKind.STARTER, folder, "",
+                    ImportState.ACCEPTED, "Holds the starter file of every "
+                    + "question.");
+        } else if (missingFiles.size() == assessment.getQuestions().size()) {
+            return new ImportItem(InputKind.STARTER, folder, "",
+                    ImportState.INVALID, "None of the starter files, such "
+                    + "as " + missingFiles.get(0) + ", is in this folder, "
+                    + describeStarterFallback(folder)
+                    + " Choose the folder given to the students.");
+        }
+        String verb = " are";
+        if (missingFiles.size() == 1) {
+            verb = " is";
+        }
+        return new ImportItem(InputKind.STARTER, folder, "",
+                ImportState.WARNING, joinWords(missingFiles) + verb
+                + " not in this folder, so untouched or empty answers to "
+                + joinWords(missingIds) + " will not be flagged.");
+    }
+
+    // Says what grading does instead of using a starter folder that
+    // cannot be used: it uses the one in Settings, when that is another
+    // folder that can be used.
+    private String describeStarterFallback(Path folder) {
+        Path configured = getConfiguredPath(InputKind.STARTER);
+        if (!isSameFolder(folder, configured) && inspect(InputKind.STARTER,
+                configured).getState().isUsable()) {
+            return "so the starter folder in Settings is used instead.";
+        }
+        return "so untouched and empty answers cannot be flagged.";
+    }
+
+    // Says whether two paths name the same folder.
+    private boolean isSameFolder(Path first, Path second) {
+        return first.toAbsolutePath().normalize().equals(
+                second.toAbsolutePath().normalize());
+    }
+
+    // Returns the chosen starter folder, or null when none is chosen or
+    // it cannot be used, so grading uses the one in Settings.
+    private Path findUsableStarter(ImportBatch batch) {
+        List<ImportItem> starters = batch.getItems(InputKind.STARTER);
+        if (starters.isEmpty() || !starters.get(0).getState().isUsable()) {
+            return null;
+        }
+        return starters.get(0).getPath();
     }
 
     // Returns the item for a path InputValidator could not read.
     private ImportItem unreadable(InputKind kind, Path path) {
         String message = "GradeZZY could not read this. Check that it "
                 + "exists and is not open in another program.";
+        if (kind == InputKind.STARTER) {
+            message = "GradeZZY could not read this, "
+                    + describeStarterFallback(path) + " Check that it "
+                    + "exists and is not open in another program.";
+        }
         CapabilityStatus checks = Capability.INPUT_CHECKS.getStatus();
         if (checks != CapabilityStatus.WORKS_NOW) {
             message += " While " + Capability.INPUT_CHECKS.getServiceMethod()
                     + " is a placeholder, every file is reported this way.";
         }
         return new ImportItem(kind, path, "", ImportState.INVALID, message);
-    }
-
-    // Guesses the username from a zip name; SubmissionLoader sets the real one.
-    private String usernameOf(String fileName) {
-        String withoutPrefix = fileName.replaceFirst(
-                config.getString(ConfigKeys.ZIP_NAME_PREFIX_PATTERN), "");
-        if (withoutPrefix.toLowerCase().endsWith(ZIP_EXTENSION)) {
-            return withoutPrefix.substring(0,
-                    withoutPrefix.length() - ZIP_EXTENSION.length());
-        }
-        return withoutPrefix;
     }
 
     // Creates the source of tester files for a batch.
@@ -707,8 +857,7 @@ public class LiveBackend implements DashboardBackend {
     private void runInBackground(GradingTask task, RunCallback callback,
             Capability capability) {
         task.setOnSucceeded(event -> finishTask(task, callback, capability));
-        task.setOnFailed(event -> callback.onFailed(
-                describeFailure(task.getException())));
+        task.setOnFailed(event -> failTask(task, callback));
 
         Thread worker = new Thread(task, "gradezzy-grading");
         worker.setDaemon(true);
@@ -719,14 +868,56 @@ public class LiveBackend implements DashboardBackend {
     private void finishTask(GradingTask task, RunCallback callback,
             Capability capability) {
         GradingRun run = task.getValue();
+        endTask();
         if (run == null) {
             callback.onFailed(waitingMessage(capability));
             return;
+        }
+        rememberAnomalies(run, capability);
+        if (capability != Capability.RETRY_FAILED) {
+            setLastRunStarted(run);
         }
         if (run.getSection() != null) {
             runsBySection.put(run.getSection().getLabel(), run);
         }
         callback.onFinished(run);
+    }
+
+    // Records the last run started or resumed, which Retry can grade.
+    private synchronized void setLastRunStarted(GradingRun run) {
+        lastRunStarted = run;
+    }
+
+    // Reports a task that stopped with an exception.
+    private void failTask(GradingTask task, RunCallback callback) {
+        endTask();
+        callback.onFailed(describeFailure(task.getException()));
+    }
+
+    // Clears what a task held while it ran. A task may have saved runs,
+    // so the saved runs are read again when next needed.
+    private void endTask() {
+        setRunGradedAgain(null);
+        forgetSavedRuns();
+    }
+
+    // Records the anomalies of a run started in this session, so a failed
+    // undo can say whether FixManager could know about its fix.
+    private void rememberAnomalies(GradingRun run,
+            Capability capability) {
+        if (capability == Capability.IMPORT_AND_GRADE) {
+            runsStartedNow.add(run.getId());
+        }
+        // A resumed run of an earlier session mixes old fixes in
+        if (!runsStartedNow.contains(run.getId())) {
+            return;
+        }
+
+        for (Submission submission : run.getSubmissions()) {
+            for (Anomaly anomaly : submission.getAnomalies()) {
+                anomaliesFoundNow.add(anomaly.getId());
+            }
+        }
     }
 
     // Turns an exception from a background task into a plain sentence.
@@ -756,14 +947,123 @@ public class LiveBackend implements DashboardBackend {
         return graded + " of " + run.getSubmissions().size() + " graded";
     }
 
-    // Says whether the anomaly reached the expected repair state.
-    private ActionResult checkFixStatus(Anomaly anomaly, FixStatus wanted,
-            String doneMessage) {
-        if (anomaly.getFixStatus() == wanted) {
-            return ActionResult.done(doneMessage);
+    // Returns the saved runs, newest first, reading them from the
+    // database only when they are not read yet.
+    private synchronized List<GradingRun> getSavedRuns() {
+        if (savedRuns == null) {
+            savedRuns = services.getHistoryService().listRuns();
         }
-        return ActionResult.failed(waitingMessage(
-                Capability.REPAIR_DECISIONS));
+        return savedRuns;
+    }
+
+    // Forgets the saved runs, so the next call reads them again.
+    private synchronized void forgetSavedRuns() {
+        savedRuns = null;
+    }
+
+    // Returns the newest saved run of a section, or null.
+    private GradingRun findNewestSavedRun(String sectionLabel) {
+        for (GradingRun saved : getSavedRuns()) {
+            if (saved.getSection() != null && sectionLabel.equals(
+                    saved.getSection().getLabel())) {
+                return saved;
+            }
+        }
+        return null;
+    }
+
+    // Returns this session's object of a saved run, else the saved copy.
+    // GradingService retries only the run object it graded. A run being
+    // graded again keeps its saved copy, as getRun does.
+    private GradingRun findSessionRun(GradingRun saved) {
+        if (saved.getSection() == null || saved.getId() == null) {
+            return saved;
+        }
+        GradingRun recent = runsBySection.get(saved.getSection().getLabel());
+        if (recent == null || isGradedAgainNow(recent)
+                || !saved.getId().equals(recent.getId())) {
+            return saved;
+        }
+        return recent;
+    }
+
+    // Says whether getRun shows this run for its section now.
+    private boolean isShownNow(GradingRun run) {
+        GradingRun shown = getRun(run.getSection());
+        return shown != null && shown.getId() != null
+                && shown.getId().equals(run.getId());
+    }
+
+    // Records which run is being graded again, or null for none.
+    private synchronized void setRunGradedAgain(String runId) {
+        runGradedAgainId = runId;
+    }
+
+    // Says whether the grading threads are changing this run now.
+    private synchronized boolean isGradedAgainNow(GradingRun run) {
+        return run.getId() != null && run.getId().equals(runGradedAgainId);
+    }
+
+    // Keys a review decision by student and anomaly id. Anomaly ids do
+    // not repeat (most end in a random UUID, as PIPELINE-<UUID> does), so
+    // the username only makes the key easier to read.
+    private String decisionKey(Anomaly anomaly) {
+        return anomaly.getUsername() + "/" + anomaly.getId();
+    }
+
+    // Says a fix status in words, for a message.
+    private String describeFixStatus(FixStatus status) {
+        if (status == FixStatus.APPROVED) {
+            return "already approved";
+        } else if (status == FixStatus.UNDONE) {
+            return "already undone";
+        } else if (status == FixStatus.APPLIED) {
+            return "still waiting for review";
+        } else if (status == FixStatus.PENDING) {
+            return "not applied yet";
+        }
+        return "not a repair GradeZZY made";
+    }
+
+    // Returns why the automatic fix for an anomaly failed, or null.
+    private String findFixFailure(Anomaly anomaly) {
+        return services.getAnomalyService().getFailureReason(anomaly);
+    }
+
+    // Says why a finding has no repair: why its fix failed, if known.
+    private String describeNoRepair(Anomaly anomaly) {
+        String reason = findFixFailure(anomaly);
+        if (reason == null) {
+            return RepairItem.NO_REPAIR_NOTE;
+        }
+        return "The automatic fix did not work: " + reason;
+    }
+
+    // Explains why a repair waiting for review could not be undone.
+    // FixManager keeps the record of each fix only in memory, and forgets
+    // a student's fixes when the student is graded again.
+    private String explainUndoFailure(Anomaly anomaly) {
+        String start = "The repair for " + anomaly.getUsername()
+                + " could not be undone, so it still shows as applied. ";
+        if (!anomaliesFoundNow.contains(anomaly.getId())) {
+            return start + "Its run was graded before GradeZZY was last "
+                    + "opened, and GradeZZY can only undo a repair made "
+                    + "since then.";
+        }
+        return start + "Either the student was graded again since, or "
+                + "the files the repair changed were moved or deleted.";
+    }
+
+    // Explains why HistoryService.backupNow wrote no backup.
+    private String explainBackupFailure() {
+        if (!config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+            return "Saving results is switched off in Settings, so there "
+                    + "is nothing to back up.";
+        }
+        return "The backup could not be written. If no batch has been "
+                + "graded yet there is nothing to back up; otherwise check "
+                + "that " + config.getString(ConfigKeys.BACKUP_DIR)
+                + " can be written.";
     }
 
     // Returns "s" for any count other than one.
@@ -772,5 +1072,19 @@ public class LiveBackend implements DashboardBackend {
             return "";
         }
         return "s";
+    }
+
+    // Joins words as "a", "a and b" or "a, b and c".
+    private String joinWords(List<String> words) {
+        String text = "";
+        for (int index = 0; index < words.size(); index++) {
+            if (index > 0 && index == words.size() - 1) {
+                text += " and ";
+            } else if (index > 0) {
+                text += ", ";
+            }
+            text += words.get(index);
+        }
+        return text;
     }
 }

@@ -184,6 +184,14 @@ public interface DashboardBackend {
             ProgressListener listener, RunCallback callback);
 
     /**
+     * Says whether retryFailedSubmissions can work on a run now.
+     *
+     * @param gradingRun the run, or null
+     * @return true when its failed submissions can be graded again
+     */
+    boolean canRetryFailed(GradingRun gradingRun);
+
+    /**
      * Runs one question's tester again and replaces only that result.
      *
      * @param submission the student
