@@ -37,7 +37,8 @@ public interface Fixer {
      *
      * @param submission the submission
      * @param anomaly the anomaly
-     * @return a record that allows the fix to be undone
+     * @return a record that allows the fix to be undone, or null when the
+     *         working copy shows that this fixer has nothing to do
      * @throws FixException if the operation fails
      */
     FixRecord apply(Submission submission, Anomaly anomaly) throws FixException;

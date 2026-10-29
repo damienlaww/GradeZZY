@@ -9,11 +9,12 @@
 package gradezzy.fix;
 
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
@@ -21,7 +22,6 @@ import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
-import gradezzy.util.FileUtils;
 import gradezzy.util.TextUtils;
 
 /**
@@ -33,18 +33,6 @@ public class HeaderNameFixer extends AbstractFixer {
      * The name shown in the anomaly log.
      */
     public static final String NAME = "Fill in header";
-
-    // The roster's value for a part of a name that is empty
-    private static final String EMPTY_NAME_PART = "_";
-
-    // Ends the file path at the start of the header anomaly's message
-    private static final String PATH_END = " ";
-
-    // Separates the question folder and the file in that path
-    private static final String FOLDER_SEPARATOR = "/";
-
-    // The ending of every source file the header check looks at
-    private static final String JAVA_EXTENSION = ".java";
 
     // Ends one line of the file
     private static final char LINE_FEED = '\n';
@@ -100,15 +88,25 @@ public class HeaderNameFixer extends AbstractFixer {
                     + "in.");
         }
 
-        String relativePath = readRelativePath(anomaly);
+        String questionId = findQuestionId(config, anomaly);
+        if (questionId == null) {
+            throw new FixException("Could not tell which file this header "
+                    + "problem is about, so nothing was changed.");
+        }
+
+        String folderName = readFolderName(config, questionId);
+        String fileName = readFileName(config, questionId);
+        String relativePath = folderName + FOLDER_SEPARATOR + fileName;
         Path file = findFile(submission.getWorkingCopyPath(),
-                submission.getUsername(), relativePath);
-        String name = buildFullName(student);
+                submission.getUsername(), folderName, fileName);
+        String name = student.getFullName();
         String email = student.getEmail();
 
         String nameLabel = config.getString(ConfigKeys.HEADER_NAME_LABEL);
         String emailLabel = config.getString(ConfigKeys.HEADER_EMAIL_LABEL);
-        String original = readFile(file);
+        byte[] originalBytes = readBytes(file);
+        Charset charset = chooseCharset(originalBytes);
+        String original = new String(originalBytes, charset);
         String withName = fillValue(original, nameLabel, name);
         String filled = fillValue(withName, emailLabel, email);
         if (filled.equals(original) || !hasValue(filled, nameLabel)
@@ -126,15 +124,15 @@ public class HeaderNameFixer extends AbstractFixer {
         }
 
         Path backupPath = backup(submission, file);
-        writeFile(file, filled);
+        writeFile(file, filled, charset);
 
         return new FixRecord(anomaly, NAME, "Filled in the header of "
-                + relativePath + " with " + written + ".", file, file,
-                backupPath);
+                + relativePath + " with " + written + ".",
+                submission.getWorkingCopyPath(), file, file, backupPath);
     }
 
     /**
-     * Restores the file from its backup.
+     * Restores the file from its backup, wherever the file is now.
      *
      * @param fixRecord the fix record
      * @throws FixException if the operation fails
@@ -142,12 +140,11 @@ public class HeaderNameFixer extends AbstractFixer {
     @Override
     public void undo(FixRecord fixRecord) throws FixException {
         Path backupPath = fixRecord.getBackupPath();
-        Path file = fixRecord.getFixedPath();
-        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
-            Anomaly anomaly = fixRecord.getAnomaly();
-            file = findFile(findWorkingCopyOf(backupPath),
-                    anomaly.getUsername(), readRelativePath(anomaly));
-        }
+        Path fixedPath = fixRecord.getFixedPath();
+        Path file = findFile(fixRecord.getWorkingCopy(),
+                fixRecord.getAnomaly().getUsername(),
+                fixedPath.getParent().getFileName().toString(),
+                fixedPath.getFileName().toString());
 
         try {
             Files.copy(backupPath, file,
@@ -160,95 +157,24 @@ public class HeaderNameFixer extends AbstractFixer {
         discardBackup(backupPath);
     }
 
-    // Reads the file, such as Q1/Q1a.java, named at the start of the message.
-    private String readRelativePath(Anomaly anomaly) throws FixException {
-        String message = anomaly.getMessage();
-        int end = message.indexOf(PATH_END);
-        String path = "";
-        if (end > 0) {
-            path = message.substring(0, end);
-        }
-
-        if (path.contains(FOLDER_SEPARATOR) && path.endsWith(JAVA_EXTENSION)) {
-            return path;
-        }
-        throw new FixException("Could not tell which file this header "
-                + "problem is about, so nothing was changed.");
-    }
-
-    // Finds the file in whichever layout the working copy now has.
+    // Finds a required file in whichever layout the working copy now has.
     private Path findFile(Path workingCopy, String username,
-            String relativePath) throws FixException {
+            String folderName, String fileName) throws FixException {
         if (workingCopy == null) {
             throw new FixException("There is no working copy to fix.");
         }
 
-        Path inUsernameFolder = workingCopy.resolve(username)
-                .resolve(relativePath);
-        if (isFile(inUsernameFolder)) {
-            return inUsernameFolder;
+        Path folder = findQuestionFolderNow(workingCopy, username,
+                readFolderNames(config), folderName);
+        Path file = null;
+        if (folder != null) {
+            file = findByName(listFiles(folder), fileName);
         }
-
-        Path atTop = workingCopy.resolve(relativePath);
-        if (isFile(atTop)) {
-            return atTop;
+        if (file == null) {
+            throw new FixException("Could not find " + folderName
+                    + FOLDER_SEPARATOR + fileName + " in the working copy.");
         }
-
-        Path onlyFolder = findOnlyFolder(workingCopy);
-        if (onlyFolder != null && isFile(onlyFolder.resolve(relativePath))) {
-            return onlyFolder.resolve(relativePath);
-        }
-        throw new FixException("Could not find " + relativePath
-                + " in the working copy.");
-    }
-
-    // Returns the only visible top folder, or null.
-    private Path findOnlyFolder(Path workingCopy) throws FixException {
-        Path onlyFolder = null;
-        int folderCount = 0;
-
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(workingCopy)) {
-            for (Path child : children) {
-                if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
-                        && !isHidden(child)) {
-                    onlyFolder = child;
-                    folderCount++;
-                }
-            }
-        } catch (IOException exception) {
-            throw new FixException("Could not list the working copy: "
-                    + exception.getMessage(), exception);
-        }
-
-        if (folderCount != 1) {
-            return null;
-        }
-        return onlyFolder;
-    }
-
-    // Says whether a path is an ordinary file.
-    private boolean isFile(Path path) {
-        return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
-    }
-
-    // Joins the roster's first and last name, skipping an empty part.
-    private String buildFullName(Student student) {
-        String firstName = student.getFirstName();
-        String lastName = student.getLastName();
-        boolean hasFirst = !TextUtils.isBlank(firstName)
-                && !firstName.equals(EMPTY_NAME_PART);
-        boolean hasLast = !TextUtils.isBlank(lastName)
-                && !lastName.equals(EMPTY_NAME_PART);
-
-        if (hasFirst && hasLast) {
-            return firstName.trim() + SPACE + lastName.trim();
-        } else if (hasFirst) {
-            return firstName.trim();
-        } else if (hasLast) {
-            return lastName.trim();
-        }
-        return "";
+        return file;
     }
 
     // Writes the value after the label if nothing follows it yet.
@@ -308,20 +234,31 @@ public class HeaderNameFixer extends AbstractFixer {
         return lineEnd;
     }
 
+    // Picks UTF-8 if the bytes are valid UTF-8, else byte-safe ISO-8859-1.
+    private Charset chooseCharset(byte[] bytes) {
+        String asUtf8 = new String(bytes, StandardCharsets.UTF_8);
+        byte[] backAgain = asUtf8.getBytes(StandardCharsets.UTF_8);
+        if (Arrays.equals(backAgain, bytes)) {
+            return StandardCharsets.UTF_8;
+        }
+        return StandardCharsets.ISO_8859_1;
+    }
+
     // Reads a source file, turning a failure into a FixException.
-    private String readFile(Path file) throws FixException {
+    private byte[] readBytes(Path file) throws FixException {
         try {
-            return FileUtils.readText(file);
+            return Files.readAllBytes(file);
         } catch (IOException exception) {
             throw new FixException("Could not read " + file.getFileName()
                     + ": " + exception.getMessage(), exception);
         }
     }
 
-    // Writes a source file, turning a failure into a FixException.
-    private void writeFile(Path file, String text) throws FixException {
+    // Writes a source file in the character set it was read with.
+    private void writeFile(Path file, String text,
+            Charset charset) throws FixException {
         try {
-            FileUtils.writeText(file, text);
+            Files.write(file, text.getBytes(charset));
         } catch (IOException exception) {
             throw new FixException("Could not write " + file.getFileName()
                     + ": " + exception.getMessage(), exception);
