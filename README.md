@@ -963,7 +963,7 @@ file: `java -Dgradezzy.config=other.properties ...`.
 | `exec.compile.timeout.seconds` | `30` | Time limit for compiling one question folder. |
 | `exec.run.timeout.seconds` | `10` | Time limit for one tester run. |
 | `exec.thread.count` | `4` | Submissions graded at the same time. |
-| `exec.max.output.characters` | `100000` | Longest program output kept. |
+| `exec.max.output.characters` | `100000` | Longest program output kept. In a tester run, student prints may use half of it, so the tester's own lines are never cut off. |
 | `grading.tester.class.suffix` | `Tester` | `Q1a` becomes `Q1aTester`. |
 | `grading.pass.marker` | `Passed` | Line a tester prints for a passed test. |
 | `grading.fail.marker` | `Failed` | Start of the line for a failed test. |
@@ -1030,9 +1030,10 @@ Kept to a minimum and confined to the classes named here:
 | `CopyOnWriteArrayList` | `model.Submission` | The window reads a submission's anomalies and results while a grading thread clears and refills them for Retry or Resume. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | Timers: how long a notice stays, the pause before a code search, the demo grader's pace. |
 | `java.awt.Robot`, `javax.imageio.ImageIO`, `java.util.concurrent`, `java.util.zip.ZipOutputStream` | `ui.check` only | The `--snapshot` and `--windowtest` developer checks. Not used when grading. |
-| `synchronized` | `grading.CancellationToken`, `fix.FixManager`, `ui.backend.LiveBackend`, `service.PlagiarismService` | The Cancel button and the grading thread share one flag; the grading threads and the anomaly log share one list of fixes and their failure reasons; the window and grading threads share the cached list of saved runs; two similarity checks of one run cannot both add their flags. |
+| `synchronized` | `grading.CancellationToken`, `fix.FixManager`, `grading.CompileStage`, `exec.TesterHarness`, `ui.backend.LiveBackend`, `service.PlagiarismService` | The Cancel button and the grading thread share one flag; the grading threads and the anomaly log share one list of fixes and their failure reasons; the grading threads check each tester only once; student threads and the tester take turns writing to standard output; the window and grading threads share the cached list of saved runs; two similarity checks of one run cannot both add their flags. |
 | `java.nio.file` (`Files.move`, `Files.copy`, `Files.createTempDirectory`, `DirectoryStream`, `StandardCopyOption`) | `fix` package | Moves and renames folders in the working copy and keeps a backup of each file a fix changes. |
 | `java.nio.charset` (`Charset`, `StandardCharsets`), `Files.readAllBytes` | `fix.HeaderNameFixer` | Fills the header of a file saved in Windows-1252 without changing any other byte. |
+| `Files.createTempDirectory`, `Path.toRealPath` | `grading.CompileStage` | Compiles each tester with a temporary copy of the starter code, so a broken tester is not blamed on the students. |
 | `HashSet`, `String.join`, `List.subList` | `plagiarism.TokenSimilarityDetector` | Holds each answer's runs of three tokens for the similarity measure. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. |
 | `enum` | `model`, `ui.backend`, `ui.flow` (`Page`, `Step`, `Tone`) | Fixed lists of values. |
@@ -1040,10 +1041,11 @@ Kept to a minimum and confined to the classes named here:
 | `ProcessBuilder`, `Process`, `ProcessHandle` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and kills a run and its child processes at the time limit. |
 | `Stream.toList()` | `exec.ProcessRunner.terminate` | Turns the child processes of a run into a list so they can be killed. |
 | `Thread.sleep` | `exec.ProcessRunner.run` | Pauses between checks of a running program, instead of using a reader thread. |
-| `StackWalker` with a lambda, `System.setOut`, a `PrintStream` subclass | `exec.TesterHarness` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. |
+| `StackWalker` with a lambda, `System.setOut`, a `PrintStream` subclass | `exec.TesterHarness` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. Student code that reads the token by reflection can still fake trusted lines. |
 | Reflection (`Class.forName`, `Method.invoke`) | `exec.TesterHarness` | Starts the tester's `main` from inside the harness. |
 | `Runtime.halt`, the `jdk.lang.Process.launchMechanism` property | `exec.TesterHarness` | Ends the run without waiting for student threads, and stops student code starting other programs (macOS and Linux). |
-| `java` options `--limit-modules`, `--illegal-native-access=deny`; `UUID` | `exec.TesterRunner` | Student code gets only core Java and no native code; a new random token for every tester run. |
+| `java` options `--limit-modules`, `--illegal-native-access=deny`, `-Duser.home`, `-Djava.io.tmpdir`; `UUID` | `exec.TesterRunner` | Student code gets only core Java and no native code, and its home and temp folders are its own question folder; a new random token for every tester run. |
+| macOS `sandbox-exec` (`/usr/bin/sandbox-exec -p <rules>`) | `exec.TesterRunner` | Student code may write only in its own question folder and may not read the other working copies, the backups or the submissions folder. JDK 24 removed the `SecurityManager`, so Java cannot do this itself. Windows and Linux have no built-in sandbox, and the sandbox is tried once per run in case it cannot start: without it a note is printed and student code keeps the instructor's file permissions. |
 | `java.util.zip` (`ZipFile`, `ZipEntry`) | `ingest.ZipExtractor` | Unzips submissions and lists the zips inside a bulk zip. |
 | `String.replaceFirst`, `String.replaceAll` with a regular expression | `ingest.SubmissionLoader` | Removes the zip name prefix and a browser's copy number such as ` (1)`, and reads that number to choose which copy to grade. |
 | `java.util.regex.Pattern` | `service.SettingsService` | Checks that the zip name pattern setting is a valid regular expression. |

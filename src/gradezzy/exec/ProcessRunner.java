@@ -37,9 +37,6 @@ public class ProcessRunner {
     // Milliseconds in one second
     private static final long MILLIS_PER_SECOND = 1000;
 
-    // Size of the buffer used to read the rest of the output at the end
-    private static final int READ_BUFFER_SIZE = 8192;
-
     // The application settings
     private final AppConfig config;
 
@@ -247,7 +244,10 @@ public class ProcessRunner {
     }
 
     /**
-     * Reads the output that is left after the process has stopped.
+     * Reads the output that is left after the process has stopped. Only
+     * what is already waiting is read: a program the process started can
+     * keep the pipe open, and on Windows a read that waits for the end of
+     * the pipe would then wait forever.
      *
      * @param stream the output of the process
      * @param text where the output is collected
@@ -256,12 +256,8 @@ public class ProcessRunner {
      */
     private void readRemaining(InputStream stream, StringBuilder text,
             int maxCharacters) throws IOException {
-        byte[] buffer = new byte[READ_BUFFER_SIZE];
-        int count = stream.read(buffer);
-
-        while (count != -1) {
-            appendCapped(text, buffer, count, maxCharacters);
-            count = stream.read(buffer);
+        while (stream.available() > 0) {
+            readAvailable(stream, text, maxCharacters);
         }
     }
 
