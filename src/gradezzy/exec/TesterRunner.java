@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.util.TextUtils;
 
 /**
  * Runs one compiled tester class with java.
@@ -130,8 +131,9 @@ public class TesterRunner {
      */
     private ProcessResult separateStudentLines(ProcessResult raw,
             String token) {
-        // The output is capped by ProcessRunner, so joining with + is quick
-        String output = "";
+        // The lines are joined once at the end: a student printing many
+        // short lines would make += copy the whole output again each time
+        List<String> lines = new ArrayList<>();
         boolean finished = false;
 
         for (String line : raw.getStandardOutput().split(LINE_BREAK)) {
@@ -141,7 +143,7 @@ public class TesterRunner {
                 studentPart = line.substring(0, tokenStart);
             }
             if (!studentPart.isEmpty()) {
-                output += STUDENT_LINE_PREFIX + studentPart + NEW_LINE;
+                lines.add(STUDENT_LINE_PREFIX + studentPart + NEW_LINE);
             }
 
             String testerLine = "";
@@ -151,7 +153,7 @@ public class TesterRunner {
             if (testerLine.equals(TesterHarness.FINISHED_LINE)) {
                 finished = true;
             } else if (tokenStart >= 0) {
-                output += testerLine + NEW_LINE;
+                lines.add(testerLine + NEW_LINE);
             }
         }
 
@@ -159,7 +161,7 @@ public class TesterRunner {
         if (exitCode == SUCCESS_EXIT_CODE && !finished && !raw.isTimedOut()) {
             exitCode = EARLY_EXIT_CODE;
         }
-        return new ProcessResult(exitCode, output,
+        return new ProcessResult(exitCode, TextUtils.join("", lines),
                 raw.getStandardError(), raw.isTimedOut(),
                 raw.getDurationMillis());
     }

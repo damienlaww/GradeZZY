@@ -269,9 +269,11 @@ final class JavaSourceText {
         return trimmed.substring(headerEnd + BLOCK_COMMENT_END.length());
     }
 
-    // Drops blank lines and the spaces at the end of every line.
+    // Drops blank lines and the spaces at the end of every line. The lines
+    // are joined once at the end: adding each one to a String with += would
+    // copy the whole text again for every line of a long student file.
     private static String removeBlankLines(String text) {
-        String result = "";
+        List<String> kept = new ArrayList<>();
         int lineStart = 0;
 
         while (lineStart < text.length()) {
@@ -284,13 +286,13 @@ final class JavaSourceText {
             String line = text.substring(lineStart, lineEnd).stripTrailing();
 
             if (!line.isEmpty()) {
-                result += line + LINE_END;
+                kept.add(line + LINE_END);
             }
 
             lineStart = lineEnd + LINE_END.length();
         }
 
-        return result;
+        return TextUtils.join("", kept);
     }
 
     // Drops every space, tab and line break.
