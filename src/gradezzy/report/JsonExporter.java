@@ -11,9 +11,7 @@ package gradezzy.report;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import gradezzy.model.Anomaly;
 import gradezzy.model.Assessment;
@@ -111,7 +109,7 @@ public class JsonExporter implements Exporter {
             submissions.add(writeSubmission(submission));
         }
 
-        Map<String, String> fields = new LinkedHashMap<>();
+        JsonFields fields = new JsonFields();
         fields.put("runId", text(gradingRun.getId()));
         fields.put("startedAt", text(gradingRun.getStartedAt()));
         fields.put("assessment", writeAssessment(gradingRun.getAssessment()));
@@ -131,7 +129,7 @@ public class JsonExporter implements Exporter {
             questions.add(writeQuestion(question));
         }
 
-        Map<String, String> fields = new LinkedHashMap<>();
+        JsonFields fields = new JsonFields();
         fields.put("name", text(assessment.getName()));
         fields.put("moduleCode", text(assessment.getModuleCode()));
         fields.put("maxTotal", number(assessment.getMaxTotal()));
@@ -145,7 +143,7 @@ public class JsonExporter implements Exporter {
             return JsonWriter.NULL;
         }
 
-        Map<String, String> fields = new LinkedHashMap<>();
+        JsonFields fields = new JsonFields();
         fields.put("id", text(question.getId()));
         fields.put("folder", text(question.getFolderName()));
         fields.put("file", text(question.getFileName()));
@@ -159,7 +157,7 @@ public class JsonExporter implements Exporter {
             return JsonWriter.NULL;
         }
 
-        Map<String, String> fields = new LinkedHashMap<>();
+        JsonFields fields = new JsonFields();
         fields.put("moduleCode", text(section.getModuleCode()));
         fields.put("sectionCode", text(section.getSectionCode()));
         return jsonWriter.writeObject(fields);
@@ -178,7 +176,7 @@ public class JsonExporter implements Exporter {
             anomalies.add(writeAnomaly(anomaly));
         }
 
-        Map<String, String> fields = new LinkedHashMap<>();
+        JsonFields fields = new JsonFields();
         fields.put("username", text(submission.getUsername()));
         fields.put("status", text(submission.getStatus()));
         fields.put("totalScore", number(submission.getTotalScore()));
@@ -197,7 +195,7 @@ public class JsonExporter implements Exporter {
             return JsonWriter.NULL;
         }
 
-        Map<String, String> fields = new LinkedHashMap<>();
+        JsonFields fields = new JsonFields();
         fields.put("orgDefinedId", text(student.getOrgDefinedId()));
         fields.put("username", text(student.getUsername()));
         fields.put("lastName", text(student.getLastName()));
@@ -222,7 +220,7 @@ public class JsonExporter implements Exporter {
             maxScore = number(question.getMaxScore());
         }
 
-        Map<String, String> fields = new LinkedHashMap<>();
+        JsonFields fields = new JsonFields();
         fields.put("questionId", text(questionId));
         fields.put("score", number(questionResult.getScore()));
         fields.put("maxScore", maxScore);
@@ -235,7 +233,7 @@ public class JsonExporter implements Exporter {
 
     // One test case of a tester run
     private String writeTestCase(TestCaseResult testCaseResult) {
-        Map<String, String> fields = new LinkedHashMap<>();
+        JsonFields fields = new JsonFields();
         fields.put("testNumber",
                 String.valueOf(testCaseResult.getTestNumber()));
         fields.put("passed", String.valueOf(testCaseResult.isPassed()));
@@ -245,7 +243,7 @@ public class JsonExporter implements Exporter {
 
     // One anomaly and the state of its automatic fix
     private String writeAnomaly(Anomaly anomaly) {
-        Map<String, String> fields = new LinkedHashMap<>();
+        JsonFields fields = new JsonFields();
         fields.put("id", text(anomaly.getId()));
         fields.put("type", text(anomaly.getType()));
         fields.put("severity", text(anomaly.getSeverity()));

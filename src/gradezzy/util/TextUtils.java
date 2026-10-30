@@ -51,7 +51,7 @@ public final class TextUtils {
         }
 
         List<String> values = new ArrayList<>();
-        StringBuilder value = new StringBuilder();
+        String value = "";
         boolean quoted = false;
         boolean closedQuote = false;
 
@@ -59,18 +59,18 @@ public final class TextUtils {
             char current = line.charAt(index);
             if (quoted) {
                 if (current != '"') {
-                    value.append(current);
+                    value += current;
                 } else if (index + 1 < line.length()
                         && line.charAt(index + 1) == '"') {
-                    value.append('"');
+                    value += '"';
                     index++;
                 } else {
                     quoted = false;
                     closedQuote = true;
                 }
             } else if (current == ',') {
-                values.add(value.toString());
-                value.setLength(0);
+                values.add(value);
+                value = "";
                 closedQuote = false;
             } else if (closedQuote || current == '\r' || current == '\n') {
                 throw new IllegalArgumentException("Malformed CSV field.");
@@ -81,14 +81,14 @@ public final class TextUtils {
                 }
                 quoted = true;
             } else {
-                value.append(current);
+                value += current;
             }
         }
 
         if (quoted) {
             throw new IllegalArgumentException("Unclosed CSV quote.");
         }
-        values.add(value.toString());
+        values.add(value);
         return values;
     }
 
@@ -113,7 +113,73 @@ public final class TextUtils {
                 fields.add(value);
             }
         }
-        return String.join(",", fields);
+        return join(",", fields);
+    }
+
+    /**
+     * Joins values into one CSV line, for a row that is written as a fixed
+     * array, such as a header.
+     *
+     * @param values the values
+     * @return the CSV line, without a line ending
+     * @throws IllegalArgumentException if a value is null
+     */
+    public static String joinCsvLine(String[] values) {
+        List<String> list = new ArrayList<>();
+        for (String value : values) {
+            list.add(value);
+        }
+        return joinCsvLine(list);
+    }
+
+    /**
+     * Joins values into one text, with the separator between each pair.
+     * An empty list gives empty text and a null value is written as null.
+     *
+     * <p>Tier: MUST.
+     *
+     * @param separator the text put between two values
+     * @param values the values, in order
+     * @return the values joined together
+     */
+    public static String join(String separator, List<String> values) {
+        String[] texts = new String[values.size()];
+        for (int index = 0; index < values.size(); index++) {
+            texts[index] = values.get(index);
+        }
+        return join(separator, texts);
+    }
+
+    /**
+     * Joins values into one text, with the separator between each pair.
+     * An empty array gives empty text and a null value is written as null.
+     * The characters are copied into one array of the final length, so
+     * joining many long values (a whole JSON export) stays quick.
+     *
+     * <p>Tier: MUST.
+     *
+     * @param separator the text put between two values
+     * @param values the values, in order
+     * @return the values joined together
+     */
+    public static String join(String separator, String[] values) {
+        int length = 0;
+        for (int index = 0; index < values.length; index++) {
+            if (index > 0) {
+                length += separator.length();
+            }
+            length += String.valueOf(values[index]).length();
+        }
+
+        char[] joined = new char[length];
+        int count = 0;
+        for (int index = 0; index < values.length; index++) {
+            if (index > 0) {
+                count = copyInto(separator, joined, count);
+            }
+            count = copyInto(String.valueOf(values[index]), joined, count);
+        }
+        return new String(joined);
     }
 
     /**
@@ -124,5 +190,14 @@ public final class TextUtils {
      */
     public static String normaliseLineEndings(String text) {
         return text.replace("\r\n", "\n").replace('\r', '\n');
+    }
+
+    // Copies the characters of text into target, starting at start, and
+    // returns the position just after the last one copied.
+    private static int copyInto(String text, char[] target, int start) {
+        for (int index = 0; index < text.length(); index++) {
+            target[start + index] = text.charAt(index);
+        }
+        return start + text.length();
     }
 }

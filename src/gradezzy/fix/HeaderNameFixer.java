@@ -207,14 +207,19 @@ public class HeaderNameFixer extends AbstractFixer {
         Path onlyFolder = null;
         int folderCount = 0;
 
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(workingCopy)) {
-            for (Path child : children) {
-                if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
-                        && !isHidden(child)) {
-                    onlyFolder = child;
-                    folderCount++;
+        try {
+            DirectoryStream<Path> children =
+                    Files.newDirectoryStream(workingCopy);
+            try {
+                for (Path child : children) {
+                    if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
+                            && !isHidden(child)) {
+                        onlyFolder = child;
+                        folderCount++;
+                    }
                 }
+            } finally {
+                children.close();
             }
         } catch (IOException exception) {
             throw new FixException("Could not list the working copy: "

@@ -20,6 +20,7 @@ import java.util.regex.PatternSyntaxException;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.util.TextUtils;
 
 /**
  * Reads, checks and saves settings for the settings page. A new value is
@@ -332,7 +333,7 @@ public class SettingsService {
 
         List<String> lines = Files.readAllLines(configFile);
         List<String> writtenKeys = new ArrayList<>();
-        StringBuilder output = new StringBuilder();
+        String output = "";
         int index = 0;
 
         while (index < lines.size()) {
@@ -340,12 +341,12 @@ public class SettingsService {
             String key = readKey(lines.get(index));
 
             if (key != null && changedKeys.contains(key)) {
-                output.append(formatLine(key)).append(lineEnding);
+                output += formatLine(key) + lineEnding;
                 writtenKeys.add(key);
             } else {
                 for (int lineIndex = index; lineIndex <= lastIndex;
                         lineIndex++) {
-                    output.append(lines.get(lineIndex)).append(lineEnding);
+                    output += lines.get(lineIndex) + lineEnding;
                 }
             }
 
@@ -355,11 +356,11 @@ public class SettingsService {
         // A key that was not in the file yet goes at the end.
         for (String key : changedKeys) {
             if (!writtenKeys.contains(key)) {
-                output.append(formatLine(key)).append(lineEnding);
+                output += formatLine(key) + lineEnding;
             }
         }
 
-        writeSafely(configFile, output.toString());
+        writeSafely(configFile, output);
         changedKeys.clear();
     }
 
@@ -485,8 +486,8 @@ public class SettingsService {
             }
         }
 
-        return "'" + key + "' must be one of: " + String.join(", ", choices)
-                + ".";
+        return "'" + key + "' must be one of: "
+                + TextUtils.join(", ", choices) + ".";
     }
 
     // Checks that a value is a valid regular expression.

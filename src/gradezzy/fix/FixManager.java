@@ -179,7 +179,9 @@ public class FixManager {
             Anomaly anomaly) {
         try {
             return fixer.apply(submission, anomaly);
-        } catch (FixException | RuntimeException exception) {
+        } catch (FixException exception) {
+            return null;
+        } catch (RuntimeException exception) {
             return null;
         }
     }

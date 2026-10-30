@@ -163,13 +163,16 @@ public class SubmissionLoader {
     private void collectChildren(Path directory, List<Path> candidates)
             throws IOException {
         List<Path> children = new ArrayList<>();
-        try (DirectoryStream<Path> entries =
-                Files.newDirectoryStream(directory)) {
+        DirectoryStream<Path> entries = null;
+        try {
+            entries = Files.newDirectoryStream(directory);
             for (Path child : entries) {
                 if (!isIgnored(child)) {
                     children.add(child);
                 }
             }
+        } finally {
+            FileUtils.closeIfOpen(entries);
         }
         Collections.sort(children);
         candidates.addAll(children);
@@ -215,7 +218,8 @@ public class SubmissionLoader {
     private void reject(Submission submission, String message) {
         submission.setIngestFailure(message);
         submission.setStatus(SubmissionStatus.FAILED);
-        submission.addAnomaly(new Anomaly("INGEST-" + java.util.UUID.randomUUID(),
+        submission.addAnomaly(new Anomaly(
+                "INGEST-" + java.util.UUID.randomUUID(),
                 AnomalyType.INVALID_ARCHIVE, Severity.ERROR,
                 submission.getUsername(), message,
                 "Correct this upload and add it to a new batch."));
@@ -236,20 +240,30 @@ public class SubmissionLoader {
         try {
             extractor.extract(input, batch);
             collectBatchZips(batch, candidates);
-        } catch (IOException | IngestException exception) {
-            try {
-                FileUtils.deleteDirectory(batch);
-            } catch (IOException cleanup) {
-                exception.addSuppressed(cleanup);
-            }
+        } catch (IOException exception) {
+            deleteFailedBatch(batch, exception);
             throw exception;
+        } catch (IngestException exception) {
+            deleteFailedBatch(batch, exception);
+            throw exception;
+        }
+    }
+
+    // Removes a half-unpacked batch folder. A failure to remove it is
+    // attached to the original error instead of hiding it.
+    private void deleteFailedBatch(Path batch, Exception failure) {
+        try {
+            FileUtils.deleteDirectory(batch);
+        } catch (IOException cleanup) {
+            failure.addSuppressed(cleanup);
         }
     }
 
     private void collectBatchZips(Path directory, List<Path> candidates)
             throws IOException {
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(directory)) {
+        DirectoryStream<Path> children = null;
+        try {
+            children = Files.newDirectoryStream(directory);
             for (Path child : children) {
                 if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
                     collectBatchZips(child, candidates);
@@ -257,6 +271,8 @@ public class SubmissionLoader {
                     candidates.add(child);
                 }
             }
+        } finally {
+            FileUtils.closeIfOpen(children);
         }
     }
 

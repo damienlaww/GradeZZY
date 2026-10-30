@@ -11,6 +11,7 @@ package gradezzy.exec;
 import java.io.File;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -99,11 +100,14 @@ public class TesterRunner {
         // The harness comes first, so a student class cannot replace it
         String classPath = harnessLocation() + File.pathSeparator
                 + CURRENT_FOLDER;
-        List<String> command = List.of(
-                config.getString(ConfigKeys.JAVA_COMMAND),
-                LIMIT_MODULES_OPTION, NO_NATIVE_OPTION,
-                CLASSPATH_OPTION, classPath,
-                TesterHarness.class.getName(), testerClassName);
+        List<String> command = new ArrayList<>();
+        command.add(config.getString(ConfigKeys.JAVA_COMMAND));
+        command.add(LIMIT_MODULES_OPTION);
+        command.add(NO_NATIVE_OPTION);
+        command.add(CLASSPATH_OPTION);
+        command.add(classPath);
+        command.add(TesterHarness.class.getName());
+        command.add(testerClassName);
         long timeoutSeconds = config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS);
         // A new random token for every run, sent where only the harness
         // reads it before any student code starts
@@ -126,7 +130,8 @@ public class TesterRunner {
      */
     private ProcessResult separateStudentLines(ProcessResult raw,
             String token) {
-        StringBuilder output = new StringBuilder();
+        // The output is capped by ProcessRunner, so joining with + is quick
+        String output = "";
         boolean finished = false;
 
         for (String line : raw.getStandardOutput().split(LINE_BREAK)) {
@@ -136,8 +141,7 @@ public class TesterRunner {
                 studentPart = line.substring(0, tokenStart);
             }
             if (!studentPart.isEmpty()) {
-                output.append(STUDENT_LINE_PREFIX).append(studentPart)
-                        .append(NEW_LINE);
+                output += STUDENT_LINE_PREFIX + studentPart + NEW_LINE;
             }
 
             String testerLine = "";
@@ -147,7 +151,7 @@ public class TesterRunner {
             if (testerLine.equals(TesterHarness.FINISHED_LINE)) {
                 finished = true;
             } else if (tokenStart >= 0) {
-                output.append(testerLine).append(NEW_LINE);
+                output += testerLine + NEW_LINE;
             }
         }
 
@@ -155,7 +159,7 @@ public class TesterRunner {
         if (exitCode == SUCCESS_EXIT_CODE && !finished && !raw.isTimedOut()) {
             exitCode = EARLY_EXIT_CODE;
         }
-        return new ProcessResult(exitCode, output.toString(),
+        return new ProcessResult(exitCode, output,
                 raw.getStandardError(), raw.isTimedOut(),
                 raw.getDurationMillis());
     }

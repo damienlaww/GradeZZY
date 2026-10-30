@@ -23,6 +23,7 @@ import gradezzy.model.Assessment;
 import gradezzy.model.Question;
 import gradezzy.model.Submission;
 import gradezzy.testcase.QuestionFolderFinder;
+import gradezzy.util.TextUtils;
 
 /**
  * Compares submissions by the tokens of their source code.
@@ -214,7 +215,7 @@ public class TokenSimilarityDetector implements SimilarityDetector {
         Set<String> trigrams = new HashSet<>();
 
         for (int i = 0; i + TRIGRAM_LENGTH <= tokens.size(); i++) {
-            trigrams.add(String.join(TOKEN_SEPARATOR,
+            trigrams.add(TextUtils.join(TOKEN_SEPARATOR,
                     tokens.subList(i, i + TRIGRAM_LENGTH)));
         }
 

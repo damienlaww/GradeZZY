@@ -130,18 +130,21 @@ public class CsvScoreSheetExporter implements Exporter {
         Map<String, Submission> submissionsByUsername =
                 indexByUsername(gradingRun.getSubmissions());
         String lineEnding = getLineEnding();
-        StringBuilder output = new StringBuilder();
-        output.append(lines.get(0)).append(lineEnding);
+        List<String> outputLines = new ArrayList<>();
+        outputLines.add(lines.get(0));
 
         for (int index = 1; index < lines.size(); index++) {
             String line = lines.get(index);
             String filledLine = fillRow(line, index + 1, usernameIndex,
                     numeratorIndex, submissionsByUsername);
-            output.append(filledLine).append(lineEnding);
+            outputLines.add(filledLine);
         }
 
+        // Every line, the header included, ends with the line ending
+        String output = TextUtils.join(lineEnding, outputLines) + lineEnding;
+
         try {
-            FileUtils.writeText(outputFile, output.toString());
+            FileUtils.writeText(outputFile, output);
         } catch (IOException exception) {
             throw new ExportException("Could not write the score sheet to "
                     + outputFile + ". Check that the folder exists and is "

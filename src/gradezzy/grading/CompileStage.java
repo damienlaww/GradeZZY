@@ -11,6 +11,7 @@ package gradezzy.grading;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -123,8 +124,9 @@ public class CompileStage implements GradingStage {
             Question question, TesterFile tester, Path folder)
             throws GradingException {
         String testerSource = tester.getClassName() + JAVA_EXTENSION;
-        List<String> sourceFiles = List.of(question.getFileName(),
-                testerSource);
+        List<String> sourceFiles = new ArrayList<>();
+        sourceFiles.add(question.getFileName());
+        sourceFiles.add(testerSource);
         ProcessResult compileResult = runCompiler(folder, sourceFiles);
         removeTesterSource(folder.resolve(testerSource));
 

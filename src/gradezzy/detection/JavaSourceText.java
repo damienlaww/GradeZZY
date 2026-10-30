@@ -35,6 +35,10 @@ final class JavaSourceText {
     // The line ending every file has after normalising
     private static final String LINE_END = "\n";
 
+    // The same line ending as a single character, for building text in an
+    // array of characters
+    private static final char LINE_END_CHAR = '\n';
+
     // The invisible mark some editors put at the start of a file
     private static final String BYTE_ORDER_MARK = "\uFEFF";
 
@@ -114,8 +118,12 @@ final class JavaSourceText {
     }
 
     // Removes every comment but keeps string and char literals unchanged.
+    // Each comment is at least two characters and becomes one line end,
+    // so the result is never longer than the code and fits in an array of
+    // that size; count says how much of the array is filled.
     static String removeComments(String code) {
-        StringBuilder result = new StringBuilder();
+        char[] result = new char[code.length()];
+        int count = 0;
         int index = 0;
 
         while (index < code.length()) {
@@ -124,27 +132,33 @@ final class JavaSourceText {
             if (isQuote(current)) {
                 int literalEnd = skipLiteral(code, index);
 
-                result.append(code, index, literalEnd);
+                for (int i = index; i < literalEnd; i++) {
+                    result[count] = code.charAt(i);
+                    count++;
+                }
                 index = literalEnd;
             } else if (code.startsWith(LINE_COMMENT_START, index)) {
                 index = skipPast(code, LINE_END, index);
-                result.append(LINE_END);
+                result[count] = LINE_END_CHAR;
+                count++;
             } else if (code.startsWith(BLOCK_COMMENT_START, index)) {
                 index = skipPast(code, BLOCK_COMMENT_END,
                         index + BLOCK_COMMENT_START.length());
-                result.append(LINE_END);
+                result[count] = LINE_END_CHAR;
+                count++;
             } else {
-                result.append(current);
+                result[count] = current;
+                count++;
                 index++;
             }
         }
 
-        return result.toString();
+        return new String(result, 0, count);
     }
 
     // Replaces the inside of each literal with spaces.
     static String blankLiterals(String code) {
-        StringBuilder result = new StringBuilder(code);
+        char[] result = code.toCharArray();
         int index = 0;
 
         while (index < code.length()) {
@@ -152,7 +166,7 @@ final class JavaSourceText {
                 int literalEnd = skipLiteral(code, index);
 
                 for (int i = index + 1; i < literalEnd - 1; i++) {
-                    result.setCharAt(i, BLANK);
+                    result[i] = BLANK;
                 }
 
                 index = literalEnd;
@@ -161,7 +175,7 @@ final class JavaSourceText {
             }
         }
 
-        return result.toString();
+        return new String(result);
     }
 
     // Lists the methods in code without comments, except main, in order.
@@ -257,7 +271,7 @@ final class JavaSourceText {
 
     // Drops blank lines and the spaces at the end of every line.
     private static String removeBlankLines(String text) {
-        StringBuilder result = new StringBuilder();
+        String result = "";
         int lineStart = 0;
 
         while (lineStart < text.length()) {
@@ -270,29 +284,32 @@ final class JavaSourceText {
             String line = text.substring(lineStart, lineEnd).stripTrailing();
 
             if (!line.isEmpty()) {
-                result.append(line);
-                result.append(LINE_END);
+                result += line + LINE_END;
             }
 
             lineStart = lineEnd + LINE_END.length();
         }
 
-        return result.toString();
+        return result;
     }
 
     // Drops every space, tab and line break.
+    // The result is never longer than the text, so an array of that size
+    // holds it; count says how much of the array is filled.
     private static String removeWhitespace(String text) {
-        StringBuilder result = new StringBuilder();
+        char[] result = new char[text.length()];
+        int count = 0;
 
         for (int i = 0; i < text.length(); i++) {
             char current = text.charAt(i);
 
             if (!Character.isWhitespace(current)) {
-                result.append(current);
+                result[count] = current;
+                count++;
             }
         }
 
-        return result.toString();
+        return new String(result, 0, count);
     }
 
     // Returns the position after the literal that starts at start.

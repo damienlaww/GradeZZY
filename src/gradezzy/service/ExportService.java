@@ -171,33 +171,33 @@ public class ExportService {
     // Keeps letters, digits, dashes and underscores, so a code
     // from the settings cannot add a folder to the path.
     private String makeSafe(String text) {
-        StringBuilder safe = new StringBuilder();
+        String safe = "";
 
         for (int index = 0; index < text.length(); index++) {
             char current = text.charAt(index);
 
             if (Character.isLetterOrDigit(current) || current == '-'
                     || current == '_') {
-                safe.append(current);
+                safe += current;
             } else {
-                safe.append(SAFE_CHARACTER);
+                safe += SAFE_CHARACTER;
             }
         }
 
-        return safe.toString();
+        return safe;
     }
 
     // Lists the registered format names, for an error message.
     private String listFormatNames() {
-        StringBuilder names = new StringBuilder();
+        String names = "";
 
         for (Exporter exporter : exporters) {
             if (names.length() > 0) {
-                names.append(", ");
+                names += ", ";
             }
-            names.append(exporter.getFormatName());
+            names += exporter.getFormatName();
         }
 
-        return names.toString();
+        return names;
     }
 }

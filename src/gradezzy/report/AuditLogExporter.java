@@ -36,8 +36,7 @@ public class AuditLogExporter implements Exporter {
     public static final String FILE_EXTENSION = "csv";
 
     // The header row, in the order of the values in each row
-    private static final List<String> HEADER =
-            List.of("Time", "Action", "Detail");
+    private static final String[] HEADER = {"Time", "Action", "Detail"};
 
     // CSV files end each row with CRLF so spreadsheets read them cleanly
     private static final String LINE_ENDING = "\r\n";
@@ -95,17 +94,18 @@ public class AuditLogExporter implements Exporter {
                     + "missing.");
         }
 
-        StringBuilder output = new StringBuilder();
-        output.append(TextUtils.joinCsvLine(HEADER)).append(LINE_ENDING);
+        // Every row, the header included, ends with LINE_ENDING
+        List<String> lines = new ArrayList<>();
+        lines.add(TextUtils.joinCsvLine(HEADER));
         if (entries != null) {
             for (AuditEntry entry : entries) {
-                output.append(TextUtils.joinCsvLine(toRow(entry)))
-                        .append(LINE_ENDING);
+                lines.add(TextUtils.joinCsvLine(toRow(entry)));
             }
         }
+        String output = TextUtils.join(LINE_ENDING, lines) + LINE_ENDING;
 
         try {
-            FileUtils.writeText(outputFile, output.toString());
+            FileUtils.writeText(outputFile, output);
         } catch (IOException exception) {
             throw new ExportException("Could not write the audit log to "
                     + outputFile + ". Check that the folder exists and is "

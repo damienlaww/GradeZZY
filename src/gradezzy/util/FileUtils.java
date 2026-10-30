@@ -7,6 +7,7 @@
  */
 package gradezzy.util;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
@@ -66,11 +67,14 @@ public final class FileUtils {
             rejectLinks(parent);
         }
         if (Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
-            try (DirectoryStream<Path> children =
-                    Files.newDirectoryStream(directory)) {
+            DirectoryStream<Path> children = null;
+            try {
+                children = Files.newDirectoryStream(directory);
                 for (Path child : children) {
                     deleteDirectory(child);
                 }
+            } finally {
+                closeIfOpen(children);
             }
         }
         Files.deleteIfExists(directory);
@@ -110,8 +114,9 @@ public final class FileUtils {
     public static List<Path> listFiles(Path directory,
             String extension) throws IOException {
         List<Path> matches = new ArrayList<>();
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(directory)) {
+        DirectoryStream<Path> children = null;
+        try {
+            children = Files.newDirectoryStream(directory);
             for (Path child : children) {
                 if (Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS)
                         && child.getFileName().toString()
@@ -119,9 +124,27 @@ public final class FileUtils {
                     matches.add(child);
                 }
             }
+        } finally {
+            closeIfOpen(children);
         }
         Collections.sort(matches);
         return matches;
+    }
+
+    /**
+     * Closes a file, folder listing or stream that was opened inside a try
+     * block. Called from the matching finally block, so null means the
+     * opening itself failed and there is nothing to close.
+     *
+     * <p>Tier: MUST.
+     *
+     * @param resource the thing to close, or null
+     * @throws IOException if closing fails
+     */
+    public static void closeIfOpen(Closeable resource) throws IOException {
+        if (resource != null) {
+            resource.close();
+        }
     }
 
     // Copies ordinary files only; links must never reach outside a copy.
@@ -131,11 +154,14 @@ public final class FileUtils {
         rejectLinks(target);
         if (Files.isDirectory(source, LinkOption.NOFOLLOW_LINKS)) {
             Files.createDirectories(target);
-            try (DirectoryStream<Path> children =
-                    Files.newDirectoryStream(source)) {
+            DirectoryStream<Path> children = null;
+            try {
+                children = Files.newDirectoryStream(source);
                 for (Path child : children) {
                     copyContents(child, target.resolve(child.getFileName()));
                 }
+            } finally {
+                closeIfOpen(children);
             }
         } else if (Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) {
             Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);

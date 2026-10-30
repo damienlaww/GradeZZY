@@ -118,14 +118,13 @@ public class StudentReportExporter implements Exporter {
                     + username + " in run " + gradingRun.getId() + ".");
         }
 
-        StringBuilder report = new StringBuilder();
-        writeDetails(report, gradingRun, submission);
-        writeScores(report, submission);
-        writeFailedTests(report, submission);
-        writeAnomalies(report, submission);
+        String report = writeDetails(gradingRun, submission)
+                + writeScores(submission)
+                + writeFailedTests(submission)
+                + writeAnomalies(submission);
 
         try {
-            FileUtils.writeText(outputFile, report.toString());
+            FileUtils.writeText(outputFile, report);
         } catch (IOException exception) {
             throw new ExportException("Could not write the student report "
                     + "to " + outputFile + ". Check that the folder exists "
@@ -144,32 +143,32 @@ public class StudentReportExporter implements Exporter {
     }
 
     // The title, the student and the run
-    private void writeDetails(StringBuilder report, GradingRun gradingRun,
+    private String writeDetails(GradingRun gradingRun,
             Submission submission) {
-        report.append(TITLE).append(NEW_LINE);
-        report.append(String.valueOf(UNDERLINE).repeat(TITLE.length()))
-                .append(NEW_LINE).append(NEW_LINE);
+        String report = TITLE + NEW_LINE;
+        report += String.valueOf(UNDERLINE).repeat(TITLE.length())
+                + NEW_LINE + NEW_LINE;
 
         Student student = submission.getStudent();
         if (student == null) {
-            addLine(report, "Student:", username + " (not on the roster)");
+            report += labelLine("Student:", username + " (not on the roster)");
         } else {
-            addLine(report, "Student:", fullName(student) + " ("
+            report += labelLine("Student:", fullName(student) + " ("
                     + username + ")");
-            addLine(report, "Email:", student.getEmail());
+            report += labelLine("Email:", student.getEmail());
         }
 
         Assessment assessment = gradingRun.getAssessment();
         Section section = gradingRun.getSection();
         if (assessment != null && section != null) {
-            addLine(report, "Assessment:", assessment.getName() + ", "
+            report += labelLine("Assessment:", assessment.getName() + ", "
                     + section.getModuleCode() + " "
                     + section.getSectionCode());
         }
-        addLine(report, "Run:", gradingRun.getId());
-        addLine(report, "Status:", String.valueOf(submission.getStatus()));
+        report += labelLine("Run:", gradingRun.getId());
+        report += labelLine("Status:", String.valueOf(submission.getStatus()));
         if (!TextUtils.isBlank(submission.getIngestFailure())) {
-            addLine(report, "Problem:", submission.getIngestFailure());
+            report += labelLine("Problem:", submission.getIngestFailure());
         }
 
         String total = ScoreFormatter.format(submission.getTotalScore());
@@ -177,15 +176,16 @@ public class StudentReportExporter implements Exporter {
             total = total + " / "
                     + ScoreFormatter.format(assessment.getMaxTotal());
         }
-        addLine(report, "Total:", total);
-        report.append(NEW_LINE);
+        report += labelLine("Total:", total);
+        report += NEW_LINE;
+        return report;
     }
 
     // One line per question, with a remark for a compile error or timeout
-    private void writeScores(StringBuilder report, Submission submission) {
-        report.append("Scores").append(NEW_LINE);
+    private String writeScores(Submission submission) {
+        String report = "Scores" + NEW_LINE;
         if (submission.getQuestionResults().isEmpty()) {
-            report.append(NONE).append(NEW_LINE);
+            report += NONE + NEW_LINE;
         }
 
         for (QuestionResult result : submission.getQuestionResults()) {
@@ -204,62 +204,59 @@ public class StudentReportExporter implements Exporter {
                 remark = "stopped at the time limit";
             }
 
-            report.append(String.format(SCORE_FORMAT, questionId,
+            report += String.format(SCORE_FORMAT, questionId,
                     ScoreFormatter.format(result.getScore()), maxScore,
-                    remark).stripTrailing()).append(NEW_LINE);
+                    remark).stripTrailing() + NEW_LINE;
         }
-        report.append(NEW_LINE);
+        report += NEW_LINE;
+        return report;
     }
 
     // Every test case that did not pass, with its first line of detail
-    private void writeFailedTests(StringBuilder report,
-            Submission submission) {
-        report.append("Failed tests").append(NEW_LINE);
+    private String writeFailedTests(Submission submission) {
+        String report = "Failed tests" + NEW_LINE;
         int failedCount = 0;
         for (QuestionResult result : submission.getQuestionResults()) {
             for (TestCaseResult testCase : result.getTestCaseResults()) {
                 if (!testCase.isPassed()) {
-                    report.append("  ").append(questionIdOf(result))
-                            .append(" test ")
-                            .append(testCase.getTestNumber()).append(": ")
-                            .append(firstLine(testCase.getDetail()))
-                            .append(NEW_LINE);
+                    report += "  " + questionIdOf(result) + " test "
+                            + testCase.getTestNumber() + ": "
+                            + firstLine(testCase.getDetail()) + NEW_LINE;
                     failedCount++;
                 }
             }
         }
 
         if (failedCount == 0) {
-            report.append(NONE).append(NEW_LINE);
+            report += NONE + NEW_LINE;
         }
-        report.append(NEW_LINE);
+        report += NEW_LINE;
+        return report;
     }
 
     // Every anomaly, its fix status and what the instructor can do
-    private void writeAnomalies(StringBuilder report, Submission submission) {
-        report.append("Anomalies").append(NEW_LINE);
+    private String writeAnomalies(Submission submission) {
+        String report = "Anomalies" + NEW_LINE;
         if (submission.getAnomalies().isEmpty()) {
-            report.append(NONE).append(NEW_LINE);
+            report += NONE + NEW_LINE;
         }
 
         for (Anomaly anomaly : submission.getAnomalies()) {
-            report.append("  [").append(anomaly.getSeverity()).append("] ")
-                    .append(anomaly.getType()).append(": ")
-                    .append(firstLine(anomaly.getMessage()))
-                    .append(" (fix: ").append(anomaly.getFixStatus())
-                    .append(")").append(NEW_LINE);
+            report += "  [" + anomaly.getSeverity() + "] "
+                    + anomaly.getType() + ": "
+                    + firstLine(anomaly.getMessage())
+                    + " (fix: " + anomaly.getFixStatus() + ")" + NEW_LINE;
             if (!TextUtils.isBlank(anomaly.getSuggestedAction())) {
-                report.append("      What to do: ")
-                        .append(firstLine(anomaly.getSuggestedAction()))
-                        .append(NEW_LINE);
+                report += "      What to do: "
+                        + firstLine(anomaly.getSuggestedAction()) + NEW_LINE;
             }
         }
+        return report;
     }
 
-    // Adds one "Label:    value" line
-    private void addLine(StringBuilder report, String label, String value) {
-        report.append(String.format(LABEL_FORMAT, label, value))
-                .append(NEW_LINE);
+    // Returns one "Label:    value" line, line ending included
+    private String labelLine(String label, String value) {
+        return String.format(LABEL_FORMAT, label, value) + NEW_LINE;
     }
 
     // First name, then the last name unless the roster left it empty

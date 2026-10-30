@@ -24,6 +24,7 @@ import gradezzy.model.Assessment;
 import gradezzy.model.Question;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
+import gradezzy.util.FileUtils;
 
 /**
  * Shared code for all validators.
@@ -183,8 +184,10 @@ public abstract class AbstractValidator implements Validator {
     protected List<Path> listFolders(Path directory) throws IOException {
         List<Path> folders = new ArrayList<>();
 
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(directory)) {
+        DirectoryStream<Path> children = null;
+
+        try {
+            children = Files.newDirectoryStream(directory);
             for (Path child : children) {
                 String childName = child.getFileName().toString();
 
@@ -193,6 +196,8 @@ public abstract class AbstractValidator implements Validator {
                     folders.add(child);
                 }
             }
+        } finally {
+            FileUtils.closeIfOpen(children);
         }
 
         Collections.sort(folders);
@@ -209,13 +214,17 @@ public abstract class AbstractValidator implements Validator {
     protected List<Path> listFiles(Path directory) throws IOException {
         List<Path> files = new ArrayList<>();
 
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(directory)) {
+        DirectoryStream<Path> children = null;
+
+        try {
+            children = Files.newDirectoryStream(directory);
             for (Path child : children) {
                 if (Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS)) {
                     files.add(child);
                 }
             }
+        } finally {
+            FileUtils.closeIfOpen(children);
         }
 
         Collections.sort(files);

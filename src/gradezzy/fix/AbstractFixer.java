@@ -139,9 +139,12 @@ public abstract class AbstractFixer implements Fixer {
         if (!Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS)) {
             return false;
         }
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(folder)) {
+        DirectoryStream<Path> children = null;
+        try {
+            children = Files.newDirectoryStream(folder);
             return !children.iterator().hasNext();
+        } finally {
+            FileUtils.closeIfOpen(children);
         }
     }
 }
