@@ -42,6 +42,7 @@ import gradezzy.testcase.TypedTestCaseSource;
 import gradezzy.testcase.UploadedTesterSource;
 import gradezzy.ui.FileTreeBuilder;
 import gradezzy.ui.GradingTask;
+import gradezzy.ui.GradingTaskKind;
 import gradezzy.util.FileUtils;
 import gradezzy.util.InputValidator;
 
@@ -273,7 +274,7 @@ public class LiveBackend implements DashboardBackend {
     public void resumeGrading(GradingRun gradingRun,
             ProgressListener listener, RunCallback callback) {
         GradingTask task = new GradingTask(services.getGradingService(),
-                GradingTask.Kind.RESUME, gradingRun, listener);
+                GradingTaskKind.RESUME, gradingRun, listener);
         runInBackground(task, callback, Capability.RESUME_RUN);
     }
 
@@ -284,7 +285,7 @@ public class LiveBackend implements DashboardBackend {
     public void retryFailedSubmissions(GradingRun gradingRun,
             ProgressListener listener, RunCallback callback) {
         GradingTask task = new GradingTask(services.getGradingService(),
-                GradingTask.Kind.RETRY_FAILED, gradingRun, listener);
+                GradingTaskKind.RETRY_FAILED, gradingRun, listener);
         runInBackground(task, callback, Capability.RETRY_FAILED);
     }
 
@@ -591,17 +592,26 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public ActionResult saveSettings(Map<String, String> changes) {
-        for (Map.Entry<String, String> change : changes.entrySet()) {
-            String problem = validateSetting(change.getKey(),
-                    change.getValue());
+        return saveSettings(new ArrayList<>(changes.keySet()), changes);
+    }
+
+    /**
+     * Validates every change in order, then saves them with
+     * SettingsService in the same order.
+     */
+    @Override
+    public ActionResult saveSettings(List<String> keys,
+            Map<String, String> changes) {
+        for (String key : keys) {
+            String problem = validateSetting(key, changes.get(key));
             if (!problem.isEmpty()) {
                 return ActionResult.failed(problem);
             }
         }
 
-        for (Map.Entry<String, String> change : changes.entrySet()) {
-            services.getSettingsService().updateSetting(change.getKey(),
-                    change.getValue());
+        for (String key : keys) {
+            services.getSettingsService().updateSetting(key,
+                    changes.get(key));
         }
 
         try {
@@ -707,8 +717,7 @@ public class LiveBackend implements DashboardBackend {
     private void runInBackground(GradingTask task, RunCallback callback,
             Capability capability) {
         task.setOnSucceeded(event -> finishTask(task, callback, capability));
-        task.setOnFailed(event -> callback.onFailed(
-                describeFailure(task.getException())));
+        task.setOnFailed(event -> failTask(task, callback));
 
         Thread worker = new Thread(task, "gradezzy-grading");
         worker.setDaemon(true);
@@ -727,6 +736,16 @@ public class LiveBackend implements DashboardBackend {
             runsBySection.put(run.getSection().getLabel(), run);
         }
         callback.onFinished(run);
+    }
+
+    /**
+     * Reports a task that ended with an exception.
+     *
+     * @param task the task that failed
+     * @param callback told the reason in a plain sentence
+     */
+    private void failTask(GradingTask task, RunCallback callback) {
+        callback.onFailed(describeFailure(task.getException()));
     }
 
     // Turns an exception from a background task into a plain sentence.

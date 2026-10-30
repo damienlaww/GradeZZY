@@ -12,7 +12,7 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import javafx.scene.control.TreeItem;
@@ -108,10 +108,15 @@ public class FileTreeBuilder {
             return;
         }
 
-        Arrays.sort(entries);
+        List<File> sorted = new ArrayList<>();
+        for (File entry : entries) {
+            sorted.add(entry);
+        }
+        Collections.sort(sorted);
+
         List<File> folders = new ArrayList<>();
         List<File> files = new ArrayList<>();
-        for (File entry : entries) {
+        for (File entry : sorted) {
             // Links are skipped so a link to a parent folder cannot loop.
             if (Files.isSymbolicLink(entry.toPath())) {
                 continue;

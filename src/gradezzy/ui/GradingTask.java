@@ -29,26 +29,11 @@ import gradezzy.testcase.TestCaseSource;
  */
 public class GradingTask extends Task<GradingRun> {
 
-    /**
-     * What the task asks GradingService to do.
-     */
-    public enum Kind {
-
-        /** Grade a new batch. */
-        START,
-
-        /** Grade the failed and cancelled submissions of a run again. */
-        RETRY_FAILED,
-
-        /** Continue a saved run. */
-        RESUME
-    }
-
     // The service that does the grading
     private final GradingService gradingService;
 
     // What to ask the service to do
-    private final Kind kind;
+    private final GradingTaskKind kind;
 
     // The zip files or folders the instructor chose
     private final List<Path> inputPaths;
@@ -82,7 +67,7 @@ public class GradingTask extends Task<GradingRun> {
             Section section, TestCaseSource testCaseSource,
             ProgressListener listener) {
         this.gradingService = gradingService;
-        this.kind = Kind.START;
+        this.kind = GradingTaskKind.START;
         this.inputPaths = inputPaths;
         this.section = section;
         this.testCaseSource = testCaseSource;
@@ -106,8 +91,9 @@ public class GradingTask extends Task<GradingRun> {
      * @param gradingRun the run to retry or resume
      * @param listener the progress listener, on the background thread
      */
-    public GradingTask(GradingService gradingService, Kind kind,
-            GradingRun gradingRun, ProgressListener listener) {
+    public GradingTask(GradingService gradingService,
+            GradingTaskKind kind, GradingRun gradingRun,
+            ProgressListener listener) {
         this.gradingService = gradingService;
         this.kind = kind;
         this.inputPaths = new ArrayList<>();
@@ -125,9 +111,9 @@ public class GradingTask extends Task<GradingRun> {
      */
     @Override
     protected GradingRun call() throws Exception {
-        if (kind == Kind.RETRY_FAILED) {
+        if (kind == GradingTaskKind.RETRY_FAILED) {
             return gradingService.retryFailed(gradingRun, listener);
-        } else if (kind == Kind.RESUME) {
+        } else if (kind == GradingTaskKind.RESUME) {
             return gradingService.resume(gradingRun.getId(), listener);
         }
         if (scoreSheetFile != null) {

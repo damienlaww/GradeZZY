@@ -48,33 +48,32 @@ public final class DemoExports {
      * @return the CSV text
      */
     public static String toCsv(GradingRun run, List<Submission> scope) {
-        StringBuilder csv = new StringBuilder("Username,Last Name,"
-                + "First Name");
+        String csv = "Username,Last Name,First Name";
         for (Question question : run.getAssessment().getQuestions()) {
-            csv.append(COMMA).append(question.getId());
+            csv += COMMA + question.getId();
         }
-        csv.append(",Total").append(CSV_LINE_END);
+        csv += ",Total" + CSV_LINE_END;
 
         for (Submission submission : scope) {
             Student student = submission.getStudent();
-            csv.append(csvValue(submission.getUsername())).append(COMMA)
-                    .append(csvValue(lastName(student))).append(COMMA)
-                    .append(csvValue(firstName(student)));
+            csv += csvValue(submission.getUsername()) + COMMA
+                    + csvValue(lastName(student)) + COMMA
+                    + csvValue(firstName(student));
             boolean graded = ResultState.hasTotal(submission);
             for (Question question : run.getAssessment().getQuestions()) {
-                csv.append(COMMA);
+                csv += COMMA;
                 QuestionResult result = find(submission, question);
                 if (graded && result != null) {
-                    csv.append(format(result.getScore()));
+                    csv += format(result.getScore());
                 }
             }
-            csv.append(COMMA);
+            csv += COMMA;
             if (graded) {
-                csv.append(format(submission.getTotalScore()));
+                csv += format(submission.getTotalScore());
             }
-            csv.append(CSV_LINE_END);
+            csv += CSV_LINE_END;
         }
-        return csv.toString();
+        return csv;
     }
 
     /**
@@ -85,55 +84,52 @@ public final class DemoExports {
      * @return the JSON text
      */
     public static String toJson(GradingRun run, List<Submission> scope) {
-        StringBuilder json = new StringBuilder("{\n");
-        json.append(INDENT).append("\"run\": ").append(jsonText(run.getId()))
-                .append(",\n");
-        json.append(INDENT).append("\"section\": ")
-                .append(jsonText(run.getSection().getLabel()))
-                .append(",\n");
-        json.append(INDENT).append("\"students\": [");
+        String json = "{\n";
+        json += INDENT + "\"run\": " + jsonText(run.getId()) + ",\n";
+        json += INDENT + "\"section\": "
+                + jsonText(run.getSection().getLabel()) + ",\n";
+        json += INDENT + "\"students\": [";
 
         for (int index = 0; index < scope.size(); index++) {
             Submission submission = scope.get(index);
             if (index > 0) {
-                json.append(',');
+                json += ",";
             }
-            json.append('\n').append(INDENT).append(INDENT).append("{ ")
-                    .append("\"username\": ")
-                    .append(jsonText(submission.getUsername()))
-                    .append(", \"scores\": {");
-            appendScores(json, run, submission);
-            json.append(" }, \"total\": ");
+            json += "\n" + INDENT + INDENT + "{ " + "\"username\": "
+                    + jsonText(submission.getUsername())
+                    + ", \"scores\": {";
+            json += scoresText(run, submission);
+            json += " }, \"total\": ";
             if (ResultState.hasTotal(submission)) {
-                json.append(format(submission.getTotalScore()));
+                json += format(submission.getTotalScore());
             } else {
-                json.append("null");
+                json += "null";
             }
-            json.append(" }");
+            json += " }";
         }
-        json.append('\n').append(INDENT).append("]\n}\n");
-        return json.toString();
+        json += "\n" + INDENT + "]\n}\n";
+        return json;
     }
 
-    // Adds "Q1a": 3, ... for one student; ungraded marks are null.
-    private static void appendScores(StringBuilder json, GradingRun run,
-            Submission submission) {
+    // Returns "Q1a": 3, ... for one student; ungraded marks are null.
+    private static String scoresText(GradingRun run, Submission submission) {
         boolean graded = ResultState.hasTotal(submission);
         boolean first = true;
+        String text = "";
         for (Question question : run.getAssessment().getQuestions()) {
             if (!first) {
-                json.append(',');
+                text += ",";
             }
             first = false;
-            json.append(' ').append(jsonText(question.getId()))
-                    .append(": ");
+            text += " " + jsonText(question.getId()) + ": ";
             QuestionResult result = find(submission, question);
             if (graded && result != null) {
-                json.append(format(result.getScore()));
+                text += format(result.getScore());
             } else {
-                json.append("null");
+                text += "null";
             }
         }
+        return text;
     }
 
     // Finds the result of one question.

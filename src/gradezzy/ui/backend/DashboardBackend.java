@@ -426,6 +426,16 @@ public interface DashboardBackend {
      */
     ActionResult saveSettings(Map<String, String> changes);
 
+    /**
+     * Saves changed settings, checking and saving them in a given order.
+     *
+     * @param keys the names of the changed settings, in order
+     * @param changes the new values, by setting name
+     * @return what happened
+     */
+    ActionResult saveSettings(List<String> keys,
+            Map<String, String> changes);
+
     // ------------------------------------------------------ similarity
 
     /**

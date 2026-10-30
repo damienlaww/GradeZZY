@@ -58,9 +58,17 @@ public class DragDropHandler {
      */
     public void install(Node target) {
         target.setOnDragOver(event -> handleDragOver(event, target));
-        target.setOnDragExited(event -> target.getStyleClass().remove(
-                DRAG_OVER_CLASS));
+        target.setOnDragExited(event -> clearDragOver(target));
         target.setOnDragDropped(event -> handleDrop(event, target));
+    }
+
+    /**
+     * Removes the hover highlight when the files leave the target.
+     *
+     * @param target the target
+     */
+    private void clearDragOver(Node target) {
+        target.getStyleClass().remove(DRAG_OVER_CLASS);
     }
 
     /**
