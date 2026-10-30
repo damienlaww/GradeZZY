@@ -187,7 +187,7 @@ public class CompareView {
                 + CompareChart.MOST_SERIES + ":");
         intro.getStyleClass().add("small-text");
         intro.setMinWidth(Region.USE_PREF_SIZE);
-        HBox row = Parts.row(Parts.GAP_SMALL, intro);
+        HBox row = Parts.row(Parts.GAP_SMALL, new Node[] {intro});
         for (int index = 0; index < chosen.size(); index++) {
             row.getChildren().add(chip(chosen.get(index), index));
         }
@@ -223,7 +223,7 @@ public class CompareView {
     private HBox chip(String code, int index) {
         Label name = new Label(code);
         name.setMinWidth(Region.USE_PREF_SIZE);
-        HBox chip = Parts.row(SWATCH_GAP, seriesDot(index), name);
+        HBox chip = Parts.row(SWATCH_GAP, new Node[] {seriesDot(index), name});
         chip.getStyleClass().add("section-chip");
         if (chosen.size() > 1) {
             Button remove = new Button();
@@ -285,8 +285,11 @@ public class CompareView {
                 names += ", " + parts.get(index);
             }
         }
-        boolean one = notGraded.size() == 1;
-        return names + (one ? " has" : " have") + " not been graded yet.";
+        String verb = " have";
+        if (notGraded.size() == 1) {
+            verb = " has";
+        }
+        return names + verb + " not been graded yet.";
     }
 
     // Says whether two sections sit next to each other in the settings,
@@ -309,15 +312,17 @@ public class CompareView {
                     seriesClass(index));
             Label name = Parts.muted(chosen.get(index));
             name.getStyleClass().add("small-text");
-            legend.getChildren().add(Parts.row(SWATCH_GAP, line, name));
+            legend.getChildren().add(Parts.row(SWATCH_GAP,
+                    new Node[] {line, name}));
         }
         CompareChart chart = new CompareChart();
         chart.setSeries(chosen, chosenStats);
 
         Label title = Parts.title("How the marks spread in each section");
         title.setMinWidth(0);
-        HBox titleRow = Parts.row(Parts.GAP, title, Parts.grow(), legend);
-        VBox card = Parts.card(null, titleRow, chart);
+        HBox titleRow = Parts.row(Parts.GAP,
+                new Node[] {title, Parts.grow(), legend});
+        VBox card = Parts.card(null, new Node[] {titleRow, chart});
         card.getStyleClass().add("stats-card");
         return card;
     }
@@ -358,7 +363,8 @@ public class CompareView {
 
         Label name = Parts.strong(code);
         name.setMinWidth(0);
-        HBox section = Parts.row(Parts.GAP_SMALL, seriesDot(index), name);
+        HBox section = Parts.row(Parts.GAP_SMALL,
+                new Node[] {seriesDot(index), name});
         section.getStyleClass().addAll("compare-cell", "compare-first");
         section.setMaxWidth(Double.MAX_VALUE);
         section.setMaxHeight(Double.MAX_VALUE);

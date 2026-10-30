@@ -24,6 +24,7 @@ import javafx.scene.Node;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
@@ -100,7 +101,8 @@ public class StatisticsScreen extends FlowScreen {
     private final VBox body = new VBox(Parts.CARD_GAP);
 
     // The page
-    private final ScrollPane view = Parts.widePage(headerArea, body);
+    private final ScrollPane view =
+            Parts.widePage(new Node[] {headerArea, body});
 
     // The two views
     private final SectionView sectionView;
@@ -200,6 +202,23 @@ public class StatisticsScreen extends FlowScreen {
 
     // ------------------------------------------------------------ build
 
+    /**
+     * Follows a click on One section or Compare sections. Clicking the
+     * button that is already on would turn both off, so it stays on.
+     *
+     * @param before the button that was on
+     * @param after the button that is on now, or null for none
+     */
+    private void switchView(Toggle before, Toggle after) {
+        if (after == null) {
+            before.setSelected(true);
+            return;
+        }
+        if (!filling) {
+            refresh();
+        }
+    }
+
     // Builds the pickers and the switch and wires their events.
     private void createControls() {
         moduleBox.setPrefWidth(MODULE_WIDTH);
@@ -216,15 +235,7 @@ public class StatisticsScreen extends FlowScreen {
         oneButton.getStyleClass().add("left-pill");
         compareButton.getStyleClass().add("right-pill");
         group.selectedToggleProperty().addListener((observable, before,
-                after) -> {
-            if (after == null) {
-                before.setSelected(true);
-                return;
-            }
-            if (!filling) {
-                refresh();
-            }
-        });
+                after) -> switchView(before, after));
         HBox switchBar = new HBox(oneButton, compareButton);
         switchBar.getStyleClass().add("segmented");
         switchBar.setMinWidth(Region.USE_PREF_SIZE);

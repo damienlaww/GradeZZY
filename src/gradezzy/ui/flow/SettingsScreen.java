@@ -13,7 +13,7 @@
 package gradezzy.ui.flow;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -118,7 +118,7 @@ public class SettingsScreen extends FlowScreen {
     private final VBox noMatch = new VBox();
 
     // Every group, top to bottom
-    private final List<Group> groups = new ArrayList<>();
+    private final List<SettingsGroup> groups = new ArrayList<>();
 
     // Every setting, top to bottom
     private final List<SettingField> fields = new ArrayList<>();
@@ -133,10 +133,10 @@ public class SettingsScreen extends FlowScreen {
     private final Button discardButton;
 
     // The group being built
-    private Group building = null;
+    private SettingsGroup building = null;
 
     // The group highlighted in the list
-    private Group current = null;
+    private SettingsGroup current = null;
 
     // True while the page scrolls because a group was clicked
     private boolean jumping = false;
@@ -162,9 +162,10 @@ public class SettingsScreen extends FlowScreen {
         search.setMaxWidth(SEARCH_WIDTH);
         search.textProperty().addListener((observable, before, after)
                 -> applySearch());
-        HBox headerRow = Parts.row(Parts.GAP, Parts.header("Settings",
-                "Everything GradeZZY uses, saved in config.properties."),
-                Parts.grow(), search);
+        VBox header = Parts.header("Settings",
+                "Everything GradeZZY uses, saved in config.properties.");
+        HBox headerRow = Parts.row(Parts.GAP,
+                new Node[] {header, Parts.grow(), search});
         headerRow.getStyleClass().add("settings-header");
 
         noMatch.getChildren().add(Parts.muted("No setting matches."));
@@ -385,42 +386,42 @@ public class SettingsScreen extends FlowScreen {
 
     // Starts a new group with a card and an entry in the list.
     private void startGroup(String title) {
-        Group group = new Group(title);
-        group.indexItem.setOnMouseClicked(event -> jumpTo(group));
+        SettingsGroup group = new SettingsGroup(title);
+        group.getIndexItem().setOnMouseClicked(event -> jumpTo(group));
         groups.add(group);
-        index.getChildren().add(group.indexItem);
-        cards.getChildren().add(group.card);
+        index.getChildren().add(group.getIndexItem());
+        cards.getChildren().add(group.getCard());
         building = group;
     }
 
     // Adds a wide text setting to the group being built.
     private void text(String key, String name, String description) {
         add(new SettingField(getWindow(), key, name, description,
-                SettingField.Kind.TEXT));
+                SettingKind.TEXT));
     }
 
     // Adds a short number setting to the group being built.
     private void number(String key, String name, String description) {
         add(new SettingField(getWindow(), key, name, description,
-                SettingField.Kind.NUMBER));
+                SettingKind.NUMBER));
     }
 
     // Adds a file setting to the group being built.
     private void file(String key, String name, String description) {
         add(new SettingField(getWindow(), key, name, description,
-                SettingField.Kind.FILE));
+                SettingKind.FILE));
     }
 
     // Adds a folder setting to the group being built.
     private void folder(String key, String name, String description) {
         add(new SettingField(getWindow(), key, name, description,
-                SettingField.Kind.FOLDER));
+                SettingKind.FOLDER));
     }
 
     // Adds an on and off setting to the group being built.
     private void toggle(String key, String name, String description) {
         add(new SettingField(getWindow(), key, name, description,
-                SettingField.Kind.SWITCH));
+                SettingKind.SWITCH));
     }
 
     // Adds a setting with fixed values to the group being built, and
@@ -428,7 +429,7 @@ public class SettingsScreen extends FlowScreen {
     private SettingField choice(String key, String name,
             String description, String[] values) {
         SettingField field = new SettingField(getWindow(), key, name,
-                description, SettingField.Kind.CHOICE, values);
+                description, SettingKind.CHOICE, values);
         add(field);
         return field;
     }
@@ -451,10 +452,10 @@ public class SettingsScreen extends FlowScreen {
         table.addColumn("File", PlainTable.GROW, Pos.CENTER_LEFT);
         table.addColumn("Max", MAX_WIDTH, Pos.CENTER_RIGHT);
         for (Question question : assessment.getQuestions()) {
-            table.addRow(Parts.strong(question.getId()),
-                    new Label(question.getFolderName()),
-                    new Label(question.getFileName()),
-                    new Label(Parts.mark(question.getMaxScore())));
+            table.addRow(new Node[] {Parts.strong(question.getId()),
+                new Label(question.getFolderName()),
+                new Label(question.getFileName()),
+                new Label(Parts.mark(question.getMaxScore()))});
         }
         if (assessment.getQuestions().isEmpty()) {
             table.showMessage(Parts.muted("No questions are listed."));
@@ -477,7 +478,8 @@ public class SettingsScreen extends FlowScreen {
         row.setAlignment(Pos.TOP_LEFT);
         row.getStyleClass().add("setting-row");
         building.addRow(row, null);
-        building.questionsText = ("questions " + description).toLowerCase();
+        building.setQuestionsText(("questions " + description)
+                .toLowerCase());
     }
 
     // ------------------------------------------------- search, scrolling
@@ -487,12 +489,12 @@ public class SettingsScreen extends FlowScreen {
     private void applySearch() {
         String query = search.getText().trim().toLowerCase();
         boolean any = false;
-        for (Group group : groups) {
+        for (SettingsGroup group : groups) {
             boolean shown = group.filter(query);
-            group.card.setVisible(shown);
-            group.card.setManaged(shown);
-            group.indexItem.setVisible(shown);
-            group.indexItem.setManaged(shown);
+            group.getCard().setVisible(shown);
+            group.getCard().setManaged(shown);
+            group.getIndexItem().setVisible(shown);
+            group.getIndexItem().setManaged(shown);
             if (shown) {
                 any = true;
             }
@@ -504,13 +506,13 @@ public class SettingsScreen extends FlowScreen {
     }
 
     // Scrolls the cards so a group's card is at the top.
-    private void jumpTo(Group group) {
+    private void jumpTo(SettingsGroup group) {
         double contentHeight = cards.getHeight();
         double viewHeight = cardScroll.getViewportBounds().getHeight();
         double room = contentHeight - viewHeight;
         jumping = true;
         if (room > 0) {
-            double share = group.card.getBoundsInParent().getMinY() / room;
+            double share = group.getCard().getBoundsInParent().getMinY() / room;
             cardScroll.setVvalue(Math.min(1.0, Math.max(0.0, share)));
         }
         jumping = false;
@@ -528,10 +530,10 @@ public class SettingsScreen extends FlowScreen {
                 * cardScroll.getVvalue();
         boolean atBottom = cardScroll.getVvalue()
                 >= cardScroll.getVmax() - BOTTOM_SLACK;
-        Group found = null;
-        for (Group group : groups) {
-            if (group.card.isVisible() && (found == null || atBottom
-                    || group.card.getBoundsInParent().getMinY()
+        SettingsGroup found = null;
+        for (SettingsGroup group : groups) {
+            if (group.getCard().isVisible() && (found == null || atBottom
+                    || group.getCard().getBoundsInParent().getMinY()
                     <= top + SCROLL_SLACK)) {
                 found = group;
             }
@@ -542,12 +544,12 @@ public class SettingsScreen extends FlowScreen {
     }
 
     // Marks one group as the current one in the list.
-    private void select(Group group) {
+    private void select(SettingsGroup group) {
         if (current != null) {
-            current.indexItem.getStyleClass().remove("selected");
+            current.getIndexItem().getStyleClass().remove("selected");
         }
         current = group;
-        group.indexItem.getStyleClass().add("selected");
+        group.getIndexItem().getStyleClass().add("selected");
     }
 
     // ------------------------------------------------------ action bar
@@ -579,9 +581,10 @@ public class SettingsScreen extends FlowScreen {
         getActions().setPrimaryEnabled(changed > 0 && valid);
     }
 
-    // Saves every changed setting together.
+    // Saves every changed setting together, in the order they are shown.
     private void save() {
-        Map<String, String> changes = new LinkedHashMap<>();
+        List<String> keys = new ArrayList<>();
+        Map<String, String> changes = new HashMap<>();
         for (SettingField field : fields) {
             if (field.isChanged()) {
                 if (!field.isValid()) {
@@ -589,13 +592,16 @@ public class SettingsScreen extends FlowScreen {
                             + "first.");
                     return;
                 }
+                if (!changes.containsKey(field.getKey())) {
+                    keys.add(field.getKey());
+                }
                 changes.put(field.getKey(), field.getValue());
             }
         }
         if (changes.isEmpty()) {
             return;
         }
-        ActionResult result = getBackend().saveSettings(changes);
+        ActionResult result = getBackend().saveSettings(keys, changes);
         getWindow().notify(result.getMessage());
         if (result.isDone()) {
             for (SettingField field : fields) {
@@ -605,85 +611,5 @@ public class SettingsScreen extends FlowScreen {
             }
         }
         refreshBar();
-    }
-
-    /**
-     * One group of settings: its card, its entry in the list and its
-     * rows.
-     */
-    private static class Group {
-
-        // The entry in the list on the left
-        private final Label indexItem;
-
-        // The card on the right
-        private final VBox card;
-
-        // The rows of the card
-        private final VBox rowBox = new VBox();
-
-        // Each row, top to bottom
-        private final List<HBox> rows = new ArrayList<>();
-
-        // The setting of each row, or null for the questions table
-        private final List<SettingField> rowFields = new ArrayList<>();
-
-        // The words the questions row matches, if this group has it
-        private String questionsText = "";
-
-        // Creates an empty group.
-        Group(String title) {
-            indexItem = new Label(title);
-            indexItem.getStyleClass().add("settings-index-item");
-            indexItem.setMaxWidth(Double.MAX_VALUE);
-            card = Parts.card(title, rowBox);
-        }
-
-        // Adds a row under the others.
-        void addRow(HBox row, SettingField field) {
-            rows.add(row);
-            rowFields.add(field);
-            rowBox.getChildren().add(row);
-            markEnds();
-        }
-
-        // Shows the rows that match; says whether any is shown.
-        boolean filter(String query) {
-            boolean any = false;
-            for (int i = 0; i < rows.size(); i++) {
-                SettingField field = rowFields.get(i);
-                boolean shown = query.isEmpty();
-                if (field != null) {
-                    shown = field.matches(query);
-                } else if (!shown) {
-                    shown = questionsText.contains(query);
-                }
-                rows.get(i).setVisible(shown);
-                rows.get(i).setManaged(shown);
-                if (shown) {
-                    any = true;
-                }
-            }
-            markEnds();
-            return any;
-        }
-
-        // Gives the first shown row no line above it, and the first and
-        // last shown rows no gap against the card's edge.
-        void markEnds() {
-            HBox last = null;
-            for (HBox row : rows) {
-                row.getStyleClass().removeAll("first", "last");
-                if (row.isVisible()) {
-                    if (last == null) {
-                        row.getStyleClass().add("first");
-                    }
-                    last = row;
-                }
-            }
-            if (last != null) {
-                last.getStyleClass().add("last");
-            }
-        }
     }
 }

@@ -9,7 +9,7 @@
  */
 package gradezzy.ui.flow;
 
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -29,7 +29,7 @@ public class TabBar extends HBox {
     private static final double TAB_GAP = 4.0;
 
     // One button per page
-    private final Map<Page, Button> tabs = new EnumMap<>(Page.class);
+    private final Map<Page, Button> tabs = new HashMap<>();
 
     /**
      * Creates the tabs.
@@ -57,10 +57,11 @@ public class TabBar extends HBox {
      * @param page the page on screen
      */
     public void select(Page page) {
-        for (Map.Entry<Page, Button> entry : tabs.entrySet()) {
-            entry.getValue().getStyleClass().remove("selected");
-            if (entry.getKey() == page) {
-                entry.getValue().getStyleClass().add("selected");
+        for (Page other : tabs.keySet()) {
+            Button tab = tabs.get(other);
+            tab.getStyleClass().remove("selected");
+            if (other == page) {
+                tab.getStyleClass().add("selected");
             }
         }
     }

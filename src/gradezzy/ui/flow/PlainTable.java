@@ -94,7 +94,7 @@ public class PlainTable extends VBox {
      *
      * @param cells the content of each column, left to right
      */
-    public void addRow(Node... cells) {
+    public void addRow(Node[] cells) {
         HBox row = new HBox();
         row.getStyleClass().add("plain-row");
         row.setAlignment(Pos.CENTER_LEFT);

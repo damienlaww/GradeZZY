@@ -9,6 +9,7 @@
  */
 package gradezzy.ui.flow;
 
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Group;
@@ -187,7 +188,7 @@ public final class Parts {
      * @param content what the card holds
      * @return the card
      */
-    public static VBox card(String title, Node... content) {
+    public static VBox card(String title, Node[] content) {
         VBox card = new VBox();
         card.getStyleClass().add("flow-card");
         if (title != null) {
@@ -288,13 +289,23 @@ public final class Parts {
     }
 
     /**
+     * Returns an empty row, centred vertically, to be filled later.
+     *
+     * @param spacing the gap between nodes
+     * @return the row
+     */
+    public static HBox row(double spacing) {
+        return row(spacing, new Node[0]);
+    }
+
+    /**
      * Returns a row of nodes, centred vertically.
      *
      * @param spacing the gap between nodes
      * @param nodes the nodes
      * @return the row
      */
-    public static HBox row(double spacing, Node... nodes) {
+    public static HBox row(double spacing, Node[] nodes) {
         HBox row = new HBox(spacing, nodes);
         row.setAlignment(Pos.CENTER_LEFT);
         return row;
@@ -326,7 +337,7 @@ public final class Parts {
      * @param content the header and cards, top to bottom
      * @return the page
      */
-    public static ScrollPane narrowPage(Node... content) {
+    public static ScrollPane narrowPage(Node[] content) {
         VBox column = new VBox(CARD_GAP, content);
         column.getStyleClass().add("narrow-column");
         column.setMaxWidth(COLUMN_WIDTH);
@@ -337,9 +348,23 @@ public final class Parts {
         // Centres the column on the window, not on the space left beside
         // the scroll bar, so pages with and without one line up.
         pane.viewportBoundsProperty().addListener((seen, old, bounds) ->
-                centre.setPadding(new Insets(0, 0, 0, Math.max(0,
-                pane.getWidth() - bounds.getWidth()))));
+                centreColumn(pane, centre, bounds));
         return pane;
+    }
+
+    /**
+     * Pads the left of a narrow page by the width of its scroll bar, so
+     * the column is centred on the window.
+     *
+     * @param pane the scrolling page
+     * @param centre the box that centres the column
+     * @param bounds the new bounds of the visible part of the page
+     */
+    private static void centreColumn(ScrollPane pane, StackPane centre,
+            Bounds bounds) {
+        double scrollBarWidth = Math.max(0,
+                pane.getWidth() - bounds.getWidth());
+        centre.setPadding(new Insets(0, 0, 0, scrollBarWidth));
     }
 
     /**
@@ -349,7 +374,7 @@ public final class Parts {
      * @param content the header and cards, top to bottom
      * @return the page
      */
-    public static ScrollPane widePage(Node... content) {
+    public static ScrollPane widePage(Node[] content) {
         VBox column = new VBox(CARD_GAP, content);
         column.getStyleClass().add("wide-column");
         return scroll(column);

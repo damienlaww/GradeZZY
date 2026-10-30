@@ -107,7 +107,10 @@ public class BellCurveChart extends Region {
     public BellCurveChart(boolean small) {
         this.small = small;
         getStyleClass().add("bell-chart");
-        double height = small ? SMALL_HEIGHT : FULL_HEIGHT;
+        double height = FULL_HEIGHT;
+        if (small) {
+            height = SMALL_HEIGHT;
+        }
         setPrefHeight(height);
         setMinHeight(height);
         setMinWidth(0);
@@ -154,7 +157,10 @@ public class BellCurveChart extends Region {
 
     // Draws every part of the chart into the given size.
     private void draw(double width, double height) {
-        double[] margins = small ? SMALL_MARGINS : FULL_MARGINS;
+        double[] margins = FULL_MARGINS;
+        if (small) {
+            margins = SMALL_MARGINS;
+        }
         double left = margins[0];
         double top = margins[2];
         double plotWidth = width - left - margins[1];
@@ -166,13 +172,23 @@ public class BellCurveChart extends Region {
 
         double max = stats.getMaxTotal();
         boolean single = max <= MOST_SINGLE_BARS && max == Math.rint(max);
-        int binCount = single ? (int) max + 1 : GROUPED_BINS;
-        int[] counts = single ? countSingle(binCount)
-                : stats.countBins(GROUPED_BINS);
-        double binMarks = single ? 1.0 : max / GROUPED_BINS;
-        double lowMark = single ? -HALF_MARK : 0.0;
-        double highMark = single ? max + HALF_MARK : max;
-        Scale x = new Scale(lowMark, highMark, left, left + plotWidth);
+        int[] counts;
+        double binMarks;
+        double lowMark;
+        double highMark;
+        if (single) {
+            counts = countSingle((int) max + 1);
+            binMarks = 1.0;
+            lowMark = -HALF_MARK;
+            highMark = max + HALF_MARK;
+        } else {
+            counts = stats.countBins(GROUPED_BINS);
+            binMarks = max / GROUPED_BINS;
+            lowMark = 0.0;
+            highMark = max;
+        }
+        ChartScale x = new ChartScale(lowMark, highMark, left,
+                left + plotWidth);
 
         double tallest = curveHeight(stats.getMean(), binMarks);
         for (int count : counts) {
@@ -181,7 +197,7 @@ public class BellCurveChart extends Region {
         int gridStep = gridStep(tallest * HEADROOM);
         double yMax = Math.max(gridStep, Math.ceil(tallest * HEADROOM
                 / gridStep) * gridStep);
-        Scale y = new Scale(0, yMax, bottom, top);
+        ChartScale y = new ChartScale(0, yMax, bottom, top);
 
         if (!small) {
             drawGrid(y, gridStep, yMax, left, left + plotWidth);
@@ -209,7 +225,7 @@ public class BellCurveChart extends Region {
     }
 
     // Draws the horizontal gridlines and their numbers.
-    private void drawGrid(Scale y, int step, double yMax, double from,
+    private void drawGrid(ChartScale y, int step, double yMax, double from,
             double to) {
         for (int value = 0; value <= yMax; value += step) {
             double at = y.map(value);
@@ -223,7 +239,7 @@ public class BellCurveChart extends Region {
     }
 
     // Shades the band of the average plus or minus one spread.
-    private void drawBand(Scale x, double top, double plotHeight) {
+    private void drawBand(ChartScale x, double top, double plotHeight) {
         double spread = stats.getSpread();
         if (spread <= 0) {
             return;
@@ -237,8 +253,8 @@ public class BellCurveChart extends Region {
     }
 
     // Draws one bar per bin, with a tooltip giving its count.
-    private void drawBars(int[] counts, Scale x, Scale y, boolean single,
-            double binMarks, double bottom) {
+    private void drawBars(int[] counts, ChartScale x, ChartScale y,
+            boolean single, double binMarks, double bottom) {
         for (int bin = 0; bin < counts.length; bin++) {
             if (counts[bin] > 0) {
                 drawBar(bin, counts[bin], x, y, single, binMarks, bottom);
@@ -247,17 +263,17 @@ public class BellCurveChart extends Region {
     }
 
     // Draws the bar of one bin.
-    private void drawBar(int bin, int count, Scale x, Scale y,
+    private void drawBar(int bin, int count, ChartScale x, ChartScale y,
             boolean single, double binMarks, double bottom) {
         double from;
-            double to;
-            if (single) {
-                from = x.map(bin - 0.5);
-                to = x.map(bin + 0.5);
-            } else {
-                from = x.map(bin * binMarks);
-                to = x.map((bin + 1) * binMarks);
-            }
+        double to;
+        if (single) {
+            from = x.map(bin - 0.5);
+            to = x.map(bin + 0.5);
+        } else {
+            from = x.map(bin * binMarks);
+            to = x.map((bin + 1) * binMarks);
+        }
         double barWidth = Math.max(1, to - from - BAR_GAP);
         double barHeight = bottom - y.map(count);
         SVGPath bar = new SVGPath();
@@ -270,7 +286,7 @@ public class BellCurveChart extends Region {
     }
 
     // Draws the bell curve of the average and spread.
-    private void drawCurve(Scale x, Scale y, double binMarks,
+    private void drawCurve(ChartScale x, ChartScale y, double binMarks,
             double lowMark, double highMark) {
         if (stats.getSpread() <= 0 || stats.getCount() < 2) {
             return;
@@ -288,7 +304,7 @@ public class BellCurveChart extends Region {
     }
 
     // Labels the marks along the bottom.
-    private void drawTicks(Scale x, double max, double bottom,
+    private void drawTicks(ChartScale x, double max, double bottom,
             boolean single) {
         double step;
         if (small) {
@@ -305,7 +321,7 @@ public class BellCurveChart extends Region {
     }
 
     // Draws the pass mark and average lines with their names.
-    private void drawMarkers(Scale x, double top, double bottom) {
+    private void drawMarkers(ChartScale x, double top, double bottom) {
         double pass = x.clampMap(stats.getPassMark());
         Line passLine = addLine(pass, top - LINE_RISE, pass, bottom,
                 "chart-pass");
@@ -430,41 +446,5 @@ public class BellCurveChart extends Region {
     private static void placeCentre(Text text, double x, double y) {
         text.setLayoutX(x - text.getLayoutBounds().getWidth() / 2);
         text.setLayoutY(y - text.getLayoutBounds().getMinY());
-    }
-
-    /**
-     * Maps a range of values onto a range of pixels.
-     */
-    private static final class Scale {
-
-        // The value range
-        private final double fromValue;
-        private final double toValue;
-
-        // The pixel range
-        private final double fromPixel;
-        private final double toPixel;
-
-        // Creates the mapping.
-        Scale(double fromValue, double toValue, double fromPixel,
-                double toPixel) {
-            this.fromValue = fromValue;
-            this.toValue = toValue;
-            this.fromPixel = fromPixel;
-            this.toPixel = toPixel;
-        }
-
-        // Returns the pixel of a value.
-        double map(double value) {
-            double share = (value - fromValue) / (toValue - fromValue);
-            return fromPixel + share * (toPixel - fromPixel);
-        }
-
-        // Returns the pixel of a value kept inside the range.
-        double clampMap(double value) {
-            double low = Math.min(fromValue, toValue);
-            double high = Math.max(fromValue, toValue);
-            return map(Math.max(low, Math.min(high, value)));
-        }
     }
 }

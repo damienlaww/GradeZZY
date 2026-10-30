@@ -13,7 +13,8 @@
 package gradezzy.ui.flow;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javafx.application.Platform;
@@ -110,7 +111,10 @@ public class GradeScreen extends FlowScreen
     private final Label[] counts = new Label[WAITING + 1];
 
     // Every student of the run that has a result, by username
-    private final Map<String, Submission> results = new LinkedHashMap<>();
+    private final Map<String, Submission> results = new HashMap<>();
+
+    // The usernames in results, in the order they first got a result
+    private final List<String> resultOrder = new ArrayList<>();
 
     // How many students this run grades
     private int total = 0;
@@ -141,7 +145,8 @@ public class GradeScreen extends FlowScreen
         cards.add(createSoFarCard(), 1, 0);
         VBox header = new VBox(heading, subtitle);
         header.getStyleClass().add("screen-header");
-        view = Parts.narrowPage(header, createProgressCard(), cards);
+        view = Parts.narrowPage(
+                new Node[] {header, createProgressCard(), cards});
     }
 
     @Override
@@ -190,7 +195,7 @@ public class GradeScreen extends FlowScreen
             if (isUnfinished(submission) || again) {
                 total++;
             } else {
-                results.put(submission.getUsername(), submission);
+                addResult(submission);
             }
         }
         updateCount();
@@ -233,14 +238,14 @@ public class GradeScreen extends FlowScreen
         bar.setAlignment(Pos.CENTER_LEFT);
         fill.maxWidthProperty().bind(bar.widthProperty().multiply(progress));
         fill.minWidthProperty().bind(fill.maxWidthProperty());
-        return Parts.card(null, top, bar);
+        return Parts.card(null, new Node[] {top, bar});
     }
 
     // Builds the card with the small bell curve.
     private VBox createMarksCard() {
         StackPane box = new StackPane(chart, noMarks);
         box.setMinHeight(BellCurveChart.SMALL_HEIGHT);
-        VBox card = Parts.card("Marks so far", box);
+        VBox card = Parts.card("Marks so far", new Node[] {box});
         card.setMaxHeight(Double.MAX_VALUE);
         return card;
     }
@@ -255,8 +260,8 @@ public class GradeScreen extends FlowScreen
             pills[index] = Parts.pill(words[index], tones[index]);
             counts[index] = Parts.strong("0");
             counts[index].getStyleClass().add("count-value");
-            HBox row = Parts.row(Parts.GAP, pills[index], Parts.grow(),
-                    counts[index]);
+            HBox row = Parts.row(Parts.GAP,
+                    new Node[] {pills[index], Parts.grow(), counts[index]});
             row.getStyleClass().add("card-row");
             if (index == 0) {
                 row.getStyleClass().add("first");
@@ -266,7 +271,7 @@ public class GradeScreen extends FlowScreen
             }
             rows.getChildren().add(row);
         }
-        VBox card = Parts.card("So far", rows);
+        VBox card = Parts.card("So far", new Node[] {rows});
         card.setMaxHeight(Double.MAX_VALUE);
         return card;
     }
@@ -275,43 +280,74 @@ public class GradeScreen extends FlowScreen
 
     @Override
     public void onRunStarted(int totalSubmissions) {
-        Platform.runLater(() -> {
-            total = totalSubmissions;
-            updateCount();
-        });
+        Platform.runLater(() -> showTotal(totalSubmissions));
     }
 
     @Override
     public void onSubmissionStarted(Submission submission) {
-        Platform.runLater(() -> now.setText("Now: "
-                + Students.name(submission)));
+        Platform.runLater(() -> showStudent(submission));
     }
 
     @Override
     public void onStageStarted(Submission submission, String stageName) {
-        Platform.runLater(() -> {
-            int index = PipelineStages.indexOf(stageName);
-            String words = "working";
-            if (index >= 0 && index < STAGE_WORDS.length) {
-                words = STAGE_WORDS[index];
-            }
-            now.setText("Now: " + Students.name(submission) + DOT
-                    + words);
-        });
+        Platform.runLater(() -> showStage(submission, stageName));
     }
 
     @Override
     public void onSubmissionFinished(Submission submission) {
-        Platform.runLater(() -> {
-            finished++;
-            results.put(submission.getUsername(), submission);
-            updateCount();
-        });
+        Platform.runLater(() -> countFinished(submission));
     }
 
     @Override
     public void onRunFinished(GradingRun gradingRun) {
         // The callback below moves on; nothing to do here
+    }
+
+    /**
+     * Shows how many students the run grades. Runs on the JavaFX thread.
+     *
+     * @param totalSubmissions the number of students
+     */
+    private void showTotal(int totalSubmissions) {
+        total = totalSubmissions;
+        updateCount();
+    }
+
+    /**
+     * Shows which student is being graded. Runs on the JavaFX thread.
+     *
+     * @param submission the student
+     */
+    private void showStudent(Submission submission) {
+        now.setText("Now: " + Students.name(submission));
+    }
+
+    /**
+     * Shows which student is being graded and what is being done.
+     * Runs on the JavaFX thread.
+     *
+     * @param submission the student
+     * @param stageName the name of the step of grading
+     */
+    private void showStage(Submission submission, String stageName) {
+        int index = PipelineStages.indexOf(stageName);
+        String words = "working";
+        if (index >= 0 && index < STAGE_WORDS.length) {
+            words = STAGE_WORDS[index];
+        }
+        now.setText("Now: " + Students.name(submission) + DOT + words);
+    }
+
+    /**
+     * Counts a finished student and keeps its result. Runs on the
+     * JavaFX thread.
+     *
+     * @param submission the student
+     */
+    private void countFinished(Submission submission) {
+        finished++;
+        addResult(submission);
+        updateCount();
     }
 
     // ----------------------------------------------------- run callback
@@ -323,7 +359,7 @@ public class GradeScreen extends FlowScreen
         if (gradingRun != null) {
             for (Submission submission : gradingRun.getSubmissions()) {
                 if (!isUnfinished(submission)) {
-                    results.put(submission.getUsername(), submission);
+                    addResult(submission);
                 }
             }
             updateCount();
@@ -358,9 +394,29 @@ public class GradeScreen extends FlowScreen
 
     // ---------------------------------------------------------- helpers
 
+    // Keeps a student's result; a student who already has one keeps
+    // their place in the order.
+    private void addResult(Submission submission) {
+        String username = submission.getUsername();
+        if (!results.containsKey(username)) {
+            resultOrder.add(username);
+        }
+        results.put(username, submission);
+    }
+
+    // Returns every kept result, in the order they first arrived.
+    private List<Submission> resultsInOrder() {
+        List<Submission> inOrder = new ArrayList<>();
+        for (String username : resultOrder) {
+            inOrder.add(results.get(username));
+        }
+        return inOrder;
+    }
+
     // Empties the screen for a new run.
     private void prepare(String sectionLabel) {
         results.clear();
+        resultOrder.clear();
         total = 0;
         finished = 0;
         cancelling = false;
@@ -382,7 +438,11 @@ public class GradeScreen extends FlowScreen
     private void updateCount() {
         done.setText(String.valueOf(finished));
         ofTotal.setText("of " + Parts.plural(total, "student"));
-        progress.set(total > 0 ? (double) finished / total : 0);
+        double share = 0;
+        if (total > 0) {
+            share = (double) finished / total;
+        }
+        progress.set(share);
         updateTimeLeft();
         updateChart();
         updateRows();
@@ -410,12 +470,16 @@ public class GradeScreen extends FlowScreen
         if (assessment == null) {
             return;
         }
-        MarkStats stats = MarkStats.of(new ArrayList<>(
-                results.values()), assessment.getMaxTotal(),
+        MarkStats stats = MarkStats.of(resultsInOrder(),
+                assessment.getMaxTotal(),
                 MarkStats.parsePassPercent(getBackend().getSetting(
                 ConfigKeys.PASS_MARK_PERCENT)));
         boolean empty = stats.isEmpty();
-        chart.setStats(empty ? null : stats);
+        if (empty) {
+            chart.setStats(null);
+        } else {
+            chart.setStats(stats);
+        }
         noMarks.setVisible(empty);
     }
 
@@ -423,7 +487,7 @@ public class GradeScreen extends FlowScreen
     private void updateRows() {
         int[] tally = new int[WAITING + 1];
         boolean onlyCompile = true;
-        for (Submission submission : results.values()) {
+        for (Submission submission : resultsInOrder()) {
             ResultState state = Students.state(submission, getBackend());
             if (state == ResultState.NEEDS_REVIEW) {
                 tally[REVIEW]++;
@@ -438,8 +502,11 @@ public class GradeScreen extends FlowScreen
             }
         }
         tally[WAITING] += Math.max(0, total - finished);
-        pills[FAILED].setText(onlyCompile ? "Did not compile"
-                : "Could not grade");
+        if (onlyCompile) {
+            pills[FAILED].setText("Did not compile");
+        } else {
+            pills[FAILED].setText("Could not grade");
+        }
         for (int index = 0; index < tally.length; index++) {
             counts[index].setText(String.valueOf(tally[index]));
         }
@@ -480,10 +547,13 @@ public class GradeScreen extends FlowScreen
         GradingRun run = getState().getRun();
         if (getState().isGrading()) {
             actions.setBack("Cancel", () -> askCancel());
-            actions.setStatus(cancelling ? "Stopping after the current "
-                    + "student." : "Results open in Review when grading "
-                    + "finishes.");
-            actions.setPrimary("Review results", () -> { }, false);
+            if (cancelling) {
+                actions.setStatus("Stopping after the current student.");
+            } else {
+                actions.setStatus("Results open in Review when grading "
+                        + "finishes.");
+            }
+            actions.setPrimary("Review results", () -> doNothing(), false);
             return;
         }
         actions.setBack(() -> getWindow().show(Step.SET_UP));
@@ -498,8 +568,8 @@ public class GradeScreen extends FlowScreen
             return;
         }
         if (run != null) {
-            actions.setPrimary("Review results", () -> getWindow()
-                    .advanceTo(Step.REVIEW), true);
+            actions.setPrimary("Review results",
+                    () -> getWindow().advanceTo(Step.REVIEW), true);
         }
     }
 
@@ -507,11 +577,24 @@ public class GradeScreen extends FlowScreen
     private void askCancel() {
         getWindow().confirm("Cancel grading?", "Students already graded "
                 + "keep their marks. You can resume the rest later.",
-                "Cancel grading", () -> {
-                    cancelling = true;
-                    getBackend().cancelGrading();
-                    getActions().setStatus("Stopping after the current "
-                            + "student.");
-                });
+                "Cancel grading", () -> cancelGrading());
+    }
+
+    /**
+     * Asks the backend to stop after the current student, once the
+     * instructor has confirmed.
+     */
+    private void cancelGrading() {
+        cancelling = true;
+        getBackend().cancelGrading();
+        getActions().setStatus("Stopping after the current student.");
+    }
+
+    /**
+     * The action of Review results while grading runs: nothing happens,
+     * because the button is disabled until grading ends.
+     */
+    private void doNothing() {
+        // the button is disabled while grading runs
     }
 }

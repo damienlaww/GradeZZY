@@ -67,7 +67,7 @@ public final class AdjustMarkSheet {
         mark.setAccessibleText("New mark");
         Label outOf = Parts.muted("out of " + Parts.mark(max) + ", now "
                 + Parts.mark(result.getScore()));
-        HBox markRow = Parts.row(Parts.GAP_SMALL, mark, outOf);
+        HBox markRow = Parts.row(Parts.GAP_SMALL, new Node[] {mark, outOf});
 
         TextArea reason = new TextArea();
         reason.setPrefRowCount(REASON_ROWS);
@@ -86,9 +86,10 @@ public final class AdjustMarkSheet {
 
         Button cancel = Parts.secondary("Cancel", () -> window.closeSheet());
         Button save = Parts.primary("Save");
-        save.setOnAction(event -> save(window, submission, result,
-                mark.getText(), reason.getText(), problem, onSaved));
-        HBox buttons = Parts.row(Parts.GAP, Parts.grow(), cancel, save);
+        save.setOnAction(event -> save(window, submission, result, mark,
+                reason, problem, onSaved));
+        HBox buttons = Parts.row(Parts.GAP,
+                new Node[] {Parts.grow(), cancel, save});
 
         VBox body = new VBox(Parts.GAP,
                 Parts.title("Adjust " + questionId + " for "
@@ -136,8 +137,10 @@ public final class AdjustMarkSheet {
 
     // Checks the form, then saves the mark and closes the sheet.
     private static void save(FlowWindow window, Submission submission,
-            QuestionResult result, String markText, String reasonText,
+            QuestionResult result, TextField mark, TextArea reason,
             Label problem, Runnable onSaved) {
+        String markText = mark.getText();
+        String reasonText = reason.getText();
         String error = validate(markText, reasonText,
                 result.getQuestion().getMaxScore());
         if (!error.isEmpty()) {
