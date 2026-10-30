@@ -362,7 +362,7 @@ public class LiveBackend implements DashboardBackend {
         Anomaly anomaly = repair.getAnomaly();
         services.getAnomalyService().approveFix(anomaly);
         return checkFixStatus(anomaly, FixStatus.APPROVED,
-                "Approved the repair for " + anomaly.getUsername() + ".");
+                "Approved the fix for " + anomaly.getUsername() + ".");
     }
 
     /**
@@ -373,7 +373,7 @@ public class LiveBackend implements DashboardBackend {
         Anomaly anomaly = repair.getAnomaly();
         services.getAnomalyService().undoFix(anomaly);
         return checkFixStatus(anomaly, FixStatus.UNDONE,
-                "Rejected the repair for " + anomaly.getUsername()
+                "Rejected the fix for " + anomaly.getUsername()
                 + ". The working copy was put back.");
     }
 
@@ -536,7 +536,7 @@ public class LiveBackend implements DashboardBackend {
         } catch (RuntimeException exception) {
             return ActionResult.failed("The restore of "
                     + backupFile.getFileName() + " did not finish ("
-                    + exception + "). Check the History screen before "
+                    + exception + "). Check the Runs tab before "
                     + "grading again.");
         }
 

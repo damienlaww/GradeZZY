@@ -40,7 +40,7 @@ public abstract class AbstractValidator implements Validator {
 
     // The suggested actions, one for each type a validator reports
     private static final String WRAPPER_ACTION =
-            "Approve the repair if the new username folder is right.";
+            "Approve the fix if the new username folder is right.";
     private static final String FOLDER_NAME_ACTION =
             "Approve the rename to the username, or reject it.";
     private static final String QUESTION_FOLDER_ACTION =
@@ -49,7 +49,7 @@ public abstract class AbstractValidator implements Validator {
     private static final String MISSING_FILE_ACTION =
             "Ask for a corrected submission, or keep the question at 0.";
     private static final String FILE_NAME_ACTION =
-            "Rename the file by hand. No automatic repair exists for file "
+            "Rename the file by hand. No automatic fix exists for file "
             + "names.";
     private static final String HEADER_ACTION =
             "Approve the name taken from the roster, or reject it.";

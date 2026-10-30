@@ -225,8 +225,8 @@ public final class DemoData {
                         AnomalyType.INVALID_ARCHIVE, Severity.ERROR,
                         username, username + ZIP_EXTENSION + " could not "
                         + "be opened as a ZIP file, so it was not graded.",
-                        "Replace the file on the Submissions screen, then "
-                        + "grade the batch again."));
+                        "Replace the file on Set up, then grade the batch "
+                        + "again."));
             } else {
                 applyOutcome(submission, assessment, timeoutSeconds, ids);
             }
@@ -542,7 +542,8 @@ public final class DemoData {
                 AnomalyType.COMPILE_ERROR, Severity.ERROR, username,
                 "Q2b did not compile: cannot find symbol class Q2b. The "
                 + "other questions were still graded.",
-                "Read the compiler output on the Logs tab."));
+                "Open code and test output on Review to read the "
+                    + "compiler output."));
 
         Path found = workingCopyPath(username).resolve("Q2")
                 .resolve("q2b.java");
@@ -605,7 +606,8 @@ public final class DemoData {
         submission.addAnomaly(new Anomaly(ids.next(),
                 AnomalyType.RUNTIME_ERROR, Severity.ERROR, username,
                 "Q1a case 3 threw IllegalArgumentException. Cases 1 and 2 "
-                + "were scored.", "Read the log on the Logs tab."));
+                + "were scored.", "Open code and test output on Review "
+                + "to read the tester output."));
         submission.addAnomaly(new Anomaly(ids.next(),
                 AnomalyType.MISSING_FILE, Severity.ERROR, username,
                 "Q1/Q1b.java is missing. GradeZZY never writes a missing "
@@ -615,7 +617,7 @@ public final class DemoData {
                 AnomalyType.SIMILAR_CODE, Severity.INFO, username,
                 "Q2a.java is 84% similar to learner.alpha. This is a "
                 + "review aid, not a finding.",
-                "Compare the pair on the Similarity Review screen."));
+                "Use Compare in the Similar code card on Export."));
     }
 
     // A student not on the earlier run's score sheet, so not graded.
@@ -637,11 +639,11 @@ public final class DemoData {
         submission.setStatus(SubmissionStatus.FAILED);
         submission.addAnomaly(new Anomaly(ids.next(),
                 AnomalyType.INTERNAL_ERROR, Severity.ERROR, username,
-                "Grading stopped on this submission in the Unpacking "
-                + "stage, so it has no marks. The other submissions were "
-                + "graded.",
-                "Replace " + username + ZIP_EXTENSION + " on the "
-                + "Submissions screen, then grade the batch again."));
+                "Grading stopped on this submission while it was "
+                + "being unpacked, so it has no marks. The other "
+                + "submissions were graded.",
+                "Replace " + username + ZIP_EXTENSION + " on Set up, "
+                + "then grade the batch again."));
     }
 
     // Gives a generated student an outcome picked by its number.
@@ -656,10 +658,9 @@ public final class DemoData {
             submission.setStatus(SubmissionStatus.FAILED);
             submission.addAnomaly(new Anomaly(ids.next(),
                     AnomalyType.INTERNAL_ERROR, Severity.ERROR, username,
-                    "Grading stopped on this submission in the Scoring "
-                    + "stage. The other submissions were graded.",
-                    "Retry the failed submissions from the Progress "
-                    + "screen."));
+                    "Grading stopped on this submission while it was "
+                    + "being scored. The other submissions were graded.",
+                    "Retry the failed submissions on Review."));
             return;
         }
 
@@ -679,7 +680,8 @@ public final class DemoData {
             submission.addAnomaly(new Anomaly(ids.next(),
                     AnomalyType.COMPILE_ERROR, Severity.ERROR, username,
                     "Q2a did not compile: ';' expected.",
-                    "Read the compiler output on the Logs tab."));
+                    "Open code and test output on Review to read the "
+                    + "compiler output."));
         }
         if (number % TIMEOUT_EVERY == 0) {
             submission.getQuestionResults().get(Q1A).setTimedOut(true);

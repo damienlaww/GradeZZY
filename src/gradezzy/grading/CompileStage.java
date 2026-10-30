@@ -57,7 +57,8 @@ public class CompileStage implements GradingStage {
 
     // What the instructor can do about a compile error
     private static final String COMPILE_ERROR_ACTION =
-            "Read the compiler output on the Logs tab.";
+            "Open code and test output on Review to read the compiler "
+            + "output.";
 
     // The helper that runs javac
     private final SourceCompiler sourceCompiler;
