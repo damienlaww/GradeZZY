@@ -149,17 +149,17 @@ The base package is `gradezzy`. Each package has one job.
 | `ingest` | Accepts uploads, unzips them into a working copy, reads the roster. | `SubmissionLoader`, `ZipExtractor`, `WorkingCopyManager`, `RosterReader` |
 | `validation` | One class per structural check. | `Validator` (interface), `AbstractValidator`, `StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`, `HeaderNameValidator`, `ValidationRunner` |
 | `fix` | One class per automatic correction, each with apply and undo. | `Fixer` (interface), `AbstractFixer`, `FolderNameFixer`, `FolderHierarchyFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
-| `exec` | Runs `javac` and `java` in a separate process with a time limit. | `ProcessRunner`, `ProcessResult`, `SourceCompiler`, `TesterRunner` |
+| `exec` | Runs `javac` and `java` in a separate process with a time limit. | `ProcessRunner`, `ProcessResult`, `SourceCompiler`, `TesterRunner`, and inside the tester's run `TesterHarness`, `TrustedPrintStream`, `TrustedFrameCheck` |
 | `testcase` | Where tester files come from. | `TestCaseSource` (interface), `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TestCase`, `TesterFile` |
-| `grading` | The pipeline, its stages and scoring. | `GradingStage` (interface), `GradingPipeline`, `GradingContext`, the nine `...Stage` classes, `ScoreParser` (interface), `TesterOutputScoreParser`, `ScoreCalculator`, `ProgressListener`, `CancellationToken` |
+| `grading` | The pipeline, its stages and scoring. | `GradingStage` (interface), `GradingPipeline`, `GradingContext`, the nine `...Stage` classes, `ScoreParser` (interface), `TesterOutputScoreParser`, `ScoreCalculator`, `ProgressListener`, `CancellationToken`, and for parallel grading `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener` |
 | `detection` | Flags answers for review. Never changes a mark. | `Detector` (interface), `UntouchedStarterDetector`, `EmptyAnswerDetector`, `HardCodedAnswerDetector` |
 | `plagiarism` | Compares submissions for copied code. | `SimilarityDetector` (interface), `TokenSimilarityDetector`, `SimilarityPair` |
-| `report` | One class per export format. | `Exporter` (interface), `CsvScoreSheetExporter`, `JsonExporter`, `StudentReportExporter`, `AnomalyReportExporter`, `AuditLogExporter`, `JsonWriter` |
+| `report` | One class per export format. | `Exporter` (interface), `CsvScoreSheetExporter`, `JsonExporter`, `StudentReportExporter`, `AnomalyReportExporter`, `AuditLogExporter`, `JsonWriter`, `JsonFields` |
 | `stats` | Statistics for the dashboard. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
 | `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ProgressEstimator`, `ServiceRegistry` |
 | `ui` | JavaFX only: starting the window and small shared helpers. | `MainApp`, `ThemeManager`, `GradingTask`, `FileTreeBuilder`, `DragDropHandler` |
-| `ui.flow` | The window: tabs Marking (Set up, Grade, Review, Export), Statistics, Runs and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts` |
+| `ui.flow` | The window: tabs Marking (Set up, Grade, Review, Export), Statistics, Runs and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts`, the review table cells `Review...Cell`, and comparators such as `StudentNameComparator` |
 | `ui.backend` | The one interface the screens call, and its live version that calls the services. | `DashboardBackend`, `LiveBackend`, `Capability`, small view classes such as `RepairItem` and `RunRecord` |
 | `ui.demo` | Synthetic data for `--demo`. Never reads, grades or saves real files. | `DemoBackend`, `DemoData`, `DemoGrader` |
 | `ui.check` | Developer checks behind the `--check`, `--selftest`, `--snapshot` and `--windowtest` options. Not used when grading. | `FlowCheck`, `FlowSelfTest`, `FlowWindowTest`, `RobotDriver` |
@@ -943,38 +943,46 @@ Notes:
 
 ### Java beyond the CS102 syllabus
 
-Kept to a minimum and confined to the classes named here:
+Every team member must be able to explain every line, so the code uses the
+Java taught in CS102 (weeks 1 to 11). Two kinds of untaught Java are
+treated differently:
 
-| Construct | Where | Why |
-|---|---|---|
-| JavaFX | `ui` package only | The window. |
-| Lambdas and method references (`->`, `::`) | 31 files in `ui` | Button handlers, table cells and callbacks. |
-| `java.util.function` (`Consumer`, `IntConsumer`) | `ui.flow.StepBar`, `ui.flow.TabBar`, `ui.check.FlowWindowTest` | Telling the window which step or tab was clicked. |
-| `javafx.concurrent.Task` (a background thread) | `ui.GradingTask` | Keeps the window responsive while grading. |
-| `new Thread`, `Platform.runLater` | `ui.backend.LiveBackend`, `ui.GradingTask`, `ui.flow.GradeScreen`, `ui.check` | Grading, exports, backups and the similarity check run off the window's thread; screen updates go back to it. |
-| `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. |
-| `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | Timers: how long a notice stays, the pause before a code search, the demo grader's pace. |
-| `java.awt.Robot`, `javax.imageio.ImageIO`, `java.util.concurrent`, `java.util.zip.ZipOutputStream` | `ui.check` only | The `--snapshot` and `--windowtest` developer checks. Not used when grading. |
-| `synchronized` | `grading.CancellationToken`, `fix.FixManager` | The Cancel button and the grading thread share one flag; the grading threads and the anomaly log share one list of fixes. |
-| `java.nio.file` (`Files.move`, `Files.copy`, `Files.createTempDirectory`, `DirectoryStream`, `StandardCopyOption`) | `fix` package | Moves and renames folders in the working copy and keeps a backup of each file a fix changes. |
-| `HashSet`, `String.join`, `List.subList` | `plagiarism.TokenSimilarityDetector` | Holds each answer's runs of three tokens for the similarity measure. |
-| `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. |
-| `enum` | `model`, `ui.backend`, `ui.flow` (`Page`, `Step`, `Tone`) | Fixed lists of values. |
-| JDBC (`Connection`, `PreparedStatement`, `ResultSet`), try-with-resources | `persistence.SqliteResultRepository` | Talks to SQLite and closes each statement even when a query fails. |
-| `ProcessBuilder`, `Process`, `ProcessHandle` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and kills a run and its child processes at the time limit. |
-| `Stream.toList()` | `exec.ProcessRunner.terminate` | Turns the child processes of a run into a list so they can be killed. |
-| `Thread.sleep` | `exec.ProcessRunner.run` | Pauses between checks of a running program, instead of using a reader thread. |
-| `StackWalker` with a lambda, `System.setOut`, a `PrintStream` subclass | `exec.TesterHarness` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. |
-| Reflection (`Class.forName`, `Method.invoke`) | `exec.TesterHarness` | Starts the tester's `main` from inside the harness. |
-| `Runtime.halt`, the `jdk.lang.Process.launchMechanism` property | `exec.TesterHarness` | Ends the run without waiting for student threads, and stops student code starting other programs (macOS and Linux). |
-| `java` options `--limit-modules`, `--illegal-native-access=deny`; `UUID` | `exec.TesterRunner` | Student code gets only core Java and no native code; a new random token for every tester run. |
-| `java.util.zip` (to be written) | `ingest.ZipExtractor` | Unzips submissions. |
-| `java.util.regex.Pattern` | `service.SettingsService` | Checks that the zip name pattern setting is a valid regular expression. |
-| `java.nio.file.Files` (`readString`, `writeString`, `move`, `isSymbolicLink`) | `service.SettingsService`, `service.SearchService` | Saves `config.properties` through a temporary copy; reads source files for the code search. |
-| `java.nio.file` (`Path`, `Paths`, `Files`) | About 20 files in `ui` | The files and folders the instructor chooses or drops on the window. |
+- **Language features** that were not taught are not used. They have
+  been rewritten into taught Java; the rules are under "Java taught in
+  CS102" in the coding rules below.
+- **Library classes** with no taught substitute are kept, each confined to
+  the classes named here. The last column is a one-sentence explanation
+  for the presentation.
 
-Outside the `ui` package, a stream appears only in `exec.ProcessRunner` and
-`exec.TesterHarness`, and a lambda only in `exec.TesterHarness`.
+`ui.check` (the developer checks) was left as it was and is not covered
+by this section.
+
+| Construct | Where | Why | How to explain it |
+|---|---|---|---|
+| JavaFX | `ui` package only | The window. | A library of window parts (buttons, tables, charts) that we arrange in code. |
+| One-line lambdas `event -> exportResults()` | 26 files in `ui` | Button handlers, table cells and callbacks. | Short for a small class that implements the handler interface (like `AgeComparator implements Comparator`) and whose one method calls `exportResults()`. Every lambda is one line that calls one method. |
+| `Runnable`, `Consumer` | `ui.flow` (`ActionBar`, `Parts`, `StepBar`, `TabBar`, ...), `exec.TrustedFrameCheck` | The type of a lambda parameter, for example "what to do when this button is pressed". | Interfaces with one method, so a screen can pass "run this later" to another class. |
+| `java.nio.file` (`Path`, `Paths`, `Files`, `DirectoryStream`, `StandardCopyOption`, `LinkOption`) | About 60 files | Every file and folder the system reads, copies, moves or writes. | `Path` is a file or folder location (like `File`); `Files` has static methods to read, copy, move and list them, and can refuse to follow links. |
+| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen` | Grading, exports and backups run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
+| `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. | A `HashMap` that two threads can use at the same time. |
+| `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
+| Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |
+| `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. | Reads a file of `key=value` lines into a lookup table. |
+| JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs to SQLite so Runs can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
+| `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |
+| `PrintStream` subclass, `System.setOut`, `StackWalker` | `exec.TesterHarness`, `exec.TrustedPrintStream`, `exec.TrustedFrameCheck` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. | All printing goes through our `PrintStream`, which checks who called it and marks a line only when no student method is on the call stack. |
+| Varargs `format(String, Object...)` | `exec.TrustedPrintStream` only | It overrides `PrintStream.format`, whose signature Java fixes. | `printf` calls this method, so ours must have exactly the same parameters to catch `printf` output too. |
+| Reflection (`Class.forName`, `Method.invoke`, `Class<?>`) | `exec.TesterHarness`, `exec.TrustedPrintStream`, `exec.TrustedFrameCheck` | Starts the tester's `main` from inside the harness. | Loads a class by its name at run time and calls its `main`, the way `java Q1aTester` would. |
+| `Runtime.halt`, the `jdk.lang.Process.launchMechanism` property | `exec.TesterHarness` | Ends the run without waiting for student threads, and stops student code starting other programs (macOS and Linux). | A hard stop for the tester's program, and a switch that blocks it from launching others. |
+| `java` options `--limit-modules`, `--illegal-native-access=deny`; `UUID` | `exec.TesterRunner` (`UUID` also for anomaly ids) | Student code gets only core Java and no native code; a new random token for every tester run. | Command-line options that shrink what student code can reach; a `UUID` is a random id nobody can guess. |
+| `java.util.zip` (`ZipFile`, `ZipEntry`, `Enumeration`, `CRC32`) | `ingest.ZipExtractor` | Unzips submissions safely. | Opens a zip and hands us its entries one at a time, like an `Iterator`. |
+| `java.util.regex.Pattern`, `matches`, `replaceFirst` | `service.SettingsService`, `ingest.SubmissionLoader`, `ingest.ZipExtractor.isSafeEntry` | The zip name setting is itself a pattern; unsafe Windows file names are a pattern too. | A pattern describes a family of strings, such as "2023-2024-" followed by a username. |
+| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
+| `java.time` (`LocalDateTime`, `DateTimeFormatter`) | `model`, `persistence`, `report.AuditLogExporter`, `service`, `ui.demo` | Run and audit times. | The current date and time, and how to print it. |
+| `java.util.Random` | `ui.demo.DemoData` | Synthetic marks for `--demo`, always from the same seed. | Gives the same "random" numbers every time, so the demo looks the same. |
+
+`String.format` is used for numbers such as `%.1f`; it takes the same
+format codes as `printf` and returns the text instead of printing it.
 
 ## Coding rules
 
@@ -1013,6 +1021,30 @@ Team rules on top of that:
 - No emojis and no em dashes anywhere, including commit messages.
 - Keep `javafx` imports inside the `ui` package.
 - Read settings through `AppConfig`; do not hard-code a value in logic.
+
+### Java taught in CS102
+
+Use the Java taught in CS102. These language features were not taught, so
+they are written the taught way instead:
+
+| Instead of | Write |
+|---|---|
+| `a ? b : c` | `if` / `else` |
+| A nested, inner or anonymous class | A top-level class in its own file, given what it needs through its constructor (for example `ReviewMarkCell`, `GradingWorker`) |
+| `try (Resource r = ...)` | Declare it `null` before `try`, open it inside, close it in `finally` (`FileUtils.closeIfOpen`) |
+| `catch (A \| B e)` | Two `catch` blocks |
+| `Type... values` | An array parameter; callers pass `new Node[] {a, b}` |
+| `StringBuilder`, `String.join` | `+` / `+=`, or `TextUtils.join`; a `char[]` when building long text one character at a time |
+| `List.of`, `Map.of` | `new ArrayList<>()` and `add` |
+| `entrySet` | A loop over `keySet()` with `get` |
+| `LinkedHashMap` | An `ArrayList` of keys beside a `HashMap` (for example `report.JsonFields`) |
+| Streams, method references `X::y` | Loops; an `Iterator` when a JDK method returns a stream |
+| Lambdas outside `ui` | A named class that implements the interface, like week 5's `AgeComparator` |
+| A lambda in `ui` with more than one method call | `event -> namedMethod()`, with the logic in a private method |
+
+Anything else that was not taught must be a library from the table in
+"Java beyond the CS102 syllabus" above. Add a row there before using a new
+one.
 
 ## Feature checklist
 
