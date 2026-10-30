@@ -128,15 +128,6 @@ public class BellCurveChart extends Region {
     }
 
     /**
-     * Returns the figures drawn, for the developer checks.
-     *
-     * @return the figures, or null
-     */
-    public MarkStats getStats() {
-        return stats;
-    }
-
-    /**
      * Redraws the chart when its size has changed.
      */
     @Override

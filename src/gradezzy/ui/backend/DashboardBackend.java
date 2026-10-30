@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import javafx.scene.control.TreeItem;
 
 import gradezzy.grading.ProgressListener;
 import gradezzy.model.Anomaly;
@@ -55,14 +54,6 @@ public interface DashboardBackend {
      * @return the module codes, in order
      */
     List<String> getModuleCodes();
-
-    /**
-     * Returns the full name of a module.
-     *
-     * @param moduleCode the module code
-     * @return the name, or an empty string when none is known
-     */
-    String getModuleName(String moduleCode);
 
     /**
      * Returns the section codes of a module.
@@ -119,14 +110,6 @@ public interface DashboardBackend {
      * @return synthetic paths, or an empty list in live mode
      */
     List<Path> getSampleFiles(InputKind kind);
-
-    /**
-     * Returns a stand-in for a corrected file, used in demo mode.
-     *
-     * @param invalidItem the file to replace
-     * @return a synthetic path, or null in live mode
-     */
-    Path getSampleReplacement(ImportItem invalidItem);
 
     /**
      * Returns the path config.properties names for an input group.
@@ -270,15 +253,6 @@ public interface DashboardBackend {
     // --------------------------------------------------- search, source
 
     /**
-     * Returns the submissions whose username or name holds a keyword.
-     *
-     * @param gradingRun the run, or null
-     * @param keyword the text to look for; empty matches everyone
-     * @return the matching submissions
-     */
-    List<Submission> search(GradingRun gradingRun, String keyword);
-
-    /**
      * Returns the submissions whose source code holds some text.
      *
      * @param gradingRun the run, or null
@@ -286,14 +260,6 @@ public interface DashboardBackend {
      * @return the matching submissions
      */
     List<Submission> searchCode(GradingRun gradingRun, String codeFragment);
-
-    /**
-     * Returns the folder tree of a submission's working copy.
-     *
-     * @param submission the student
-     * @return the root item, or null when there is no working copy
-     */
-    TreeItem<String> getFileTree(Submission submission);
 
     /**
      * Returns the text of one file of a working copy.

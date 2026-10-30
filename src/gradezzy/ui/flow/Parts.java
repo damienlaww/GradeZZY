@@ -73,10 +73,6 @@ public final class Parts {
     public static final String SEARCH = "M11 4.5a6.5 6.5 0 1 0 0.01 0Z"
             + "M20 20l-4.2-4.2";
 
-    /** Download arrow. */
-    public static final String DOWNLOAD = "M12 4v11M7 10l5 5 5-5"
-            + "M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4";
-
     /** A tick in a box, for the Marking tab. */
     public static final String MARKING = "M9 11l3 3L21 4"
             + "M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11";

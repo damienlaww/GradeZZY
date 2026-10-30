@@ -157,8 +157,8 @@ The base package is `gradezzy`. Each package has one job.
 | `report` | One class per export format. | `Exporter` (interface), `CsvScoreSheetExporter`, `JsonExporter`, `StudentReportExporter`, `AnomalyReportExporter`, `AuditLogExporter`, `JsonWriter`, `JsonFields` |
 | `stats` | Statistics for the dashboard. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
-| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ProgressEstimator`, `ServiceRegistry` |
-| `ui` | JavaFX only: starting the window and small shared helpers. | `MainApp`, `ThemeManager`, `GradingTask`, `FileTreeBuilder`, `DragDropHandler` |
+| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ServiceRegistry` |
+| `ui` | JavaFX only: starting the window and small shared helpers. | `MainApp`, `ThemeManager`, `GradingTask`, `DragDropHandler` |
 | `ui.flow` | The window: tabs Marking (Set up, Grade, Review, Export), Statistics, Runs and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts`, the review table cells `Review...Cell`, and comparators such as `StudentNameComparator` |
 | `ui.backend` | The one interface the screens call, and its live version that calls the services. | `DashboardBackend`, `LiveBackend`, `Capability`, small view classes such as `RepairItem` and `RunRecord` |
 | `ui.demo` | Synthetic data for `--demo`. Never reads, grades or saves real files. | `DemoBackend`, `DemoData`, `DemoGrader` |
@@ -718,7 +718,8 @@ What to build, in order:
    question's maximum.
 3. In `GradingService.startGrading`: read the roster into the context and
    save the run before grading starts.
-4. `ProgressEstimator`: fraction done and seconds remaining.
+4. The fraction done and the time left, now worked out on the Grade
+   step (`ui.flow.GradeScreen`).
 5. `ExportService`: find an exporter by name and write to the output
    folder.
 6. `AnomalyService`, `SearchService`, `StatisticsService`,
@@ -1096,10 +1097,11 @@ implemented. `[x]` means it works now.
 - [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
   `TesterGenerator`, `ui.flow.TestCasesSheet`)
 - [x] Progress bar and estimated time of completion
-  (`service.ProgressEstimator`, `ui.GradingMonitor`)
+  (`ui.flow.GradeScreen`)
 - [x] Statistics dashboard filtered by module and section (`stats`
   package, `service.StatisticsService`, `ui.flow.StatisticsScreen`)
-- [x] Search, filter and sort (`service.SearchService`)
+- [x] Search, filter and sort (`ui.flow.ReviewScreen`; the code search
+  goes through `service.SearchService`)
 - [x] Select one, several or all (`ui.flow.ReviewScreen`)
 - [ ] Collapse and expand panels (`ui`)
 - [x] Next, Back and Cancel (`ui.flow.ActionBar`)

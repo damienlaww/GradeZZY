@@ -84,15 +84,6 @@ public class GradingPipeline {
     }
 
     /**
-     * Returns the stages in the order they run.
-     *
-     * @return the stages
-     */
-    public List<GradingStage> getStages() {
-        return stages;
-    }
-
-    /**
      * Grades every submission of a run. This method does not throw for a
      * failing submission; it marks that submission as FAILED instead. The
      * number of submissions graded at the same time comes from

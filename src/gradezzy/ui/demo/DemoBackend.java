@@ -16,7 +16,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javafx.scene.control.TreeItem;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
@@ -37,7 +36,6 @@ import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.stats.StatisticsSummary;
-import gradezzy.ui.FileTreeBuilder;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
@@ -258,20 +256,6 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Returns the synthetic module name.
-     */
-    @Override
-    public String getModuleName(String moduleCode) {
-        if (DemoData.MODULE_CODE.equals(moduleCode)) {
-            return DemoData.MODULE_NAME;
-        }
-        if (DemoData.EMPTY_MODULE_CODE.equals(moduleCode)) {
-            return DemoData.EMPTY_MODULE_NAME;
-        }
-        return "";
-    }
-
-    /**
      * Returns the configured sections, or one for the empty module.
      */
     @Override
@@ -365,15 +349,6 @@ public final class DemoBackend implements DashboardBackend {
             paths.add(DemoData.samplePath(DemoData.SAMPLE_STARTER));
         }
         return paths;
-    }
-
-    /**
-     * Returns a synthetic corrected copy of the unreadable sample ZIP.
-     */
-    @Override
-    public Path getSampleReplacement(ImportItem invalidItem) {
-        return DemoData.samplePath(invalidItem.getUsername()
-                + DemoData.REPLACEMENT_SUFFIX + DemoData.ZIP_EXTENSION);
     }
 
     /**
@@ -650,14 +625,6 @@ public final class DemoBackend implements DashboardBackend {
     // --------------------------------------------------- search, source
 
     /**
-     * Calls SearchService.search, which only reads the run in memory.
-     */
-    @Override
-    public List<Submission> search(GradingRun gradingRun, String keyword) {
-        return services.getSearchService().search(gradingRun, keyword);
-    }
-
-    /**
      * Searches the synthetic source files.
      */
     @Override
@@ -674,19 +641,6 @@ public final class DemoBackend implements DashboardBackend {
             }
         }
         return matches;
-    }
-
-    /**
-     * Builds the tree of the synthetic working copy.
-     */
-    @Override
-    public TreeItem<String> getFileTree(Submission submission) {
-        if (submission.getWorkingCopyPath() == null) {
-            return null;
-        }
-        return new FileTreeBuilder().buildFromPaths(
-                submission.getUsername(),
-                DemoData.sourceFiles(submission.getUsername()));
     }
 
     /**

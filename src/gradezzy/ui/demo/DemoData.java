@@ -37,14 +37,8 @@ public final class DemoData {
     /** The module shown in demo mode. */
     public static final String MODULE_CODE = "CS102";
 
-    /** The full name of the demo module. */
-    public static final String MODULE_NAME = "Programming Fundamentals II";
-
     /** A second module with no runs, to show empty states. */
     public static final String EMPTY_MODULE_CODE = "DEMO";
-
-    /** The full name of the empty module. */
-    public static final String EMPTY_MODULE_NAME = "Empty sample module";
 
     /** The only section of the empty module. */
     public static final String EMPTY_MODULE_SECTION = "D1";

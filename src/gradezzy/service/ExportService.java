@@ -42,15 +42,6 @@ public class ExportService {
     }
 
     /**
-     * Returns the registered exporters.
-     *
-     * @return the registered exporters
-     */
-    public List<Exporter> getExporters() {
-        return exporters;
-    }
-
-    /**
      * Makes one more export format available.
      *
      * @param exporter the exporter

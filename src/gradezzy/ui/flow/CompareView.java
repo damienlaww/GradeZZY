@@ -97,15 +97,6 @@ public class CompareView {
     }
 
     /**
-     * Returns the sections chosen, for the developer checks.
-     *
-     * @return a copy of the chosen section codes
-     */
-    public List<String> getChosen() {
-        return new ArrayList<>(chosen);
-    }
-
-    /**
      * Fills the view. The chosen sections are kept while they are still
      * graded; when none is, the first graded sections are chosen,
      * starting with the preferred one.
@@ -149,15 +140,6 @@ public class CompareView {
             chooseFirst(preferred);
         }
         rebuild();
-    }
-
-    /**
-     * Says how many sections of the module have marks.
-     *
-     * @return the count
-     */
-    public int getGradedCount() {
-        return graded.size();
     }
 
     // Chooses up to three graded sections, the preferred one first.

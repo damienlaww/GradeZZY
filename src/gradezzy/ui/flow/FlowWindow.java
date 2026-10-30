@@ -300,13 +300,6 @@ public class FlowWindow {
     }
 
     /**
-     * Returns to the Marking tab, on the step the instructor was on.
-     */
-    public void closePage() {
-        show(currentStep);
-    }
-
-    /**
      * Shows a sheet over the screen, dimming what is behind it.
      *
      * @param body the sheet's content

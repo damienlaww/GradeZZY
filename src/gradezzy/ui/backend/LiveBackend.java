@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import javafx.scene.control.TreeItem;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
@@ -40,7 +39,6 @@ import gradezzy.testcase.TestCaseSource;
 import gradezzy.testcase.TesterGenerator;
 import gradezzy.testcase.TypedTestCaseSource;
 import gradezzy.testcase.UploadedTesterSource;
-import gradezzy.ui.FileTreeBuilder;
 import gradezzy.ui.GradingTask;
 import gradezzy.ui.GradingTaskKind;
 import gradezzy.util.FileUtils;
@@ -107,14 +105,6 @@ public class LiveBackend implements DashboardBackend {
     @Override
     public List<String> getModuleCodes() {
         return config.getList(ConfigKeys.MODULE_CODES);
-    }
-
-    /**
-     * Returns an empty string: config.properties has no module names.
-     */
-    @Override
-    public String getModuleName(String moduleCode) {
-        return "";
     }
 
     /**
@@ -191,14 +181,6 @@ public class LiveBackend implements DashboardBackend {
     @Override
     public List<Path> getSampleFiles(InputKind kind) {
         return new ArrayList<>();
-    }
-
-    /**
-     * Returns null, because live mode uses the system file picker.
-     */
-    @Override
-    public Path getSampleReplacement(ImportItem invalidItem) {
-        return null;
     }
 
     /**
@@ -386,14 +368,6 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls SearchService.search.
-     */
-    @Override
-    public List<Submission> search(GradingRun gradingRun, String keyword) {
-        return services.getSearchService().search(gradingRun, keyword);
-    }
-
-    /**
      * Calls SearchService.searchCode.
      */
     @Override
@@ -401,18 +375,6 @@ public class LiveBackend implements DashboardBackend {
             String codeFragment) {
         return services.getSearchService().searchCode(gradingRun,
                 codeFragment);
-    }
-
-    /**
-     * Builds the tree of the working copy with FileTreeBuilder.
-     */
-    @Override
-    public TreeItem<String> getFileTree(Submission submission) {
-        Path workingCopy = submission.getWorkingCopyPath();
-        if (workingCopy == null) {
-            return null;
-        }
-        return new FileTreeBuilder().build(workingCopy);
     }
 
     /**

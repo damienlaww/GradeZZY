@@ -117,7 +117,7 @@ public enum Capability {
     /** The folder tree and source files of a working copy. */
     SOURCE_VIEW("Show working-copy files",
             "Shows a student's files, so you can read the code behind a "
-            + "mark.", "Damien", "FileTreeBuilder, FileUtils.readText",
+            + "mark.", "Damien", "FileUtils.readText",
             CapabilityStatus.WORKS_NOW,
             "Nothing; files are read from the working copy."),
 
