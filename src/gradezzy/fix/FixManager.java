@@ -4,8 +4,8 @@
  * Purpose: Applies fixes automatically and lets the instructor approve or undo
  * them, one at a time or in bulk.
  *
- * Where it fits: Called by FixStage during grading and by AnomalyService from
- * the anomaly log screen.
+ * Where it fits: Called by FixStage during grading and by AnomalyService when
+ * the instructor approves or undoes a fix on Review.
  */
 package gradezzy.fix;
 

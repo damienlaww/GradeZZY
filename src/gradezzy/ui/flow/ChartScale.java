@@ -11,8 +11,6 @@ package gradezzy.ui.flow;
 
 /**
  * Maps a range of values onto a range of pixels.
- *
- * <p>Tier: SHOULD.
  */
 public final class ChartScale {
 
@@ -43,8 +41,6 @@ public final class ChartScale {
     /**
      * Returns the pixel of a value.
      *
-     * <p>Tier: SHOULD.
-     *
      * @param value the value
      * @return the pixel
      */
@@ -55,8 +51,6 @@ public final class ChartScale {
 
     /**
      * Returns the pixel of a value kept inside the range.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param value the value
      * @return the pixel, never outside the pixel range

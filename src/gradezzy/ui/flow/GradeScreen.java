@@ -149,11 +149,18 @@ public class GradeScreen extends FlowScreen
                 new Node[] {header, createProgressCard(), cards});
     }
 
+    /**
+     * Returns the Grade step built in the constructor.
+     */
     @Override
     public Node getView() {
         return view;
     }
 
+    /**
+     * Shows the buttons that fit the run: Cancel while it grades, Resume
+     * when it stopped early, Review results when it is done.
+     */
     @Override
     public void onShow() {
         refreshActions();
@@ -278,26 +285,41 @@ public class GradeScreen extends FlowScreen
 
     // ------------------------------------------------ progress listener
 
+    /**
+     * Shows how many submissions the run will grade.
+     */
     @Override
     public void onRunStarted(int totalSubmissions) {
         Platform.runLater(() -> showTotal(totalSubmissions));
     }
 
+    /**
+     * Shows which student is being graded now.
+     */
     @Override
     public void onSubmissionStarted(Submission submission) {
         Platform.runLater(() -> showStudent(submission));
     }
 
+    /**
+     * Shows what is happening to the student now.
+     */
     @Override
     public void onStageStarted(Submission submission, String stageName) {
         Platform.runLater(() -> showStage(submission, stageName));
     }
 
+    /**
+     * Counts the student as done and updates the bar and the chart.
+     */
     @Override
     public void onSubmissionFinished(Submission submission) {
         Platform.runLater(() -> countFinished(submission));
     }
 
+    /**
+     * Does nothing: onFinished, called after it, moves on.
+     */
     @Override
     public void onRunFinished(GradingRun gradingRun) {
         // The callback below moves on; nothing to do here
@@ -352,6 +374,11 @@ public class GradeScreen extends FlowScreen
 
     // ----------------------------------------------------- run callback
 
+    /**
+     * Keeps the run and shows every result. A run that stopped early
+     * waits for Resume; a finished one opens Review if the instructor
+     * is still on this step.
+     */
     @Override
     public void onFinished(GradingRun gradingRun) {
         getState().setGrading(false);
@@ -383,6 +410,9 @@ public class GradeScreen extends FlowScreen
         refreshActions();
     }
 
+    /**
+     * Says that grading could not run and why.
+     */
     @Override
     public void onFailed(String message) {
         getState().setGrading(false);

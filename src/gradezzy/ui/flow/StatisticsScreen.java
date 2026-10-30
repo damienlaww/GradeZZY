@@ -185,16 +185,25 @@ public class StatisticsScreen extends FlowScreen {
         }
     }
 
+    /**
+     * Returns the Statistics tab built in the constructor.
+     */
     @Override
     public Node getView() {
         return view;
     }
 
+    /**
+     * Reloads the graded runs and redraws the charts.
+     */
     @Override
     public void onShow() {
         refresh();
     }
 
+    /**
+     * Returns false: the Statistics tab has no action bar.
+     */
     @Override
     public boolean usesActionBar() {
         return false;

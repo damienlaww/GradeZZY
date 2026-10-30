@@ -3,7 +3,8 @@
  *
  * Purpose: Writes the individual report of one student.
  *
- * Where it fits: Used from the student report screen.
+ * Where it fits: Not registered in ApplicationContext yet, so no screen
+ * offers it (see the README feature list).
  */
 package gradezzy.report;
 

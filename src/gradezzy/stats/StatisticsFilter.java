@@ -3,8 +3,8 @@
  *
  * Purpose: Which runs the statistics should cover.
  *
- * Where it fits: Set from the module and section choosers on the statistics
- * screen.
+ * Where it fits: Set from the module and section choosers on the
+ * Statistics tab.
  */
 package gradezzy.stats;
 

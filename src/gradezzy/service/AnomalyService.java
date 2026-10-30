@@ -1,9 +1,10 @@
 /*
  * File: AnomalyService.java
  *
- * Purpose: What the anomaly log screen can do.
+ * Purpose: What the Review step can do with the problems found: list
+ * them, and approve or undo fixes one at a time or in bulk.
  *
- * Where it fits: Sits between the UI and FixManager so controllers hold no
+ * Where it fits: Sits between the UI and FixManager so the screens hold no
  * logic.
  */
 package gradezzy.service;
@@ -22,7 +23,7 @@ import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
 
 /**
- * What the anomaly log screen can do.
+ * What the Review step can do with the problems found.
  *
  * <p>Tier: SHOULD. Owner: Jing Yuan.
  */

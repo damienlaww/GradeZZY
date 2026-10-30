@@ -200,11 +200,18 @@ public class SettingsScreen extends FlowScreen {
         }
     }
 
+    /**
+     * Returns the Settings tab built in the constructor.
+     */
     @Override
     public Node getView() {
         return view;
     }
 
+    /**
+     * Sets up the Save and Discard buttons, or says that settings
+     * can only be changed in config.properties.
+     */
     @Override
     public void onShow() {
         ActionBar actions = getActions();

@@ -1,9 +1,9 @@
 /*
  * File: StatisticsService.java
  *
- * Purpose: Loads saved runs and summarises them for the dashboard.
+ * Purpose: Loads saved runs and summarises them for the Statistics tab.
  *
- * Where it fits: Sits between the statistics screen and StatisticsCalculator.
+ * Where it fits: Sits between the Statistics tab and StatisticsCalculator.
  */
 package gradezzy.service;
 
@@ -18,7 +18,7 @@ import gradezzy.stats.StatisticsFilter;
 import gradezzy.stats.StatisticsSummary;
 
 /**
- * Loads saved runs and summarises them for the dashboard.
+ * Loads saved runs and summarises them for the Statistics tab.
  *
  * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
@@ -46,7 +46,7 @@ public class StatisticsService {
      * Summarises the saved runs that match a filter.
      *
      * @param filter the filter
-     * @return the summary for the dashboard; it holds empty values when
+     * @return the summary for the Statistics tab; it holds empty values when
      *         no saved run matches or the database cannot be read
      */
     public StatisticsSummary summarise(StatisticsFilter filter) {

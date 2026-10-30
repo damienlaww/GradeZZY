@@ -146,16 +146,25 @@ public class RunsScreen extends FlowScreen {
         body.setAlignment(Pos.TOP_LEFT);
     }
 
+    /**
+     * Returns the Runs tab built in the constructor.
+     */
     @Override
     public Node getView() {
         return view;
     }
 
+    /**
+     * Reloads the runs, backups and activity log.
+     */
     @Override
     public void onShow() {
         refresh();
     }
 
+    /**
+     * Returns false: the Runs tab has no action bar.
+     */
     @Override
     public boolean usesActionBar() {
         return false;

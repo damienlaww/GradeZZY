@@ -3,8 +3,8 @@
  *
  * Purpose: Two submissions whose answer to a question is very similar.
  *
- * Where it fits: Returned by a SimilarityDetector and listed on the plagiarism
- * screen.
+ * Where it fits: Returned by a SimilarityDetector and listed in the
+ * Similar code card on Export.
  */
 package gradezzy.plagiarism;
 

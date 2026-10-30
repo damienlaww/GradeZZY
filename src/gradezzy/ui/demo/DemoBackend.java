@@ -103,7 +103,7 @@ public final class DemoBackend implements DashboardBackend {
     // The run shown for each section, by section label
     private final Map<String, GradingRun> runsBySection = new HashMap<>();
 
-    // Every run on the History screen, newest first
+    // Every run on the Runs tab, newest first
     private final List<DemoHistoryItem> history = new ArrayList<>();
 
     // Review decisions, by anomaly id

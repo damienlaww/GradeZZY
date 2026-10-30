@@ -18,8 +18,6 @@ import gradezzy.model.Submission;
 
 /**
  * A row of the Review table that marks itself when it is the last.
- *
- * <p>Tier: SHOULD.
  */
 public class ReviewRow extends TableRow<Submission> {
 
@@ -42,8 +40,6 @@ public class ReviewRow extends TableRow<Submission> {
     /**
      * Moves the row to another position and checks whether it is last.
      *
-     * <p>Tier: SHOULD.
-     *
      * @param index the new position
      */
     @Override
@@ -54,8 +50,6 @@ public class ReviewRow extends TableRow<Submission> {
 
     /**
      * Shows another student and checks whether the row is last.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param submission the student, or null
      * @param isEmpty true when the row shows no student

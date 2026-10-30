@@ -17,8 +17,6 @@ import gradezzy.model.Submission;
 
 /**
  * A check box that adds the row's student to the export scope.
- *
- * <p>Tier: SHOULD.
  */
 public class ReviewTickCell extends TableCell<Submission, Submission> {
 
@@ -40,8 +38,6 @@ public class ReviewTickCell extends TableCell<Submission, Submission> {
 
     /**
      * Shows the box, ticked when the row's student is ticked.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param submission the student, or null
      * @param isEmpty true when the row shows no student

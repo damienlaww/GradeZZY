@@ -13,15 +13,11 @@ import gradezzy.model.Submission;
 
 /**
  * Fills in the simulated results of one finished submission.
- *
- * <p>Tier: COULD.
  */
 public interface DemoOutcome {
 
     /**
      * Fills in the results of one submission.
-     *
-     * <p>Tier: COULD.
      *
      * @param submission the submission that finished
      */

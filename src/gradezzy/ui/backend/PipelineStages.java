@@ -3,7 +3,7 @@
  *
  * Purpose: The names of the nine grading stages, in pipeline order.
  *
- * Where it fits: Used by the Progress screen. The names come from each
+ * Where it fits: Used by the Grade step. The names come from each
  * stage's NAME constant, so they match what GradingPipeline reports.
  */
 package gradezzy.ui.backend;

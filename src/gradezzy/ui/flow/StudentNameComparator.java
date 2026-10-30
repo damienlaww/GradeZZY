@@ -14,16 +14,12 @@ import gradezzy.model.Submission;
 
 /**
  * Compares two students by their names in lower case.
- *
- * <p>Tier: SHOULD.
  */
 public class StudentNameComparator implements Comparator<Submission> {
 
     /**
      * Puts the student whose name comes first in alphabetical order
      * first.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param first one student
      * @param second the other student

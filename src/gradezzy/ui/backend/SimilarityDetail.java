@@ -4,7 +4,7 @@
  * Purpose: The evidence the instructor needs to compare one similar pair.
  *
  * Where it fits: Returned by DashboardBackend.getSimilarityDetail and
- * shown on the Similarity Review screen.
+ * shown by SimilaritySheet, opened from Export.
  */
 package gradezzy.ui.backend;
 

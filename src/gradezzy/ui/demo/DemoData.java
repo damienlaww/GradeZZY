@@ -73,7 +73,7 @@ public final class DemoData {
     /** The id of the sample run shown at start-up. */
     public static final String CURRENT_RUN_ID = "024";
 
-    /** The id of the earlier sample run on the History screen. */
+    /** The id of the earlier sample run on the Runs tab. */
     public static final String EARLIER_RUN_ID = "023";
 
     /** When the sample run started. */
@@ -230,7 +230,7 @@ public final class DemoData {
     }
 
     /**
-     * Builds the earlier run on the History screen, with one student not
+     * Builds the earlier run on the Runs tab, with one student not
      * on the roster and one failed submission.
      *
      * @param assessment the assessment

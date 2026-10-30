@@ -10,8 +10,6 @@ package gradezzy.ui.backend;
 
 /**
  * The three possible outcomes of a backend action.
- *
- * <p>Tier: MUST.
  */
 public enum ActionOutcome {
 

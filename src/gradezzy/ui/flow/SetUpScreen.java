@@ -138,11 +138,18 @@ public class SetUpScreen extends FlowScreen {
             createSettingsCard()});
     }
 
+    /**
+     * Returns the Set up step built in the constructor.
+     */
     @Override
     public Node getView() {
         return view;
     }
 
+    /**
+     * Fills the module and section choices, the first time also the
+     * configured files, then refreshes the checks and the action bar.
+     */
     @Override
     public void onShow() {
         fillChoices();

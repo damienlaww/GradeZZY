@@ -16,8 +16,6 @@ import gradezzy.model.Submission;
 
 /**
  * A mark, grey when zero, a dash when there is none.
- *
- * <p>Tier: MUST.
  */
 public class ReviewMarkCell extends TableCell<Submission, Double> {
 
@@ -36,8 +34,6 @@ public class ReviewMarkCell extends TableCell<Submission, Double> {
 
     /**
      * Shows a mark.
-     *
-     * <p>Tier: MUST.
      *
      * @param mark the mark, or null when there is none
      * @param isEmpty true when the row shows no student

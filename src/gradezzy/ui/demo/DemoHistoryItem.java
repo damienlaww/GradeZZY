@@ -1,7 +1,7 @@
 /*
  * File: DemoHistoryItem.java
  *
- * Purpose: One run on the demo History screen, with a description of its
+ * Purpose: One run on the Runs tab in demo mode, with a description of its
  * latest snapshot.
  *
  * Where it fits: DemoBackend keeps a list of these, newest first, and
@@ -12,9 +12,7 @@ package gradezzy.ui.demo;
 import gradezzy.model.GradingRun;
 
 /**
- * One run on the History screen with its backup.
- *
- * <p>Tier: COULD.
+ * One run on the Runs tab with its backup.
  */
 public class DemoHistoryItem {
 
@@ -44,8 +42,6 @@ public class DemoHistoryItem {
     /**
      * Returns the run.
      *
-     * <p>Tier: COULD.
-     *
      * @return the run
      */
     public GradingRun getRun() {
@@ -54,8 +50,6 @@ public class DemoHistoryItem {
 
     /**
      * Returns the description of the latest snapshot.
-     *
-     * <p>Tier: COULD.
      *
      * @return the description
      */
@@ -66,8 +60,6 @@ public class DemoHistoryItem {
     /**
      * Records a new snapshot, which can always be restored.
      *
-     * <p>Tier: COULD.
-     *
      * @param backupText a description of the new snapshot
      */
     public void recordSnapshot(String backupText) {
@@ -77,8 +69,6 @@ public class DemoHistoryItem {
 
     /**
      * Says whether a snapshot can be restored.
-     *
-     * <p>Tier: COULD.
      *
      * @return true when a snapshot can be restored
      */

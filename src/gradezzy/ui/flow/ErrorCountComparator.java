@@ -14,8 +14,6 @@ import java.util.Map;
 
 /**
  * Compares two compile error reasons by how often they happened.
- *
- * <p>Tier: SHOULD.
  */
 public class ErrorCountComparator implements Comparator<String> {
 
@@ -34,8 +32,6 @@ public class ErrorCountComparator implements Comparator<String> {
     /**
      * Puts the reason with the higher count first; on a tie, the reason
      * that comes first in alphabetical order.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param first one reason
      * @param second the other reason

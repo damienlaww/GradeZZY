@@ -1,16 +1,17 @@
 /*
  * File: ScoreCalculator.java
  *
- * Purpose: Adds up scores per question and per student.
+ * Purpose: Works out the mark of each question, kept between 0 and the
+ * question's maximum.
  *
- * Where it fits: Used by ScoreStage, the exporters and the statistics.
+ * Where it fits: Used by ScoreStage.
  */
 package gradezzy.grading;
 
 import gradezzy.model.QuestionResult;
 
 /**
- * Adds up scores per question and per student.
+ * Works out the mark of each question.
  *
  * <p>Tier: MUST. Owner: Jing Yuan.
  */

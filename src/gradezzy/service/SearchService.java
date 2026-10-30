@@ -1,9 +1,9 @@
 /*
  * File: SearchService.java
  *
- * Purpose: Searches, filters and sorts the submissions of a run.
+ * Purpose: Finds the submissions of a run whose code holds some text.
  *
- * Where it fits: Used by the results and anomaly screens.
+ * Where it fits: Used by the code search on Review.
  */
 package gradezzy.service;
 
@@ -21,8 +21,8 @@ import gradezzy.model.Question;
 import gradezzy.model.Submission;
 
 /**
- * Searches, filters and sorts the submissions of a run. Every method
- * returns a new list and leaves the run unchanged.
+ * Finds the submissions of a run whose code holds some text. It returns
+ * a new list and leaves the run unchanged.
  *
  * <p>Tier: SHOULD. Owner: Jing Yuan.
  */

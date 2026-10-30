@@ -16,8 +16,6 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * The status pill of a student.
- *
- * <p>Tier: MUST.
  */
 public class ReviewStatusCell extends TableCell<Submission, Submission> {
 
@@ -35,8 +33,6 @@ public class ReviewStatusCell extends TableCell<Submission, Submission> {
 
     /**
      * Shows the status pill of a student.
-     *
-     * <p>Tier: MUST.
      *
      * @param submission the student, or null
      * @param isEmpty true when the row shows no student

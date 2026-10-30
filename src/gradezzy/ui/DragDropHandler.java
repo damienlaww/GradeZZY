@@ -3,7 +3,7 @@
  *
  * Purpose: Lets the instructor drop files onto the window.
  *
- * Where it fits: Used by the upload screen next to the file picker. It
+ * Where it fits: Used by Set up next to the file picker. It
  * accepts ZIP files and folders only and never opens them.
  */
 package gradezzy.ui;

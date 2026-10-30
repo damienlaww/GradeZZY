@@ -18,8 +18,6 @@ import gradezzy.model.Submission;
 
 /**
  * The student's name above the username.
- *
- * <p>Tier: MUST.
  */
 public class ReviewStudentCell extends TableCell<Submission, Submission> {
 
@@ -32,8 +30,6 @@ public class ReviewStudentCell extends TableCell<Submission, Submission> {
 
     /**
      * Shows the name and username of a student.
-     *
-     * <p>Tier: MUST.
      *
      * @param submission the student, or null
      * @param isEmpty true when the row shows no student

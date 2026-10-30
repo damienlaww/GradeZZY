@@ -4,7 +4,7 @@
  * Purpose: Tells a screen how a backend action went.
  *
  * Where it fits: Returned by the DashboardBackend methods that change
- * something. A screen shows the message, or a Not connected yet panel.
+ * something. The screen shows its message.
  */
 package gradezzy.ui.backend;
 

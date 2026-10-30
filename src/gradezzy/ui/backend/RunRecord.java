@@ -1,7 +1,7 @@
 /*
  * File: RunRecord.java
  *
- * Purpose: One earlier grading run and its backup, for the History screen.
+ * Purpose: One earlier grading run and its backup, for the Runs tab.
  *
  * Where it fits: Returned by DashboardBackend.listRuns.
  */

@@ -3,7 +3,7 @@
  *
  * Purpose: Runs the similarity check on a finished run.
  *
- * Where it fits: Used by the plagiarism screen.
+ * Where it fits: Used by LiveBackend for the Similar code card on Export.
  */
 package gradezzy.service;
 

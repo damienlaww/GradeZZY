@@ -234,6 +234,10 @@ public class ReviewScreen extends FlowScreen {
                 -> fitColumns());
     }
 
+    /**
+     * Returns the Review step, or an empty state when nothing has
+     * been graded yet.
+     */
     @Override
     public Node getView() {
         if (getState().getRun() == null) {
@@ -242,6 +246,10 @@ public class ReviewScreen extends FlowScreen {
         return view;
     }
 
+    /**
+     * Fills the table with the current run and sets up the action
+     * bar.
+     */
     @Override
     public void onShow() {
         GradingRun run = getState().getRun();

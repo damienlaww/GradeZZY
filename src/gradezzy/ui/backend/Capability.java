@@ -3,8 +3,8 @@
  *
  * Purpose: Lists every backend feature the interface uses and how ready it is.
  *
- * Where it fits: Feeds the Not connected yet panels and the Help screen's
- * Backend connections table. When a service method is done, change its
+ * Where it fits: DashboardBackend.supports takes one, and the screens
+ * hide what is not supported. When a service method is done, change its
  * status here from WAITING to WORKS_NOW.
  */
 package gradezzy.ui.backend;

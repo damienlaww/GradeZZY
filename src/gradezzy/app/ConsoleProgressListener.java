@@ -3,7 +3,7 @@
  *
  * Purpose: Prints grading progress to the terminal.
  *
- * Where it fits: The console counterpart of the progress screen. It lets
+ * Where it fits: The console counterpart of the Grade step. It lets
  * the pipeline be watched and tested before any window exists.
  */
 package gradezzy.app;

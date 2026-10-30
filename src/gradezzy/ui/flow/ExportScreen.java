@@ -129,11 +129,18 @@ public class ExportScreen extends FlowScreen {
                 createScoreSheetCard(), similar});
     }
 
+    /**
+     * Returns the Export step built in the constructor.
+     */
     @Override
     public Node getView() {
         return view;
     }
 
+    /**
+     * Fills the figures, the score sheet card and the similar code
+     * card for the current run.
+     */
     @Override
     public void onShow() {
         GradingRun run = getState().getRun();

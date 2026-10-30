@@ -10,8 +10,6 @@ package gradezzy.ui.demo;
 
 /**
  * Hands out unique anomaly ids.
- *
- * <p>Tier: COULD.
  */
 public class DemoIdCounter {
 
@@ -27,8 +25,6 @@ public class DemoIdCounter {
 
     /**
      * Returns the next anomaly id.
-     *
-     * <p>Tier: COULD.
      *
      * @return an id such as A-0007
      */

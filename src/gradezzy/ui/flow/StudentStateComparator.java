@@ -16,8 +16,6 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * Compares two students by their status.
- *
- * <p>Tier: SHOULD.
  */
 public class StudentStateComparator implements Comparator<Submission> {
 
@@ -35,8 +33,6 @@ public class StudentStateComparator implements Comparator<Submission> {
 
     /**
      * Puts the student whose status comes first in ResultState first.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param first one student
      * @param second the other student

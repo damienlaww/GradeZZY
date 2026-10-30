@@ -4,8 +4,8 @@
  * Purpose: Says how far a backend feature is from working in the live
  * application.
  *
- * Where it fits: Every Capability has one. The Help screen shows it, and
- * LiveBackend uses it to decide whether a screen may call the feature.
+ * Where it fits: Every Capability has one. LiveBackend uses it to decide
+ * whether a screen may call the feature.
  */
 package gradezzy.ui.backend;
 
@@ -20,10 +20,10 @@ public enum CapabilityStatus {
     /** The service method exists but still holds a placeholder. */
     WAITING("Waiting for backend"),
 
-    /** No service method exists yet, so the screen shows Not connected yet. */
+    /** No service method exists yet, so the screens hide the feature. */
     PROPOSED("Proposed, no contract yet");
 
-    // The words shown on the Help screen
+    // A short description of the status
     private final String label;
 
     // Creates a status constant.

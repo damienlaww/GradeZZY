@@ -10,8 +10,6 @@ package gradezzy.ui;
 
 /**
  * What a grading task asks GradingService to do.
- *
- * <p>Tier: MUST.
  */
 public enum GradingTaskKind {
 

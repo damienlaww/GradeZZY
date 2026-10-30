@@ -4,8 +4,8 @@
  * Purpose: Runs a grading batch on a background thread so the window
  * stays responsive.
  *
- * Where it fits: Created by LiveBackend and watched by the progress screen
- * through GradingMonitor. GradingService does the grading itself.
+ * Where it fits: Created by LiveBackend, which passes its progress on to
+ * the Grade step. GradingService does the grading itself.
  *
  * Note on untaught Java: javafx.concurrent.Task runs the grading on a
  * background thread, so the window does not freeze.
@@ -75,7 +75,7 @@ public class GradingTask extends Task<GradingRun> {
         this.listener = listener;
     }
 
-    /** Creates a task with the roster selected on the upload screen. */
+    /** Creates a task with the roster chosen on Set up. */
     public GradingTask(GradingService gradingService, List<Path> inputPaths,
             Section section, TestCaseSource testCaseSource,
             ProgressListener listener, Path scoreSheetFile) {

@@ -3,7 +3,7 @@
  *
  * Purpose: Everything the screens ask of the backend, in one interface.
  *
- * Where it fits: Controllers call only this interface. LiveBackend passes
+ * Where it fits: The screens call only this interface. LiveBackend passes
  * each call to a service; DemoBackend answers from data in memory.
  */
 package gradezzy.ui.backend;

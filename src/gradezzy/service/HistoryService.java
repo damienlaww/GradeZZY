@@ -3,7 +3,7 @@
  *
  * Purpose: Lists earlier runs and handles backup and recovery.
  *
- * Where it fits: Used by the history screen.
+ * Where it fits: Used by the Runs tab.
  */
 package gradezzy.service;
 

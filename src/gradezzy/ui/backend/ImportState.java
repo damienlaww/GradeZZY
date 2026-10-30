@@ -3,8 +3,8 @@
  *
  * Purpose: Says whether a chosen input file can be used for grading.
  *
- * Where it fits: Each ImportItem has one state, shown on the Submissions
- * screen and used by ImportBatch.
+ * Where it fits: Each ImportItem has one state, shown on Set up and used
+ * by ImportBatch.
  */
 package gradezzy.ui.backend;
 
