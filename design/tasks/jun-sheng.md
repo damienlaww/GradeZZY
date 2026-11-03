@@ -95,14 +95,31 @@ items first.
 - Done when: in the live window, a folder fix shows both names before
   the instructor approves it.
 
-### 5. Decide with Jing Yuan: what Undo does to the marks
+### 5. Undo grades the student again without that fix (decided)
 
-- Today Undo puts the working copy back but keeps the marks earned with
-  the fix, so the CSV still carries them. A regrade does not help:
-  `FixStage` would apply the same fix again.
-- Agree on the rule today (for example: Undo marks the student "needs
-  grading again", and Retry skips fixes the instructor undid). Then
-  build the `FixStage` side.
+- Decided on 3 November: when the instructor undoes a fix, the student
+  is graded again with that fix skipped, so the marks match the files
+  they submitted.
+- Example: kenneth.yeo.2024 (cohort). With the `q3` to `Q3` fix he gets
+  20/20; with fixes off he gets 16/20. Today, after Undo, he keeps 20.
+  After this change, Undo gives 16 and the card says "Fix undone. Marks
+  20 to 16".
+- Your side, the fixing step:
+  - Give every fix a key that names what it changed and stays the same
+    when the student is graded again: the fixer's name plus the path it
+    changed, relative to the working copy. For example
+    `CaseNameFixer:q3`.
+  - Jing Yuan is adding `List<String> getRejectedFixes()` to
+    `Submission`. `GradingService.resetForRetry` keeps that list.
+  - In `FixManager` (or `FixStage`), skip a fix whose key is in that
+    list. Still add the problem card, with the fix status `UNDONE`, so
+    the instructor sees why the question scored 0.
+  - Give `FixRecord` (or the anomaly) a way to read that key, so
+    `AnomalyService.undoFix` can add it to the list.
+- Jing Yuan builds the rest: after Undo, she adds the key and grades
+  that one student again. Agree the method names with her this morning.
+- Done when: undo both fixes on kenneth.yeo.2024 and his total becomes
+  16, with Q3 at 0. Approve them instead and he stays at 20.
 
 ## P3
 

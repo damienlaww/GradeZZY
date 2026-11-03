@@ -21,28 +21,40 @@ Most of your list is done on `jingyuan/taught-java`:
 
 What is left, in order:
 
-## Decisions the team is waiting for (do these first)
+## Decided on 3 November
 
-1. **Undo and marks** (with Jun Sheng). Today Undo puts the working copy
-   back, but the marks earned with the fix stay in the CSV. A regrade
-   does not help, because `FixStage` applies the same fix again. Choose
-   a rule, for example:
-   - Undo marks the student "needs grading again";
-   - Retry skips the fixes the instructor undid;
-   - Export warns while any student needs grading again.
+1. **Undo grades the student again without that fix** (option A).
+   kenneth.yeo.2024 goes from 20 to 16 when his folder fixes are undone.
+2. **A late batch joins the section's existing run** (option A). One run
+   per section, so Review, Export and Statistics show everyone.
+3. **Seth's three drafts are approved**: the tester warning on Set up,
+   the banner for problems every student shares, and "No submission"
+   with the blank rows named on Export.
 
-   Jun Sheng builds the `FixStage` side; you build the service and
-   export side.
-2. **One section graded in two batches** (with Huxley and Seth). If G3
-   is graded, and then a late zip is graded as G3:
-   - each run's CSV leaves the other students blank;
-   - Statistics counts only the newest run.
+## Your code for those decisions (do these first)
 
-   Choose between adding a late batch to the section's existing run and
-   filling the CSV from the newest result per student across runs.
-3. **Drafts for Seth.** He needs approved drafts for the Set up tester
-   warning, the Review banner for shared problems, and the "No
-   submission" filter with the blank-row line on Export.
+1. **Undo** (with Jun Sheng, his file item 5):
+   - add `List<String> getRejectedFixes()` to `Submission`;
+   - keep that list in `GradingService.resetForRetry`;
+   - in `AnomalyService.undoFix`, add the fix's key to the list, then
+     grade that one student again. A new `GradingService` method grades
+     one submission with `lastContext`, like `retryFailed`, but for a
+     GRADED student;
+   - return the old and new total, so the card can say "Marks 20 to 16".
+2. **Late batch** (with Seth, his file item 3, and Huxley, his file
+   item 6):
+   - a `GradingService` method that finds the newest run of a module and
+     section (this session's runs, then the saved ones);
+   - a method that grades new zips into that run. A new username is
+     added. A username already in the run replaces the older
+     submission, and an audit entry keeps the old total ("Replaced
+     alicia.tan.2024: 20 to 18");
+   - refuse with a clear message if the tester folder or score sheet
+     differs from the run's.
+3. **Export blank rows** (for Seth's draft C): a method on
+   `ExportService` that reads the run's score sheet and returns the
+   counts and usernames of filled rows, rows with no submission, and rows
+   that could not be graded.
 
 ## Code still in your packages
 

@@ -101,15 +101,33 @@ exports can still be lost or wrong. Do the P1 items first.
   methods on `ResultRepository`. Tell Seth, who will call them from
   `LiveBackend`.
 
-### 6. Wait for Jing Yuan's decision: one section in two batches
+### 6. A late batch joins the section's run (decided)
 
-- `StatisticsCalculator.newestRunPerSection` (line 208) keeps only the
-  newest run of a section. If G3 is graded, and then one late zip is
-  graded as G3, Statistics covers only the late student. The CSV of each
-  run leaves the others blank.
-- Jing Yuan will decide today whether a late batch is added to the
-  section's run, or whether the newest result per student wins across
-  runs. Do not change this before then.
+- Decided on 3 November: when a section that already has a run is graded
+  again, the instructor can add the new students to that run. A student
+  who was graded before is graded again, and the newer result replaces
+  the older one. So each section keeps one run, and Statistics
+  (`newestRunPerSection`, line 208) stays as it is.
+- Example: G3 graded as 16 zips at 2:04 pm, then olivia.sim.2024's late
+  zip at 4:10 pm. Today the second run's CSV has 1 mark and 17 blanks,
+  and the G3 average shows 20.0 (Olivia alone). After the change, both
+  are in one run: 16 marks, 2 blanks, average 16.44.
+- Your side:
+  - Check that `saveRun` (line 336) of a run whose list of students grew,
+    or where one student's result was replaced, leaves exactly one row
+    per student. It deletes and rewrites the students (line 180), which
+    should already do it; confirm it with a test.
+  - Check that History shows the new student count and time for that
+    run after the late batch is added.
+- Jing Yuan writes the service method that adds students to a run.
+  Seth asks the question on Set up.
+
+### 7. Save the fixes the instructor undid
+
+- With the Undo decision (Jun Sheng's file, item 5), each submission
+  keeps a list of undone fixes (`Submission.getRejectedFixes()`).
+- Add a `rejected_fixes TEXT` column to `submissions`, holding the keys
+  joined with commas, so Resume after a restart still skips them.
 
 ## P3
 
