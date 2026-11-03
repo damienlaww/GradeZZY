@@ -1041,7 +1041,7 @@ by this section.
 | `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen` | Grading, exports and backups run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
-| Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |
+| Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. | Reads a file of `key=value` lines into a lookup table. |
 | JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs to SQLite so Runs can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
 | `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |
@@ -1180,16 +1180,21 @@ implemented. `[x]` means it works now.
 - [ ] Collapse and expand panels (`ui`)
 - [x] Next, Back and Cancel (`ui.flow.ActionBar`)
 - [x] Cancel, retry and resume grading (`service.GradingService`,
-  `grading.CancellationToken`; a run from an earlier session is resumed
-  with the score sheet and testers in the settings)
+  `grading.CancellationToken`; Cancel stops each student being graded
+  at its next step; a run from an earlier session is resumed with its
+  own score sheet and tester folder once the database saves the tester
+  folder, and until then with the testers in the settings, with a
+  warning on every student graded that way)
 - [x] Light and dark theme switch (`ui.ThemeManager`, `ui.theme`)
 - [x] Settings page backed by `config.properties`
   (`service.SettingsService`, `ui.flow.SettingsScreen`)
 - [x] SQLite persistence behind `ResultRepository`
   (`persistence.SqliteResultRepository`)
 - [ ] Audit log, exportable (`service.AuditService`,
-  `report.AuditLogExporter`; the log is saved and shown, the export is
-  not registered in `ApplicationContext` yet)
+  `report.AuditLogExporter`; the log records grading started, cancelled,
+  retried and resumed, fixes approved and undone, settings saved,
+  backups made and restored, and exports; it is saved and shown, the
+  export is not registered in `ApplicationContext` yet)
 - [ ] Individual student report, exportable
   (`report.StudentReportExporter`; no screen yet)
 - [x] JSON export (`report.JsonExporter`, `JsonWriter`)

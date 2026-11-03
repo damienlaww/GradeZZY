@@ -162,19 +162,38 @@ public class SettingsService {
         ConfigKeys.PLACEHOLDER_FOLDER_NAMES
     };
 
+    // The audit log action this service records
+    private static final String SETTINGS_SAVED = "Settings saved";
+
     // The application settings
     private final AppConfig config;
+
+    // The log of instructor actions, or null to log nothing
+    private final AuditService auditService;
 
     // The keys changed since the last save, in the order they changed
     private final List<String> changedKeys = new ArrayList<>();
 
     /**
-     * Creates a new settings service.
+     * Creates a new settings service that logs nothing.
      *
      * @param config the application settings
      */
     public SettingsService(AppConfig config) {
+        this(config, null);
+    }
+
+    /**
+     * Creates a new settings service that writes every save to the audit
+     * log, with the settings that changed.
+     *
+     * @param config the application settings
+     * @param auditService the log of instructor actions, or null to log
+     *        nothing
+     */
+    public SettingsService(AppConfig config, AuditService auditService) {
         this.config = config;
+        this.auditService = auditService;
     }
 
     /**
@@ -361,7 +380,24 @@ public class SettingsService {
         }
 
         writeSafely(configFile, output);
+        if (auditService != null) {
+            auditService.record(SETTINGS_SAVED, describeChanges());
+        }
         changedKeys.clear();
+    }
+
+    // Lists the changed settings with their new values, for the audit log.
+    private String describeChanges() {
+        String detail = "";
+
+        for (String key : changedKeys) {
+            if (!detail.isEmpty()) {
+                detail += ", ";
+            }
+            detail += key + KEY_VALUE_SEPARATOR + config.getString(key);
+        }
+
+        return "Changed " + detail + ".";
     }
 
     // Writes a copy first, so a failure halfway leaves the original

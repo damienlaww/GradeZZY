@@ -77,18 +77,24 @@ public class ApplicationContext {
         PipelineFactory pipelineFactory = new PipelineFactory(config,
                 fixManager, repository);
 
-        this.services = new ServiceRegistry(config,
-                new GradingService(config, pipelineFactory,
-                        new AssessmentFactory(config), repository),
-                new AnomalyService(fixManager, repository),
+        // One audit log for every service, so the Activity list shows
+        // grading, fixes, settings and backups together
+        AuditService auditService = new AuditService(config, repository);
+        // Made first: Statistics also counts the runs of this session
+        GradingService gradingService = new GradingService(config,
+                pipelineFactory, new AssessmentFactory(config), repository,
+                auditService);
+
+        this.services = new ServiceRegistry(config, gradingService,
+                new AnomalyService(fixManager, repository, auditService),
                 createExportService(),
                 new StatisticsService(new StatisticsCalculator(config),
-                        repository),
+                        repository, gradingService),
                 new SearchService(config),
-                new AuditService(config, repository),
-                new SettingsService(config),
+                auditService,
+                new SettingsService(config, auditService),
                 new HistoryService(config, repository,
-                        new BackupManager(config)),
+                        new BackupManager(config), auditService),
                 new PlagiarismService(config,
                         new TokenSimilarityDetector(config)));
     }

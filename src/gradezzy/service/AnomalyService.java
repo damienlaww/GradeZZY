@@ -29,21 +29,43 @@ import gradezzy.persistence.ResultRepository;
  */
 public class AnomalyService {
 
+    // The audit log actions this service records
+    private static final String FIX_APPROVED = "Fix approved";
+    private static final String FIX_UNDONE = "Fix undone";
+
     // The helper that applies and undoes fixes
     private final FixManager fixManager;
 
     // The store results are saved to
     private final ResultRepository repository;
 
+    // The log of instructor actions, or null to log nothing
+    private final AuditService auditService;
+
     /**
-     * Creates a new anomaly service.
+     * Creates a new anomaly service that logs nothing.
      *
      * @param fixManager the helper that applies and undoes fixes
      * @param repository the store results are saved to
      */
     public AnomalyService(FixManager fixManager, ResultRepository repository) {
+        this(fixManager, repository, null);
+    }
+
+    /**
+     * Creates a new anomaly service that writes every approve and undo to
+     * the audit log.
+     *
+     * @param fixManager the helper that applies and undoes fixes
+     * @param repository the store results are saved to
+     * @param auditService the log of instructor actions, or null to log
+     *        nothing
+     */
+    public AnomalyService(FixManager fixManager, ResultRepository repository,
+            AuditService auditService) {
         this.fixManager = fixManager;
         this.repository = repository;
+        this.auditService = auditService;
     }
 
     /**
@@ -82,6 +104,7 @@ public class AnomalyService {
             return;
         }
 
+        FixStatus before = anomaly.getFixStatus();
         FixRecord fixRecord = fixManager.findRecord(anomaly);
         if (fixRecord != null) {
             fixManager.approve(fixRecord);
@@ -91,6 +114,10 @@ public class AnomalyService {
         }
 
         saveStatus(anomaly);
+        if (before != FixStatus.APPROVED
+                && anomaly.getFixStatus() == FixStatus.APPROVED) {
+            record(FIX_APPROVED, anomaly);
+        }
     }
 
     /**
@@ -107,6 +134,7 @@ public class AnomalyService {
             return;
         }
 
+        FixStatus before = anomaly.getFixStatus();
         FixRecord fixRecord = fixManager.findRecord(anomaly);
         if (fixRecord == null) {
             return;
@@ -121,6 +149,10 @@ public class AnomalyService {
 
         copyStatus(fixRecord, anomaly);
         saveStatus(anomaly);
+        if (before != FixStatus.UNDONE
+                && anomaly.getFixStatus() == FixStatus.UNDONE) {
+            record(FIX_UNDONE, anomaly);
+        }
     }
 
     /**
@@ -169,6 +201,16 @@ public class AnomalyService {
     // the database), so the new status is copied onto that one too.
     private void copyStatus(FixRecord fixRecord, Anomaly anomaly) {
         anomaly.setFixStatus(fixRecord.getAnomaly().getFixStatus());
+    }
+
+    // Writes a decision on a fix to the audit log, naming the student and
+    // the problem that was fixed.
+    private void record(String action, Anomaly anomaly) {
+        if (auditService == null) {
+            return;
+        }
+        auditService.record(action, anomaly.getUsername() + ": "
+                + anomaly.getMessage());
     }
 
     // Saves the new status when the database is open. A failure keeps the

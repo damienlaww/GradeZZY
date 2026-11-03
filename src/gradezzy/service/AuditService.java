@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigException;
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.AuditEntry;
 import gradezzy.persistence.PersistenceException;
@@ -44,14 +45,24 @@ public class AuditService {
     /**
      * Adds an entry with the current time when the audit log is switched
      * on. An entry that cannot be saved is dropped: the audit log never
-     * stops the action it records.
+     * stops the action it records. That includes a setting audit.enabled
+     * that is not true or false: the entry is dropped rather than the
+     * action failing, often on its way to report another error.
      *
      * @param action the action
      * @param detail the detail
      */
     public void record(String action, String detail) {
-        if (repository == null || action == null
-                || !config.getBoolean(ConfigKeys.AUDIT_ENABLED)) {
+        if (repository == null || action == null) {
+            return;
+        }
+
+        try {
+            if (!config.getBoolean(ConfigKeys.AUDIT_ENABLED)) {
+                return;
+            }
+        } catch (ConfigException exception) {
+            // See the comment above
             return;
         }
 

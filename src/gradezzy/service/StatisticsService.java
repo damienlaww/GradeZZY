@@ -1,7 +1,8 @@
 /*
  * File: StatisticsService.java
  *
- * Purpose: Loads saved runs and summarises them for the Statistics tab.
+ * Purpose: Loads saved runs and this session's runs and summarises them
+ * for the Statistics tab.
  *
  * Where it fits: Sits between the Statistics tab and StatisticsCalculator.
  */
@@ -30,36 +31,76 @@ public class StatisticsService {
     // The store results are saved to
     private final ResultRepository repository;
 
+    // The service that knows this session's runs, or null for saved runs
+    // only
+    private final GradingService gradingService;
+
     /**
-     * Creates a new statistics service.
+     * Creates a new statistics service that reads saved runs only.
      *
      * @param statisticsCalculator the helper that does the calculations
      * @param repository the store results are saved to
      */
     public StatisticsService(StatisticsCalculator statisticsCalculator,
             ResultRepository repository) {
-        this.statisticsCalculator = statisticsCalculator;
-        this.repository = repository;
+        this(statisticsCalculator, repository, null);
     }
 
     /**
-     * Summarises the saved runs that match a filter.
+     * Creates a new statistics service that also counts the runs of this
+     * session.
+     *
+     * @param statisticsCalculator the helper that does the calculations
+     * @param repository the store results are saved to
+     * @param gradingService the service that knows this session's runs,
+     *        or null for saved runs only
+     */
+    public StatisticsService(StatisticsCalculator statisticsCalculator,
+            ResultRepository repository, GradingService gradingService) {
+        this.statisticsCalculator = statisticsCalculator;
+        this.repository = repository;
+        this.gradingService = gradingService;
+    }
+
+    /**
+     * Summarises the runs that match a filter: the saved runs, plus the
+     * runs of this session. A run of this session replaces its saved copy,
+     * because it holds the newest results, and a run that could not be
+     * saved (or any run while the database is off) is still counted.
      *
      * @param filter the filter
      * @return the summary for the Statistics tab; it holds empty values when
-     *         no saved run matches or the database cannot be read
+     *         no run matches
      */
     public StatisticsSummary summarise(StatisticsFilter filter) {
         List<GradingRun> runs = new ArrayList<>();
 
         if (repository != null) {
             try {
-                runs = repository.listRuns();
+                // Copied, so the saved copies can be replaced below
+                runs = new ArrayList<>(repository.listRuns());
             } catch (PersistenceException exception) {
-                // An empty summary is shown instead
+                // Only the runs of this session are shown
+            }
+        }
+
+        if (gradingService != null) {
+            for (GradingRun sessionRun : gradingService.getSessionRuns()) {
+                replaceOrAdd(runs, sessionRun);
             }
         }
 
         return statisticsCalculator.summarise(runs, filter);
+    }
+
+    // Puts a run in place of the run with the same id, or adds it.
+    private void replaceOrAdd(List<GradingRun> runs, GradingRun run) {
+        for (int index = 0; index < runs.size(); index++) {
+            if (runs.get(index).getId().equals(run.getId())) {
+                runs.set(index, run);
+                return;
+            }
+        }
+        runs.add(run);
     }
 }

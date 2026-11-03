@@ -41,6 +41,9 @@ public class GradingRun {
     // The starter folder chosen for the batch, or null for the settings
     private Path starterDirectory = null;
 
+    // The tester folder chosen for the batch, or null if unknown
+    private Path testersDirectory = null;
+
     /**
      * Creates a new grading run.
      *
@@ -148,5 +151,25 @@ public class GradingRun {
      */
     public void setStarterDirectory(Path starterDirectory) {
         this.starterDirectory = starterDirectory;
+    }
+
+    /**
+     * Returns the tester folder the batch was graded with. Resume uses it,
+     * so a run is never finished with other testers than it started with.
+     *
+     * @return the tester folder, or null if the testers were typed in the
+     *         app or the run was saved before this was recorded
+     */
+    public Path getTestersDirectory() {
+        return testersDirectory;
+    }
+
+    /**
+     * Sets the tester folder the batch was graded with.
+     *
+     * @param testersDirectory the tester folder, or null if unknown
+     */
+    public void setTestersDirectory(Path testersDirectory) {
+        this.testersDirectory = testersDirectory;
     }
 }

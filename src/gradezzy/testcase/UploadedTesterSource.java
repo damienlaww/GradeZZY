@@ -51,6 +51,16 @@ public class UploadedTesterSource implements TestCaseSource {
     }
 
     /**
+     * Returns the folder the testers are read from. GradingService keeps
+     * it on the run, so Resume uses the same testers.
+     *
+     * @return the folder holding the uploaded testers
+     */
+    public Path getTestersDirectory() {
+        return testersDirectory;
+    }
+
+    /**
      * Returns the name of this source.
      *
      * @return the name shown in the app

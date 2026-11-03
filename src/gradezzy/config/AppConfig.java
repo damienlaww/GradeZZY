@@ -165,15 +165,29 @@ public class AppConfig {
     }
 
     /**
-     * Returns a setting as a flag. Only the word true (in any case) counts
-     * as true.
+     * Returns a setting as a flag. The value must be true or false, in any
+     * case. Anything else, such as yes or on, is an error rather than
+     * being read as false, so a typing mistake cannot quietly switch off
+     * the database or a check.
      *
      * @param key the name of the setting, from ConfigKeys
      * @return the value as a boolean
-     * @throws ConfigException if the setting is missing
+     * @throws ConfigException if the setting is missing or not true or
+     *         false
      */
     public boolean getBoolean(String key) {
-        return Boolean.parseBoolean(getString(key));
+        String value = getString(key).trim();
+
+        if (value.equalsIgnoreCase(Boolean.TRUE.toString())) {
+            return true;
+        }
+
+        if (value.equalsIgnoreCase(Boolean.FALSE.toString())) {
+            return false;
+        }
+
+        throw new ConfigException(describeBadValue(key, value,
+                "true or false"));
     }
 
     /**
