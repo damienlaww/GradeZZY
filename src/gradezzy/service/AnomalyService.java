@@ -166,6 +166,20 @@ public class AnomalyService {
     }
 
     /**
+     * Returns the fix made for an anomaly in this session, which says
+     * what it changed before and after.
+     *
+     * @param anomaly the anomaly
+     * @return the fix record, or null if none is kept for it
+     */
+    public FixRecord findFixRecord(Anomaly anomaly) {
+        if (anomaly == null) {
+            return null;
+        }
+        return fixManager.findRecord(anomaly);
+    }
+
+    /**
      * Approves the fixes of all selected anomalies.
      *
      * @param anomalies the anomalies

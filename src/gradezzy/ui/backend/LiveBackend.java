@@ -22,6 +22,7 @@ import javafx.scene.control.TreeItem;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.fix.FixRecord;
 import gradezzy.grading.ProgressListener;
 import gradezzy.model.Anomaly;
 import gradezzy.model.Assessment;
@@ -387,18 +388,33 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Lists the validation findings among the run's anomalies.
+     * Lists the validation findings among the run's anomalies, with the
+     * Before and After of each fix made in this session.
      */
     @Override
     public List<RepairItem> listRepairs(GradingRun gradingRun) {
         List<RepairItem> repairs = new ArrayList<>();
         for (Anomaly anomaly : listAnomalies(gradingRun)) {
             if (ReviewRules.isValidationFinding(anomaly.getType())) {
-                repairs.add(new RepairItem(anomaly, "Not recorded yet",
-                        "Not recorded yet", describeNoRepair(anomaly)));
+                repairs.add(createRepair(anomaly));
             }
         }
         return repairs;
+    }
+
+    // Builds the repair item of a finding. A fix not made in this
+    // session has no Before and After, so the panel hides them.
+    private RepairItem createRepair(Anomaly anomaly) {
+        FixRecord fixRecord =
+                services.getAnomalyService().findFixRecord(anomaly);
+        String before = null;
+        String after = null;
+        if (fixRecord != null) {
+            before = fixRecord.getValueBefore();
+            after = fixRecord.getValueAfter();
+        }
+        return new RepairItem(anomaly, before, after,
+                describeNoRepair(anomaly));
     }
 
     /**

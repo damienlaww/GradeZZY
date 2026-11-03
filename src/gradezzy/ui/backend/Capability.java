@@ -84,9 +84,11 @@ public enum Capability {
     /** The original and proposed value of each repair. */
     REPAIR_VALUES("Original and proposed repair values",
             "Shows what each repair changed, before and after, side by "
-            + "side.", "Jun Sheng", null, CapabilityStatus.PROPOSED,
-            "A way to read each FixRecord's original and proposed value "
-            + "through AnomalyService."),
+            + "side.", "Jun Sheng",
+            "AnomalyService.findFixRecord, FixRecord.getValueBefore, "
+            + "getValueAfter", CapabilityStatus.WORKS_NOW,
+            "Nothing; a fix made before GradeZZY was last opened shows "
+            + "no Before and After."),
 
     /** Returns an approved or undone repair to Applied. */
     REPAIR_DECISION_UNDO("Undo a repair decision",

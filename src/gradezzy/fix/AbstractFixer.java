@@ -54,6 +54,15 @@ public abstract class AbstractFixer implements Fixer {
     // Follows the file path at the start of a file anomaly's message
     private static final String PATH_END = " ";
 
+    // Separates folders in a path on Windows
+    private static final String WINDOWS_SEPARATOR = "\\";
+
+    // Goes between two names of a list, but the last two
+    private static final String LIST_SEPARATOR = ", ";
+
+    // Goes between the last two names of a list
+    private static final String LAST_SEPARATOR = " and ";
+
     // The name shown in the anomaly log
     private final String name;
 
@@ -74,6 +83,21 @@ public abstract class AbstractFixer implements Fixer {
     @Override
     public String getName() {
         return name;
+    }
+
+    /**
+     * Returns null, so FixManager always applies this fix. A fixer that
+     * can tell what it would change overrides this.
+     *
+     * @param submission the submission
+     * @param anomaly the anomaly
+     * @return null
+     * @throws FixException never here
+     */
+    @Override
+    public Path findPathToChange(Submission submission, Anomaly anomaly)
+            throws FixException {
+        return null;
     }
 
     /**
@@ -209,7 +233,8 @@ public abstract class AbstractFixer implements Fixer {
      * Finds the folder that holds the question folders, by the rule the
      * validators use: the top of the working copy when a question folder
      * is there, else the folder named after the username, else the only
-     * folder there is.
+     * folder there is, else the only top folder that holds a question
+     * folder, so an extra folder such as bin is ignored.
      *
      * @param workingCopy the working copy
      * @param username the student's username
@@ -229,7 +254,44 @@ public abstract class AbstractFixer implements Fixer {
         } else if (topFolders.size() == 1) {
             return topFolders.get(0);
         }
-        return null;
+        return findOnlyHolder(topFolders, folderNames);
+    }
+
+    /**
+     * Writes a folder as shown in Before and After: its path relative to
+     * the working copy with forward slashes and a slash at the end, such
+     * as ping.lee.2023/inner/, or empty text for the working copy itself.
+     *
+     * @param workingCopy the working copy
+     * @param folder the folder inside it
+     * @return the folder as shown
+     */
+    protected String showFolder(Path workingCopy, Path folder) {
+        if (folder.equals(workingCopy)) {
+            return "";
+        }
+
+        String relativePath = workingCopy.relativize(folder).toString();
+        return relativePath.replace(WINDOWS_SEPARATOR, FOLDER_SEPARATOR)
+                + FOLDER_SEPARATOR;
+    }
+
+    /**
+     * Joins names as words: Q1, Q2 and Q3.
+     *
+     * @param names the names, at least one
+     * @return the names joined
+     */
+    protected String joinNames(List<String> names) {
+        String joined = names.get(0);
+        int last = names.size() - 1;
+        for (int i = 1; i < last; i++) {
+            joined += LIST_SEPARATOR + names.get(i);
+        }
+        if (last > 0) {
+            joined += LAST_SEPARATOR + names.get(last);
+        }
+        return joined;
     }
 
     /**
@@ -500,6 +562,22 @@ public abstract class AbstractFixer implements Fixer {
             }
         }
         return false;
+    }
+
+    // Returns the only folder that holds a question folder, or null.
+    private Path findOnlyHolder(List<Path> folders,
+            List<String> folderNames) throws FixException {
+        List<Path> holders = new ArrayList<>();
+        for (Path folder : folders) {
+            if (holdsQuestionFolder(listFolders(folder), folderNames)) {
+                holders.add(folder);
+            }
+        }
+
+        if (holders.size() != 1) {
+            return null;
+        }
+        return holders.get(0);
     }
 
     // Returns the name at a place in the list, or null past its end.

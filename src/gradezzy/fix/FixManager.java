@@ -9,6 +9,7 @@
  */
 package gradezzy.fix;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -65,24 +66,40 @@ public class FixManager {
     }
 
     /**
-     * Applies every available fix to one submission. Older fixes and
-     * failure reasons for the same student are dropped first. A failed
-     * fix is skipped and its reason kept, and an anomaly that is already
-     * fixed is not offered to the next fixer.
+     * Applies every available fix to one submission, skipping the fixes
+     * the instructor undid for it.
      *
      * @param submission the submission
      * @return the fixes that were applied
      */
     public synchronized List<FixRecord> applyAll(Submission submission) {
+        return applyAll(submission, findRejectedFixes(submission));
+    }
+
+    /**
+     * Applies every available fix to one submission. Older fixes and
+     * failure reasons for the same student are dropped first. A failed
+     * fix is skipped and its reason kept, and an anomaly that is already
+     * fixed is not offered to the next fixer. A fix whose key is in the
+     * rejected list is not applied and its anomaly is marked UNDONE, so
+     * the student is graded on the files as submitted.
+     *
+     * @param submission the submission
+     * @param rejectedKeys the keys of the fixes the instructor undid
+     * @return the fixes that were applied
+     */
+    public synchronized List<FixRecord> applyAll(Submission submission,
+            List<String> rejectedKeys) {
         forgetFixesOf(submission.getUsername());
         failureReasons.remove(submission.getUsername());
         return applyTo(submission,
-                new ArrayList<>(submission.getAnomalies()));
+                new ArrayList<>(submission.getAnomalies()), rejectedKeys);
     }
 
     /**
      * Applies the available fixes to some anomalies of a submission only,
-     * keeping the fixes and failure reasons already recorded for it.
+     * keeping the fixes and failure reasons already recorded for it, and
+     * skipping the fixes the instructor undid.
      *
      * @param submission the submission
      * @param anomalies the anomalies to fix
@@ -90,14 +107,34 @@ public class FixManager {
      */
     public synchronized List<FixRecord> applyTo(Submission submission,
             List<Anomaly> anomalies) {
+        return applyTo(submission, anomalies,
+                findRejectedFixes(submission));
+    }
+
+    /**
+     * Applies the available fixes to some anomalies of a submission only,
+     * keeping the fixes and failure reasons already recorded for it. A fix
+     * whose key is in the rejected list is skipped and its anomaly marked
+     * UNDONE. Other anomalies of the same skipped fix are removed, so it
+     * shows as one card, as it does when applied.
+     *
+     * @param submission the submission
+     * @param anomalies the anomalies to fix
+     * @param rejectedKeys the keys of the fixes the instructor undid
+     * @return the fixes that were applied
+     */
+    public synchronized List<FixRecord> applyTo(Submission submission,
+            List<Anomaly> anomalies, List<String> rejectedKeys) {
         List<FixRecord> applied = new ArrayList<>();
+        List<String> skippedKeys = new ArrayList<>();
+        List<Anomaly> repeats = new ArrayList<>();
 
         for (Fixer fixer : fixers) {
             for (Anomaly anomaly : anomalies) {
                 FixRecord fixRecord = null;
-                if (anomaly.getFixStatus() != FixStatus.APPLIED
-                        && fixer.canFix(anomaly)) {
-                    fixRecord = tryApply(fixer, submission, anomaly);
+                if (isOpen(submission, anomaly) && fixer.canFix(anomaly)) {
+                    fixRecord = tryApply(fixer, submission, anomaly,
+                            rejectedKeys, skippedKeys, repeats);
                 }
                 if (fixRecord != null) {
                     anomaly.setFixStatus(FixStatus.APPLIED);
@@ -107,6 +144,9 @@ public class FixManager {
                 }
             }
         }
+
+        // Removed only now, as fixers find a folder by its problem's place
+        submission.getAnomalies().removeAll(repeats);
         return applied;
     }
 
@@ -223,11 +263,44 @@ public class FixManager {
         }
     }
 
-    // Applies one fix, or keeps the reason and returns null if it fails.
+    // The keys of the fixes the instructor undid for a student. This is
+    // the one place to return submission.getRejectedFixes() once
+    // Submission has it.
+    private List<String> findRejectedFixes(Submission submission) {
+        return new ArrayList<>();
+    }
+
+    // Says whether an anomaly still waits for a fix in this pass: not
+    // fixed, not skipped, and not removed by a fix that covered it.
+    private boolean isOpen(Submission submission, Anomaly anomaly) {
+        return anomaly.getFixStatus() != FixStatus.APPLIED
+                && anomaly.getFixStatus() != FixStatus.UNDONE
+                && submission.getAnomalies().contains(anomaly);
+    }
+
+    // Applies one fix and keeps its key, skips it if it was rejected, or
+    // keeps the reason and returns null if it fails.
     private FixRecord tryApply(Fixer fixer, Submission submission,
-            Anomaly anomaly) {
+            Anomaly anomaly, List<String> rejectedKeys,
+            List<String> skippedKeys, List<Anomaly> repeats) {
         try {
-            return fixer.apply(submission, anomaly);
+            Path pathToChange = fixer.findPathToChange(submission, anomaly);
+            String plannedKey = null;
+            if (pathToChange != null) {
+                plannedKey = makeKey(fixer.getName(), submission,
+                        pathToChange);
+            }
+            if (plannedKey != null && rejectedKeys.contains(plannedKey)) {
+                skip(anomaly, plannedKey, skippedKeys, repeats);
+                return null;
+            }
+
+            FixRecord fixRecord = fixer.apply(submission, anomaly);
+            if (fixRecord != null) {
+                fixRecord.setFixKey(makeKey(fixer.getName(), submission,
+                        fixRecord.getOriginalPath()));
+            }
+            return fixRecord;
         } catch (FixException exception) {
             rememberFailure(anomaly, exception.getMessage());
             return null;
@@ -235,6 +308,34 @@ public class FixManager {
             rememberFailure(anomaly, UNEXPECTED_FAILURE + exception);
             return null;
         }
+    }
+
+    // Marks a rejected fix UNDONE. Another anomaly of the same fix is
+    // kept as a repeat, which applyTo removes once every fixer has run.
+    private void skip(Anomaly anomaly, String fixKey,
+            List<String> skippedKeys, List<Anomaly> repeats) {
+        if (skippedKeys.contains(fixKey)) {
+            repeats.add(anomaly);
+        } else {
+            skippedKeys.add(fixKey);
+        }
+        anomaly.setFixStatus(FixStatus.UNDONE);
+    }
+
+    // Makes a fix key from the path the student uploaded: the path is
+    // taken back through this student's earlier fixes, newest first.
+    private String makeKey(String fixerName, Submission submission,
+            Path path) {
+        Path uploadedPath = path;
+        for (int i = fixRecords.size() - 1; i >= 0; i--) {
+            FixRecord earlier = fixRecords.get(i);
+            if (earlier.getAnomaly().getUsername().equals(
+                    submission.getUsername())) {
+                uploadedPath = earlier.findPathBefore(uploadedPath);
+            }
+        }
+        return FixRecord.makeFixKey(fixerName,
+                submission.getWorkingCopyPath(), uploadedPath);
     }
 
     // Keeps why the fix for an anomaly failed.
