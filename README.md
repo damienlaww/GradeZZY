@@ -1059,7 +1059,7 @@ by this section.
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
 | Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |
-| `CharsetDecoder`, `CodingErrorAction`, `ByteBuffer` | `fix.EncodingFixer` | Tells whether a Java file is valid UTF-8, which javac needs. | A decoder turns bytes into characters; set to `REPORT`, it throws instead of guessing when the bytes are not UTF-8. |
+| `CharsetDecoder`, `CodingErrorAction`, `ByteBuffer` | `fix.EncodingFixer`, `report.CsvScoreSheetExporter` | Tells whether a Java file is valid UTF-8, which javac needs, and whether a score sheet is UTF-8 or Windows-1252, so the export is written the same way. | A decoder turns bytes into characters; set to `REPORT`, it throws instead of guessing when the bytes are not UTF-8. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. | Reads a file of `key=value` lines into a lookup table. |
 | JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs to SQLite so Runs can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
 | `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |
@@ -1211,10 +1211,11 @@ implemented. `[x]` means it works now.
 - [ ] Audit log, exportable (`service.AuditService`,
   `report.AuditLogExporter`; the log records grading started, cancelled,
   retried and resumed, fixes approved and undone, settings saved,
-  backups made and restored, and exports; it is saved and shown, the
-  export is not registered in `ApplicationContext` yet)
+  backups made and restored, and exports; it is saved and shown, and
+  the export is registered as "Audit log", but no screen offers it yet)
 - [ ] Individual student report, exportable
-  (`report.StudentReportExporter`; no screen yet)
+  (`report.StudentReportExporter`; registered as "Student report",
+  which writes every student of the run into one file; no screen yet)
 - [x] JSON export (`report.JsonExporter`, `JsonWriter`)
 - [ ] Nielsen's 10 usability heuristics, reviewed screen by screen:
   https://www.nngroup.com/articles/ten-usability-heuristics/

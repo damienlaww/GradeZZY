@@ -27,9 +27,11 @@ import gradezzy.persistence.ResultRepository;
 import gradezzy.persistence.SqliteResultRepository;
 import gradezzy.plagiarism.TokenSimilarityDetector;
 import gradezzy.report.AnomalyReportExporter;
+import gradezzy.report.AuditLogExporter;
 import gradezzy.report.CsvScoreSheetExporter;
 import gradezzy.report.JsonExporter;
 import gradezzy.report.JsonWriter;
+import gradezzy.report.StudentReportExporter;
 import gradezzy.service.AnomalyService;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AuditService;
@@ -180,6 +182,8 @@ public class ApplicationContext {
                 Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE))));
         exportService.registerExporter(new JsonExporter(new JsonWriter()));
         exportService.registerExporter(new AnomalyReportExporter());
+        exportService.registerExporter(new StudentReportExporter());
+        exportService.registerExporter(new AuditLogExporter(repository));
 
         return exportService;
     }

@@ -15,6 +15,8 @@ import java.util.List;
 
 import gradezzy.model.AuditEntry;
 import gradezzy.model.GradingRun;
+import gradezzy.persistence.PersistenceException;
+import gradezzy.persistence.ResultRepository;
 import gradezzy.util.FileUtils;
 import gradezzy.util.TextUtils;
 
@@ -44,16 +46,32 @@ public class AuditLogExporter implements Exporter {
     // Date, then the time to the second, so every row has the same width
     private static final String TIME_FORMAT = "%sT%02d:%02d:%02d";
 
-    // The entries to write
+    // The entries to write, or null to read them from the repository
     private final List<AuditEntry> entries;
 
+    // Where the audit log is saved, or null when entries were given
+    private final ResultRepository repository;
+
     /**
-     * Creates a new audit log exporter.
+     * Creates a new audit log exporter that writes the given entries.
      *
      * @param entries the entries to write
      */
     public AuditLogExporter(List<AuditEntry> entries) {
         this.entries = entries;
+        this.repository = null;
+    }
+
+    /**
+     * Creates a new audit log exporter that reads the saved audit log
+     * each time it exports, so the file holds every entry up to that
+     * moment. This is the one ApplicationContext registers.
+     *
+     * @param repository where the audit log is saved
+     */
+    public AuditLogExporter(ResultRepository repository) {
+        this.entries = null;
+        this.repository = repository;
     }
 
     /**
@@ -95,10 +113,11 @@ public class AuditLogExporter implements Exporter {
         }
 
         // Every row, the header included, ends with LINE_ENDING
+        List<AuditEntry> entriesToWrite = chooseEntries();
         List<String> lines = new ArrayList<>();
         lines.add(TextUtils.joinCsvLine(HEADER));
-        if (entries != null) {
-            for (AuditEntry entry : entries) {
+        if (entriesToWrite != null) {
+            for (AuditEntry entry : entriesToWrite) {
                 lines.add(TextUtils.joinCsvLine(toRow(entry)));
             }
         }
@@ -110,6 +129,21 @@ public class AuditLogExporter implements Exporter {
             throw new ExportException("Could not write the audit log to "
                     + outputFile + ". Check that the folder exists and is "
                     + "not read-only.", exception);
+        }
+    }
+
+    // The entries given to the constructor, or else the audit log as it
+    // is saved now
+    private List<AuditEntry> chooseEntries() throws ExportException {
+        if (repository == null) {
+            return entries;
+        }
+
+        try {
+            return repository.listAudit();
+        } catch (PersistenceException exception) {
+            throw new ExportException("The audit log could not be read: "
+                    + exception.getMessage(), exception);
         }
     }
 
