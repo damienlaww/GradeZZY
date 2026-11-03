@@ -67,6 +67,15 @@ public class TesterRunner {
     private static final String NO_NATIVE_OPTION =
             "--illegal-native-access=deny";
 
+    // Limits for each tester run, so one student's code cannot take the
+    // memory or CPUs the other workers need: a heap size from the
+    // settings, a 2 MB thread stack and one CPU
+    private static final String MAX_HEAP_OPTION = "-Xmx";
+    private static final String MEGABYTES_SUFFIX = "m";
+    private static final String STACK_SIZE_OPTION = "-Xss2m";
+    private static final String ONE_PROCESSOR_OPTION =
+            "-XX:ActiveProcessorCount=1";
+
     // Point the home and temp folders at the question folder, so code
     // that saves "to home" or "to temp" stays in its own working copy
     private static final String HOME_OPTION = "-Duser.home=";
@@ -80,13 +89,22 @@ public class TesterRunner {
     private static final String SANDBOX_COMMAND = "/usr/bin/sandbox-exec";
     private static final String PROFILE_OPTION = "-p";
 
-    // The smallest rule set and command used to test the sandbox once
-    private static final String PROBE_RULES = "(version 1)(allow default)";
+    // The command used to test the sandbox once, with the real rules, and
+    // the start of the name of the empty folder it runs in
     private static final String VERSION_OPTION = "-version";
+    private static final String PROBE_FOLDER_PREFIX = "gradezzy-probe-";
+
+    // Where macOS keeps every user's home folder, with the instructor's
+    // files, the testers and the ground truth
+    private static final String USERS_FOLDER = "/Users";
+
+    // The system property holding the folder of the running JDK
+    private static final String JAVA_HOME_PROPERTY = "java.home";
 
     // Printed once per run where no sandbox exists
     private static final String NO_SANDBOX_NOTE = "Note: student code is "
-            + "not sandboxed on this system and can reach any file the "
+            + "not sandboxed, because this system has no sandbox or java "
+            + "could not start inside it, so it can reach any file the "
             + "instructor can.";
 
     // Exit code of a program that ended normally
@@ -125,8 +143,9 @@ public class TesterRunner {
 
     /**
      * Says whether java can run inside the macOS sandbox. It is tried
-     * once, because the tool can exist and still refuse to start, and
-     * then every tester would fail.
+     * once, with the same rules a tester gets, because the tool can exist
+     * and still refuse to start, or java can be kept from reading its own
+     * files, and then every tester would fail.
      *
      * @return true if testers can run inside the sandbox
      */
@@ -134,19 +153,44 @@ public class TesterRunner {
         if (!Files.isExecutable(Path.of(SANDBOX_COMMAND))) {
             return false;
         }
-        List<String> command = new ArrayList<>();
-        command.add(SANDBOX_COMMAND);
-        command.add(PROFILE_OPTION);
-        command.add(PROBE_RULES);
-        command.add(config.getString(ConfigKeys.JAVA_COMMAND));
-        command.add(VERSION_OPTION);
+        // An empty folder stands in for the question folder, so the probe
+        // gets no more to read than any real run
+        Path probeFolder = null;
         try {
-            ProcessResult probe = processRunner.run(command,
-                    Path.of(CURRENT_FOLDER),
+            probeFolder = Files.createTempDirectory(PROBE_FOLDER_PREFIX)
+                    .toRealPath();
+            List<String> command = new ArrayList<>();
+            command.add(SANDBOX_COMMAND);
+            command.add(PROFILE_OPTION);
+            command.add(sandboxRules(probeFolder, harnessLocation()));
+            command.add(config.getString(ConfigKeys.JAVA_COMMAND));
+            command.add(VERSION_OPTION);
+            ProcessResult probe = processRunner.run(command, probeFolder,
                     config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS));
             return probe.getExitCode() == SUCCESS_EXIT_CODE;
         } catch (ProcessExecutionException exception) {
             return false;
+        } catch (IOException exception) {
+            return false;
+        } finally {
+            deleteProbeFolder(probeFolder);
+        }
+    }
+
+    /**
+     * Deletes the empty folder the probe ran in. A folder that cannot be
+     * deleted is left in the temp folder, which the system clears.
+     *
+     * @param probeFolder the folder, or null if it was never made
+     */
+    private void deleteProbeFolder(Path probeFolder) {
+        if (probeFolder == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(probeFolder);
+        } catch (IOException exception) {
+            System.err.println("Could not delete " + probeFolder);
         }
     }
 
@@ -165,8 +209,8 @@ public class TesterRunner {
         }
 
         // The harness comes first, so a student class cannot replace it
-        String classPath = harnessLocation() + File.pathSeparator
-                + CURRENT_FOLDER;
+        String harness = harnessLocation();
+        String classPath = harness + File.pathSeparator + CURRENT_FOLDER;
         String folder = questionFolder.toAbsolutePath().toString();
         int studentLimit = config.getInt(ConfigKeys.MAX_OUTPUT_CHARACTERS)
                 / STUDENT_SHARE_DIVISOR;
@@ -174,9 +218,15 @@ public class TesterRunner {
         if (sandboxed) {
             command.add(SANDBOX_COMMAND);
             command.add(PROFILE_OPTION);
-            command.add(sandboxRules(questionFolder));
+            command.add(sandboxRules(questionFolder, harness));
         }
         command.add(config.getString(ConfigKeys.JAVA_COMMAND));
+        int maxMemoryMb = config.getInt(ConfigKeys.MAX_MEMORY_MB);
+        if (maxMemoryMb > 0) {
+            command.add(MAX_HEAP_OPTION + maxMemoryMb + MEGABYTES_SUFFIX);
+        }
+        command.add(STACK_SIZE_OPTION);
+        command.add(ONE_PROCESSOR_OPTION);
         command.add(LIMIT_MODULES_OPTION);
         command.add(NO_NATIVE_OPTION);
         command.add(HOME_OPTION + folder);
@@ -187,6 +237,9 @@ public class TesterRunner {
         command.add(testerClassName);
         command.add(String.valueOf(studentLimit));
         long timeoutSeconds = config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS);
+        // The harness stops itself a little after this, in case GradeZZY
+        // is gone by then
+        command.add(String.valueOf(timeoutSeconds));
         // A new random token for every run, sent where only the harness
         // reads it before any student code starts
         String token = UUID.randomUUID().toString();
@@ -245,26 +298,36 @@ public class TesterRunner {
 
     /**
      * Builds the sandbox rules for one run. In these rules a later line
-     * wins over an earlier one, so the own question folder is allowed
-     * again after the folders around it are denied.
+     * wins over an earlier one, so the JDK, the harness and the own
+     * question folder are allowed again after the folders around them are
+     * denied. No network is allowed, so files cannot be sent away.
      *
      * @param questionFolder the question folder
+     * @param harness the folder or jar holding TesterHarness
      * @return the rules, in the sandbox's own language
      */
-    private String sandboxRules(Path questionFolder) {
+    private String sandboxRules(Path questionFolder, String harness) {
         String own = quotedPath(questionFolder);
-        // shortcut: covers the configured submissions folder only, not one
-        // chosen in the window; pass the batch folder in if that matters
+        String javaHome = quotedPath(Path.of(
+                System.getProperty(JAVA_HOME_PROPERTY)));
+        // shortcut: reads are blocked under /Users and in the configured
+        // folders; a batch folder chosen elsewhere, such as on an external
+        // drive, can still be read; pass it in if that matters
         return "(version 1)(allow default)"
+                + "(deny network*)"
                 + "(deny file-write*)"
                 + "(allow file-write* (subpath " + own + ")"
                 + " (literal \"/dev/null\"))"
                 + "(deny file-read-data"
+                + " (subpath \"" + USERS_FOLDER + "\")"
                 + " (subpath " + configuredPath(ConfigKeys.WORKING_DIR) + ")"
                 + " (subpath " + configuredPath(ConfigKeys.BACKUP_DIR) + ")"
                 + " (subpath " + configuredPath(ConfigKeys.SUBMISSIONS_DIR)
                 + "))"
-                + "(allow file-read-data (subpath " + own + "))";
+                + "(allow file-read-data"
+                + " (subpath " + javaHome + ")"
+                + " (subpath " + quotedPath(Path.of(harness)) + ")"
+                + " (subpath " + own + "))";
     }
 
     /**

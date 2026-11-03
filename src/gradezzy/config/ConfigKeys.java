@@ -166,6 +166,11 @@ public final class ConfigKeys {
             "exec.max.output.characters";
 
     /**
+     * Most memory, in MB, one tester run may use for its objects.
+     */
+    public static final String MAX_MEMORY_MB = "exec.max.memory.mb";
+
+    /**
      * Text added to a question id to form its tester class name.
      */
     public static final String TESTER_CLASS_SUFFIX =

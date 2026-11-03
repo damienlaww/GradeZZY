@@ -203,8 +203,8 @@ ui (JavaFX)        app.ConsoleMain
 | 3 | `FixStage` | Applies automatic corrections. | Jun Sheng |
 | 4 | `DetectStage` | Runs every `Detector`. | Jun Sheng |
 | 5 | `InstallTestersStage` | Copies testers and data files into the working copy. | Zach |
-| 6 | `CompileStage` | Compiles each question folder. | Zach |
-| 7 | `ExecuteStage` | Runs each tester with a time limit and parses its output. | Zach |
+| 6 | `CompileStage` | Compiles each question in its own copy of its folder, `<working copy>/.questions/<id>/`, so Q1a's code cannot change Q1b's tester. | Zach |
+| 7 | `ExecuteStage` | Runs each tester in that copy with a time limit and parses its output. | Zach |
 | 8 | `ScoreStage` | Sets per-question and per-student scores. | Jing Yuan |
 | 9 | `PersistStage` | Saves the result so a run can be resumed. | Huxley |
 
@@ -982,6 +982,7 @@ file: `java -Dgradezzy.config=other.properties ...`.
 | `exec.run.timeout.seconds` | `10` | Time limit for one tester run. |
 | `exec.thread.count` | `4` | Submissions graded at the same time. |
 | `exec.max.output.characters` | `100000` | Longest program output kept. In a tester run, student prints may use half of it, so the tester's own lines are never cut off. |
+| `exec.max.memory.mb` | `256` | Most memory, in MB, one tester run may use for its objects. `0` means no limit. Each run also gets a 2 MB thread stack and one CPU. |
 | `grading.tester.class.suffix` | `Tester` | `Q1a` becomes `Q1aTester`. |
 | `grading.pass.marker` | `Passed` | Line a tester prints for a passed test. |
 | `grading.fail.marker` | `Failed` | Start of the line for a failed test. |
@@ -1063,6 +1064,7 @@ by this section.
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. | Reads a file of `key=value` lines into a lookup table. |
 | JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs to SQLite so Runs can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
 | `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |
+| Shutdown hook (`Runtime.addShutdownHook`), a daemon `Thread` | `exec.ProcessRunner`, `exec.RunningProcesses`, `exec.TesterHarness`, `exec.HarnessWatchdog` | No tester keeps running after GradeZZY closes or crashes. | A shutdown hook is a thread Java starts as the program ends; ours stops every tester still running. The watchdog is a second thread inside each tester run that sleeps until the time limit plus 2 seconds, then ends the run, in case GradeZZY is gone. |
 | `PrintStream` subclass, `System.setOut`, `StackWalker` | `exec.TesterHarness`, `exec.TrustedPrintStream`, `exec.TrustedFrameCheck` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. | All printing goes through our `PrintStream`, which checks who called it and marks a line only when no student method is on the call stack. |
 | Varargs `format(String, Object...)` | `exec.TrustedPrintStream` only | It overrides `PrintStream.format`, whose signature Java fixes. | `printf` calls this method, so ours must have exactly the same parameters to catch `printf` output too. |
 | Reflection (`Class.forName`, `Method.invoke`, `Class<?>`) | `exec.TesterHarness`, `exec.TrustedPrintStream`, `exec.TrustedFrameCheck` | Starts the tester's `main` from inside the harness. | Loads a class by its name at run time and calls its `main`, the way `java Q1aTester` would. |

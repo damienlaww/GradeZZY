@@ -38,6 +38,10 @@ public class ProcessRunner {
     // Milliseconds in one second
     private static final long MILLIS_PER_SECOND = 1000;
 
+    // Every program any ProcessRunner started that has not ended. A
+    // shutdown hook stops them all if GradeZZY closes during a run.
+    private static final RunningProcesses RUNNING = startShutdownHook();
+
     // The application settings
     private final AppConfig config;
 
@@ -94,6 +98,7 @@ public class ProcessRunner {
         long startMillis = System.currentTimeMillis();
         long deadlineMillis = startMillis + timeoutSeconds * MILLIS_PER_SECOND;
         Process process = startProcess(command, workingDirectory, input);
+        RUNNING.add(process);
         List<ProcessHandle> children = new ArrayList<>();
 
         try {
@@ -113,7 +118,20 @@ public class ProcessRunner {
         } finally {
             // Student code may start programs that outlive the tester
             stopChildren(children);
+            RUNNING.remove(process);
         }
+    }
+
+    /**
+     * Makes the list of running programs and asks Java to stop them all
+     * when GradeZZY shuts down. Called once, when this class is loaded.
+     *
+     * @return the list of running programs
+     */
+    private static RunningProcesses startShutdownHook() {
+        RunningProcesses running = new RunningProcesses();
+        Runtime.getRuntime().addShutdownHook(new Thread(running));
+        return running;
     }
 
     /**
@@ -147,7 +165,7 @@ public class ProcessRunner {
                 errorText = readAvailable(error, errorText, maxCharacters);
 
                 if (System.currentTimeMillis() > deadlineMillis) {
-                    terminate(process);
+                    stopKeepingOutput(process);
                     timedOut = true;
                 } else {
                     Thread.sleep(POLL_INTERVAL_MILLIS);
@@ -155,12 +173,11 @@ public class ProcessRunner {
             }
 
             int exitCode = process.waitFor();
-            // Killing a process closes its streams, so after a timeout
-            // only the output read inside the loop is kept
-            if (!timedOut) {
-                outputText = readRemaining(output, outputText, maxCharacters);
-                errorText = readRemaining(error, errorText, maxCharacters);
-            }
+            // A timed-out process was stopped with its streams left open,
+            // so output printed just before, such as a last "Passed", is
+            // still read here
+            outputText = readRemaining(output, outputText, maxCharacters);
+            errorText = readRemaining(error, errorText, maxCharacters);
             long durationMillis = System.currentTimeMillis() - startMillis;
             return new ProcessResult(exitCode, outputText, errorText,
                     timedOut, durationMillis);
@@ -197,13 +214,25 @@ public class ProcessRunner {
             return;
         }
 
+        stopKeepingOutput(process);
+        // Also closes the streams of the process
+        process.destroyForcibly();
+    }
+
+    /**
+     * Stops a process and any child processes it started, but leaves its
+     * output streams open, so what it printed can still be read.
+     *
+     * @param process the process
+     */
+    private void stopKeepingOutput(Process process) {
         // Collect the children first: once the parent dies they are
         // handed to the operating system and can no longer be found here
         List<ProcessHandle> descendants = listDescendants(process);
         for (ProcessHandle descendant : descendants) {
             descendant.destroyForcibly();
         }
-        process.destroyForcibly();
+        process.toHandle().destroyForcibly();
     }
 
     /**
