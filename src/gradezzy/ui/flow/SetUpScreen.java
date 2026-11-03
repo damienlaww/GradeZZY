@@ -68,8 +68,8 @@ public class SetUpScreen extends FlowScreen {
 
     // How grading picks one file when a student has several
     private static final String ONE_FILE_RULE = "Only one file per "
-            + "student is graded: the one without a copy number such as "
-            + "(1), else the lowest number, else the one named in lower "
+            + "student is graded: the newest download, with the highest "
+            + "copy number such as (1), else the one named in lower "
             + "case, else the first chosen. The others are not graded and "
             + "are noted on that student.";
 

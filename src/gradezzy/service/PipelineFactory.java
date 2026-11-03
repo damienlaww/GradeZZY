@@ -108,7 +108,7 @@ public class PipelineFactory {
         // To add a stage, write a class that implements GradingStage and
         // add it here, in the position it should run.
         pipeline.addStage(new ExtractStage(workingCopyManager,
-                new RosterReader(config)));
+                new RosterReader(config), starterDirectory));
         pipeline.addStage(new ValidateStage(createValidationRunner()));
         pipeline.addStage(new FixStage(fixManager,
                 createFileCheckRunner()));

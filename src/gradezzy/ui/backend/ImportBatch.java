@@ -160,8 +160,8 @@ public class ImportBatch {
 
     /**
      * Returns the file grading keeps in place of this one, by the rule
-     * grading uses: the file without a copy number such as (1), else the
-     * lowest number; then, for one username in two letter cases, the
+     * grading uses: the newest download, which has the highest copy
+     * number such as (1); then, for one username in two letter cases, the
      * lower-case one; then the file chosen first.
      *
      * @param item a file of this batch
@@ -236,7 +236,7 @@ public class ImportBatch {
     /**
      * Lists the usernames found in more than one usable submission, across
      * every chosen file and folder. Grading grades one file per student
-     * (the one without a copy number such as (1), else the lowest number,
+     * (the newest download, with the highest copy number such as (1),
      * else the one named in lower case, else the first chosen) and notes
      * the others on that student. Case does not matter. A file
      * chosen again (see isChosenAgain) is not counted twice.
@@ -343,7 +343,7 @@ public class ImportBatch {
         int firstCopy = SubmissionLoader.readCopyNumber(first.getName());
         int secondCopy = SubmissionLoader.readCopyNumber(second.getName());
         if (firstCopy != secondCopy) {
-            return firstCopy < secondCopy;
+            return firstCopy > secondCopy;
         }
 
         boolean firstLower = isLowerCase(first.getUsername());

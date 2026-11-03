@@ -240,6 +240,9 @@ public class GradingPipeline {
             }
 
             submission.setStatus(SubmissionStatus.GRADED);
+        } catch (UploadRejectedException exception) {
+            // The stage has already recorded what is wrong with the upload
+            submission.setStatus(SubmissionStatus.FAILED);
         } catch (GradingException exception) {
             recordFailure(submission, exception);
         } catch (RuntimeException exception) {

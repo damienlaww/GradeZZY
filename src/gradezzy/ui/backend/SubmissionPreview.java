@@ -86,6 +86,10 @@ public class SubmissionPreview {
         if (files.isEmpty()) {
             return oneStudent(file, ImportState.WARNING,
                     "This ZIP file holds no files.");
+        } else if (files.size() == 1 && countZips(files) == 1) {
+            return oneStudent(file, ImportState.ACCEPTED, "This ZIP file "
+                    + "holds only another ZIP file, which grading unpacks "
+                    + "and grades as this student.");
         } else if (countZips(files) > files.size() * MOSTLY) {
             return oneStudent(file, ImportState.WARNING, "Most files "
                     + "inside are ZIP files, but grading treats this as one "
@@ -144,19 +148,29 @@ public class SubmissionPreview {
                 skippedNote(skipped), new HashMap<>());
     }
 
-    // Describes a folder of student zips and unzipped submissions.
+    // Describes a folder of student zips and unzipped submissions. A zip
+    // of student zips in the folder gives the students inside it, as in
+    // grading.
     private ImportItem inspectFolderOfStudents(Path folder,
             List<Path> candidates) {
         int zips = 0;
         int folders = 0;
         List<String> names = new ArrayList<>();
+        List<String> bulkZips = new ArrayList<>();
         for (Path candidate : candidates) {
-            if (Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)) {
+            List<String> innerZips = listInnerStudentZips(candidate);
+            if (innerZips != null) {
+                bulkZips.add(String.valueOf(candidate.getFileName()));
+                zips += innerZips.size();
+                names.addAll(innerZips);
+            } else if (Files.isDirectory(candidate,
+                    LinkOption.NOFOLLOW_LINKS)) {
                 folders++;
+                names.add(String.valueOf(candidate.getFileName()));
             } else {
                 zips++;
+                names.add(String.valueOf(candidate.getFileName()));
             }
-            names.add(String.valueOf(candidate.getFileName()));
         }
 
         List<String> skipped = new ArrayList<>();
@@ -178,8 +192,31 @@ public class SubmissionPreview {
             notes += " Skipped, because it has the name of the starter "
                     + "folder: " + listNames(starterFolders) + ".";
         }
-        return severalStudents(folder, "Holds " + describeParts(zips,
-                folders), names, notes, findGradedFiles(folder));
+
+        // Asking the loader which file is graded would unpack a bulk zip,
+        // and the preview must change nothing
+        Map<String, String> graded = new HashMap<>();
+        String holds = "Holds " + describeParts(zips, folders);
+        if (bulkZips.isEmpty()) {
+            graded = findGradedFiles(folder);
+        } else {
+            holds += ", counting the ZIP files inside "
+                    + listNames(bulkZips);
+        }
+        return severalStudents(folder, holds, names, notes, graded);
+    }
+
+    // Returns the student zips inside a zip of student zips, or null when
+    // the path is not one, or cannot be read.
+    private List<String> listInnerStudentZips(Path candidate) {
+        if (!loader.isBatchArchive(candidate)) {
+            return null;
+        }
+        try {
+            return loader.listBatchEntries(candidate);
+        } catch (IngestException exception) {
+            return null;
+        }
     }
 
     // Asks the loader which file grading keeps for each student, by
@@ -260,9 +297,9 @@ public class SubmissionPreview {
             message += " Not graded: " + listNames(notGraded) + ".";
         } else if (!repeated.isEmpty()) {
             message += " More than one ZIP file for " + listNames(repeated)
-                    + ": only the one without a copy number such as (1), "
-                    + "else the lowest number, else the one named in lower "
-                    + "case, is graded.";
+                    + ": only the newest download, the one with the "
+                    + "highest copy number such as (1), else the one named "
+                    + "in lower case, is graded.";
         }
         if (noUsername.size() == 1) {
             message += " No username in " + listNames(noUsername)

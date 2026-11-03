@@ -36,6 +36,10 @@ public class RosterReader {
     private static final String FIRST_NAME_COLUMN = "First Name";
     private static final String EMAIL_COLUMN = "Email";
 
+    // The last column of a score sheet from eLearn, which a sheet saved
+    // again by another tool may leave out of each student row
+    private static final String END_OF_LINE_COLUMN = "End-of-Line Indicator";
+
     // The application settings
     private final AppConfig config;
 
@@ -79,10 +83,7 @@ public class RosterReader {
             for (int index = 1; index < records.size(); index++) {
                 List<String> fields = TextUtils.splitCsvLine(
                         records.get(index));
-                if (fields.size() != header.size()) {
-                    throw new IllegalArgumentException("Wrong column count "
-                            + "in roster record " + (index + 1) + ".");
-                }
+                checkColumnCount(header, fields, index + 1);
                 String id = removePrefix(fields.get(header.indexOf(
                         ID_COLUMN)));
                 String username = removePrefix(fields.get(header.indexOf(
@@ -135,6 +136,27 @@ public class RosterReader {
                 exception);
     }
 
+    // A row must have one value per column, except that a row short only
+    // by the trailing End-of-Line column is accepted. Otherwise the
+    // message names the first column the row has no value for.
+    private void checkColumnCount(List<String> header, List<String> fields,
+            int recordNumber) {
+        int lastColumn = header.size() - 1;
+        boolean onlyEndOfLineMissing = fields.size() == lastColumn
+                && header.get(lastColumn).equals(END_OF_LINE_COLUMN);
+        if (fields.size() < header.size() && !onlyEndOfLineMissing) {
+            throw new IllegalArgumentException("Roster record "
+                    + recordNumber + " has no value for the column \""
+                    + header.get(fields.size()) + "\".");
+        }
+        if (fields.size() > header.size()) {
+            throw new IllegalArgumentException("Roster record "
+                    + recordNumber + " has more values than the header "
+                    + "has columns.");
+        }
+    }
+
+    // Requires a column to appear in the header exactly once.
     private void requireColumn(List<String> header, String name) {
         if (header.indexOf(name) < 0
                 || header.indexOf(name) != header.lastIndexOf(name)) {

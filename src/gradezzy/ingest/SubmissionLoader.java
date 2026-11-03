@@ -51,10 +51,12 @@ public class SubmissionLoader {
     // Matches every character that is not a digit
     private static final String NON_DIGIT_PATTERN = "\\D";
 
-    // The copy number of a name that has none, so it ranks first
+    // The copy number of a name that has none: the first download, so
+    // every copy ranks as newer
     private static final int NO_COPY_NUMBER = 0;
 
-    // The copy number of a name whose number is too long to read
+    // The copy number of a name whose number is too long to read, which
+    // ranks as the newest copy
     private static final int UNREADABLE_COPY_NUMBER = Integer.MAX_VALUE;
 
     // How deep a question folder is looked for in a zip: at the top (0)
@@ -98,14 +100,15 @@ public class SubmissionLoader {
 
     /**
      * Creates one Submission per student. Each chosen path gives the
-     * students listCandidates finds, and a chosen bulk zip (see
-     * isBatchArchive) is unpacked into one student per zip inside it.
-     * A chosen file that is not a zip is still one student, so extraction
-     * reports it without discarding the other students. When several
-     * files give one username, in any case, only one is graded: the file
-     * without a copy number such as " (1)", else the lowest copy number;
-     * on a tie, the one whose username is already in lower case, as on
-     * the roster, else the first chosen. Each file left out is named in a
+     * students listCandidates finds, and a bulk zip (see isBatchArchive),
+     * chosen or found directly in a chosen folder, is unpacked into one
+     * student per zip inside it. A chosen file that is not a zip is still
+     * one student, so extraction reports it without discarding the other
+     * students. When several files give one username, in any case, only
+     * one is graded: the newest download, which is the highest copy
+     * number such as " (2)", a file without one being the oldest; on a
+     * tie, the one whose username is already in lower case, as on the
+     * roster, else the first chosen. Each file left out is named in a
      * DUPLICATE_SUBMISSION warning on the graded one. Uploads without a
      * username cannot be graded: the first is kept as a failed submission
      * and each other one is named in a warning on it.
@@ -142,7 +145,8 @@ public class SubmissionLoader {
      * A sub-folder with a starter folder name, such as
      * RenameToYourUsername, is skipped. A chosen file is one student; for
      * a bulk zip that is the zip itself, and listBatchEntries names the
-     * students inside it.
+     * students inside it. A bulk zip directly in a chosen folder is also
+     * listed as itself, and loadSubmissions unpacks it.
      *
      * @param input the chosen file or folder
      * @return the students' zips and folders, sorted by name; empty for an
@@ -309,7 +313,8 @@ public class SubmissionLoader {
     /**
      * Reads the copy number a browser adds to a second download, such as
      * 1 for "2023-2024-ping.lee.2023 (1).zip", by the same rule grading
-     * uses to choose one file per student. The window calls this too.
+     * uses to choose one file per student: the highest number is the
+     * newest download and is graded. The window calls this too.
      *
      * @param fileName the zip file or folder name
      * @return the copy number, or 0 when the name has none
@@ -361,15 +366,17 @@ public class SubmissionLoader {
         return createSubmissions(candidates, section);
     }
 
-    // Adds the students of one chosen path. A chosen bulk zip is replaced
-    // by the student zips inside it.
+    // Adds the students of one chosen path. A bulk zip, chosen or found
+    // in a chosen folder, is replaced by the student zips inside it, as
+    // when the instructor puts the section's bulk download in a folder.
     private void collectInput(Path input, List<Path> candidates)
             throws IOException, IngestException {
-        List<Path> found = listCandidates(input);
-        if (found.contains(input) && isBatchArchive(input)) {
-            unpackBatch(input, candidates);
-        } else {
-            candidates.addAll(found);
+        for (Path found : listCandidates(input)) {
+            if (isBatchArchive(found)) {
+                unpackBatch(found, candidates);
+            } else {
+                candidates.add(found);
+            }
         }
     }
 
@@ -616,15 +623,16 @@ public class SubmissionLoader {
     }
 
     // Says whether a file is graded in place of an earlier chosen file
-    // with the same username: no or a lower copy number, else a username
-    // already in lower case, as on the roster.
+    // with the same username: a higher copy number, because a student who
+    // uploads a fixed version gets it saved as "name (1).zip", else a
+    // username already in lower case, as on the roster.
     private boolean isPreferred(Submission candidate, Submission current) {
         int candidateCopy = readCopyNumber(fileNameOf(
                 candidate.getOriginalPath()));
         int currentCopy = readCopyNumber(fileNameOf(
                 current.getOriginalPath()));
         if (candidateCopy != currentCopy) {
-            return candidateCopy < currentCopy;
+            return candidateCopy > currentCopy;
         }
         return isLowerCase(candidate.getUsername())
                 && !isLowerCase(current.getUsername());

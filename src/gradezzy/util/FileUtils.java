@@ -9,6 +9,8 @@ package gradezzy.util;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -25,6 +27,9 @@ import java.util.List;
  * <p>Tier: MUST. Owner: Damien.
  */
 public final class FileUtils {
+
+    // The encoding Excel on Windows uses when it saves a "CSV" file
+    private static final String WINDOWS_CHARSET = "windows-1252";
 
     /**
      * Not used: every method here is static.
@@ -81,14 +86,20 @@ public final class FileUtils {
     }
 
     /**
-     * Reads a whole text file.
+     * Reads a whole text file as UTF-8. A file that is not valid UTF-8,
+     * such as a score sheet saved as CSV by Excel on Windows with a name
+     * like José in it, is read as Windows-1252 instead.
      *
      * @param file the file
      * @return the content of the file
      * @throws IOException if the operation fails
      */
     public static String readText(Path file) throws IOException {
-        return Files.readString(file, StandardCharsets.UTF_8);
+        try {
+            return Files.readString(file, StandardCharsets.UTF_8);
+        } catch (MalformedInputException exception) {
+            return Files.readString(file, Charset.forName(WINDOWS_CHARSET));
+        }
     }
 
     /**
