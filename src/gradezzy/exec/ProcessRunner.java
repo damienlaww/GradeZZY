@@ -147,7 +147,7 @@ public class ProcessRunner {
                 errorText = readAvailable(error, errorText, maxCharacters);
 
                 if (System.currentTimeMillis() > deadlineMillis) {
-                    terminate(process);
+                    stopKeepingOutput(process);
                     timedOut = true;
                 } else {
                     Thread.sleep(POLL_INTERVAL_MILLIS);
@@ -155,12 +155,11 @@ public class ProcessRunner {
             }
 
             int exitCode = process.waitFor();
-            // Killing a process closes its streams, so after a timeout
-            // only the output read inside the loop is kept
-            if (!timedOut) {
-                outputText = readRemaining(output, outputText, maxCharacters);
-                errorText = readRemaining(error, errorText, maxCharacters);
-            }
+            // A timed-out process was stopped with its streams left open,
+            // so output printed just before, such as a last "Passed", is
+            // still read here
+            outputText = readRemaining(output, outputText, maxCharacters);
+            errorText = readRemaining(error, errorText, maxCharacters);
             long durationMillis = System.currentTimeMillis() - startMillis;
             return new ProcessResult(exitCode, outputText, errorText,
                     timedOut, durationMillis);
@@ -197,13 +196,25 @@ public class ProcessRunner {
             return;
         }
 
+        stopKeepingOutput(process);
+        // Also closes the streams of the process
+        process.destroyForcibly();
+    }
+
+    /**
+     * Stops a process and any child processes it started, but leaves its
+     * output streams open, so what it printed can still be read.
+     *
+     * @param process the process
+     */
+    private void stopKeepingOutput(Process process) {
         // Collect the children first: once the parent dies they are
         // handed to the operating system and can no longer be found here
         List<ProcessHandle> descendants = listDescendants(process);
         for (ProcessHandle descendant : descendants) {
             descendant.destroyForcibly();
         }
-        process.destroyForcibly();
+        process.toHandle().destroyForcibly();
     }
 
     /**
