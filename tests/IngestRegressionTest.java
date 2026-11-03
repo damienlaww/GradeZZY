@@ -1,5 +1,6 @@
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -10,6 +11,7 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.grading.*;
 import gradezzy.ingest.*;
 import gradezzy.model.*;
+import gradezzy.report.CsvScoreSheetExporter;
 import gradezzy.service.*;
 import gradezzy.testcase.*;
 import gradezzy.ui.backend.*;
@@ -45,8 +47,8 @@ public class IngestRegressionTest {
                     "a nested student ZIP never replaces the outer identity");
             check(nested.get(0).getOriginalPath().equals(alice), "outer original is retained");
             List<Submission> repeated = loader.loadSubmissions(List.of(alice, alice), SECTION);
-            check(repeated.size() == 2 && repeated.get(1).getIngestFailure() != null,
-                    "selecting the same path twice reports the duplicate");
+            check(repeated.size() == 1 && duplicateWarnings(repeated.get(0)) == 1,
+                    "selecting the same path twice grades it once and reports the duplicate");
             Path batch = root.resolve("batch.zip");
             try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(batch))) {
                 out.putNextEntry(new ZipEntry("2023-2024-alice.zip"));
@@ -56,10 +58,72 @@ public class IngestRegressionTest {
                 out.write(Files.readAllBytes(bob));
                 out.closeEntry();
             }
-            check(loader.loadSubmissions(List.of(batch), SECTION).size() == 1,
-                    "ordinary ZIP uploads never infer a bulk container");
+            check(loader.loadSubmissions(List.of(batch), SECTION).size() == 2,
+                    "a zip of zips with no question folder is one student per zip inside");
             check(loader.loadBatchArchive(batch, SECTION).size() == 2,
                     "explicit bulk loading still works");
+            Path questionZips = root.resolve("2023-2024-eve.zip");
+            try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(questionZips))) {
+                for (String name : List.of("Q1.zip", "Q2.zip", "notes.txt")) {
+                    out.putNextEntry(new ZipEntry(name));
+                    out.write(name.getBytes());
+                    out.closeEntry();
+                }
+            }
+            check(!loader.isBatchArchive(questionZips)
+                    && loader.loadSubmissions(List.of(questionZips), SECTION).size() == 1,
+                    "a student zip holding question zips stays one student");
+
+            Path upperAlice = zip(Files.createDirectories(root.resolve("upper"))
+                    .resolve("2023-2024-ALICE.zip"), "Q1/Answer.java", "upper");
+            Path lowerAlice = zip(Files.createDirectories(root.resolve("lower"))
+                    .resolve("2023-2024-alice.zip"), "Q1/Answer.java", "lower");
+            List<Submission> caseDuplicates = loader.loadSubmissions(List.of(upperAlice, lowerAlice), SECTION);
+            check(caseDuplicates.size() == 1 && caseDuplicates.get(0).getOriginalPath().equals(lowerAlice),
+                    "a case-variant duplicate keeps the upload whose username is lower case");
+            Path otherAlice = zip(Files.createDirectories(root.resolve("other"))
+                    .resolve("2023-2024-alice.zip"), "Q1/Answer.java", "other");
+            List<Submission> sameNames = loader.loadSubmissions(List.of(otherAlice, lowerAlice), SECTION);
+            check(sameNames.size() == 1 && sameNames.get(0).getOriginalPath().equals(otherAlice)
+                    && sameNames.get(0).getAnomalies().get(0).getMessage().startsWith("Two files are named"),
+                    "a tie keeps the first chosen and two same-named files are told apart by folder");
+
+            Path namelessDir = Files.createDirectories(root.resolve("nameless"));
+            zip(namelessDir.resolve("2023-2024-.zip"), "Q1/Answer.java", "first");
+            zip(namelessDir.resolve("2023-2024- (1).zip"), "Q1/Answer.java", "second");
+            zip(namelessDir.resolve("2023-2024-erin.zip"), "Q1/Answer.java", "erin");
+            List<Submission> withNameless = loader.loadSubmissions(List.of(namelessDir), SECTION);
+            Submission keptNameless = withNameless.stream()
+                    .filter(s -> s.getUsername().isEmpty()).findFirst().orElseThrow();
+            check(withNameless.size() == 2 && keptNameless.getStatus() == SubmissionStatus.FAILED
+                    && keptNameless.getAnomalies().size() == 2,
+                    "uploads without a username give one rejected submission naming the others");
+
+            Path deep = root.resolve("carol.zip");
+            try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(deep))) {
+                for (String name : List.of("carol/carol/Q1/Answer.java", "carol/carol/Q3/notes.zip")) {
+                    out.putNextEntry(new ZipEntry(name));
+                    out.write(name.getBytes());
+                    out.closeEntry();
+                }
+            }
+            List<Submission> deepLoaded = loader.loadSubmissions(List.of(deep), SECTION);
+            check(!loader.isBatchArchive(deep) && loader.listBatchSkipped(deep).isEmpty()
+                    && deepLoaded.size() == 1 && deepLoaded.get(0).getUsername().equals("carol"),
+                    "question folders two levels down mean a student zip, not a bulk zip");
+
+            Path sheet = root.resolve("sheet.csv");
+            Files.writeString(sheet, "OrgDefinedId,Username,Calculated Final Grade Numerator\r\n#1,#alice,\r\n");
+            GradingRun exported = new GradingRun("RUN-export", new AssessmentFactory(config).create(),
+                    SECTION, LocalDateTime.now());
+            Submission upperGraded = new Submission("ALICE", SECTION, upperAlice);
+            upperGraded.setStatus(SubmissionStatus.GRADED);
+            exported.addSubmission(upperGraded);
+            exported.setScoreSheetFile(sheet);
+            Path csv = root.resolve("export.csv");
+            new CsvScoreSheetExporter(config, sheet).export(exported, csv);
+            check(Files.readString(csv).contains("#alice,0"),
+                    "the CSV export finds a username in any case");
 
             Path duplicate = zip(root.resolve("ALICE.zip"), "Q1/Answer.java", "duplicate");
             Path nameless = zip(root.resolve("2023-2024-.zip"), "Q1/Answer.java", "nameless");
@@ -84,20 +148,29 @@ public class IngestRegressionTest {
                 public String getName() { return "No execution needed for ingestion tests"; }
                 public List<TesterFile> prepareTesters(Assessment assessment) { return List.of(); }
             };
+            Path damaged = root.resolve("2023-2024-dora.zip");
+            Files.writeString(damaged, "not a zip");
+            Path damagedCopy = root.resolve("2023-2024-dora (1).zip");
+            Files.writeString(damagedCopy, "not a zip either");
             GradingService service = new GradingService(config, factory, new AssessmentFactory(config));
-            GradingRun run = service.startGrading(List.of(alice, duplicate, nameless, windows),
-                    SECTION, testers, new ConsoleProgressListener());
+            GradingRun run = service.startGrading(List.of(alice, duplicate, nameless, windows,
+                    damagedCopy, damaged), SECTION, testers, new ConsoleProgressListener());
             Submission accepted = original(run, alice);
-            Submission rejected = original(run, duplicate);
             Submission unnamed = original(run, nameless);
             Submission unknown = original(run, windows);
+            Submission broken = original(run, damaged);
             check(accepted.getStatus() == SubmissionStatus.GRADED, "valid upload completes in a mixed batch");
             check(accepted.getStudent() != null && accepted.getStudent().getUsername().equals("ALIce"),
                     "service loads roster and matches without case sensitivity");
             check(accepted.getAnomalies().stream().noneMatch(a -> a.getType() == AnomalyType.UNKNOWN_STUDENT),
                     "matched students are not flagged unknown");
-            check(rejected.getStatus() == SubmissionStatus.FAILED && rejected.getWorkingCopyPath() == null,
-                    "duplicate is rejected before touching another student's working copy");
+            check(run.getSubmissions().stream().noneMatch(s -> s.getOriginalPath().equals(duplicate))
+                    && run.getSubmissions().stream().noneMatch(s -> s.getOriginalPath().equals(damagedCopy)),
+                    "a second file for one student is not added to the run");
+            check(duplicateWarnings(accepted) == 1 && duplicateWarnings(broken) == 1,
+                    "the graded file carries a warning naming the file left out");
+            check(broken.getStatus() == SubmissionStatus.FAILED,
+                    "the file without a copy number is the one graded");
             check(unnamed.getStatus() == SubmissionStatus.FAILED && !unnamed.getAnomalies().isEmpty(),
                     "nameless upload is flagged without stopping the batch");
             check(Files.exists(accepted.getWorkingCopyPath().resolve("bob.zip")),
@@ -110,8 +183,10 @@ public class IngestRegressionTest {
                     && Files.exists(unknown.getWorkingCopyPath().resolve("charlie/Q2/Answer.java")),
                     "Windows backslashes and ./ entries extract into real folders");
             service.retryFailed(run, new ConsoleProgressListener());
-            check(rejected.getStatus() == SubmissionStatus.FAILED && !rejected.getAnomalies().isEmpty(),
-                    "retry cannot admit a duplicate or erase its rejection");
+            check(run.getSubmissions().stream().noneMatch(s -> s.getOriginalPath().equals(duplicate)),
+                    "retry cannot admit a duplicate");
+            check(broken.getStatus() == SubmissionStatus.FAILED && duplicateWarnings(broken) == 1,
+                    "retry keeps the duplicate warning of the retried submission");
             check(unnamed.getStatus() == SubmissionStatus.FAILED && !unnamed.getAnomalies().isEmpty(),
                     "retry retains the nameless upload rejection");
 
@@ -160,6 +235,11 @@ public class IngestRegressionTest {
             out.closeEntry();
         }
         return path;
+    }
+
+    private static long duplicateWarnings(Submission submission) {
+        return submission.getAnomalies().stream()
+                .filter(a -> a.getType() == AnomalyType.DUPLICATE_SUBMISSION).count();
     }
 
     private static Submission original(GradingRun run, Path path) {

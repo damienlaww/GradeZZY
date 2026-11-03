@@ -70,17 +70,17 @@ today.
 | Capability | What it does for the instructor | Screens | DashboardBackend method | Service method | Owner | Status | Contract needed |
 |---|---|---|---|---|---|---|---|
 | Module, sections, rubric and limits | Shows the module, sections, marks and time limits set in config.properties. | Set up (Class), Settings | `getModuleCodes`, `getSectionCodes`, `getAssessment`, `getRunTimeoutSeconds`, `getCompileTimeoutSeconds` | `AppConfig, AssessmentFactory.create` | Jing Yuan | Works now | None |
-| Check chosen files and folders | Tells you at once when a chosen file or folder cannot be read. | Set up | `inspect` | `InputValidator.isReadableFile, isReadableDirectory` | Seth | Works now | None |
+| Check chosen files and folders | Tells you at once when a chosen file or folder cannot be read, how many students it holds, what it skips and which students appear twice. | Set up | `inspect` | `InputValidator.isReadableFile, isReadableDirectory`; `SubmissionLoader.listCandidates, listSkipped, isBatchArchive, listBatchEntries, listBatchSkipped, extractUsername` (through `SubmissionPreview`) | Seth, Damien | Works now | None |
 | Import and grade a batch | Grades every submission of a section in one batch. | Set up, Grade | `startGrading` | `GradingService.startGrading` | Jing Yuan, with Seth, Damien, Jun Sheng, Zach and Huxley | Works now | None |
 | Cancel grading | Stops a batch early and keeps the results already finished. | Grade | `cancelGrading` | `GradingService.cancel` | Jing Yuan | Works now | None |
-| Retry failed submissions | Grades the submissions that failed or were cancelled again. | Review | `retryFailedSubmissions` | `GradingService.retryFailed` | Jing Yuan | Works now | None |
+| Retry failed submissions | Grades the submissions that failed or were cancelled again. | Review | `retryFailedSubmissions`, `canRetryFailed` | `GradingService.retryFailed` | Jing Yuan | Works now | None; only the last run started or resumed in this session can be retried, and Review shows a note for any other run. |
 | Resume a cancelled run | Finishes a cancelled run without grading finished students again. | Grade, Runs | `resumeGrading` | `GradingService.resume` | Jing Yuan, Huxley | Works now | None; a run from an earlier session uses the score sheet and testers in the settings. |
 | Progress and time left | Shows how far grading has got and about how long is left. | Grade | `GradingMonitor` (a `ProgressListener`) | `ProgressListener, ProgressEstimator` | Jing Yuan | Works now | None |
 | List anomalies | Lists every problem the checks found, so you can review it. | Review (student panel), Statistics | `listAnomalies` | `AnomalyService.listAnomalies` | Jing Yuan | Works now | None |
 | Approve and undo repairs | Lets you accept or undo each automatic repair of a working copy. | Review (student panel) | `approveRepair`, `rejectRepair` | `AnomalyService.approveFix, undoFix` | Jing Yuan, Jun Sheng | Works now | None; undo needs the run graded in this session. |
 | Original and proposed repair values | Shows what each repair changed, before and after, side by side. | Review (student panel) | `listRepairs` | None yet | Jun Sheng | Proposed | A way to read each FixRecord's original and proposed value through AnomalyService. |
 | Undo a repair decision | Takes back an approve or undo decision on a repair. | Review (student panel) | `undoRepairDecision` | None yet | Jing Yuan, Jun Sheng | Proposed | A method that returns an approved or undone fix to Applied. |
-| Mark flags reviewed or rejected | Records that you looked at a flag, without changing any mark. | Review (student panel) | `getDecision`, `setDecision` | None yet | Jing Yuan | Proposed | Store an Open, Reviewed or Rejected decision for each anomaly, with undo and an audit entry. |
+| Mark flags reviewed or rejected | Records that you looked at a flag, without changing any mark. | Review (student panel) | `getDecision`, `setDecision` | `LiveBackend` keeps the decisions in memory | Jing Yuan | Works now (kept until GradeZZY closes) | To keep decisions after a restart: store them per anomaly, with an audit entry. |
 | Search, filter and sort | Finds students by name and orders the results table. | Review, Export | `search` | `SearchService.search` | Jing Yuan | Works now | None |
 | Search inside source code | Finds the students whose code contains some text. | Review (Code search) | `searchCode` | `SearchService.searchCode` | Jing Yuan | Works now (needs working copies) | None |
 | Show working-copy files | Shows a student's files, so you can read the code behind a mark. | Review (code and test output) | `getFileTree`, `readSourceFile` | `FileTreeBuilder, FileUtils.readText` | Damien | Works now | None |
@@ -114,7 +114,7 @@ what they need. Each one is hidden in live mode until the service exists.
 |---|---|---|
 | Repair values | Jun Sheng | Read each `FixRecord`'s original and proposed value through `AnomalyService`, so Review can show them before and after. |
 | Undo a repair decision | Jing Yuan, Jun Sheng | A method that returns an approved or undone fix to Applied. |
-| Flag review decisions | Jing Yuan | Store an Open, Reviewed or Rejected decision per anomaly, with undo and an audit entry. A decision never changes a mark. |
+| Flag review decisions after a restart | Jing Yuan, Huxley | Save the Open, Reviewed or Rejected decision per anomaly, with an audit entry, so it survives a restart. Today `LiveBackend` keeps them only until GradeZZY closes. A decision never changes a mark. |
 | Retry one question | Jing Yuan, Zach | Run the tester of one question again and replace only that question's result. One tester run covers every case of a question, so the narrowest retry is a question, not a case. |
 | Retry one submission | Jing Yuan | Grade one chosen submission again, even when it did not fail. |
 | Manual mark changes | Jing Yuan, Huxley | Store a manual score with its reason and the earlier score, record it in the audit log, allow undo. |
@@ -199,15 +199,27 @@ to 4 opens a step, Esc closes a sheet.
 ## Submission ingestion behavior
 
 Each ZIP passed to `SubmissionLoader.loadSubmissions` belongs to the student
-named by its outer filename, even when it contains other ZIPs. Bulk containers
-must be explicitly opened through `loadBatchArchive`; the ordinary upload flow
-accepts individual student ZIPs or a folder containing them.
+named by its outer filename, even when it contains other ZIPs, unless it is a
+bulk zip: it holds at least one zip that is not named like a question folder
+and not inside one, holds no question folder at its top or one folder down, and
+its own name does not start with the student prefix. Each such zip inside a
+bulk zip is one student. A chosen folder
+gives one student per zip and per unzipped submission folder inside it; other
+files and the starter folder are skipped. The Set up step previews the same
+rules through `SubmissionLoader.listCandidates`, `listSkipped`,
+`isBatchArchive`, `listBatchEntries` and `listBatchSkipped` (the files a bulk
+zip skips).
 
-The first upload for a username is kept. Later uploads for the same username
-(case-insensitive), and uploads without a username, remain in the run as failed
-submissions with an ingestion anomaly. They never create a working copy and
-Retry leaves their rejection intact. Duplicate import rows do not block the
-other students from being graded.
+One upload per username (case-insensitive) is graded: the one without a copy
+number such as ` (1)`, else the lowest copy number; on a tie, the one whose
+username is already in lower case, as on the roster, else the first chosen.
+The other uploads are not added to the run; the graded student gets a
+`DUPLICATE_SUBMISSION` warning naming each of them, which Retry keeps. The CSV
+export matches usernames in any case. The first upload without a username
+remains in the run as a failed submission with an ingestion anomaly; each
+other upload without one is named in a warning on it, so no two submissions
+share the empty username. It never creates a working copy and Retry leaves its
+rejection intact.
 
 `LiveBackend` passes the selected roster through `GradingTask` to
 `GradingService`; console runs use the configured score sheet. Roster lookup is

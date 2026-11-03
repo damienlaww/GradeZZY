@@ -61,6 +61,7 @@ final class JavaSourceText {
     private static final char OPEN_BRACE = '{';
     private static final char CLOSE_BRACE = '}';
     private static final char OPEN_PAREN = '(';
+    private static final char CLOSE_PAREN = ')';
     private static final char SEMICOLON = ';';
     private static final char ASSIGN = '=';
 
@@ -194,20 +195,32 @@ final class JavaSourceText {
         return names;
     }
 
-    // Returns the body of the named method, or null if there is none.
+    // Returns the body of the first method with that name, or null.
     static String findMethodBody(String code, String methodName) {
+        List<String> bodies = findMethodBodies(code, methodName);
+
+        if (bodies.isEmpty()) {
+            return null;
+        }
+
+        return bodies.get(0);
+    }
+
+    // Returns the body of every method with that name, overloads included.
+    static List<String> findMethodBodies(String code, String methodName) {
         String blanked = blankLiterals(code);
+        List<String> bodies = new ArrayList<>();
 
         for (int brace : findMethodBraces(blanked)) {
             if (findMethodName(blanked, brace).equals(methodName)) {
                 int closeBrace = findClosingBracket(blanked, brace,
                         OPEN_BRACE, CLOSE_BRACE);
 
-                return code.substring(brace + 1, closeBrace);
+                bodies.add(code.substring(brace + 1, closeBrace));
             }
         }
 
-        return null;
+        return bodies;
     }
 
     // Returns where the bracket opened at openIndex is closed.
@@ -370,14 +383,33 @@ final class JavaSourceText {
         return braces;
     }
 
-    // Says whether a header declares a method: brackets but no equals sign.
+    // Says whether a header declares a method: brackets, no = outside them.
     private static boolean isMethodHeader(String header) {
-        return header.indexOf(OPEN_PAREN) >= 0 && header.indexOf(ASSIGN) < 0;
+        int depth = 0;
+        boolean assignsValue = false;
+
+        // An = inside brackets can only be in an annotation
+        for (int i = 0; i < header.length(); i++) {
+            char current = header.charAt(i);
+
+            if (current == OPEN_PAREN) {
+                depth++;
+            } else if (current == CLOSE_PAREN) {
+                depth--;
+            } else if (current == ASSIGN && depth == 0) {
+                assignsValue = true;
+            }
+        }
+
+        return header.indexOf(OPEN_PAREN) >= 0 && !assignsValue;
     }
 
-    // Returns the name just before the last opening bracket of a header.
+    // Returns the name in front of the parameter list: the last bracket
+    // pair of the header, which holds any parameter annotation's brackets.
     private static String findMethodName(String code, int braceIndex) {
-        int nameEnd = code.lastIndexOf(OPEN_PAREN, braceIndex);
+        int closeIndex = code.lastIndexOf(CLOSE_PAREN, braceIndex);
+        int nameEnd = findOpeningBracket(code, closeIndex, OPEN_PAREN,
+                CLOSE_PAREN);
 
         while (nameEnd > 0
                 && Character.isWhitespace(code.charAt(nameEnd - 1))) {
@@ -392,5 +424,26 @@ final class JavaSourceText {
         }
 
         return code.substring(nameStart, nameEnd);
+    }
+
+    // Returns where the bracket closed at closeIndex is opened, or 0 if
+    // it never is.
+    private static int findOpeningBracket(String code, int closeIndex,
+            char open, char close) {
+        int depth = 0;
+
+        for (int i = closeIndex; i >= 0; i--) {
+            if (code.charAt(i) == close) {
+                depth++;
+            } else if (code.charAt(i) == open) {
+                depth--;
+            }
+
+            if (depth == 0) {
+                return i;
+            }
+        }
+
+        return 0;
     }
 }

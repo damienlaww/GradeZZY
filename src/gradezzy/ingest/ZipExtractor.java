@@ -16,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.zip.CRC32;
@@ -38,6 +39,11 @@ public class ZipExtractor {
 
     // Bytes read at once, so a large entry never has to fit in memory
     private static final int BUFFER_SIZE = 8192;
+
+    // The folder separators of a zip entry name: the standard one, and
+    // the one some Windows tools write instead
+    private static final String ENTRY_SEPARATOR = "/";
+    private static final String WINDOWS_SEPARATOR = "\\";
 
     // Device names have special meaning even when followed by a suffix.
     private static final String WINDOWS_DEVICE =
@@ -105,6 +111,33 @@ public class ZipExtractor {
                     + " Check the ZIP file and configured limits.",
                     exception);
         }
+    }
+
+    /**
+     * Lists the files inside a zip without unzipping it. Folder entries
+     * are left out and every name uses forward slashes.
+     *
+     * @param zipFile the zip file
+     * @return the file names, in the order the zip stores them
+     * @throws IngestException if the file is not a readable zip
+     */
+    public List<String> listFileNames(Path zipFile) throws IngestException {
+        List<String> names = new ArrayList<>();
+        try (ZipFile zip = new ZipFile(zipFile.toFile())) {
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                String name = entries.nextElement().getName()
+                        .replace(WINDOWS_SEPARATOR, ENTRY_SEPARATOR);
+                if (!name.endsWith(ENTRY_SEPARATOR)) {
+                    names.add(name);
+                }
+            }
+        } catch (IOException | IllegalArgumentException exception) {
+            // IllegalArgumentException: an entry name that is not valid text
+            throw new IngestException("Could not read " + zipFile + ": "
+                    + exception.getMessage(), exception);
+        }
+        return names;
     }
 
     /**

@@ -13,6 +13,7 @@ package gradezzy.grading;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Anomaly;
@@ -31,13 +32,10 @@ import gradezzy.model.SubmissionStatus;
  * only {@code Thread}, {@code Runnable} and {@code synchronized}. Each
  * submission is graded in its own working-copy folder and writes only to
  * its own {@code Submission} object, so the submissions do not interfere.
- * The two pieces of state the workers share, the handout of the next
- * submission and the failure counter, are guarded by {@code synchronized},
- * and every call to the progress listener goes through one lock so the
- * listener is never touched by two threads at once. Each worker thread
- * runs a {@code GradingWorker}, takes submissions from a
- * {@code SubmissionHandout} and reports through a
- * {@code SynchronizedProgressListener}; each is in its own file.
+ * The state the workers share, the handout of the next submission, is
+ * guarded by {@code synchronized}, and every call to the progress listener
+ * goes through one lock so the listener is never touched by two threads at
+ * once.
  *
  * <p>Tier: MUST. Owner: Jing Yuan.
  */
@@ -62,9 +60,6 @@ public class GradingPipeline {
     // The flag checked before each submission
     private final CancellationToken cancellationToken;
 
-    // How many failures were recorded, used to number their anomalies
-    private int failureCount = 0;
-
     /**
      * Creates an empty pipeline.
      *
@@ -81,6 +76,15 @@ public class GradingPipeline {
      */
     public void addStage(GradingStage stage) {
         stages.add(stage);
+    }
+
+    /**
+     * Returns the stages in the order they run.
+     *
+     * @return the stages
+     */
+    public List<GradingStage> getStages() {
+        return stages;
     }
 
     /**
@@ -130,7 +134,7 @@ public class GradingPipeline {
         List<Thread> workers = new ArrayList<>();
         for (int number = 0; number < workerCount; number++) {
             Thread worker = new Thread(
-                    new GradingWorker(this, handout, context, safeListener),
+                    new GradingWorker(handout, context, safeListener),
                     WORKER_NAME_PREFIX + number);
             workers.add(worker);
             worker.start();
@@ -162,18 +166,11 @@ public class GradingPipeline {
         }
     }
 
-    /**
-     * Grades one submission: skipped and marked CANCELLED if the run was
-     * cancelled, otherwise run through the stages. Always tells the
-     * listener the submission is finished. Shared by the in-order path
-     * and by each GradingWorker of the parallel path, which is why it is
-     * visible to the rest of the package.
-     *
-     * @param submission the submission to grade
-     * @param context the shared information the stages need
-     * @param listener the object told about progress
-     */
-    void gradeOne(Submission submission, GradingContext context,
+    // Grades one submission: skipped and marked CANCELLED if the run was
+    // cancelled, otherwise run through the stages. Always tells the
+    // listener the submission is finished. Shared by the in-order and the
+    // parallel paths.
+    private void gradeOne(Submission submission, GradingContext context,
             ProgressListener listener) {
         if (cancellationToken.isCancelled()) {
             submission.setStatus(SubmissionStatus.CANCELLED);
@@ -234,18 +231,119 @@ public class GradingPipeline {
         }
     }
 
-    // Turns a failure into an anomaly on the submission. Synchronized
-    // because workers share the failure counter; the submission itself is
-    // touched by only one worker.
-    private synchronized void recordFailure(Submission submission,
-            Exception exception) {
-        failureCount++;
+    // Turns a failure into an anomaly with an id unique across runs.
+    private void recordFailure(Submission submission, Exception exception) {
         String message = "Grading stopped early: " + exception.getMessage();
-        Anomaly anomaly = new Anomaly(FAILURE_ID_PREFIX + failureCount,
+        Anomaly anomaly = new Anomaly(FAILURE_ID_PREFIX + UUID.randomUUID(),
                 AnomalyType.INTERNAL_ERROR, Severity.ERROR,
                 submission.getUsername(), message, FAILURE_ACTION);
 
         submission.addAnomaly(anomaly);
         submission.setStatus(SubmissionStatus.FAILED);
+    }
+
+    /**
+     * Hands each submission to exactly one worker. The index is guarded by
+     * synchronized, so two workers never take the same submission and none
+     * is missed.
+     */
+    private static final class SubmissionHandout {
+
+        // The submissions, in batch order
+        private final List<Submission> submissions;
+
+        // The next submission to hand out
+        private int index = 0;
+
+        private SubmissionHandout(List<Submission> submissions) {
+            this.submissions = submissions;
+        }
+
+        // Returns the next submission, or null when there are none left.
+        private synchronized Submission next() {
+            if (index >= submissions.size()) {
+                return null;
+            }
+
+            Submission submission = submissions.get(index);
+            index++;
+            return submission;
+        }
+    }
+
+    /**
+     * A worker thread that grades submissions until the handout is empty.
+     */
+    private final class GradingWorker implements Runnable {
+
+        // Where the worker gets its next submission
+        private final SubmissionHandout handout;
+
+        // The shared read-only information the stages need
+        private final GradingContext context;
+
+        // The listener, already made safe for several threads
+        private final ProgressListener listener;
+
+        private GradingWorker(SubmissionHandout handout,
+                GradingContext context, ProgressListener listener) {
+            this.handout = handout;
+            this.context = context;
+            this.listener = listener;
+        }
+
+        @Override
+        public void run() {
+            Submission submission = handout.next();
+
+            while (submission != null) {
+                gradeOne(submission, context, listener);
+                submission = handout.next();
+            }
+        }
+    }
+
+    /**
+     * Wraps a progress listener so that only one worker is inside it at a
+     * time. This keeps the listener's own counters correct and stops two
+     * workers from interleaving the characters of one printed line. The
+     * lines of different submissions may still appear mixed together,
+     * which is expected when several are graded at once.
+     */
+    private static final class SynchronizedProgressListener
+            implements ProgressListener {
+
+        // The listener the window or console gave
+        private final ProgressListener delegate;
+
+        private SynchronizedProgressListener(ProgressListener delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public synchronized void onRunStarted(int totalSubmissions) {
+            delegate.onRunStarted(totalSubmissions);
+        }
+
+        @Override
+        public synchronized void onSubmissionStarted(Submission submission) {
+            delegate.onSubmissionStarted(submission);
+        }
+
+        @Override
+        public synchronized void onStageStarted(Submission submission,
+                String stageName) {
+            delegate.onStageStarted(submission, stageName);
+        }
+
+        @Override
+        public synchronized void onSubmissionFinished(Submission submission) {
+            delegate.onSubmissionFinished(submission);
+        }
+
+        @Override
+        public synchronized void onRunFinished(GradingRun gradingRun) {
+            delegate.onRunFinished(gradingRun);
+        }
     }
 }

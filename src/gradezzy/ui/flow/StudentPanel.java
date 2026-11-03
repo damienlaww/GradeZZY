@@ -14,6 +14,7 @@ package gradezzy.ui.flow;
 
 import java.util.List;
 
+import javafx.event.Event;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
@@ -192,10 +193,15 @@ public class StudentPanel extends ScrollPane {
         total.getStyleClass().add("big-total");
         total.setMinWidth(Region.USE_PREF_SIZE);
         Label max = Parts.muted("");
+        max.setMinWidth(Region.USE_PREF_SIZE);
         if (assessment != null) {
             max.setText("out of " + Parts.mark(assessment.getMaxTotal()));
         }
         Label pill = Students.pill(submission, window.getBackend());
+        // A long status, such as three questions that did not compile,
+        // may be shortened here; its tooltip keeps the whole text
+        pill.setMinWidth(0);
+        pill.setTooltip(new Tooltip(pill.getText()));
         HBox row = new HBox(Parts.GAP_SMALL, total, max, Parts.grow(),
                 pill);
         row.setAlignment(Pos.BASELINE_LEFT);
@@ -244,8 +250,7 @@ public class StudentPanel extends ScrollPane {
             Hyperlink adjust = Parts.link("Adjust",
                     () -> openAdjust(question.getId()));
             adjust.getStyleClass().add("small-text");
-            adjust.addEventHandler(MouseEvent.MOUSE_CLICKED,
-                    event -> event.consume());
+            adjust.addEventHandler(MouseEvent.MOUSE_CLICKED, Event::consume);
             top.getChildren().add(adjust);
         }
 
@@ -259,20 +264,12 @@ public class StudentPanel extends ScrollPane {
         details.setManaged(false);
         row.getChildren().add(details);
         row.getStyleClass().add("clickable");
-        top.setOnMouseClicked(event -> toggleDetails(details));
+        top.setOnMouseClicked(event -> {
+            details.setVisible(!details.isVisible());
+            details.setManaged(details.isVisible());
+        });
         Tooltip.install(top, new Tooltip("Show the tests"));
         return row;
-    }
-
-    /**
-     * Shows a question's details when they are hidden, and hides them
-     * when they are shown.
-     *
-     * @param details the reason, test squares and Grade again link
-     */
-    private void toggleDetails(VBox details) {
-        details.setVisible(!details.isVisible());
-        details.setManaged(details.isVisible());
     }
 
     // Builds what a click on a question shows.
@@ -295,7 +292,8 @@ public class StudentPanel extends ScrollPane {
         }
         if (backend.supports(Capability.RETRY_QUESTION)) {
             Hyperlink retry = Parts.link("Grade " + question.getId()
-                    + " again", () -> retryQuestion(backend, question));
+                    + " again", () -> apply(backend.retryQuestion(
+                    submission, question.getId()), true));
             retry.getStyleClass().add("small-text");
             details.getChildren().add(retry);
         }
@@ -307,15 +305,17 @@ public class StudentPanel extends ScrollPane {
         FlowPane tests = new FlowPane(TIGHT_GAP, TIGHT_GAP);
         tests.getStyleClass().add("test-squares");
         for (TestCaseResult test : results) {
-            String outcome = "failed";
-            if (test.isPassed()) {
-                outcome = "passed";
-            }
             Region square = new Region();
-            square.getStyleClass().addAll("test-square", outcome);
-            String detail = "Test " + test.getTestNumber() + ": " + outcome;
-            if (test.getDetail() != null && !test.getDetail().isEmpty()) {
-                detail = detail + "\n" + test.getDetail();
+            square.getStyleClass().addAll("test-square",
+                    test.isPassed() ? "passed" : "failed");
+            String verdict = test.isPassed() ? "passed" : "failed";
+            String detail = "Test " + test.getTestNumber() + ": " + verdict;
+            String output = test.getDetail();
+            // The tester's line is shown only when it says more, such as
+            // why a test failed
+            if (output != null && !output.trim().isEmpty()
+                    && !output.trim().equalsIgnoreCase(verdict)) {
+                detail = detail + "\n" + output;
             }
             Tooltip.install(square, new Tooltip(detail));
             tests.getChildren().add(square);
@@ -338,8 +338,11 @@ public class StudentPanel extends ScrollPane {
 
     // Returns the short reason for a question's mark.
     private String reasonFor(QuestionResult result) {
-        if (!result.isCompiled()) {
+        if (Students.didNotCompile(result)) {
             return "Did not compile.";
+        } else if (!result.isCompiled()) {
+            return "Not compiled, because the file or its tester is "
+                    + "missing.";
         }
         if (result.isTimedOut()) {
             return "A test ran too long and was stopped.";
@@ -414,7 +417,7 @@ public class StudentPanel extends ScrollPane {
         text.setMinWidth(0);
         HBox.setHgrow(text, Priority.ALWAYS);
         HBox line = new HBox(Parts.GAP, text, Parts.small("Undo",
-                () -> undoAdjustment(backend, change)));
+                () -> apply(backend.undoAdjustment(change), true)));
         line.setAlignment(Pos.CENTER_LEFT);
         return line;
     }
@@ -463,19 +466,21 @@ public class StudentPanel extends ScrollPane {
 
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         if (repair.isBlocked()) {
-            Label note = Parts.muted("This fix cannot be changed now.");
+            Label note = Parts.muted(repair.getNote());
             note.getStyleClass().add("small-text");
+            note.setWrapText(true);
             buttons.getChildren().add(note);
         } else if (status == FixStatus.APPLIED) {
             buttons.getChildren().addAll(
-                    Parts.small("Approve",
-                    () -> approveRepair(backend, repair)),
-                    Parts.small("Undo",
-                    () -> rejectRepair(backend, repair)));
+                    Parts.small("Approve", () -> apply(
+                    backend.approveRepair(repair), false)),
+                    Parts.small("Undo", () -> apply(
+                    backend.rejectRepair(repair), false)));
         } else if (ReviewRules.isRepairSettled(anomaly)
                 && backend.supports(Capability.REPAIR_DECISION_UNDO)) {
             buttons.getChildren().add(Parts.small("Change decision",
-                    () -> undoRepairDecision(backend, repair)));
+                    () -> apply(backend.undoRepairDecision(repair),
+                    false)));
         }
         addButtons(card, buttons);
         return card;
@@ -514,17 +519,20 @@ public class StudentPanel extends ScrollPane {
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         if (open && flag) {
             buttons.getChildren().addAll(
-                    Parts.small("Looks fine", () -> decide(backend,
-                    anomaly, ReviewDecision.REJECTED)),
-                    Parts.small("Keep flagged", () -> decide(backend,
-                    anomaly, ReviewDecision.REVIEWED)));
+                    Parts.small("Looks fine", () -> apply(
+                    backend.setDecision(anomaly, ReviewDecision.REJECTED),
+                    false)),
+                    Parts.small("Keep flagged", () -> apply(
+                    backend.setDecision(anomaly, ReviewDecision.REVIEWED),
+                    false)));
         } else if (open) {
             buttons.getChildren().add(Parts.small("Mark as checked",
-                    () -> decide(backend, anomaly,
-                    ReviewDecision.REVIEWED)));
+                    () -> apply(backend.setDecision(anomaly,
+                    ReviewDecision.REVIEWED), false)));
         } else if (decision != ReviewDecision.OPEN) {
-            buttons.getChildren().add(Parts.small("Reopen",
-                    () -> decide(backend, anomaly, ReviewDecision.OPEN)));
+            buttons.getChildren().add(Parts.small("Reopen", () -> apply(
+                    backend.setDecision(anomaly, ReviewDecision.OPEN),
+                    false)));
         }
         addButtons(card, buttons);
         return card;
@@ -572,95 +580,15 @@ public class StudentPanel extends ScrollPane {
         links.getStyleClass().add("panel-links");
         if (backend.supports(Capability.SOURCE_VIEW)) {
             links.getChildren().add(Parts.link("Open code and test output",
-                    () -> openCode()));
+                    () -> window.showSheet(CodeSheet.create(window,
+                    submission))));
         }
         if (backend.supports(Capability.RETRY_SUBMISSION)) {
             links.getChildren().add(Parts.link("Grade this student again",
-                    () -> retrySubmission(backend)));
+                    () -> apply(backend.retrySubmission(submission),
+                    true)));
         }
         return links;
-    }
-
-    // ---------------------------------------------------------- actions
-
-    /**
-     * Opens the sheet with the shown student's code and test output.
-     */
-    private void openCode() {
-        window.showSheet(CodeSheet.create(window, submission));
-    }
-
-    /**
-     * Grades the shown student again from the start.
-     *
-     * @param backend the backend that grades
-     */
-    private void retrySubmission(DashboardBackend backend) {
-        apply(backend.retrySubmission(submission), true);
-    }
-
-    /**
-     * Grades one question of the shown student again.
-     *
-     * @param backend the backend that grades
-     * @param question the question
-     */
-    private void retryQuestion(DashboardBackend backend, Question question) {
-        apply(backend.retryQuestion(submission, question.getId()), true);
-    }
-
-    /**
-     * Puts back a mark that was changed by hand.
-     *
-     * @param backend the backend that keeps the marks
-     * @param change the change to undo
-     */
-    private void undoAdjustment(DashboardBackend backend,
-            ScoreAdjustment change) {
-        apply(backend.undoAdjustment(change), true);
-    }
-
-    /**
-     * Approves a fix made for the student.
-     *
-     * @param backend the backend that keeps the fixes
-     * @param repair the fix
-     */
-    private void approveRepair(DashboardBackend backend, RepairItem repair) {
-        apply(backend.approveRepair(repair), false);
-    }
-
-    /**
-     * Undoes a fix made for the student.
-     *
-     * @param backend the backend that keeps the fixes
-     * @param repair the fix
-     */
-    private void rejectRepair(DashboardBackend backend, RepairItem repair) {
-        apply(backend.rejectRepair(repair), false);
-    }
-
-    /**
-     * Puts a settled fix back to waiting for a decision.
-     *
-     * @param backend the backend that keeps the fixes
-     * @param repair the fix
-     */
-    private void undoRepairDecision(DashboardBackend backend,
-            RepairItem repair) {
-        apply(backend.undoRepairDecision(repair), false);
-    }
-
-    /**
-     * Records a decision on a flag or problem.
-     *
-     * @param backend the backend that keeps the decisions
-     * @param anomaly the flag or problem
-     * @param decision the decision
-     */
-    private void decide(DashboardBackend backend, Anomaly anomaly,
-            ReviewDecision decision) {
-        apply(backend.setDecision(anomaly, decision), false);
     }
 
     // ----------------------------------------------------------- update

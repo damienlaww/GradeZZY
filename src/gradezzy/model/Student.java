@@ -15,6 +15,9 @@ package gradezzy.model;
  */
 public class Student {
 
+    // What the roster puts in a name column that has no name
+    private static final String EMPTY_NAME_PART = "_";
+
     // The id from the OrgDefinedId column
     private final String orgDefinedId;
 
@@ -91,5 +94,34 @@ public class Student {
      */
     public String getEmail() {
         return email;
+    }
+
+    /**
+     * Returns the first and last name, leaving out a part that is blank
+     * or the roster's "_".
+     *
+     * @return the full name, or an empty string when there is none
+     */
+    public String getFullName() {
+        boolean hasFirst = isName(firstName);
+        boolean hasLast = isName(lastName);
+
+        if (hasFirst && hasLast) {
+            return firstName.trim() + " " + lastName.trim();
+        } else if (hasFirst) {
+            return firstName.trim();
+        } else if (hasLast) {
+            return lastName.trim();
+        }
+        return "";
+    }
+
+    // Says whether a name column holds a name, not blank and not "_".
+    private boolean isName(String part) {
+        if (part == null) {
+            return false;
+        }
+        String trimmed = part.trim();
+        return !trimmed.isEmpty() && !trimmed.equals(EMPTY_NAME_PART);
     }
 }

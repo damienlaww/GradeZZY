@@ -9,7 +9,9 @@
 package gradezzy.exec;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +19,6 @@ import java.util.UUID;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
-import gradezzy.util.TextUtils;
 
 /**
  * Runs one compiled tester class with java.
@@ -26,6 +27,13 @@ import gradezzy.util.TextUtils;
  * the tester itself prints with a secret token. Every other line was
  * printed by student code, and is returned with STUDENT_LINE_PREFIX in
  * front so the score parser never counts it.
+ *
+ * <p>On macOS the tester runs inside sandbox-exec: it may write only in
+ * its own question folder, and may not read the other working copies,
+ * the backups or the submissions folder. JDK 24 removed the
+ * SecurityManager, so Java itself can no longer do this. Other systems
+ * have no built-in sandbox, so there student code keeps the instructor's
+ * file permissions and a note is printed once per run.
  *
  * <p>Tier: MUST. Owner: Zach.
  */
@@ -58,6 +66,28 @@ public class TesterRunner {
     private static final String NO_NATIVE_OPTION =
             "--illegal-native-access=deny";
 
+    // Point the home and temp folders at the question folder, so code
+    // that saves "to home" or "to temp" stays in its own working copy
+    private static final String HOME_OPTION = "-Duser.home=";
+    private static final String TEMP_OPTION = "-Djava.io.tmpdir=";
+
+    // Student prints may use half the output limit; the other half is
+    // kept for the tester's own lines, so they are never cut off
+    private static final int STUDENT_SHARE_DIVISOR = 2;
+
+    // The macOS sandbox tool and its option for an inline rule set
+    private static final String SANDBOX_COMMAND = "/usr/bin/sandbox-exec";
+    private static final String PROFILE_OPTION = "-p";
+
+    // The smallest rule set and command used to test the sandbox once
+    private static final String PROBE_RULES = "(version 1)(allow default)";
+    private static final String VERSION_OPTION = "-version";
+
+    // Printed once per run where no sandbox exists
+    private static final String NO_SANDBOX_NOTE = "Note: student code is "
+            + "not sandboxed on this system and can reach any file the "
+            + "instructor can.";
+
     // Exit code of a program that ended normally
     private static final int SUCCESS_EXIT_CODE = 0;
 
@@ -73,8 +103,12 @@ public class TesterRunner {
     // The helper that runs external commands
     private final ProcessRunner processRunner;
 
+    // Whether testers run inside the macOS sandbox
+    private final boolean sandboxed;
+
     /**
-     * Creates a new tester runner.
+     * Creates a new tester runner. One is made for each grading run, so
+     * the note about a missing sandbox is printed once per run.
      *
      * @param config the application settings
      * @param processRunner the helper that runs external commands
@@ -82,6 +116,34 @@ public class TesterRunner {
     public TesterRunner(AppConfig config, ProcessRunner processRunner) {
         this.config = config;
         this.processRunner = processRunner;
+        this.sandboxed = sandboxWorks();
+        if (!sandboxed) {
+            System.err.println(NO_SANDBOX_NOTE);
+        }
+    }
+
+    /**
+     * Says whether java can run inside the macOS sandbox. It is tried
+     * once, because the tool can exist and still refuse to start, and
+     * then every tester would fail.
+     *
+     * @return true if testers can run inside the sandbox
+     */
+    private boolean sandboxWorks() {
+        if (!Files.isExecutable(Path.of(SANDBOX_COMMAND))) {
+            return false;
+        }
+        List<String> command = List.of(SANDBOX_COMMAND, PROFILE_OPTION,
+                PROBE_RULES, config.getString(ConfigKeys.JAVA_COMMAND),
+                VERSION_OPTION);
+        try {
+            ProcessResult probe = processRunner.run(command,
+                    Path.of(CURRENT_FOLDER),
+                    config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS));
+            return probe.getExitCode() == SUCCESS_EXIT_CODE;
+        } catch (ProcessExecutionException exception) {
+            return false;
+        }
     }
 
     /**
@@ -101,14 +163,22 @@ public class TesterRunner {
         // The harness comes first, so a student class cannot replace it
         String classPath = harnessLocation() + File.pathSeparator
                 + CURRENT_FOLDER;
+        String folder = questionFolder.toAbsolutePath().toString();
+        int studentLimit = config.getInt(ConfigKeys.MAX_OUTPUT_CHARACTERS)
+                / STUDENT_SHARE_DIVISOR;
         List<String> command = new ArrayList<>();
-        command.add(config.getString(ConfigKeys.JAVA_COMMAND));
-        command.add(LIMIT_MODULES_OPTION);
-        command.add(NO_NATIVE_OPTION);
-        command.add(CLASSPATH_OPTION);
-        command.add(classPath);
-        command.add(TesterHarness.class.getName());
-        command.add(testerClassName);
+        if (sandboxed) {
+            command.add(SANDBOX_COMMAND);
+            command.add(PROFILE_OPTION);
+            command.add(sandboxRules(questionFolder));
+        }
+        command.addAll(List.of(
+                config.getString(ConfigKeys.JAVA_COMMAND),
+                LIMIT_MODULES_OPTION, NO_NATIVE_OPTION,
+                HOME_OPTION + folder, TEMP_OPTION + folder,
+                CLASSPATH_OPTION, classPath,
+                TesterHarness.class.getName(), testerClassName,
+                String.valueOf(studentLimit)));
         long timeoutSeconds = config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS);
         // A new random token for every run, sent where only the harness
         // reads it before any student code starts
@@ -131,9 +201,7 @@ public class TesterRunner {
      */
     private ProcessResult separateStudentLines(ProcessResult raw,
             String token) {
-        // The lines are joined once at the end: a student printing many
-        // short lines would make += copy the whole output again each time
-        List<String> lines = new ArrayList<>();
+        StringBuilder output = new StringBuilder();
         boolean finished = false;
 
         for (String line : raw.getStandardOutput().split(LINE_BREAK)) {
@@ -143,7 +211,8 @@ public class TesterRunner {
                 studentPart = line.substring(0, tokenStart);
             }
             if (!studentPart.isEmpty()) {
-                lines.add(STUDENT_LINE_PREFIX + studentPart + NEW_LINE);
+                output.append(STUDENT_LINE_PREFIX).append(studentPart)
+                        .append(NEW_LINE);
             }
 
             String testerLine = "";
@@ -153,7 +222,7 @@ public class TesterRunner {
             if (testerLine.equals(TesterHarness.FINISHED_LINE)) {
                 finished = true;
             } else if (tokenStart >= 0) {
-                lines.add(testerLine + NEW_LINE);
+                output.append(testerLine).append(NEW_LINE);
             }
         }
 
@@ -161,9 +230,70 @@ public class TesterRunner {
         if (exitCode == SUCCESS_EXIT_CODE && !finished && !raw.isTimedOut()) {
             exitCode = EARLY_EXIT_CODE;
         }
-        return new ProcessResult(exitCode, TextUtils.join("", lines),
+        return new ProcessResult(exitCode, output.toString(),
                 raw.getStandardError(), raw.isTimedOut(),
                 raw.getDurationMillis());
+    }
+
+    /**
+     * Builds the sandbox rules for one run. In these rules a later line
+     * wins over an earlier one, so the own question folder is allowed
+     * again after the folders around it are denied.
+     *
+     * @param questionFolder the question folder
+     * @return the rules, in the sandbox's own language
+     */
+    private String sandboxRules(Path questionFolder) {
+        String own = quotedPath(questionFolder);
+        // shortcut: covers the configured submissions folder only, not one
+        // chosen in the window; pass the batch folder in if that matters
+        return "(version 1)(allow default)"
+                + "(deny file-write*)"
+                + "(allow file-write* (subpath " + own + ")"
+                + " (literal \"/dev/null\"))"
+                + "(deny file-read-data"
+                + " (subpath " + configuredPath(ConfigKeys.WORKING_DIR) + ")"
+                + " (subpath " + configuredPath(ConfigKeys.BACKUP_DIR) + ")"
+                + " (subpath " + configuredPath(ConfigKeys.SUBMISSIONS_DIR)
+                + "))"
+                + "(allow file-read-data (subpath " + own + "))";
+    }
+
+    /**
+     * Returns a folder from the settings, quoted for the sandbox rules.
+     *
+     * @param key the setting name
+     * @return the quoted full path
+     */
+    private String configuredPath(String key) {
+        return quotedPath(Path.of(config.getString(key)));
+    }
+
+    /**
+     * Returns the real full path in double quotes. The sandbox compares
+     * real paths, so links such as /tmp to /private/tmp are followed.
+     *
+     * @param path the path
+     * @return the quoted path
+     */
+    private String quotedPath(Path path) {
+        String escaped = realPath(path).toString().replace("\\", "\\\\")
+                .replace("\"", "\\\"");
+        return "\"" + escaped + "\"";
+    }
+
+    /**
+     * Returns the real full path, following links.
+     *
+     * @param path the path
+     * @return the real path, or the plain full path if it does not exist
+     */
+    private Path realPath(Path path) {
+        try {
+            return path.toRealPath();
+        } catch (IOException exception) {
+            return path.toAbsolutePath().normalize();
+        }
     }
 
     /**

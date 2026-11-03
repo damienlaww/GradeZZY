@@ -9,9 +9,13 @@
  */
 package gradezzy.ui.flow;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import javafx.scene.control.Label;
 
 import gradezzy.model.Anomaly;
+import gradezzy.model.QuestionResult;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.DashboardBackend;
@@ -21,6 +25,9 @@ import gradezzy.ui.backend.ResultState;
  * Names and statuses of students.
  */
 public final class Students {
+
+    // The most questions named in a pill; more are counted instead
+    private static final int MAX_NAMED_QUESTIONS = 3;
 
     // Not used: every method is static.
     private Students() {
@@ -38,8 +45,7 @@ public final class Students {
         if (student == null) {
             return submission.getUsername();
         }
-        String name = (student.getFirstName() + " "
-                + student.getLastName()).trim();
+        String name = student.getFullName();
         if (name.isEmpty()) {
             return submission.getUsername();
         }
@@ -90,8 +96,53 @@ public final class Students {
             int open = openCount(submission, backend);
             return Parts.pill(Parts.plural(open, "thing") + " to check",
                     Tone.WARN);
+        } else if (state == ResultState.COMPILE_ERROR) {
+            return Parts.pill(compileWords(submission), tone(state));
         }
         return Parts.pill(words(state), tone(state));
+    }
+
+    /**
+     * Says whether a question was compiled and failed. A missing answer
+     * is not compiled either, but it has no compiler messages.
+     *
+     * @param result the result of one question
+     * @return true for a compile error
+     */
+    public static boolean didNotCompile(QuestionResult result) {
+        return !result.isCompiled() && result.getOutput() != null
+                && !result.getOutput().isEmpty();
+    }
+
+    /**
+     * Names the questions of a student that did not compile, such as
+     * "Q1a, Q2b did not compile". Missing answers are not named.
+     *
+     * @param submission the submission
+     * @return the words
+     */
+    public static String compileWords(Submission submission) {
+        List<String> questionIds = new ArrayList<>();
+        for (QuestionResult result : submission.getQuestionResults()) {
+            if (didNotCompile(result) && result.getQuestion() != null) {
+                questionIds.add(result.getQuestion().getId());
+            }
+        }
+
+        if (questionIds.isEmpty()) {
+            return words(ResultState.COMPILE_ERROR);
+        } else if (questionIds.size() > MAX_NAMED_QUESTIONS) {
+            return questionIds.size() + " questions did not compile";
+        }
+        StringBuilder text = new StringBuilder();
+        for (int index = 0; index < questionIds.size(); index++) {
+            if (index > 0) {
+                text.append(", ");
+            }
+            text.append(questionIds.get(index));
+        }
+        text.append(" did not compile");
+        return text.toString();
     }
 
     /**

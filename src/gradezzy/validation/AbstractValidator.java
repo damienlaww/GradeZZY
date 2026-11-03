@@ -24,7 +24,6 @@ import gradezzy.model.Assessment;
 import gradezzy.model.Question;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
-import gradezzy.util.FileUtils;
 
 /**
  * Shared code for all validators.
@@ -40,17 +39,17 @@ public abstract class AbstractValidator implements Validator {
 
     // The suggested actions, one for each type a validator reports
     private static final String WRAPPER_ACTION =
-            "Approve the fix if the new username folder is right.";
+            "Approve the repair if the new username folder is right.";
     private static final String FOLDER_NAME_ACTION =
             "Approve the rename to the username, or reject it.";
     private static final String QUESTION_FOLDER_ACTION =
-            "Ask for a corrected submission, or keep the questions in "
-            + "that folder at 0.";
+            "Approve the move or rename if the folder was found elsewhere. "
+            + "If it is truly missing, ask for a corrected submission, or "
+            + "keep its questions at 0.";
     private static final String MISSING_FILE_ACTION =
             "Ask for a corrected submission, or keep the question at 0.";
     private static final String FILE_NAME_ACTION =
-            "Rename the file by hand. No automatic fix exists for file "
-            + "names.";
+            "Approve the rename to the required name, or reject it.";
     private static final String HEADER_ACTION =
             "Approve the name taken from the roster, or reject it.";
     private static final String UNREADABLE_ACTION =
@@ -184,10 +183,8 @@ public abstract class AbstractValidator implements Validator {
     protected List<Path> listFolders(Path directory) throws IOException {
         List<Path> folders = new ArrayList<>();
 
-        DirectoryStream<Path> children = null;
-
-        try {
-            children = Files.newDirectoryStream(directory);
+        try (DirectoryStream<Path> children =
+                Files.newDirectoryStream(directory)) {
             for (Path child : children) {
                 String childName = child.getFileName().toString();
 
@@ -196,8 +193,6 @@ public abstract class AbstractValidator implements Validator {
                     folders.add(child);
                 }
             }
-        } finally {
-            FileUtils.closeIfOpen(children);
         }
 
         Collections.sort(folders);
@@ -214,17 +209,13 @@ public abstract class AbstractValidator implements Validator {
     protected List<Path> listFiles(Path directory) throws IOException {
         List<Path> files = new ArrayList<>();
 
-        DirectoryStream<Path> children = null;
-
-        try {
-            children = Files.newDirectoryStream(directory);
+        try (DirectoryStream<Path> children =
+                Files.newDirectoryStream(directory)) {
             for (Path child : children) {
                 if (Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS)) {
                     files.add(child);
                 }
             }
-        } finally {
-            FileUtils.closeIfOpen(children);
         }
 
         Collections.sort(files);

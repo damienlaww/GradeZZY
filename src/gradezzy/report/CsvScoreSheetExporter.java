@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import gradezzy.config.AppConfig;
@@ -204,12 +205,18 @@ public class CsvScoreSheetExporter implements Exporter {
         return columnIndex;
     }
 
-    // Maps each username to its submission for a quick lookup per row
+    // Maps each username, in lower case, to its submission, so an upload
+    // named PING.LEE.2023 still fills the row of ping.lee.2023. A
+    // rejected duplicate never replaces a submission that was loaded.
     private Map<String, Submission> indexByUsername(
             List<Submission> submissions) {
         Map<String, Submission> submissionsByUsername = new HashMap<>();
         for (Submission submission : submissions) {
-            submissionsByUsername.put(submission.getUsername(), submission);
+            String key = submission.getUsername().toLowerCase(Locale.ROOT);
+            Submission earlier = submissionsByUsername.get(key);
+            if (earlier == null || earlier.getIngestFailure() != null) {
+                submissionsByUsername.put(key, submission);
+            }
         }
         return submissionsByUsername;
     }
@@ -229,7 +236,8 @@ public class CsvScoreSheetExporter implements Exporter {
         }
 
         String username = removeIdPrefix(values.get(usernameIndex));
-        Submission submission = submissionsByUsername.get(username);
+        Submission submission = submissionsByUsername.get(
+                username.toLowerCase(Locale.ROOT));
         values.set(numeratorIndex, formatScore(submission));
         return TextUtils.joinCsvLine(values);
     }

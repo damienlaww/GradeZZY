@@ -33,7 +33,7 @@ public class HardCodedAnswerDetector implements Detector {
     private static final int MIN_LITERAL_BRANCHES = 3;
 
     // Values honest code compares with all the time, so they do not count
-    private static final String[] COMMON_VALUES = {"0", "1", "-1", "\"\""};
+    private static final String[] COMMON_VALUES = {"0", "1", "-1"};
 
     // The text in front of the id of every flag a detector raises
     private static final String ID_PREFIX = "detection-";
@@ -47,16 +47,32 @@ public class HardCodedAnswerDetector implements Detector {
     private static final String IF_KEYWORD = "if";
     private static final String CASE_KEYWORD = "case";
 
-    // The two ways to compare for equality
+    // The ways to test a value against a literal
     private static final String EQUALS_OPERATOR = "==";
     private static final String EQUALS_METHOD = ".equals";
+    private static final String CONTAINS_METHOD = ".contains";
+
+    // The signs of a calculation, such as the % in i % 2
+    private static final String ARITHMETIC_SIGNS = "+-*/%";
+
+    // The arrow after a label such as case 3 ->, which is not a minus sign
+    private static final String ARROW = "->";
 
     // The brackets around a condition or an argument
     private static final char OPEN_PAREN = '(';
     private static final char CLOSE_PAREN = ')';
 
+    // The bracket that ends an array index, as in a[i] - 5
+    private static final char CLOSE_BRACKET = ']';
+
     // The sign in front of a negative number
     private static final char MINUS = '-';
+
+    // Starts an escape such as \n inside a literal
+    private static final char BACKSLASH = '\\';
+
+    // The length of a simple escape: the backslash and one character
+    private static final int ESCAPE_LENGTH = 2;
 
     // The point inside a decimal number such as 3.5
     private static final char DECIMAL_POINT = '.';
@@ -104,36 +120,39 @@ public class HardCodedAnswerDetector implements Detector {
         return flags;
     }
 
-    // Flags each answer method with too many literal branches.
+    // Flags each answer method, overloads too, with too many literal branches.
     private void checkMethods(List<Anomaly> flags, Submission submission,
             Question question, String studentText) {
         String code = JavaSourceText.removeComments(studentText);
 
         for (String methodName : JavaSourceText.findAnswerMethodNames(code)) {
-            String body = JavaSourceText.findMethodBody(code, methodName);
-            int literalBranches = countLiteralBranches(
-                    JavaSourceText.blankLiterals(body));
+            for (String body : JavaSourceText.findMethodBodies(code,
+                    methodName)) {
+                int literalBranches = countLiteralBranches(body);
 
-            if (literalBranches >= MIN_LITERAL_BRANCHES) {
-                flags.add(createFlag(submission,
-                        JavaSourceText.describeFile(question) + ": "
-                        + methodName + " has " + literalBranches + " if or "
-                        + "case branches that compare a value with a fixed "
-                        + "literal, so it may be hard-coded to the sample "
-                        + "cases."));
+                if (literalBranches >= MIN_LITERAL_BRANCHES) {
+                    flags.add(createFlag(submission,
+                            JavaSourceText.describeFile(question) + ": "
+                            + methodName + " has " + literalBranches
+                            + " if or case branches that compare a value "
+                            + "with a fixed literal, so it may be "
+                            + "hard-coded to the sample cases."));
+                }
             }
         }
     }
 
     // Counts the if and case branches that compare a value with a literal.
     private int countLiteralBranches(String body) {
+        // Keywords and brackets inside a literal are hidden in this copy
+        String blanked = JavaSourceText.blankLiterals(body);
         int count = 0;
 
-        for (int i = 0; i < body.length(); i++) {
-            if (isKeywordAt(body, i, IF_KEYWORD)
-                    && comparesWithLiteral(findCondition(body, i))) {
+        for (int i = 0; i < blanked.length(); i++) {
+            if (isKeywordAt(blanked, i, IF_KEYWORD)
+                    && comparesWithLiteral(findCondition(body, blanked, i))) {
                 count++;
-            } else if (isKeywordAt(body, i, CASE_KEYWORD)
+            } else if (isKeywordAt(blanked, i, CASE_KEYWORD)
                     && isSampleValue(readLiteralAt(body,
                     i + CASE_KEYWORD.length()))) {
                 count++;
@@ -155,14 +174,14 @@ public class HardCodedAnswerDetector implements Detector {
     }
 
     // Returns the condition in the brackets after the if keyword.
-    private String findCondition(String body, int ifIndex) {
-        int openIndex = body.indexOf(OPEN_PAREN, ifIndex);
+    private String findCondition(String body, String blanked, int ifIndex) {
+        int openIndex = blanked.indexOf(OPEN_PAREN, ifIndex);
 
         if (openIndex < 0) {
             return "";
         }
 
-        int closeIndex = JavaSourceText.findClosingBracket(body, openIndex,
+        int closeIndex = JavaSourceText.findClosingBracket(blanked, openIndex,
                 OPEN_PAREN, CLOSE_PAREN);
 
         return body.substring(openIndex + 1, closeIndex);
@@ -170,8 +189,10 @@ public class HardCodedAnswerDetector implements Detector {
 
     // Says whether a condition compares something with a literal.
     private boolean comparesWithLiteral(String condition) {
-        for (int i = 0; i < condition.length(); i++) {
-            int rightStart = findRightOperand(condition, i);
+        String blanked = JavaSourceText.blankLiterals(condition);
+
+        for (int i = 0; i < blanked.length(); i++) {
+            int rightStart = findRightOperand(blanked, i);
 
             if (rightStart != NOT_FOUND
                     && (isSampleValue(readLiteralBefore(condition, i))
@@ -183,11 +204,12 @@ public class HardCodedAnswerDetector implements Detector {
         return false;
     }
 
-    // Returns where the value after == or .equals( starts, or NOT_FOUND.
+    // Returns where the value after ==, .equals( or .contains( starts.
     private int findRightOperand(String condition, int index) {
         if (condition.startsWith(EQUALS_OPERATOR, index)) {
             return index + EQUALS_OPERATOR.length();
-        } else if (condition.startsWith(EQUALS_METHOD, index)) {
+        } else if (condition.startsWith(EQUALS_METHOD, index)
+                || condition.startsWith(CONTAINS_METHOD, index)) {
             return condition.indexOf(OPEN_PAREN, index) + 1;
         }
 
@@ -218,10 +240,39 @@ public class HardCodedAnswerDetector implements Detector {
             start--;
         }
 
-        if (start < end && Character.isDigit(text.charAt(start))) {
+        boolean isNumber = start < end
+                && Character.isDigit(text.charAt(start));
+
+        // The minus of a negative number such as -5 belongs to it
+        if (isNumber && start > 0 && text.charAt(start - 1) == MINUS
+                && isNegativeSign(text, start - 1)) {
+            start--;
+        }
+
+        if (isNumber && !isInCalculation(text, start, end)) {
             return text.substring(start, end);
         }
         return "";
+    }
+
+    // Says whether a minus starts a number, as in (-5 or == -5, because
+    // nothing before it can end a value, unlike the minus in n - 5.
+    private boolean isNegativeSign(String text, int minusIndex) {
+        int before = minusIndex - 1;
+
+        while (before >= 0 && Character.isWhitespace(text.charAt(before))) {
+            before--;
+        }
+
+        if (before < 0) {
+            return true;
+        }
+
+        char previous = text.charAt(before);
+
+        return !Character.isJavaIdentifierPart(previous)
+                && previous != CLOSE_PAREN && previous != CLOSE_BRACKET
+                && !JavaSourceText.isQuote(previous);
     }
 
     // Returns the literal that starts at index, or "" if none.
@@ -256,21 +307,72 @@ public class HardCodedAnswerDetector implements Detector {
             end++;
         }
 
-        if (end > digitsStart && Character.isDigit(text.charAt(digitsStart))) {
+        boolean isNumber = end > digitsStart
+                && Character.isDigit(text.charAt(digitsStart));
+
+        if (isNumber && !isInCalculation(text, start, end)) {
             return text.substring(start, end);
         }
         return "";
     }
 
-    // Says whether a literal is a sample value, not a common one like 0.
+    // Says whether a sign such as % is next to a number, as in i % 2.
+    private boolean isInCalculation(String text, int start, int end) {
+        int before = start - 1;
+
+        while (before >= 0 && Character.isWhitespace(text.charAt(before))) {
+            before--;
+        }
+
+        int after = end;
+
+        while (after < text.length()
+                && Character.isWhitespace(text.charAt(after))) {
+            after++;
+        }
+
+        boolean signBefore = before >= 0
+                && ARITHMETIC_SIGNS.indexOf(text.charAt(before)) >= 0;
+        boolean signAfter = after < text.length()
+                && ARITHMETIC_SIGNS.indexOf(text.charAt(after)) >= 0
+                && !text.startsWith(ARROW, after);
+
+        return signBefore || signAfter;
+    }
+
+    // Says whether a literal is a sample value, not 0 or a separator.
     private boolean isSampleValue(String literal) {
-        if (literal.isEmpty()) {
+        if (literal.isEmpty() || isSeparator(literal)) {
             return false;
         }
 
         for (String commonValue : COMMON_VALUES) {
             if (literal.equals(commonValue)) {
                 return false;
+            }
+        }
+        return true;
+    }
+
+    // Says whether a quoted literal holds only signs and escapes, such as
+    // "-", ", " or '\n', with no letter or digit of its own.
+    private boolean isSeparator(String literal) {
+        if (!JavaSourceText.isQuote(literal.charAt(0))) {
+            return false;
+        }
+
+        int index = 0;
+
+        while (index < literal.length()) {
+            char current = literal.charAt(index);
+
+            if (current == BACKSLASH) {
+                // The n of \n is part of the escape, not a letter
+                index += ESCAPE_LENGTH;
+            } else if (Character.isLetterOrDigit(current)) {
+                return false;
+            } else {
+                index++;
             }
         }
         return true;

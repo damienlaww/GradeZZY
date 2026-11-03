@@ -271,6 +271,27 @@ public class FlowWindow {
     }
 
     /**
+     * Shows the screen on display again with fresh data, keeping any open
+     * sheet. Called when grading ends while another screen is open.
+     */
+    public void refreshScreen() {
+        FlowScreen screen = currentScreen();
+        actionBar.reset();
+        content.getChildren().setAll(screen.getView());
+        stepBar.update(currentStep, state.getFurthest(), false);
+        screen.onShow();
+    }
+
+    /**
+     * Forgets the run shown on Review and Export, so Marking starts again
+     * on Set up. Called after a restore replaced the saved results.
+     */
+    public void forgetRun() {
+        state.restart();
+        currentStep = Step.SET_UP;
+    }
+
+    /**
      * Says whether a screen is the one the instructor sees now.
      *
      * @param screen the screen

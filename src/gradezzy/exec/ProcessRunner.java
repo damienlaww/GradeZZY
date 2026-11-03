@@ -15,7 +15,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
@@ -37,9 +36,6 @@ public class ProcessRunner {
 
     // Milliseconds in one second
     private static final long MILLIS_PER_SECOND = 1000;
-
-    // Size of the buffer used to read the rest of the output at the end
-    private static final int READ_BUFFER_SIZE = 8192;
 
     // The application settings
     private final AppConfig config;
@@ -97,11 +93,36 @@ public class ProcessRunner {
         long startMillis = System.currentTimeMillis();
         long deadlineMillis = startMillis + timeoutSeconds * MILLIS_PER_SECOND;
         Process process = startProcess(command, workingDirectory, input);
+        StringBuilder outputText = new StringBuilder();
+        StringBuilder errorText = new StringBuilder();
         List<ProcessHandle> children = new ArrayList<>();
+        boolean timedOut = false;
 
-        try {
-            return collectOutput(process, children, startMillis,
-                    deadlineMillis, maxCharacters);
+        try (InputStream output = process.getInputStream();
+                InputStream error = process.getErrorStream()) {
+            while (process.isAlive() && !timedOut) {
+                rememberChildren(process, children);
+                readAvailable(output, outputText, maxCharacters);
+                readAvailable(error, errorText, maxCharacters);
+
+                if (System.currentTimeMillis() > deadlineMillis) {
+                    terminate(process);
+                    timedOut = true;
+                } else {
+                    Thread.sleep(POLL_INTERVAL_MILLIS);
+                }
+            }
+
+            int exitCode = process.waitFor();
+            // Killing a process closes its streams, so after a timeout
+            // only the output read inside the loop is kept
+            if (!timedOut) {
+                readRemaining(output, outputText, maxCharacters);
+                readRemaining(error, errorText, maxCharacters);
+            }
+            long durationMillis = System.currentTimeMillis() - startMillis;
+            return new ProcessResult(exitCode, outputText.toString(),
+                    errorText.toString(), timedOut, durationMillis);
         } catch (IOException exception) {
             terminate(process);
             throw new ProcessExecutionException(
@@ -120,77 +141,6 @@ public class ProcessRunner {
     }
 
     /**
-     * Waits for the process, up to the deadline, while reading its output
-     * and remembering its child processes. Both output streams are closed
-     * before this returns or throws.
-     *
-     * @param process the running process
-     * @param children the children seen so far, added to while it runs
-     * @param startMillis when the process was started
-     * @param deadlineMillis when the process must be stopped
-     * @param maxCharacters the most characters to keep of each output
-     * @return the exit code, output and timeout flag
-     * @throws IOException if the output cannot be read
-     * @throws InterruptedException if the grading run was cancelled
-     */
-    private ProcessResult collectOutput(Process process,
-            List<ProcessHandle> children, long startMillis,
-            long deadlineMillis, int maxCharacters)
-            throws IOException, InterruptedException {
-        InputStream output = process.getInputStream();
-        InputStream error = process.getErrorStream();
-        String outputText = "";
-        String errorText = "";
-        boolean timedOut = false;
-
-        try {
-            while (process.isAlive() && !timedOut) {
-                rememberChildren(process, children);
-                outputText = readAvailable(output, outputText, maxCharacters);
-                errorText = readAvailable(error, errorText, maxCharacters);
-
-                if (System.currentTimeMillis() > deadlineMillis) {
-                    terminate(process);
-                    timedOut = true;
-                } else {
-                    Thread.sleep(POLL_INTERVAL_MILLIS);
-                }
-            }
-
-            int exitCode = process.waitFor();
-            // Killing a process closes its streams, so after a timeout
-            // only the output read inside the loop is kept
-            if (!timedOut) {
-                outputText = readRemaining(output, outputText, maxCharacters);
-                errorText = readRemaining(error, errorText, maxCharacters);
-            }
-            long durationMillis = System.currentTimeMillis() - startMillis;
-            return new ProcessResult(exitCode, outputText, errorText,
-                    timedOut, durationMillis);
-        } finally {
-            closeStreams(output, error);
-        }
-    }
-
-    /**
-     * Closes both output streams of a process, the error stream first.
-     * The normal output stream is closed even if closing the error stream
-     * fails.
-     *
-     * @param output the normal output of the process
-     * @param error the error output of the process
-     * @throws IOException if a stream cannot be closed
-     */
-    private void closeStreams(InputStream output, InputStream error)
-            throws IOException {
-        try {
-            error.close();
-        } finally {
-            output.close();
-        }
-    }
-
-    /**
      * Stops a process and any child processes it started.
      *
      * @param process the process
@@ -202,28 +152,11 @@ public class ProcessRunner {
 
         // Collect the children first: once the parent dies they are
         // handed to the operating system and can no longer be found here
-        List<ProcessHandle> descendants = listDescendants(process);
+        List<ProcessHandle> descendants = process.descendants().toList();
         for (ProcessHandle descendant : descendants) {
             descendant.destroyForcibly();
         }
         process.destroyForcibly();
-    }
-
-    /**
-     * Lists the child processes of a process running now, and their
-     * children in turn. The JDK hands them out one at a time, so they are
-     * copied into a list first.
-     *
-     * @param process the process
-     * @return the descendants found
-     */
-    private List<ProcessHandle> listDescendants(Process process) {
-        List<ProcessHandle> descendants = new ArrayList<>();
-        Iterator<ProcessHandle> found = process.descendants().iterator();
-        while (found.hasNext()) {
-            descendants.add(found.next());
-        }
-        return descendants;
     }
 
     /**
@@ -235,7 +168,7 @@ public class ProcessRunner {
      */
     private void rememberChildren(Process process,
             List<ProcessHandle> children) {
-        List<ProcessHandle> descendants = listDescendants(process);
+        List<ProcessHandle> descendants = process.descendants().toList();
         for (ProcessHandle descendant : descendants) {
             if (!children.contains(descendant)) {
                 children.add(descendant);
@@ -280,8 +213,8 @@ public class ProcessRunner {
 
         // A program waiting for keyboard input gets end-of-input right
         // after the text instead of hanging until the time limit
-        try {
-            sendInput(process.getOutputStream(), input);
+        try (OutputStream stdin = process.getOutputStream()) {
+            stdin.write(input.getBytes(StandardCharsets.UTF_8));
         } catch (IOException exception) {
             terminate(process);
             throw new ProcessExecutionException(
@@ -291,89 +224,62 @@ public class ProcessRunner {
     }
 
     /**
-     * Writes the text to the standard input of a process, then closes it.
-     * The stream is closed even if writing fails.
-     *
-     * @param stdin the standard input of the process
-     * @param input the text to send
-     * @throws IOException if the text cannot be written or the stream
-     *         cannot be closed
-     */
-    private void sendInput(OutputStream stdin, String input)
-            throws IOException {
-        try {
-            stdin.write(input.getBytes(StandardCharsets.UTF_8));
-        } finally {
-            stdin.close();
-        }
-    }
-
-    /**
      * Reads whatever output is ready now, without waiting for more.
      *
      * @param stream the output of the process
-     * @param text the output collected so far
+     * @param text where the output is collected
      * @param maxCharacters the most characters to keep
-     * @return the output collected so far with the new output added
      * @throws IOException if the output cannot be read
      */
-    private String readAvailable(InputStream stream, String text,
+    private void readAvailable(InputStream stream, StringBuilder text,
             int maxCharacters) throws IOException {
         int available = stream.available();
         if (available <= 0) {
-            return text;
+            return;
         }
 
         byte[] buffer = new byte[available];
         int count = stream.read(buffer);
-        return appendCapped(text, buffer, count, maxCharacters);
+        appendCapped(text, buffer, count, maxCharacters);
     }
 
     /**
-     * Reads the output that is left after the process has stopped.
+     * Reads the output that is left after the process has stopped. Only
+     * what is already waiting is read: a program the process started can
+     * keep the pipe open, and on Windows a read that waits for the end of
+     * the pipe would then wait forever.
      *
      * @param stream the output of the process
-     * @param text the output collected so far
+     * @param text where the output is collected
      * @param maxCharacters the most characters to keep
-     * @return the output collected so far with the rest added
      * @throws IOException if the output cannot be read
      */
-    private String readRemaining(InputStream stream, String text,
+    private void readRemaining(InputStream stream, StringBuilder text,
             int maxCharacters) throws IOException {
-        byte[] buffer = new byte[READ_BUFFER_SIZE];
-        String collected = text;
-        int count = stream.read(buffer);
-
-        while (count != -1) {
-            collected = appendCapped(collected, buffer, count,
-                    maxCharacters);
-            count = stream.read(buffer);
+        while (stream.available() > 0) {
+            readAvailable(stream, text, maxCharacters);
         }
-        return collected;
     }
 
     /**
      * Adds bytes to the collected text, dropping anything past the limit.
-     * The bytes are still read, so the process never blocks. Each call
-     * adds one chunk of at most a few thousand characters and the total is
-     * capped, so joining Strings with + stays quick.
+     * The bytes are still read, so the process never blocks.
      *
-     * @param text the output collected so far
+     * @param text where the output is collected
      * @param buffer the bytes read
      * @param count how many bytes of the buffer are valid
      * @param maxCharacters the most characters to keep
-     * @return the collected text with the new characters added
      */
-    private String appendCapped(String text, byte[] buffer, int count,
+    private void appendCapped(StringBuilder text, byte[] buffer, int count,
             int maxCharacters) {
         int room = maxCharacters - text.length();
         if (count <= 0 || room <= 0) {
-            return text;
+            return;
         }
 
         // shortcut: a character split across two reads may be garbled;
         // fine for the ASCII tester output, upgrade to a Reader if not
         String chunk = new String(buffer, 0, count);
-        return text + chunk.substring(0, Math.min(room, chunk.length()));
+        text.append(chunk, 0, Math.min(room, chunk.length()));
     }
 }

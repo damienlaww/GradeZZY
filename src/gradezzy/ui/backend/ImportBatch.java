@@ -10,8 +10,12 @@ package gradezzy.ui.backend;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
+import gradezzy.ingest.SubmissionLoader;
 import gradezzy.testcase.TestCase;
 
 /**
@@ -139,30 +143,62 @@ public class ImportBatch {
     }
 
     /**
-     * Returns the state to show for a file. A later submission for a
-     * student who already has a usable one is a duplicate.
+     * Returns the state to show for a file. When a file or folder is
+     * chosen twice, or a student has two usable files, the one grading
+     * leaves out is a duplicate. Both are still sent to grading, which
+     * grades one file per student and notes the other on that student.
      *
      * @param item a file of this batch
      * @return the state to show
      */
     public ImportState getEffectiveState(ImportItem item) {
-        if (item.getKind() != InputKind.SUBMISSION
-                || !item.getState().isUsable()) {
-            return item.getState();
-        }
-
-        for (ImportItem other : items) {
-            if (other == item) {
-                return item.getState();
-            }
-            if (other.getKind() == InputKind.SUBMISSION
-                    && other.getState().isUsable()
-                    && other.getUsername().equalsIgnoreCase(
-                            item.getUsername())) {
-                return ImportState.DUPLICATE;
-            }
+        if (findGradedInstead(item) != null) {
+            return ImportState.DUPLICATE;
         }
         return item.getState();
+    }
+
+    /**
+     * Returns the file grading keeps in place of this one, by the rule
+     * grading uses: the file without a copy number such as (1), else the
+     * lowest number; then, for one username in two letter cases, the
+     * lower-case one; then the file chosen first.
+     *
+     * @param item a file of this batch
+     * @return the file graded instead, or null when this file is graded
+     */
+    public ImportItem findGradedInstead(ImportItem item) {
+        if (item.getKind() != InputKind.SUBMISSION
+                || !item.getState().isUsable()) {
+            return null;
+        }
+
+        ImportItem kept = item;
+        for (ImportItem other : getItems(InputKind.SUBMISSION)) {
+            if (other != item && other.getState().isUsable()
+                    && isSameUpload(other, item)
+                    && isGradedBefore(other, kept)) {
+                kept = other;
+            }
+        }
+        if (kept == item) {
+            return null;
+        }
+        return kept;
+    }
+
+    /**
+     * Says whether a file is left out because the very same file was
+     * chosen before. Grading then says the file was chosen more than once
+     * and graded once.
+     *
+     * @param item a file of this batch
+     * @return true when the file graded instead is the same file
+     */
+    public boolean isChosenAgain(ImportItem item) {
+        ImportItem kept = findGradedInstead(item);
+        return kept != null && kept.getPath().toAbsolutePath().normalize()
+                .equals(item.getPath().toAbsolutePath().normalize());
     }
 
     /**
@@ -180,6 +216,44 @@ public class ImportBatch {
             }
         }
         return total;
+    }
+
+    /**
+     * Counts the different students in the usable submission files. A
+     * folder of zips or a zip of student zips counts each student inside,
+     * and a student in two files counts once, as grading keeps only one.
+     *
+     * @return the number of students
+     */
+    public int countStudents() {
+        Set<String> seen = new HashSet<>();
+        for (String username : listStudents()) {
+            seen.add(username.toLowerCase(Locale.ROOT));
+        }
+        return seen.size();
+    }
+
+    /**
+     * Lists the usernames found in more than one usable submission, across
+     * every chosen file and folder. Grading grades one file per student
+     * (the one without a copy number such as (1), else the lowest number,
+     * else the one named in lower case, else the first chosen) and notes
+     * the others on that student. Case does not matter. A file
+     * chosen again (see isChosenAgain) is not counted twice.
+     *
+     * @return each repeated username once, in the order first repeated
+     */
+    public List<String> listDuplicateUsernames() {
+        Set<String> seen = new HashSet<>();
+        Set<String> repeated = new HashSet<>();
+        List<String> duplicates = new ArrayList<>();
+        for (String username : listStudents()) {
+            String key = username.toLowerCase(Locale.ROOT);
+            if (!seen.add(key) && repeated.add(key)) {
+                duplicates.add(username);
+            }
+        }
+        return duplicates;
     }
 
     /**
@@ -226,7 +300,8 @@ public class ImportBatch {
 
         int invalid = count(InputKind.SUBMISSION, ImportState.INVALID);
         if (invalid > 0) {
-            reasons.add(invalid + " ZIP file" + plural(invalid)
+            reasons.add(invalid + " chosen file" + plural(invalid)
+                    + " or folder" + plural(invalid)
                     + " cannot be used. Replace or remove "
                     + pronoun(invalid) + ".");
         }
@@ -249,6 +324,52 @@ public class ImportBatch {
      */
     public boolean isReady() {
         return getBlockingReasons().isEmpty();
+    }
+
+    // Says whether two uploads are the same path, or one student's file
+    // twice. A folder or zip of several students has no username.
+    private boolean isSameUpload(ImportItem first, ImportItem second) {
+        if (first.getPath().equals(second.getPath())) {
+            return true;
+        }
+        return !second.getUsername().isEmpty()
+                && first.getUsername().equalsIgnoreCase(
+                        second.getUsername());
+    }
+
+    // Says whether grading keeps the first of two files of one student,
+    // by the rule findGradedInstead describes.
+    private boolean isGradedBefore(ImportItem first, ImportItem second) {
+        int firstCopy = SubmissionLoader.readCopyNumber(first.getName());
+        int secondCopy = SubmissionLoader.readCopyNumber(second.getName());
+        if (firstCopy != secondCopy) {
+            return firstCopy < secondCopy;
+        }
+
+        boolean firstLower = isLowerCase(first.getUsername());
+        boolean secondLower = isLowerCase(second.getUsername());
+        if (firstLower != secondLower) {
+            return firstLower;
+        }
+        return items.indexOf(first) < items.indexOf(second);
+    }
+
+    // Says whether a username has no capital letter.
+    private boolean isLowerCase(String username) {
+        return username.equals(username.toLowerCase(Locale.ROOT));
+    }
+
+    // Lists the students of every usable submission, in the order
+    // grading meets them; duplicates are still sent to grading. A file
+    // chosen again is left out, as grading grades it once.
+    private List<String> listStudents() {
+        List<String> students = new ArrayList<>();
+        for (ImportItem item : getItems(InputKind.SUBMISSION)) {
+            if (item.getState().isUsable() && !isChosenAgain(item)) {
+                students.addAll(item.getStudents());
+            }
+        }
+        return students;
     }
 
     // Adds the reason a required single-file group blocks grading.

@@ -9,8 +9,8 @@
 package gradezzy.model;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * One student's submission and everything learnt about it.
@@ -40,11 +40,16 @@ public class Submission {
     // The grading status
     private SubmissionStatus status = SubmissionStatus.PENDING;
 
+    // The two lists below are copy-on-write: each change builds a new copy,
+    // so the window can loop over them while a grading thread adds to or
+    // clears them for Retry, without a ConcurrentModificationException.
+
     // The problems found so far
-    private final List<Anomaly> anomalies = new ArrayList<>();
+    private final List<Anomaly> anomalies = new CopyOnWriteArrayList<>();
 
     // The result of each question
-    private final List<QuestionResult> questionResults = new ArrayList<>();
+    private final List<QuestionResult> questionResults =
+            new CopyOnWriteArrayList<>();
 
     /**
      * Creates a new submission.

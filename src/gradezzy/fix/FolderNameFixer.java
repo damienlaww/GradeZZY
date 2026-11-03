@@ -29,9 +29,6 @@ public class FolderNameFixer extends AbstractFixer {
      */
     public static final String NAME = "Rename folder to username";
 
-    // A temporary name ending used when only the letter case changes
-    private static final String CASE_RENAME_SUFFIX = ".renaming";
-
     /**
      * Creates a new folder name fixer.
      */
@@ -79,7 +76,7 @@ public class FolderNameFixer extends AbstractFixer {
 
         return new FixRecord(anomaly, NAME, "Renamed the folder "
                 + wrongFolder.getFileName() + " to " + username + ".",
-                wrongFolder, usernameFolder, null);
+                workingCopy, wrongFolder, usernameFolder, null);
     }
 
     /**
@@ -96,30 +93,6 @@ public class FolderNameFixer extends AbstractFixer {
                     + " folder is no longer there, so nothing was renamed.");
         }
         rename(usernameFolder, fixRecord.getOriginalPath());
-    }
-
-    // Renames a folder, via a temporary name if only the letter case changes.
-    private void rename(Path from, Path to) throws FixException {
-        try {
-            boolean targetExists = Files.exists(to, LinkOption.NOFOLLOW_LINKS);
-            if (targetExists && !Files.isSameFile(from, to)) {
-                throw new FixException("A folder named " + to.getFileName()
-                        + " already exists, so nothing was renamed.");
-            }
-
-            if (targetExists) {
-                Path step = from.resolveSibling(from.getFileName()
-                        + CASE_RENAME_SUFFIX);
-                Files.move(from, step);
-                Files.move(step, to);
-            } else {
-                Files.move(from, to);
-            }
-        } catch (IOException exception) {
-            throw new FixException("Could not rename "
-                    + from.getFileName() + " to " + to.getFileName() + ": "
-                    + exception.getMessage(), exception);
-        }
     }
 
     // Lists the visible folders at the top of the working copy.

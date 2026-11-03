@@ -124,6 +124,16 @@ public class AnomalyService {
     }
 
     /**
+     * Returns why the automatic fix for an anomaly failed.
+     *
+     * @param anomaly the anomaly
+     * @return the reason, or null if no fix failed for it
+     */
+    public String getFailureReason(Anomaly anomaly) {
+        return fixManager.getFailureReason(anomaly);
+    }
+
+    /**
      * Approves the fixes of all selected anomalies.
      *
      * @param anomalies the anomalies

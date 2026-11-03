@@ -9,15 +9,20 @@
 package gradezzy.testcase;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.UUID;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.Question;
+import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 
 /**
@@ -26,6 +31,10 @@ import gradezzy.model.Submission;
  * <p>Tier: MUST. Owner: Zach.
  */
 public class TesterInstaller {
+
+    private static final String ID_PREFIX = "tester-data-";
+    private static final String MISSING_DATA_ACTION =
+            "Add the data file to the tester folder, then grade again.";
 
     // The application settings
     private final AppConfig config;
@@ -66,6 +75,8 @@ public class TesterInstaller {
                     Path sourceFile = tester.getSourceFile();
                     copyReplacing(sourceFile, questionFolder);
                     copyDataFiles(sourceFile.getParent(), questionFolder);
+                    flagMissingDataFiles(sourceFile, questionFolder,
+                            submission);
                 }
             }
         } catch (IOException exception) {
@@ -99,6 +110,36 @@ public class TesterInstaller {
         } catch (IOException exception) {
             throw new TestCaseException("Could not copy the tester data "
                     + "files: " + exception.getMessage(), exception);
+        }
+    }
+
+    // Adds an anomaly for each data file the tester reads that is in
+    // neither the tester folder nor the submission, since the tester
+    // would then fail those cases with no warning. The score is not
+    // changed.
+    private void flagMissingDataFiles(Path testerFile, Path questionFolder,
+            Submission submission) throws IOException {
+        // ISO-8859-1 reads any bytes, so a tester saved in another
+        // encoding cannot stop grading; the names searched are ASCII
+        String testerSource = Files.readString(testerFile,
+                StandardCharsets.ISO_8859_1);
+        List<String> dataFileNames = config.getList(
+                ConfigKeys.TESTER_DATA_FILES);
+
+        for (String dataFileName : dataFileNames) {
+            boolean needed = testerSource.contains(dataFileName);
+            boolean present = Files.isRegularFile(
+                    questionFolder.resolve(dataFileName));
+            if (needed && !present) {
+                submission.addAnomaly(new Anomaly(
+                        ID_PREFIX + UUID.randomUUID(),
+                        AnomalyType.MISSING_FILE, Severity.ERROR,
+                        submission.getUsername(),
+                        testerFile.getFileName() + " reads " + dataFileName
+                        + ", which is in neither the tester folder nor "
+                        + "the submission, so its cases will fail.",
+                        MISSING_DATA_ACTION));
+            }
         }
     }
 

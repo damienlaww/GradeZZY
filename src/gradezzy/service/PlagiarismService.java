@@ -8,8 +8,9 @@
 package gradezzy.service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.UUID;
+import java.util.Map;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
@@ -31,6 +32,9 @@ public class PlagiarismService {
 
     // Start of the id of every Similar code anomaly
     private static final String ID_PREFIX = "SIMILAR-";
+
+    // Separates the run, the two students and the question in an id
+    private static final String ID_SEPARATOR = "/";
 
     // Turns a similarity from 0 to 1 into a percentage
     private static final int PERCENT = 100;
@@ -61,23 +65,27 @@ public class PlagiarismService {
      * Compares the finished submissions of a run with each other and adds
      * a Similar code anomaly to both students of each pair found. The
      * anomalies of an earlier check are replaced, so checking a run again
-     * does not add them twice. Submissions still waiting or being graded
-     * are left out and left unchanged.
+     * does not add them twice. A pair found again gets the same anomaly
+     * id and keeps its fix status, so a review decision about it is kept.
+     * Submissions still waiting or being graded are left out and left
+     * unchanged. One check runs at a time, so two checks of a run at once
+     * cannot both add their anomalies.
      *
      * @param gradingRun the grading run
      * @return the similar pairs found, most similar first, or an empty
      *         list when there is no run or plagiarism.enabled is false
      */
-    public List<SimilarityPair> check(GradingRun gradingRun) {
+    public synchronized List<SimilarityPair> check(GradingRun gradingRun) {
         if (gradingRun == null
                 || !config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED)) {
             return new ArrayList<>();
         }
 
         List<Submission> finished = new ArrayList<>();
+        Map<String, Anomaly> earlierFlags = new HashMap<>();
         for (Submission submission : gradingRun.getSubmissions()) {
             if (isFinished(submission)) {
-                removeSimilarFlags(submission);
+                removeSimilarFlags(submission, earlierFlags);
                 finished.add(submission);
             }
         }
@@ -86,10 +94,10 @@ public class PlagiarismService {
                 finished, gradingRun.getAssessment());
 
         for (SimilarityPair pair : pairs) {
-            flag(finished, pair.getFirstUsername(),
-                    pair.getSecondUsername(), pair);
-            flag(finished, pair.getSecondUsername(),
-                    pair.getFirstUsername(), pair);
+            flag(gradingRun, finished, earlierFlags,
+                    pair.getFirstUsername(), pair.getSecondUsername(), pair);
+            flag(gradingRun, finished, earlierFlags,
+                    pair.getSecondUsername(), pair.getFirstUsername(), pair);
         }
 
         return pairs;
@@ -104,34 +112,52 @@ public class PlagiarismService {
                 || status == SubmissionStatus.FAILED;
     }
 
-    // Removes the Similar code anomalies of an earlier check. An index
-    // loop going backwards keeps the positions still to visit unchanged.
-    private void removeSimilarFlags(Submission submission) {
+    // Removes the Similar code anomalies of an earlier check, keeping
+    // them by id. They are found first and then removed one by one, by
+    // object, so a Retry clearing the same list at once cannot make a
+    // position wrong.
+    private void removeSimilarFlags(Submission submission,
+            Map<String, Anomaly> earlierFlags) {
         List<Anomaly> anomalies = submission.getAnomalies();
-
-        for (int i = anomalies.size() - 1; i >= 0; i--) {
-            if (anomalies.get(i).getType() == AnomalyType.SIMILAR_CODE) {
-                anomalies.remove(i);
+        List<Anomaly> similarFlags = new ArrayList<>();
+        for (Anomaly anomaly : anomalies) {
+            if (anomaly.getType() == AnomalyType.SIMILAR_CODE) {
+                similarFlags.add(anomaly);
             }
+        }
+
+        for (Anomaly anomaly : similarFlags) {
+            earlierFlags.put(anomaly.getId(), anomaly);
+            anomalies.remove(anomaly);
         }
     }
 
     // Adds a Similar code anomaly to one student of a pair, naming the
-    // other student.
-    private void flag(List<Submission> submissions, String username,
+    // other student. Its id names the run, both students and the
+    // question, so the same pair found again gets the same id.
+    private void flag(GradingRun gradingRun, List<Submission> submissions,
+            Map<String, Anomaly> earlierFlags, String username,
             String otherUsername, SimilarityPair pair) {
         Submission submission = findByUsername(submissions, username);
         if (submission == null) {
             return;
         }
 
+        String id = ID_PREFIX + gradingRun.getId() + ID_SEPARATOR
+                + username + ID_SEPARATOR + otherUsername + ID_SEPARATOR
+                + pair.getQuestionId();
         long percent = Math.round(pair.getSimilarity() * PERCENT);
         String message = pair.getQuestionId() + " is " + percent
                 + "% similar to " + otherUsername + ". This is a review "
                 + "aid, not a finding.";
-        submission.addAnomaly(new Anomaly(ID_PREFIX + UUID.randomUUID(),
-                AnomalyType.SIMILAR_CODE, Severity.INFO, username, message,
-                SUGGESTED_ACTION));
+        Anomaly anomaly = new Anomaly(id, AnomalyType.SIMILAR_CODE,
+                Severity.INFO, username, message, SUGGESTED_ACTION);
+
+        Anomaly earlier = earlierFlags.get(id);
+        if (earlier != null) {
+            anomaly.setFixStatus(earlier.getFixStatus());
+        }
+        submission.addAnomaly(anomaly);
     }
 
     // Returns the submission of a username, or null if there is none.

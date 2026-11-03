@@ -41,6 +41,10 @@ public class FlowState {
     // True while a batch is being graded
     private boolean grading = false;
 
+    // How many times grading has started, so a screen can tell that the
+    // results may have changed since it last looked
+    private int gradingCount = 0;
+
     // The students ticked on Review, used as the export scope
     private final List<Submission> selected = new ArrayList<>();
 
@@ -170,6 +174,19 @@ public class FlowState {
      */
     public void setGrading(boolean grading) {
         this.grading = grading;
+        if (grading) {
+            gradingCount++;
+        }
+    }
+
+    /**
+     * Returns how many times grading has started, counting resumes and
+     * retries too.
+     *
+     * @return the count
+     */
+    public int getGradingCount() {
+        return gradingCount;
     }
 
     /**
