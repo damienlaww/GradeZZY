@@ -40,6 +40,8 @@ public final class Problems {
             return "A file had the wrong name";
         } else if (type == AnomalyType.MISSING_HEADER_NAME) {
             return "The name at the top of a file was blank";
+        } else if (type == AnomalyType.WRONG_ENCODING) {
+            return "A file was saved in the wrong text encoding";
         } else if (type == AnomalyType.UNKNOWN_STUDENT) {
             return "Not on the score sheet";
         } else if (type == AnomalyType.INVALID_ARCHIVE) {
