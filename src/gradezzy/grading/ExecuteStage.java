@@ -8,7 +8,6 @@
  */
 package gradezzy.grading;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.UUID;
 
@@ -23,7 +22,7 @@ import gradezzy.model.QuestionResult;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 import gradezzy.model.TestCaseResult;
-import gradezzy.testcase.QuestionFolderFinder;
+import gradezzy.testcase.QuestionWorkspace;
 import gradezzy.testcase.TesterFile;
 
 /**
@@ -113,7 +112,8 @@ public class ExecuteStage implements GradingStage {
         Question question = result.getQuestion();
         TesterFile tester = TesterFile.findFor(context.getTesters(),
                 question.getId());
-        Path folder = findFolder(submission, context, question);
+        // The copy the compile stage made for this question only
+        Path folder = QuestionWorkspace.find(submission, question);
         if (tester == null || folder == null) {
             return;
         }
@@ -186,27 +186,6 @@ public class ExecuteStage implements GradingStage {
             return testerRunner.runTester(folder, testerClassName);
         } catch (ProcessExecutionException exception) {
             throw new GradingException("The tester could not be run: "
-                    + exception.getMessage(), exception);
-        }
-    }
-
-    /**
-     * Finds the question folder the same way the install and compile
-     * stages did.
-     *
-     * @param submission the submission
-     * @param context the context
-     * @param question the question
-     * @return the folder, or null if it is missing
-     * @throws GradingException if the working copy cannot be read
-     */
-    private Path findFolder(Submission submission, GradingContext context,
-            Question question) throws GradingException {
-        try {
-            return QuestionFolderFinder.find(submission,
-                    context.getAssessment(), question);
-        } catch (IOException exception) {
-            throw new GradingException("The working copy could not be read: "
                     + exception.getMessage(), exception);
         }
     }

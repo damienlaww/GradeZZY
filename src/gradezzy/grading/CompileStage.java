@@ -31,6 +31,7 @@ import gradezzy.model.QuestionResult;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 import gradezzy.testcase.QuestionFolderFinder;
+import gradezzy.testcase.QuestionWorkspace;
 import gradezzy.testcase.TesterFile;
 import gradezzy.util.FileUtils;
 
@@ -127,7 +128,9 @@ public class CompileStage implements GradingStage {
      * is skipped: the validators already reported what is missing. A
      * question whose tester does not compile even with the starter code
      * is not graded, and gets an INTERNAL_ERROR instead of a
-     * COMPILE_ERROR, so the student is not blamed.
+     * COMPILE_ERROR, so the student is not blamed. Each question is
+     * compiled in its own copy of its folder, so code run for Q1a cannot
+     * change what Q1b's tester sees.
      *
      * @param submission the submission
      * @param context the context
@@ -149,8 +152,13 @@ public class CompileStage implements GradingStage {
                 String testerError = checkTester(context.getConfig(),
                         question, tester);
                 if (testerError.isEmpty()) {
+                    Path copy = prepareCopy(submission, assessment,
+                            question);
                     submission.addQuestionResult(compileQuestion(
-                            submission, question, tester, folder));
+                            submission, question, tester, copy,
+                            context.getTesters()));
+                    removeTesterSource(folder.resolve(
+                            tester.getClassName() + JAVA_EXTENSION));
                 } else {
                     reportBrokenTester(submission, question, tester,
                             testerError);
@@ -263,17 +271,23 @@ public class CompileStage implements GradingStage {
      * @param submission the submission
      * @param question the question
      * @param tester the tester of the question
-     * @param folder the question folder
+     * @param folder the copy of the question folder
+     * @param testers every tester of the run
      * @return the result, marked compiled or not
      * @throws GradingException if javac cannot be run or runs too long
      */
     private QuestionResult compileQuestion(Submission submission,
-            Question question, TesterFile tester, Path folder)
-            throws GradingException {
+            Question question, TesterFile tester, Path folder,
+            List<TesterFile> testers) throws GradingException {
         String testerSource = tester.getClassName() + JAVA_EXTENSION;
         ProcessResult compileResult = runCompiler(folder,
                 sourceFiles(question, testerSource));
-        removeTesterSource(folder.resolve(testerSource));
+        // The copy also holds the sources of testers that share the folder,
+        // such as Q1bTester.java next to Q1aTester.java
+        for (TesterFile anyTester : testers) {
+            removeTesterSource(folder.resolve(
+                    anyTester.getClassName() + JAVA_EXTENSION));
+        }
 
         // A slow compiler says nothing about the student's code: the
         // computer may just be busy, so no mark is taken and the
@@ -445,6 +459,28 @@ public class CompileStage implements GradingStage {
         } catch (IOException exception) {
             throw new GradingException("The tester source could not be "
                     + "removed: " + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Makes this question's own copy of its folder, turning a copy failure
+     * into a GradingException.
+     *
+     * @param submission the submission
+     * @param assessment the assessment
+     * @param question the question
+     * @return the copy
+     * @throws GradingException if the folder cannot be copied
+     */
+    private Path prepareCopy(Submission submission, Assessment assessment,
+            Question question) throws GradingException {
+        try {
+            return QuestionWorkspace.prepare(submission, assessment,
+                    question);
+        } catch (IOException exception) {
+            throw new GradingException("The folder of " + question.getId()
+                    + " could not be copied: " + exception.getMessage(),
+                    exception);
         }
     }
 

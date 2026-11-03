@@ -3,7 +3,7 @@
  *
  * Purpose: Finds the folder of a question inside a working copy.
  *
- * Where it fits: Used by the install, compile and execute stages. It
+ * Where it fits: Used by the install and compile stages and the checks. It
  * follows the same rules as the validators, so a question the validators
  * report as missing is also skipped here instead of being reported twice.
  */

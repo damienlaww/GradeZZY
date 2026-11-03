@@ -203,8 +203,8 @@ ui (JavaFX)        app.ConsoleMain
 | 3 | `FixStage` | Applies automatic corrections. | Jun Sheng |
 | 4 | `DetectStage` | Runs every `Detector`. | Jun Sheng |
 | 5 | `InstallTestersStage` | Copies testers and data files into the working copy. | Zach |
-| 6 | `CompileStage` | Compiles each question folder. | Zach |
-| 7 | `ExecuteStage` | Runs each tester with a time limit and parses its output. | Zach |
+| 6 | `CompileStage` | Compiles each question in its own copy of its folder, `<working copy>/.questions/<id>/`, so Q1a's code cannot change Q1b's tester. | Zach |
+| 7 | `ExecuteStage` | Runs each tester in that copy with a time limit and parses its output. | Zach |
 | 8 | `ScoreStage` | Sets per-question and per-student scores. | Jing Yuan |
 | 9 | `PersistStage` | Saves the result so a run can be resumed. | Huxley |
 
