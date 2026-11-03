@@ -68,7 +68,9 @@ public class SqliteResultRepository implements ResultRepository {
                 + "assessment_name TEXT, "
                 + "assessment_module TEXT, "
                 + "placeholder_folders TEXT, "
-                + "score_sheet_file TEXT)",
+                + "score_sheet_file TEXT, "
+                + "testers_dir TEXT, "
+                + "starter_dir TEXT)",
         "CREATE TABLE IF NOT EXISTS run_questions ("
                 + "run_id TEXT NOT NULL, "
                 + "position INTEGER NOT NULL, "
@@ -130,9 +132,11 @@ public class SqliteResultRepository implements ResultRepository {
                 + "detail TEXT)"
     };
 
-    // The score sheet column was added after the first release. A database
-    // made before it has no such column, so open adds it.
+    // These columns were added after the first release. A database made
+    // before them has no such columns, so open adds them.
     private static final String SCORE_SHEET_COLUMN = "score_sheet_file";
+    private static final String TESTERS_DIR_COLUMN = "testers_dir";
+    private static final String STARTER_DIR_COLUMN = "starter_dir";
 
     // Lists the columns of the runs table, one row per column
     private static final String LIST_RUN_COLUMNS = "PRAGMA table_info(runs)";
@@ -140,10 +144,17 @@ public class SqliteResultRepository implements ResultRepository {
     private static final String ADD_SCORE_SHEET_COLUMN = "ALTER TABLE runs "
             + "ADD COLUMN score_sheet_file TEXT";
 
+    private static final String ADD_TESTERS_DIR_COLUMN = "ALTER TABLE runs "
+            + "ADD COLUMN testers_dir TEXT";
+
+    private static final String ADD_STARTER_DIR_COLUMN = "ALTER TABLE runs "
+            + "ADD COLUMN starter_dir TEXT";
+
     private static final String INSERT_RUN = "INSERT OR REPLACE INTO runs "
             + "(run_id, started_at, module_code, section_code, "
             + "assessment_name, assessment_module, placeholder_folders, "
-            + "score_sheet_file) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            + "score_sheet_file, testers_dir, starter_dir) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String INSERT_QUESTION = "INSERT INTO "
             + "run_questions (run_id, position, question_id, folder_name, "
@@ -191,8 +202,8 @@ public class SqliteResultRepository implements ResultRepository {
 
     private static final String SELECT_RUN = "SELECT started_at, "
             + "module_code, section_code, assessment_name, "
-            + "assessment_module, placeholder_folders, score_sheet_file "
-            + "FROM runs WHERE run_id = ?";
+            + "assessment_module, placeholder_folders, score_sheet_file, "
+            + "testers_dir, starter_dir FROM runs WHERE run_id = ?";
 
     // Newest first; a run without a start time comes last
     private static final String SELECT_RUN_IDS = "SELECT run_id FROM runs "
@@ -585,8 +596,14 @@ public class SqliteResultRepository implements ResultRepository {
             for (String sql : CREATE_TABLES) {
                 statement.executeUpdate(sql);
             }
-            if (!hasScoreSheetColumn(statement)) {
+            if (!hasRunColumn(statement, SCORE_SHEET_COLUMN)) {
                 statement.executeUpdate(ADD_SCORE_SHEET_COLUMN);
+            }
+            if (!hasRunColumn(statement, TESTERS_DIR_COLUMN)) {
+                statement.executeUpdate(ADD_TESTERS_DIR_COLUMN);
+            }
+            if (!hasRunColumn(statement, STARTER_DIR_COLUMN)) {
+                statement.executeUpdate(ADD_STARTER_DIR_COLUMN);
             }
         } finally {
             closeStatement(statement);
@@ -691,16 +708,16 @@ public class SqliteResultRepository implements ResultRepository {
         }
     }
 
-    // Says whether the runs table already has the score sheet column. A
+    // Says whether the runs table already has the named column. A
     // database made before the column existed does not.
-    private boolean hasScoreSheetColumn(Statement statement)
+    private boolean hasRunColumn(Statement statement, String columnName)
             throws SQLException {
         boolean found = false;
         ResultSet columns = null;
         try {
             columns = statement.executeQuery(LIST_RUN_COLUMNS);
             while (columns.next()) {
-                if (SCORE_SHEET_COLUMN.equals(columns.getString("name"))) {
+                if (columnName.equals(columns.getString("name"))) {
                     found = true;
                 }
             }
@@ -771,6 +788,10 @@ public class SqliteResultRepository implements ResultRepository {
             statement.setString(6, assessmentModule);
             statement.setString(7, placeholders);
             statement.setString(8, textOf(gradingRun.getScoreSheetFile()));
+            statement.setString(9,
+                    textOf(gradingRun.getTestersDirectory()));
+            statement.setString(10,
+                    textOf(gradingRun.getStarterDirectory()));
             statement.executeUpdate();
         } finally {
             closeStatement(statement);
@@ -957,6 +978,8 @@ public class SqliteResultRepository implements ResultRepository {
         Section section = null;
         LocalDateTime startedAt = null;
         Path scoreSheetFile = null;
+        Path testersDirectory = null;
+        Path starterDirectory = null;
         PreparedStatement statement = null;
         ResultSet rows = null;
         try {
@@ -975,6 +998,8 @@ public class SqliteResultRepository implements ResultRepository {
             addPlaceholders(assessment,
                     rows.getString("placeholder_folders"));
             scoreSheetFile = toPath(rows.getString(SCORE_SHEET_COLUMN));
+            testersDirectory = toPath(rows.getString(TESTERS_DIR_COLUMN));
+            starterDirectory = toPath(rows.getString(STARTER_DIR_COLUMN));
         } finally {
             closeQuery(rows, statement);
         }
@@ -983,6 +1008,8 @@ public class SqliteResultRepository implements ResultRepository {
         GradingRun gradingRun = new GradingRun(runId, assessment, section,
                 startedAt);
         gradingRun.setScoreSheetFile(scoreSheetFile);
+        gradingRun.setTestersDirectory(testersDirectory);
+        gradingRun.setStarterDirectory(starterDirectory);
         return gradingRun;
     }
 
