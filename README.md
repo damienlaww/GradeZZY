@@ -148,7 +148,7 @@ The base package is `gradezzy`. Each package has one job.
 | `model` | Plain data classes with no logic. | `Submission`, `Student`, `Section`, `Assessment`, `Question`, `QuestionResult`, `TestCaseResult`, `Anomaly`, `GradingRun`, `AuditEntry`, and the enums `AnomalyType`, `Severity`, `FixStatus`, `SubmissionStatus` |
 | `ingest` | Accepts uploads, unzips them into a working copy, reads the roster. | `SubmissionLoader`, `ZipExtractor`, `WorkingCopyManager`, `RosterReader` |
 | `validation` | One class per structural check. | `Validator` (interface), `AbstractValidator`, `StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`, `HeaderNameValidator`, `ValidationRunner` |
-| `fix` | One class per automatic correction, each with apply and undo. | `Fixer` (interface), `AbstractFixer`, `FolderNameFixer`, `FolderHierarchyFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
+| `fix` | One class per automatic correction, each with apply and undo. | `Fixer` (interface), `AbstractFixer`, `EncodingFixer`, `FolderNameFixer`, `FolderHierarchyFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
 | `exec` | Runs `javac` and `java` in a separate process with a time limit. | `ProcessRunner`, `ProcessResult`, `SourceCompiler`, `TesterRunner`, and inside the tester's run `TesterHarness`, `TrustedPrintStream`, `TrustedFrameCheck` |
 | `testcase` | Where tester files come from. | `TestCaseSource` (interface), `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TestCase`, `TesterFile` |
 | `grading` | The pipeline, its stages and scoring. | `GradingStage` (interface), `GradingPipeline`, `GradingContext`, the nine `...Stage` classes, `ScoreParser` (interface), `TesterOutputScoreParser`, `ScoreCalculator`, `ProgressListener`, `CancellationToken`, and for parallel grading `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener` |
@@ -607,8 +607,9 @@ How the fixes work:
   unless `fix.auto.apply.enabled` is false. Each fixer whose `canFix`
   matches an anomaly fixes the working copy and returns a `FixRecord`, and
   the anomaly becomes `APPLIED`. Fixers run in the order they are
-  registered: `FolderHierarchyFixer`, `FolderNameFixer`, `CaseNameFixer`,
-  then `HeaderNameFixer`, so the folders are in place before names and
+  registered: `EncodingFixer`, `FolderHierarchyFixer`, `FolderNameFixer`,
+  `CaseNameFixer`, then `HeaderNameFixer`, so a file is converted where
+  the problem found it, and the folders are in place before names and
   headers are fixed. A fix that fails is skipped and its anomaly stays
   for the instructor, with the reason from `getFailureReason`. An anomaly
   already fixed is not offered to a later fixer.
@@ -635,6 +636,20 @@ How the fixes work:
   it a `q3` folder scores 0 on that question.
 - Every undo finds its folder or file as the working copy is now, so the
   fixes of one student can be undone in any order.
+- Before the fixes, `FixStage` reads every `.java` file in the working
+  copy (hidden folders such as `.gradezzy-backup` aside) and adds a
+  `WRONG_ENCODING` warning for each one that starts with a UTF-8 byte
+  order mark (Notepad's "UTF-8 with BOM") or is not valid UTF-8 (checked
+  with a `CharsetDecoder` set to `REPORT`). javac rejects both, so the
+  question would score 0. The warning is added even when
+  `fix.auto.apply.enabled` is false, so the instructor sees why. Its
+  message starts with the file's path in the working copy, such as
+  `ping.lee.2023/Q1/Q1a.java`, and `EncodingFixer` finds the file by
+  taking the fixed ending off the message. `EncodingFixer` backs the file
+  up, removes the byte order mark, and rewrites a file that is still not
+  UTF-8 as UTF-8, reading it as Windows-1252. Undo copies the original
+  bytes back; if a folder fix moved the file since, it finds the file of
+  that name that still holds what the fix wrote.
 - `HeaderNameFixer` finds the file named at the start of the header
   anomaly's message, such as `Q1/Q1a.java`, among the configured answer
   files. It copies the file into the hidden `.gradezzy-backup` folder of
@@ -686,9 +701,11 @@ answers have at least 50 runs of their own beyond the starter
 (`MIN_OWN_TRIGRAMS`): short correct answers, such as most Q1b answers,
 look alike even when written separately. A copy of only a short answer
 is therefore not reported; a copy of a whole submission still is,
-through the longer questions. The starter's runs come from
-`paths.starter.dir`, even when another starter folder was chosen on the
-Set up step.
+through the longer questions. The starter's runs come from the folder
+passed to `findSimilar(submissions, assessment, starterDirectory)`, or
+from `paths.starter.dir` when it is null. `PlagiarismService.check` still
+calls the two-argument `findSimilar`, so until it passes the run's
+`getStarterDirectory()` the check uses `paths.starter.dir`.
 
 Checked on the six samples: chee.teo and jing.lim get a username folder;
 david's and fen.lai's folders are renamed; the blank headers (Q3 for
@@ -1043,6 +1060,7 @@ by this section.
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
 | Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |
+| `CharsetDecoder`, `CodingErrorAction`, `ByteBuffer` | `fix.EncodingFixer` | Tells whether a Java file is valid UTF-8, which javac needs. | A decoder turns bytes into characters; set to `REPORT`, it throws instead of guessing when the bytes are not UTF-8. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. | Reads a file of `key=value` lines into a lookup table. |
 | JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs to SQLite so Runs can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
 | `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |

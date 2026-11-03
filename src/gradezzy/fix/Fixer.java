@@ -8,6 +8,8 @@
  */
 package gradezzy.fix;
 
+import java.nio.file.Path;
+
 import gradezzy.model.Anomaly;
 import gradezzy.model.Submission;
 
@@ -30,6 +32,19 @@ public interface Fixer {
      * @return true if apply may be called for it
      */
     boolean canFix(Anomaly anomaly);
+
+    /**
+     * Finds the file or folder apply would change, without changing
+     * anything, so FixManager can skip a fix the instructor undid.
+     *
+     * @param submission the submission
+     * @param anomaly the anomaly
+     * @return the path apply would change, or null when apply would do
+     *         nothing or this fixer cannot tell before it applies
+     * @throws FixException if the working copy cannot be read
+     */
+    Path findPathToChange(Submission submission, Anomaly anomaly)
+            throws FixException;
 
     /**
      * Applies the fix to the working copy only. The original upload must never

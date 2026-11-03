@@ -46,6 +46,12 @@ public class HeaderNameFixer extends AbstractFixer {
     // Returned when a header line with a label is not found
     private static final int NOT_FOUND = -1;
 
+    // Shown in Before for a header line with nothing after its label
+    private static final String BLANK_VALUE = "(blank)";
+
+    // Goes between the name and email lines in Before and After
+    private static final String VALUE_SEPARATOR = ", ";
+
     // The application settings
     private final AppConfig config;
 
@@ -71,18 +77,18 @@ public class HeaderNameFixer extends AbstractFixer {
     }
 
     /**
-     * Backs up the file, then fills its blank header from the roster.
+     * Finds the file whose header this fix would fill in.
      *
      * @param submission the submission
      * @param anomaly the anomaly
-     * @return a record that allows the fix to be undone
-     * @throws FixException if the operation fails
+     * @return the file
+     * @throws FixException if the student is not on the roster or the
+     *         file cannot be found
      */
     @Override
-    public FixRecord apply(Submission submission,
+    public Path findPathToChange(Submission submission,
             Anomaly anomaly) throws FixException {
-        Student student = submission.getStudent();
-        if (student == null) {
+        if (submission.getStudent() == null) {
             throw new FixException(submission.getUsername() + " is not on "
                     + "the roster, so the header was left for you to fill "
                     + "in.");
@@ -93,12 +99,27 @@ public class HeaderNameFixer extends AbstractFixer {
             throw new FixException("Could not tell which file this header "
                     + "problem is about, so nothing was changed.");
         }
+        return findFile(submission.getWorkingCopyPath(),
+                submission.getUsername(), readFolderName(config, questionId),
+                readFileName(config, questionId));
+    }
 
-        String folderName = readFolderName(config, questionId);
-        String fileName = readFileName(config, questionId);
-        String relativePath = folderName + FOLDER_SEPARATOR + fileName;
-        Path file = findFile(submission.getWorkingCopyPath(),
-                submission.getUsername(), folderName, fileName);
+    /**
+     * Backs up the file, then fills its blank header from the roster.
+     *
+     * @param submission the submission
+     * @param anomaly the anomaly
+     * @return a record that allows the fix to be undone
+     * @throws FixException if the operation fails
+     */
+    @Override
+    public FixRecord apply(Submission submission,
+            Anomaly anomaly) throws FixException {
+        Path file = findPathToChange(submission, anomaly);
+        Student student = submission.getStudent();
+        String questionId = findQuestionId(config, anomaly);
+        String relativePath = readFolderName(config, questionId)
+                + FOLDER_SEPARATOR + readFileName(config, questionId);
         String name = student.getFullName();
         String email = student.getEmail();
 
@@ -117,10 +138,18 @@ public class HeaderNameFixer extends AbstractFixer {
         }
 
         String written = name + " and " + email;
+        String before = showValue(original, nameLabel)
+                + VALUE_SEPARATOR + showValue(original, emailLabel);
+        String after = showValue(filled, nameLabel)
+                + VALUE_SEPARATOR + showValue(filled, emailLabel);
         if (withName.equals(original)) {
             written = email;
+            before = showValue(original, emailLabel);
+            after = showValue(filled, emailLabel);
         } else if (filled.equals(withName)) {
             written = name;
+            before = showValue(original, nameLabel);
+            after = showValue(filled, nameLabel);
         }
 
         Path backupPath = backup(submission, file);
@@ -128,7 +157,8 @@ public class HeaderNameFixer extends AbstractFixer {
 
         return new FixRecord(anomaly, NAME, "Filled in the header of "
                 + relativePath + " with " + written + ".",
-                submission.getWorkingCopyPath(), file, file, backupPath);
+                submission.getWorkingCopyPath(), file, file, backupPath,
+                before, after);
     }
 
     /**
@@ -196,6 +226,21 @@ public class HeaderNameFixer extends AbstractFixer {
         }
         return text.substring(0, valueStart) + SPACE + value.trim() + ending
                 + text.substring(lineEnd);
+    }
+
+    // Shows one header line from its label on, such as Name: (blank).
+    private String showValue(String text, String label) {
+        int valueStart = findValueStart(text, label);
+        if (valueStart < 0) {
+            return label + SPACE + BLANK_VALUE;
+        }
+
+        String value = text.substring(valueStart,
+                findLineEnd(text, valueStart)).trim();
+        if (value.isEmpty()) {
+            value = BLANK_VALUE;
+        }
+        return label + SPACE + value;
     }
 
     // Says whether something follows the label in the header.

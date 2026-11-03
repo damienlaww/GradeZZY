@@ -8,6 +8,7 @@
  */
 package gradezzy.plagiarism;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import gradezzy.model.Assessment;
@@ -34,4 +35,17 @@ public interface SimilarityDetector {
      */
     List<SimilarityPair> findSimilar(List<Submission> submissions,
             Assessment assessment);
+
+    /**
+     * Compares every pair of submissions, leaving out the code given in
+     * the starter folder chosen for the run.
+     *
+     * @param submissions the submissions
+     * @param assessment the assessment
+     * @param starterDirectory the run's starter folder, or null to use
+     *        paths.starter.dir
+     * @return the pairs at or above the configured threshold
+     */
+    List<SimilarityPair> findSimilar(List<Submission> submissions,
+            Assessment assessment, Path starterDirectory);
 }

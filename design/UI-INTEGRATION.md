@@ -78,7 +78,7 @@ today.
 | Progress and time left | Shows how far grading has got and about how long is left. | Grade | `GradingMonitor` (a `ProgressListener`) | `ProgressListener, ProgressEstimator` | Jing Yuan | Works now | None |
 | List anomalies | Lists every problem the checks found, so you can review it. | Review (student panel), Statistics | `listAnomalies` | `AnomalyService.listAnomalies` | Jing Yuan | Works now | None |
 | Approve and undo repairs | Lets you accept or undo each automatic repair of a working copy. | Review (student panel) | `approveRepair`, `rejectRepair` | `AnomalyService.approveFix, undoFix` | Jing Yuan, Jun Sheng | Works now | None; undo needs the run graded in this session. |
-| Original and proposed repair values | Shows what each repair changed, before and after, side by side. | Review (student panel) | `listRepairs` | None yet | Jun Sheng | Proposed | A way to read each FixRecord's original and proposed value through AnomalyService. |
+| Original and proposed repair values | Shows what each repair changed, before and after, side by side. | Review (student panel) | `listRepairs` | `AnomalyService.findFixRecord`, `FixRecord.getValueBefore, getValueAfter` | Jun Sheng | Works now | None; a fix made before GradeZZY was last opened shows no Before and After. |
 | Undo a repair decision | Takes back an approve or undo decision on a repair. | Review (student panel) | `undoRepairDecision` | None yet | Jing Yuan, Jun Sheng | Proposed | A method that returns an approved or undone fix to Applied. |
 | Mark flags reviewed or rejected | Records that you looked at a flag, without changing any mark. | Review (student panel) | `getDecision`, `setDecision` | `LiveBackend` keeps the decisions in memory | Jing Yuan | Works now (kept until GradeZZY closes) | To keep decisions after a restart: store them per anomaly, with an audit entry. |
 | Search, filter and sort | Finds students by name and orders the results table. | Review, Export | `search` | `SearchService.search` | Jing Yuan | Works now | None |
@@ -112,7 +112,6 @@ what they need. Each one is hidden in live mode until the service exists.
 
 | Request | Owner | What the UI needs |
 |---|---|---|
-| Repair values | Jun Sheng | Read each `FixRecord`'s original and proposed value through `AnomalyService`, so Review can show them before and after. |
 | Undo a repair decision | Jing Yuan, Jun Sheng | A method that returns an approved or undone fix to Applied. |
 | Flag review decisions after a restart | Jing Yuan, Huxley | Save the Open, Reviewed or Rejected decision per anomaly, with an audit entry, so it survives a restart. Today `LiveBackend` keeps them only until GradeZZY closes. A decision never changes a mark. |
 | Retry one question | Jing Yuan, Zach | Run the tester of one question again and replace only that question's result. One tester run covers every case of a question, so the narrowest retry is a question, not a case. |

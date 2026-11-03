@@ -96,7 +96,8 @@ public class TokenSimilarityDetector implements SimilarityDetector {
     }
 
     /**
-     * Compares every pair of submissions whose answers hold enough new code.
+     * Compares every pair of submissions whose answers hold enough new
+     * code, leaving out the code in paths.starter.dir.
      *
      * @param submissions the submissions
      * @param assessment the assessment
@@ -105,12 +106,32 @@ public class TokenSimilarityDetector implements SimilarityDetector {
     @Override
     public List<SimilarityPair> findSimilar(List<Submission> submissions,
             Assessment assessment) {
+        return findSimilar(submissions, assessment, null);
+    }
+
+    /**
+     * Compares every pair of submissions whose answers hold enough new
+     * code, leaving out the code in the run's starter folder.
+     *
+     * @param submissions the submissions
+     * @param assessment the assessment
+     * @param starterDirectory the run's starter folder, or null to use
+     *        paths.starter.dir
+     * @return the pairs at or above the configured threshold
+     */
+    @Override
+    public List<SimilarityPair> findSimilar(List<Submission> submissions,
+            Assessment assessment, Path starterDirectory) {
         double threshold = config.getDouble(ConfigKeys.PLAGIARISM_THRESHOLD);
+        Path starter = starterDirectory;
+        if (starter == null) {
+            starter = Paths.get(config.getString(ConfigKeys.STARTER_DIR));
+        }
         List<SimilarityPair> pairs = new ArrayList<>();
 
         for (Question question : assessment.getQuestions()) {
             List<SimilarityPair> questionPairs = compareQuestion(submissions,
-                    assessment, question, threshold);
+                    assessment, question, starter, threshold);
 
             for (SimilarityPair pair : questionPairs) {
                 insertBySimilarity(pairs, pair);
@@ -138,9 +159,10 @@ public class TokenSimilarityDetector implements SimilarityDetector {
 
     // Finds the pairs of students whose new code for a question is alike.
     private List<SimilarityPair> compareQuestion(List<Submission> submissions,
-            Assessment assessment, Question question, double threshold) {
+            Assessment assessment, Question question, Path starter,
+            double threshold) {
         List<Set<String>> answers = readNewCode(submissions, assessment,
-                question);
+                question, starter);
         List<SimilarityPair> pairs = new ArrayList<>();
 
         for (int i = 0; i < submissions.size(); i++) {
@@ -165,9 +187,9 @@ public class TokenSimilarityDetector implements SimilarityDetector {
 
     // Reads each student's trigrams for a question, minus the starter's.
     private List<Set<String>> readNewCode(List<Submission> submissions,
-            Assessment assessment, Question question) {
-        Path starterFile = Paths.get(config.getString(ConfigKeys.STARTER_DIR),
-                question.getFolderName(), question.getFileName());
+            Assessment assessment, Question question, Path starter) {
+        Path starterFile = starter.resolve(question.getFolderName())
+                .resolve(question.getFileName());
         Set<String> starterTrigrams = readTrigrams(starterFile);
         List<Set<String>> answers = new ArrayList<>();
 
