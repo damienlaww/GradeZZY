@@ -117,7 +117,7 @@ public class PipelineFactory {
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
         pipeline.addStage(new CompileStage(new SourceCompiler(config,
-                processRunner)));
+                processRunner), starterDirectory));
         pipeline.addStage(new ExecuteStage(new TesterRunner(config,
                 processRunner), new TesterOutputScoreParser(config)));
         pipeline.addStage(new ScoreStage(new ScoreCalculator()));

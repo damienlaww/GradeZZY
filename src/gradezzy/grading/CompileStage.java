@@ -77,6 +77,10 @@ public class CompileStage implements GradingStage {
     // The helper that runs javac
     private final SourceCompiler sourceCompiler;
 
+    // The starter folder chosen for the batch, or null to use
+    // paths.starter.dir
+    private final Path starterDirectory;
+
     // For each tester class, its compile error against the starter code,
     // or NO_TESTER_ERROR. One stage is made per run, so each tester is
     // checked once per run.
@@ -86,9 +90,13 @@ public class CompileStage implements GradingStage {
      * Creates a new compile stage.
      *
      * @param sourceCompiler the helper that runs javac
+     * @param starterDirectory the starter folder chosen for the batch,
+     *        or null to use paths.starter.dir
      */
-    public CompileStage(SourceCompiler sourceCompiler) {
+    public CompileStage(SourceCompiler sourceCompiler,
+            Path starterDirectory) {
         this.sourceCompiler = sourceCompiler;
+        this.starterDirectory = starterDirectory;
     }
 
     /**
@@ -175,8 +183,11 @@ public class CompileStage implements GradingStage {
      */
     private String compileWithStarter(AppConfig config, Question question,
             TesterFile tester) throws GradingException {
-        Path starterFolder = Path.of(config.getString(
-                ConfigKeys.STARTER_DIR)).resolve(question.getFolderName());
+        Path starterRoot = starterDirectory;
+        if (starterRoot == null) {
+            starterRoot = Path.of(config.getString(ConfigKeys.STARTER_DIR));
+        }
+        Path starterFolder = starterRoot.resolve(question.getFolderName());
         if (!Files.isRegularFile(
                 starterFolder.resolve(question.getFileName()))) {
             return NO_TESTER_ERROR;
