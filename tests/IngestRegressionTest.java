@@ -158,23 +158,28 @@ public class IngestRegressionTest {
             Submission accepted = original(run, alice);
             Submission unnamed = original(run, nameless);
             Submission unknown = original(run, windows);
-            Submission broken = original(run, damaged);
+            Submission broken = original(run, damagedCopy);
             check(accepted.getStatus() == SubmissionStatus.GRADED, "valid upload completes in a mixed batch");
             check(accepted.getStudent() != null && accepted.getStudent().getUsername().equals("ALIce"),
                     "service loads roster and matches without case sensitivity");
             check(accepted.getAnomalies().stream().noneMatch(a -> a.getType() == AnomalyType.UNKNOWN_STUDENT),
                     "matched students are not flagged unknown");
             check(run.getSubmissions().stream().noneMatch(s -> s.getOriginalPath().equals(duplicate))
-                    && run.getSubmissions().stream().noneMatch(s -> s.getOriginalPath().equals(damagedCopy)),
+                    && run.getSubmissions().stream().noneMatch(s -> s.getOriginalPath().equals(damaged)),
                     "a second file for one student is not added to the run");
             check(duplicateWarnings(accepted) == 1 && duplicateWarnings(broken) == 1,
                     "the graded file carries a warning naming the file left out");
             check(broken.getStatus() == SubmissionStatus.FAILED,
-                    "the file without a copy number is the one graded");
+                    "the newest copy, (1), is the one graded");
+            check(broken.getAnomalies().stream().anyMatch(a -> a.getType() == AnomalyType.INVALID_ARCHIVE
+                    && a.getMessage().equals("This zip file is damaged. Ask the student for a new copy."))
+                    && broken.getAnomalies().stream().noneMatch(a -> a.getType() == AnomalyType.INTERNAL_ERROR),
+                    "a damaged zip is INVALID_ARCHIVE with one plain sentence, not INTERNAL_ERROR");
             check(unnamed.getStatus() == SubmissionStatus.FAILED && !unnamed.getAnomalies().isEmpty(),
                     "nameless upload is flagged without stopping the batch");
-            check(Files.exists(accepted.getWorkingCopyPath().resolve("bob.zip")),
-                    "outer student's nested ZIP remains in their own working copy");
+            check(Files.exists(accepted.getWorkingCopyPath().resolve("Q1/Answer.java"))
+                    && !Files.exists(accepted.getWorkingCopyPath().resolve("bob.zip")),
+                    "a zip holding only one zip is unpacked one level, keeping the outer identity");
             check(unknown.getStatus() == SubmissionStatus.GRADED && unknown.getStudent() == null,
                     "unmatched upload remains gradeable");
             check(unknown.getAnomalies().stream().filter(a -> a.getType() == AnomalyType.UNKNOWN_STUDENT).count() == 1,
@@ -208,6 +213,52 @@ public class IngestRegressionTest {
             } catch (IngestException expected) {
                 check(!Files.exists(root.resolve("escape.java")), "traversal writes no escaped file");
             }
+            Path icon = root.resolve("icon.zip");
+            try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(icon))) {
+                for (String name : List.of("w/Icon\r", "__MACOSX/w/what?.txt", "w/Q1/._A.java", "w/Q1/A.java")) {
+                    out.putNextEntry(new ZipEntry(name));
+                    out.closeEntry();
+                }
+            }
+            List<String> skippedNames = new java.util.ArrayList<>();
+            Path iconTarget = extractor.extract(icon, root.resolve("icon-target"), skippedNames);
+            check(skippedNames.equals(List.of("w/Icon?")) && Files.exists(iconTarget.resolve("w/Q1/A.java"))
+                    && !Files.exists(iconTarget.resolve("w/Q1/._A.java")),
+                    "ignored names come first and an odd name outside the question folders is skipped");
+            Path badQuestion = zip(root.resolve("bad-question.zip"), "w/Q1/Icon\r", "x");
+            try {
+                extractor.extract(badQuestion, root.resolve("bad-question-target"));
+                throw new AssertionError("odd name in a question folder accepted");
+            } catch (InvalidArchiveException expected) { checks++; }
+            Path clash = root.resolve("clash.zip");
+            try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(clash))) {
+                for (String name : List.of("w/Q1/A.java", "w/q1/A.java")) {
+                    out.putNextEntry(new ZipEntry(name));
+                    out.closeEntry();
+                }
+            }
+            try {
+                extractor.extract(clash, root.resolve("clash-target"));
+                throw new AssertionError("case clash accepted");
+            } catch (InvalidArchiveException expected) {
+                check(expected.getMessage().contains("w/q1/A.java"), "a clash names the entry");
+            }
+            Path explorer = root.resolve("explorer.zip");
+            try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(explorer),
+                    java.nio.charset.Charset.forName("CP437"))) {
+                out.putNextEntry(new ZipEntry("w/Q1/Jos\u00e9.txt"));
+                out.closeEntry();
+            }
+            check(Files.exists(extractor.extract(explorer, root.resolve("explorer-target"))
+                    .resolve("w/Q1/Jos\u00e9.txt")), "a zip from Windows Explorer opens");
+
+            Path windowsRoster = root.resolve("windows-roster.csv");
+            Files.write(windowsRoster, ("OrgDefinedId,Username,Last Name,First Name,Email,End-of-Line Indicator\r\n"
+                    + "1,jose,Example,Jos\u00e9,jose@example.com\r\n").getBytes("windows-1252"));
+            List<Student> windowsStudents = new RosterReader(config).readRoster(windowsRoster);
+            check(windowsStudents.size() == 1 && windowsStudents.get(0).getFirstName().equals("Jos\u00e9"),
+                    "a Windows-1252 roster with no # and no End-of-Line value loads");
+
             Files.writeString(roster, Files.readString(roster) + "#2,#alice,Other,Alice,other@example.com\r\n");
             try {
                 new RosterReader(config).readRoster(roster);
