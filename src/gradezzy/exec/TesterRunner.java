@@ -67,6 +67,15 @@ public class TesterRunner {
     private static final String NO_NATIVE_OPTION =
             "--illegal-native-access=deny";
 
+    // Limits for each tester run, so one student's code cannot take the
+    // memory or CPUs the other workers need: a heap size from the
+    // settings, a 2 MB thread stack and one CPU
+    private static final String MAX_HEAP_OPTION = "-Xmx";
+    private static final String MEGABYTES_SUFFIX = "m";
+    private static final String STACK_SIZE_OPTION = "-Xss2m";
+    private static final String ONE_PROCESSOR_OPTION =
+            "-XX:ActiveProcessorCount=1";
+
     // Point the home and temp folders at the question folder, so code
     // that saves "to home" or "to temp" stays in its own working copy
     private static final String HOME_OPTION = "-Duser.home=";
@@ -177,6 +186,12 @@ public class TesterRunner {
             command.add(sandboxRules(questionFolder));
         }
         command.add(config.getString(ConfigKeys.JAVA_COMMAND));
+        int maxMemoryMb = config.getInt(ConfigKeys.MAX_MEMORY_MB);
+        if (maxMemoryMb > 0) {
+            command.add(MAX_HEAP_OPTION + maxMemoryMb + MEGABYTES_SUFFIX);
+        }
+        command.add(STACK_SIZE_OPTION);
+        command.add(ONE_PROCESSOR_OPTION);
         command.add(LIMIT_MODULES_OPTION);
         command.add(NO_NATIVE_OPTION);
         command.add(HOME_OPTION + folder);
