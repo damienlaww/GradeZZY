@@ -48,6 +48,13 @@ public class ExecuteStage implements GradingStage {
     private static final String RUNTIME_ERROR_ACTION =
             "Open code and test output on Review to read the tester output.";
 
+    // What the instructor can do about a total its cases do not support
+    private static final String TOTAL_TOO_HIGH_ACTION =
+            "Read the code on Review: it may change the tester's score.";
+
+    // Allowed rounding gap when a printed total is compared with the cap
+    private static final double SCORE_TOLERANCE = 0.000001;
+
     // The helper that runs java
     private final TesterRunner testerRunner;
 
@@ -118,6 +125,25 @@ public class ExecuteStage implements GradingStage {
         result.setOutput(parsed.getOutput());
         for (TestCaseResult testCase : parsed.getTestCaseResults()) {
             result.addTestCaseResult(testCase);
+        }
+
+        // Student code can set the tester's score field by reflection,
+        // so a printed total is never worth more than its Passed lines
+        int caseCount = parsed.getTestCaseResults().size();
+        boolean finished = !run.isTimedOut()
+                && run.getExitCode() == SUCCESS_EXIT_CODE;
+        if (finished && caseCount > 0) {
+            double earned = passCount(parsed) * question.getMaxScore()
+                    / caseCount;
+            if (parsed.getScore() > earned + SCORE_TOLERANCE) {
+                result.setScore(earned);
+                addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
+                        + question.getId() + " tester printed a total of "
+                        + parsed.getScore() + ", but only "
+                        + passCount(parsed) + " of " + caseCount
+                        + " case(s) passed, so " + earned + " was given.",
+                        TOTAL_TOO_HIGH_ACTION);
+            }
         }
 
         if (run.isTimedOut()) {
