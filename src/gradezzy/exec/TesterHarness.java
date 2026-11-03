@@ -52,6 +52,13 @@ public final class TesterHarness {
     // A value java does not accept, so starting a program always fails
     private static final String NO_LAUNCH = "DISABLED_BY_GRADEZZY";
 
+    // Extra time past the limit before the watchdog halts the run, so
+    // GradeZZY, when it is still running, always stops it first
+    private static final long GRACE_SECONDS = 2;
+
+    // Milliseconds in a second
+    private static final long MILLIS_PER_SECOND = 1000;
+
     // Utility class: never created
     private TesterHarness() {
     }
@@ -59,13 +66,21 @@ public final class TesterHarness {
     /**
      * Reads the token, then runs the tester named in the first argument.
      *
-     * @param args the tester class name, then the most bytes of student
-     *             output to pass on
+     * @param args the tester class name, the most bytes of student output
+     *             to pass on, then the time limit in seconds
      * @throws IOException if the token cannot be read
      * @throws ReflectiveOperationException if the tester cannot be found
      */
     public static void main(String[] args)
             throws IOException, ReflectiveOperationException {
+        // Started before any student code, and a daemon, so it never
+        // keeps the program alive by itself
+        long limitSeconds = Long.parseLong(args[2]);
+        Thread watchdog = new Thread(new HarnessWatchdog(
+                (limitSeconds + GRACE_SECONDS) * MILLIS_PER_SECOND));
+        watchdog.setDaemon(true);
+        watchdog.start();
+
         String token = new String(System.in.readAllBytes(),
                 StandardCharsets.UTF_8).trim();
         blockNewPrograms();

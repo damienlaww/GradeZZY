@@ -237,6 +237,9 @@ public class TesterRunner {
         command.add(testerClassName);
         command.add(String.valueOf(studentLimit));
         long timeoutSeconds = config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS);
+        // The harness stops itself a little after this, in case GradeZZY
+        // is gone by then
+        command.add(String.valueOf(timeoutSeconds));
         // A new random token for every run, sent where only the harness
         // reads it before any student code starts
         String token = UUID.randomUUID().toString();

@@ -38,6 +38,10 @@ public class ProcessRunner {
     // Milliseconds in one second
     private static final long MILLIS_PER_SECOND = 1000;
 
+    // Every program any ProcessRunner started that has not ended. A
+    // shutdown hook stops them all if GradeZZY closes during a run.
+    private static final RunningProcesses RUNNING = startShutdownHook();
+
     // The application settings
     private final AppConfig config;
 
@@ -94,6 +98,7 @@ public class ProcessRunner {
         long startMillis = System.currentTimeMillis();
         long deadlineMillis = startMillis + timeoutSeconds * MILLIS_PER_SECOND;
         Process process = startProcess(command, workingDirectory, input);
+        RUNNING.add(process);
         List<ProcessHandle> children = new ArrayList<>();
 
         try {
@@ -113,7 +118,20 @@ public class ProcessRunner {
         } finally {
             // Student code may start programs that outlive the tester
             stopChildren(children);
+            RUNNING.remove(process);
         }
+    }
+
+    /**
+     * Makes the list of running programs and asks Java to stop them all
+     * when GradeZZY shuts down. Called once, when this class is loaded.
+     *
+     * @return the list of running programs
+     */
+    private static RunningProcesses startShutdownHook() {
+        RunningProcesses running = new RunningProcesses();
+        Runtime.getRuntime().addShutdownHook(new Thread(running));
+        return running;
     }
 
     /**
