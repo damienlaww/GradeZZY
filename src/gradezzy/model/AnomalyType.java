@@ -45,6 +45,11 @@ public enum AnomalyType {
     MISSING_HEADER_NAME,
 
     /**
+     * A Java file starts with a byte order mark or is not valid UTF-8.
+     */
+    WRONG_ENCODING,
+
+    /**
      * The submission cannot be matched to anyone on the roster.
      */
     UNKNOWN_STUDENT,

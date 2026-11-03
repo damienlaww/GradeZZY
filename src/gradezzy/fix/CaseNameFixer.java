@@ -56,17 +56,17 @@ public class CaseNameFixer extends AbstractFixer {
     }
 
     /**
-     * Renames the question folder or required file the anomaly is about,
+     * Finds the question folder or required file the anomaly is about,
      * when its name differs from the expected one only in case.
      *
      * @param submission the submission
      * @param anomaly the anomaly
-     * @return a record that allows the fix to be undone, or null when the
-     *         name does not differ only in case
-     * @throws FixException if the operation fails
+     * @return the folder or file to rename, or null when the name does
+     *         not differ only in case
+     * @throws FixException if the working copy cannot be read
      */
     @Override
-    public FixRecord apply(Submission submission,
+    public Path findPathToChange(Submission submission,
             Anomaly anomaly) throws FixException {
         Path workingCopy = submission.getWorkingCopyPath();
         if (workingCopy == null) {
@@ -80,9 +80,48 @@ public class CaseNameFixer extends AbstractFixer {
         }
 
         if (anomaly.getType() == AnomalyType.MISSING_QUESTION_FOLDER) {
-            return renameFolder(submission, anomaly, contentRoot);
+            return findWrongCaseFolder(submission, anomaly, contentRoot);
         }
-        return renameFile(submission, anomaly, contentRoot);
+        return findWrongCaseFile(anomaly, contentRoot);
+    }
+
+    /**
+     * Renames the question folder or required file the anomaly is about,
+     * when its name differs from the expected one only in case.
+     *
+     * @param submission the submission
+     * @param anomaly the anomaly
+     * @return a record that allows the fix to be undone, or null when the
+     *         name does not differ only in case
+     * @throws FixException if the operation fails
+     */
+    @Override
+    public FixRecord apply(Submission submission,
+            Anomaly anomaly) throws FixException {
+        Path wrongCase = findPathToChange(submission, anomaly);
+        if (wrongCase == null) {
+            return null;
+        }
+
+        String wrongName = wrongCase.getFileName().toString();
+        String rightName = findRightName(anomaly, wrongName);
+        Path renamed = wrongCase.resolveSibling(rightName);
+        rename(wrongCase, renamed);
+
+        if (anomaly.getType() == AnomalyType.MISSING_QUESTION_FOLDER) {
+            return new FixRecord(anomaly, NAME, "Renamed the folder "
+                    + wrongName + " to " + rightName + ".",
+                    submission.getWorkingCopyPath(), wrongCase, renamed,
+                    null, wrongName + FOLDER_SEPARATOR,
+                    rightName + FOLDER_SEPARATOR);
+        }
+
+        String folderName = wrongCase.getParent().getFileName()
+                + FOLDER_SEPARATOR;
+        return new FixRecord(anomaly, NAME, "Renamed " + folderName
+                + wrongName + " to " + folderName + rightName + ".",
+                submission.getWorkingCopyPath(), wrongCase, renamed, null,
+                folderName + wrongName, folderName + rightName);
     }
 
     /**
@@ -102,30 +141,19 @@ public class CaseNameFixer extends AbstractFixer {
                 fixRecord.getOriginalPath().getFileName()));
     }
 
-    // Renames the anomaly's question folder when only its case is wrong.
-    private FixRecord renameFolder(Submission submission, Anomaly anomaly,
+    // Finds the anomaly's question folder when only its case is wrong.
+    private Path findWrongCaseFolder(Submission submission, Anomaly anomaly,
             Path contentRoot) throws FixException {
         String folderName = findMissingFolderName(submission, anomaly,
                 contentRoot, readFolderNames(config));
         if (folderName == null) {
             return null;
         }
-
-        Path wrongCase = findIgnoringCase(listFolders(contentRoot),
-                folderName);
-        if (wrongCase == null) {
-            return null;
-        }
-
-        Path renamed = contentRoot.resolve(folderName);
-        rename(wrongCase, renamed);
-        return new FixRecord(anomaly, NAME, "Renamed the folder "
-                + wrongCase.getFileName() + " to " + folderName + ".",
-                submission.getWorkingCopyPath(), wrongCase, renamed, null);
+        return findIgnoringCase(listFolders(contentRoot), folderName);
     }
 
-    // Renames the anomaly's required file when only its case is wrong.
-    private FixRecord renameFile(Submission submission, Anomaly anomaly,
+    // Finds the anomaly's required file when only its case is wrong.
+    private Path findWrongCaseFile(Anomaly anomaly,
             Path contentRoot) throws FixException {
         String questionId = findQuestionId(config, anomaly);
         if (questionId == null) {
@@ -136,20 +164,25 @@ public class CaseNameFixer extends AbstractFixer {
         String folderName = readFolderName(config, questionId);
         String fileName = readFileName(config, questionId);
         Path folder = findExact(listFolders(contentRoot), folderName);
-        Path wrongCase = null;
-        if (folder != null) {
-            wrongCase = findWrongCase(listFiles(folder), fileName);
-        }
-        if (wrongCase == null) {
+        if (folder == null) {
             return null;
         }
+        return findWrongCase(listFiles(folder), fileName);
+    }
 
-        Path renamed = folder.resolve(fileName);
-        rename(wrongCase, renamed);
-        return new FixRecord(anomaly, NAME, "Renamed " + folderName
-                + FOLDER_SEPARATOR + wrongCase.getFileName() + " to "
-                + folderName + FOLDER_SEPARATOR + fileName + ".",
-                submission.getWorkingCopyPath(), wrongCase, renamed, null);
+    // Returns the expected name that a wrongly cased name stands for.
+    private String findRightName(Anomaly anomaly, String wrongName) {
+        if (anomaly.getType() == AnomalyType.WRONG_FILE_NAME) {
+            return readFileName(config, findQuestionId(config, anomaly));
+        }
+
+        String rightName = wrongName;
+        for (String folderName : readFolderNames(config)) {
+            if (folderName.equalsIgnoreCase(wrongName)) {
+                rightName = folderName;
+            }
+        }
+        return rightName;
     }
 
     // Returns the file named like the wanted one but in another case.

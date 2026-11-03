@@ -49,7 +49,7 @@ public final class ReviewRules {
      * Says whether an anomaly type is a validation finding.
      *
      * @param type the anomaly type
-     * @return true for structure, file and header findings
+     * @return true for structure, file, header and encoding findings
      */
     public static boolean isValidationFinding(AnomalyType type) {
         return type == AnomalyType.MISSING_WRAPPER_FOLDER
@@ -57,6 +57,7 @@ public final class ReviewRules {
                 || type == AnomalyType.MISSING_QUESTION_FOLDER
                 || type == AnomalyType.MISSING_FILE
                 || type == AnomalyType.WRONG_FILE_NAME
-                || type == AnomalyType.MISSING_HEADER_NAME;
+                || type == AnomalyType.MISSING_HEADER_NAME
+                || type == AnomalyType.WRONG_ENCODING;
     }
 }

@@ -1054,6 +1054,9 @@ public final class DemoBackend implements DashboardBackend {
             return new RepairItem(anomaly, "Name: (blank) in Q1a.java",
                     "Name: " + student.getFirstName() + " "
                     + student.getLastName());
+        } else if (type == AnomalyType.WRONG_ENCODING) {
+            return new RepairItem(anomaly, "Q1a.java saved as UTF-8 with "
+                    + "BOM", "Q1a.java saved as UTF-8");
         } else if (type == AnomalyType.WRONG_FILE_NAME) {
             // The full working-copy path shows how long paths wrap.
             Path folder = DemoData.workingCopyPath(username).resolve("Q2");
