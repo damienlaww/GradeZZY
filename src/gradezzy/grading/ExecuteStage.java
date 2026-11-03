@@ -46,7 +46,7 @@ public class ExecuteStage implements GradingStage {
 
     // What the instructor can do about a tester that ended with an error
     private static final String RUNTIME_ERROR_ACTION =
-            "Read the log on the Logs tab.";
+            "Open code and test output on Review to read the tester output.";
 
     // The helper that runs java
     private final TesterRunner testerRunner;

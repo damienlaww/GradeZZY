@@ -12,7 +12,7 @@
 package gradezzy.ui.flow;
 
 import java.net.URL;
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 
 import javafx.animation.PauseTransition;
@@ -25,6 +25,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
@@ -50,6 +51,14 @@ public class FlowWindow {
 
     // The size of the icon of the Help button
     private static final double TOP_ICON_SIZE = 16.0;
+
+    // The shortcut that presses the blue button: Ctrl or Cmd and Enter
+    private static final KeyCombination NEXT_KEYS = new KeyCodeCombination(
+            KeyCode.ENTER, KeyCombination.SHORTCUT_DOWN);
+
+    // With Ctrl or Cmd, the keys that open steps 1 to 4
+    private static final KeyCode[] STEP_KEYS = {KeyCode.DIGIT1,
+        KeyCode.DIGIT2, KeyCode.DIGIT3, KeyCode.DIGIT4};
 
     // The backend every screen calls
     private final DashboardBackend backend;
@@ -82,11 +91,11 @@ public class FlowWindow {
     private final ActionBar actionBar = new ActionBar();
 
     // The step screens, created when first shown
-    private final Map<Step, FlowScreen> screens = new EnumMap<>(Step.class);
+    private final Map<Step, FlowScreen> screens = new HashMap<>();
 
     // The screens of Statistics, Runs and Settings, created when first
     // shown
-    private final Map<Page, FlowScreen> pages = new EnumMap<>(Page.class);
+    private final Map<Page, FlowScreen> pages = new HashMap<>();
 
     // The notice that fades in at the bottom
     private final Label notice = new Label();
@@ -312,13 +321,6 @@ public class FlowWindow {
     }
 
     /**
-     * Returns to the Marking tab, on the step the instructor was on.
-     */
-    public void closePage() {
-        show(currentStep);
-    }
-
-    /**
      * Shows a sheet over the screen, dimming what is behind it.
      *
      * @param body the sheet's content
@@ -331,14 +333,23 @@ public class FlowWindow {
         box.setMaxHeight(VBox.USE_PREF_SIZE);
         StackPane dim = new StackPane(box);
         dim.getStyleClass().add("sheet-dim");
-        dim.setOnMouseClicked(event -> {
-            if (event.getTarget() == dim) {
-                closeSheet();
-            }
-        });
+        dim.setOnMouseClicked(event -> clickBehindSheet(event, dim));
         sheet = dim;
         layers.getChildren().add(layers.getChildren().size() - 1, dim);
         actionBar.setDisable(true);
+    }
+
+    /**
+     * Closes the sheet when the dimmed area around it is clicked, but
+     * not when the sheet itself is clicked.
+     *
+     * @param event the click
+     * @param dim the dimmed area that holds the sheet
+     */
+    private void clickBehindSheet(MouseEvent event, StackPane dim) {
+        if (event.getTarget() == dim) {
+            closeSheet();
+        }
     }
 
     /**
@@ -364,18 +375,26 @@ public class FlowWindow {
             Runnable onOk) {
         Button cancel = Parts.secondary("Cancel", () -> closeSheet());
         Button ok = Parts.primary(okText);
-        ok.setOnAction(event -> {
-            closeSheet();
-            onOk.run();
-        });
+        ok.setOnAction(event -> confirmed(onOk));
         Label text = Parts.subtitle(detail);
         text.setMaxWidth(Parts.TEXT_WIDTH);
-        HBox buttons = Parts.row(Parts.GAP, Parts.grow(), cancel, ok);
+        HBox buttons = Parts.row(Parts.GAP,
+                new Node[] {Parts.grow(), cancel, ok});
         VBox body = new VBox(Parts.GAP, Parts.title(title), text,
                 buttons);
         body.getStyleClass().add("confirm");
         showSheet(body);
         ok.requestFocus();
+    }
+
+    /**
+     * Closes the question's sheet, then goes ahead.
+     *
+     * @param onOk what to do when the instructor goes ahead
+     */
+    private void confirmed(Runnable onOk) {
+        closeSheet();
+        onOk.run();
     }
 
     /**
@@ -588,7 +607,7 @@ public class FlowWindow {
         mark.getStyleClass().add("logo-mark");
         Label name = new Label("GradeZZY");
         name.getStyleClass().add("logo-name");
-        HBox logo = Parts.row(Parts.GAP_SMALL, mark, name);
+        HBox logo = Parts.row(Parts.GAP_SMALL, new Node[] {mark, name});
         logo.setMaxWidth(Region.USE_PREF_SIZE);
         StackPane.setAlignment(logo, Pos.CENTER_LEFT);
 
@@ -613,29 +632,35 @@ public class FlowWindow {
 
     // Adds the keyboard shortcuts of the window.
     private void addShortcuts(Scene scene) {
-        KeyCombination next = new KeyCodeCombination(KeyCode.ENTER,
-                KeyCombination.SHORTCUT_DOWN);
-        KeyCode[] numbers = {KeyCode.DIGIT1, KeyCode.DIGIT2,
-            KeyCode.DIGIT3, KeyCode.DIGIT4};
-        scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (next.match(event)) {
-                actionBar.firePrimary();
-                event.consume();
-            } else if (event.getCode() == KeyCode.ESCAPE && sheet != null) {
-                closeSheet();
-                event.consume();
-            } else if (event.getCode() == KeyCode.ESCAPE
-                    && currentScreen().onEscape()) {
-                event.consume();
-            } else if (event.isShortcutDown() && sheet == null) {
-                for (int i = 0; i < numbers.length; i++) {
-                    if (event.getCode() == numbers[i]) {
-                        show(Step.values()[i]);
-                        event.consume();
-                    }
+        scene.addEventFilter(KeyEvent.KEY_PRESSED,
+                event -> handleShortcut(event));
+    }
+
+    /**
+     * Acts on a key press before any control sees it: Ctrl or Cmd and
+     * Enter presses the blue button, Escape closes a sheet or goes back,
+     * and Ctrl or Cmd and 1 to 4 open a step.
+     *
+     * @param event the key press; consumed when it was a shortcut
+     */
+    private void handleShortcut(KeyEvent event) {
+        if (NEXT_KEYS.match(event)) {
+            actionBar.firePrimary();
+            event.consume();
+        } else if (event.getCode() == KeyCode.ESCAPE && sheet != null) {
+            closeSheet();
+            event.consume();
+        } else if (event.getCode() == KeyCode.ESCAPE
+                && currentScreen().onEscape()) {
+            event.consume();
+        } else if (event.isShortcutDown() && sheet == null) {
+            for (int i = 0; i < STEP_KEYS.length; i++) {
+                if (event.getCode() == STEP_KEYS[i]) {
+                    show(Step.values()[i]);
+                    event.consume();
                 }
             }
-        });
+        }
     }
 
     // Returns the theme name ThemeManager expects.

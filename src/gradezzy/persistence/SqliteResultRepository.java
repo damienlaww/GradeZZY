@@ -39,6 +39,7 @@ import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.model.TestCaseResult;
+import gradezzy.util.TextUtils;
 
 /**
  * Saves grading state in a SQLite file through JDBC.
@@ -344,10 +345,13 @@ public class SqliteResultRepository implements ResultRepository {
             connection.setAutoCommit(false);
             insertRunRow(gradingRun);
             for (String sql : DELETE_RUN_CONTENTS) {
-                try (PreparedStatement statement =
-                        connection.prepareStatement(sql)) {
+                PreparedStatement statement = null;
+                try {
+                    statement = connection.prepareStatement(sql);
                     statement.setString(1, runId);
                     statement.executeUpdate();
+                } finally {
+                    closeStatement(statement);
                 }
             }
             insertQuestions(runId, gradingRun.getAssessment());
@@ -420,13 +424,9 @@ public class SqliteResultRepository implements ResultRepository {
             throws PersistenceException {
         requireOpen();
 
-        List<String> runIds = new ArrayList<>();
-        try (PreparedStatement statement =
-                connection.prepareStatement(SELECT_RUN_IDS);
-                ResultSet rows = statement.executeQuery()) {
-            while (rows.next()) {
-                runIds.add(rows.getString("run_id"));
-            }
+        List<String> runIds = null;
+        try {
+            runIds = readRunIds();
         } catch (SQLException exception) {
             throw new PersistenceException("The saved runs could not be "
                     + "listed: " + exception.getMessage(), exception);
@@ -464,11 +464,14 @@ public class SqliteResultRepository implements ResultRepository {
             connection.setAutoCommit(false);
             int position = findPosition(runId, username);
             for (String sql : DELETE_SUBMISSION) {
-                try (PreparedStatement statement =
-                        connection.prepareStatement(sql)) {
+                PreparedStatement statement = null;
+                try {
+                    statement = connection.prepareStatement(sql);
                     statement.setString(1, runId);
                     statement.setString(2, username);
                     statement.executeUpdate();
+                } finally {
+                    closeStatement(statement);
                 }
             }
             insertSubmission(runId, submission, position);
@@ -503,11 +506,8 @@ public class SqliteResultRepository implements ResultRepository {
                     + "save.");
         }
 
-        try (PreparedStatement statement =
-                connection.prepareStatement(UPDATE_FIX_STATUS)) {
-            statement.setString(1, fixStatus.name());
-            statement.setString(2, anomalyId);
-            statement.executeUpdate();
+        try {
+            writeFixStatus(anomalyId, fixStatus);
         } catch (SQLException exception) {
             throw new PersistenceException("The fix status of anomaly "
                     + anomalyId + " could not be saved: "
@@ -530,12 +530,8 @@ public class SqliteResultRepository implements ResultRepository {
                     + "save.");
         }
 
-        try (PreparedStatement statement =
-                connection.prepareStatement(INSERT_AUDIT)) {
-            statement.setString(1, textOf(auditEntry.getTimestamp()));
-            statement.setString(2, auditEntry.getAction());
-            statement.setString(3, auditEntry.getDetail());
-            statement.executeUpdate();
+        try {
+            insertAudit(auditEntry);
         } catch (SQLException exception) {
             throw new PersistenceException("The audit entry could not be "
                     + "saved: " + exception.getMessage(), exception);
@@ -553,16 +549,8 @@ public class SqliteResultRepository implements ResultRepository {
             throws PersistenceException {
         requireOpen();
 
-        List<AuditEntry> entries = new ArrayList<>();
-        try (PreparedStatement statement =
-                connection.prepareStatement(SELECT_AUDIT);
-                ResultSet rows = statement.executeQuery()) {
-            while (rows.next()) {
-                entries.add(new AuditEntry(
-                        parseTime(rows.getString("logged_at")),
-                        rows.getString("action"),
-                        rows.getString("detail")));
-            }
+        try {
+            return readAudit();
         } catch (SQLException exception) {
             throw new PersistenceException("The audit log could not be "
                     + "read: " + exception.getMessage(), exception);
@@ -571,7 +559,6 @@ public class SqliteResultRepository implements ResultRepository {
                     + "that cannot be read: " + exception.getMessage(),
                     exception);
         }
-        return entries;
     }
 
     /**
@@ -580,18 +567,127 @@ public class SqliteResultRepository implements ResultRepository {
      * @throws PersistenceException if the operation fails
      */
     private void createTables() throws PersistenceException {
-        // Fixed text with no values in it, so a plain Statement is safe
-        try (Statement statement = connection.createStatement()) {
+        try {
+            runTableSetup();
+        } catch (SQLException exception) {
+            throw new PersistenceException("The tables of " + databaseFile
+                    + " could not be created: " + exception.getMessage(),
+                    exception);
+        }
+    }
+
+    // Runs the statements of createTables. Fixed text with no values in
+    // it, so a plain Statement is safe.
+    private void runTableSetup() throws SQLException {
+        Statement statement = null;
+        try {
+            statement = connection.createStatement();
             for (String sql : CREATE_TABLES) {
                 statement.executeUpdate(sql);
             }
             if (!hasScoreSheetColumn(statement)) {
                 statement.executeUpdate(ADD_SCORE_SHEET_COLUMN);
             }
-        } catch (SQLException exception) {
-            throw new PersistenceException("The tables of " + databaseFile
-                    + " could not be created: " + exception.getMessage(),
-                    exception);
+        } finally {
+            closeStatement(statement);
+        }
+    }
+
+    // Reads the id of every saved run, newest first
+    private List<String> readRunIds() throws SQLException {
+        List<String> runIds = new ArrayList<>();
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_RUN_IDS);
+            rows = statement.executeQuery();
+            while (rows.next()) {
+                runIds.add(rows.getString("run_id"));
+            }
+        } finally {
+            closeQuery(rows, statement);
+        }
+        return runIds;
+    }
+
+    // Changes the saved fix status of one anomaly
+    private void writeFixStatus(String anomalyId, FixStatus fixStatus)
+            throws SQLException {
+        PreparedStatement statement = null;
+        try {
+            statement = connection.prepareStatement(UPDATE_FIX_STATUS);
+            statement.setString(1, fixStatus.name());
+            statement.setString(2, anomalyId);
+            statement.executeUpdate();
+        } finally {
+            closeStatement(statement);
+        }
+    }
+
+    // Writes one row of the audit log
+    private void insertAudit(AuditEntry auditEntry) throws SQLException {
+        PreparedStatement statement = null;
+        try {
+            statement = connection.prepareStatement(INSERT_AUDIT);
+            statement.setString(1, textOf(auditEntry.getTimestamp()));
+            statement.setString(2, auditEntry.getAction());
+            statement.setString(3, auditEntry.getDetail());
+            statement.executeUpdate();
+        } finally {
+            closeStatement(statement);
+        }
+    }
+
+    // Reads the whole audit log, oldest first
+    private List<AuditEntry> readAudit() throws SQLException {
+        List<AuditEntry> entries = new ArrayList<>();
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_AUDIT);
+            rows = statement.executeQuery();
+            while (rows.next()) {
+                entries.add(new AuditEntry(
+                        parseTime(rows.getString("logged_at")),
+                        rows.getString("action"),
+                        rows.getString("detail")));
+            }
+        } finally {
+            closeQuery(rows, statement);
+        }
+        return entries;
+    }
+
+    // Closes a statement opened inside a try block, from its finally
+    // block. Null means the statement was never opened.
+    private void closeStatement(Statement statement) throws SQLException {
+        if (statement != null) {
+            statement.close();
+        }
+    }
+
+    // Closes the rows of a query, then the statement that made them. The
+    // statement is closed even if closing the rows fails. Null means that
+    // one was never opened.
+    private void closeQuery(ResultSet rows, Statement statement)
+            throws SQLException {
+        try {
+            if (rows != null) {
+                rows.close();
+            }
+        } finally {
+            closeStatement(statement);
+        }
+    }
+
+    // Closes two statements in the order given. The second is closed
+    // even if closing the first fails.
+    private void closeStatements(Statement first, Statement second)
+            throws SQLException {
+        try {
+            closeStatement(first);
+        } finally {
+            closeStatement(second);
         }
     }
 
@@ -600,12 +696,17 @@ public class SqliteResultRepository implements ResultRepository {
     private boolean hasScoreSheetColumn(Statement statement)
             throws SQLException {
         boolean found = false;
-        try (ResultSet columns = statement.executeQuery(LIST_RUN_COLUMNS)) {
+        ResultSet columns = null;
+        try {
+            columns = statement.executeQuery(LIST_RUN_COLUMNS);
             while (columns.next()) {
                 if (SCORE_SHEET_COLUMN.equals(columns.getString("name"))) {
                     found = true;
                 }
             }
+        } finally {
+            // The statement belongs to the caller, so only the rows close
+            closeQuery(columns, null);
         }
         return found;
     }
@@ -641,23 +742,38 @@ public class SqliteResultRepository implements ResultRepository {
     private void insertRunRow(GradingRun gradingRun) throws SQLException {
         Section section = gradingRun.getSection();
         Assessment assessment = gradingRun.getAssessment();
-        try (PreparedStatement statement =
-                connection.prepareStatement(INSERT_RUN)) {
+
+        // A missing section or assessment leaves its columns empty (null)
+        String moduleCode = null;
+        String sectionCode = null;
+        if (section != null) {
+            moduleCode = section.getModuleCode();
+            sectionCode = section.getSectionCode();
+        }
+        String assessmentName = null;
+        String assessmentModule = null;
+        String placeholders = null;
+        if (assessment != null) {
+            assessmentName = assessment.getName();
+            assessmentModule = assessment.getModuleCode();
+            placeholders = TextUtils.join(LIST_SEPARATOR,
+                    assessment.getPlaceholderFolderNames());
+        }
+
+        PreparedStatement statement = null;
+        try {
+            statement = connection.prepareStatement(INSERT_RUN);
             statement.setString(1, gradingRun.getId());
             statement.setString(2, textOf(gradingRun.getStartedAt()));
-            statement.setString(3, section == null ? null
-                    : section.getModuleCode());
-            statement.setString(4, section == null ? null
-                    : section.getSectionCode());
-            statement.setString(5, assessment == null ? null
-                    : assessment.getName());
-            statement.setString(6, assessment == null ? null
-                    : assessment.getModuleCode());
-            statement.setString(7, assessment == null ? null
-                    : String.join(LIST_SEPARATOR,
-                            assessment.getPlaceholderFolderNames()));
+            statement.setString(3, moduleCode);
+            statement.setString(4, sectionCode);
+            statement.setString(5, assessmentName);
+            statement.setString(6, assessmentModule);
+            statement.setString(7, placeholders);
             statement.setString(8, textOf(gradingRun.getScoreSheetFile()));
             statement.executeUpdate();
+        } finally {
+            closeStatement(statement);
         }
     }
 
@@ -670,8 +786,9 @@ public class SqliteResultRepository implements ResultRepository {
         }
 
         List<Question> questions = assessment.getQuestions();
-        try (PreparedStatement statement =
-                connection.prepareStatement(INSERT_QUESTION)) {
+        PreparedStatement statement = null;
+        try {
+            statement = connection.prepareStatement(INSERT_QUESTION);
             for (int index = 0; index < questions.size(); index++) {
                 Question question = questions.get(index);
                 statement.setString(1, runId);
@@ -682,6 +799,8 @@ public class SqliteResultRepository implements ResultRepository {
                 statement.setDouble(6, question.getMaxScore());
                 statement.executeUpdate();
             }
+        } finally {
+            closeStatement(statement);
         }
     }
 
@@ -690,8 +809,24 @@ public class SqliteResultRepository implements ResultRepository {
             int position) throws SQLException {
         String username = submission.getUsername();
         Student student = submission.getStudent();
-        try (PreparedStatement statement =
-                connection.prepareStatement(INSERT_SUBMISSION)) {
+
+        // A student who is not on the roster leaves these columns empty
+        String orgDefinedId = null;
+        String studentUsername = null;
+        String lastName = null;
+        String firstName = null;
+        String email = null;
+        if (student != null) {
+            orgDefinedId = student.getOrgDefinedId();
+            studentUsername = student.getUsername();
+            lastName = student.getLastName();
+            firstName = student.getFirstName();
+            email = student.getEmail();
+        }
+
+        PreparedStatement statement = null;
+        try {
+            statement = connection.prepareStatement(INSERT_SUBMISSION);
             statement.setString(1, runId);
             statement.setString(2, username);
             statement.setInt(3, position);
@@ -699,17 +834,14 @@ public class SqliteResultRepository implements ResultRepository {
             statement.setString(5, textOf(submission.getOriginalPath()));
             statement.setString(6, textOf(submission.getWorkingCopyPath()));
             statement.setString(7, submission.getIngestFailure());
-            statement.setString(8, student == null ? null
-                    : student.getOrgDefinedId());
-            statement.setString(9, student == null ? null
-                    : student.getUsername());
-            statement.setString(10, student == null ? null
-                    : student.getLastName());
-            statement.setString(11, student == null ? null
-                    : student.getFirstName());
-            statement.setString(12, student == null ? null
-                    : student.getEmail());
+            statement.setString(8, orgDefinedId);
+            statement.setString(9, studentUsername);
+            statement.setString(10, lastName);
+            statement.setString(11, firstName);
+            statement.setString(12, email);
             statement.executeUpdate();
+        } finally {
+            closeStatement(statement);
         }
 
         insertQuestionResults(runId, username,
@@ -720,10 +852,12 @@ public class SqliteResultRepository implements ResultRepository {
     // Writes the score of each question and each of its test cases
     private void insertQuestionResults(String runId, String username,
             List<QuestionResult> results) throws SQLException {
-        try (PreparedStatement resultStatement =
-                connection.prepareStatement(INSERT_QUESTION_RESULT);
-                PreparedStatement testStatement =
-                        connection.prepareStatement(INSERT_TEST_CASE)) {
+        PreparedStatement resultStatement = null;
+        PreparedStatement testStatement = null;
+        try {
+            resultStatement = connection.prepareStatement(
+                    INSERT_QUESTION_RESULT);
+            testStatement = connection.prepareStatement(INSERT_TEST_CASE);
             for (int index = 0; index < results.size(); index++) {
                 QuestionResult result = results.get(index);
                 String questionId = questionIdOf(result);
@@ -751,14 +885,18 @@ public class SqliteResultRepository implements ResultRepository {
                     testStatement.executeUpdate();
                 }
             }
+        } finally {
+            // Closed in the opposite order to opening
+            closeStatements(testStatement, resultStatement);
         }
     }
 
     // Writes each anomaly of one submission
     private void insertAnomalies(String runId, String username,
             List<Anomaly> anomalies) throws SQLException {
-        try (PreparedStatement statement =
-                connection.prepareStatement(INSERT_ANOMALY)) {
+        PreparedStatement statement = null;
+        try {
+            statement = connection.prepareStatement(INSERT_ANOMALY);
             for (int index = 0; index < anomalies.size(); index++) {
                 Anomaly anomaly = anomalies.get(index);
                 statement.setString(1, runId);
@@ -772,30 +910,43 @@ public class SqliteResultRepository implements ResultRepository {
                 statement.setString(9, textOf(anomaly.getFixStatus()));
                 statement.executeUpdate();
             }
+        } finally {
+            closeStatement(statement);
         }
     }
 
     // The place a submission already has in the run, or the next free one
     private int findPosition(String runId,
             String username) throws SQLException {
-        try (PreparedStatement statement =
-                connection.prepareStatement(SELECT_POSITION)) {
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_POSITION);
             statement.setString(1, runId);
             statement.setString(2, username);
-            try (ResultSet rows = statement.executeQuery()) {
-                if (rows.next()) {
-                    return rows.getInt("position");
-                }
+            rows = statement.executeQuery();
+            if (rows.next()) {
+                return rows.getInt("position");
             }
+        } finally {
+            closeQuery(rows, statement);
         }
 
-        try (PreparedStatement statement =
-                connection.prepareStatement(SELECT_NEXT_POSITION)) {
+        return findNextPosition(runId);
+    }
+
+    // The next free place at the end of a run
+    private int findNextPosition(String runId) throws SQLException {
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_NEXT_POSITION);
             statement.setString(1, runId);
-            try (ResultSet rows = statement.executeQuery()) {
-                rows.next();
-                return rows.getInt(1);
-            }
+            rows = statement.executeQuery();
+            rows.next();
+            return rows.getInt(1);
+        } finally {
+            closeQuery(rows, statement);
         }
     }
 
@@ -806,42 +957,54 @@ public class SqliteResultRepository implements ResultRepository {
         Section section = null;
         LocalDateTime startedAt = null;
         Path scoreSheetFile = null;
-        try (PreparedStatement statement =
-                connection.prepareStatement(SELECT_RUN)) {
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_RUN);
             statement.setString(1, runId);
-            try (ResultSet rows = statement.executeQuery()) {
-                if (!rows.next()) {
-                    return null;
-                }
-                startedAt = parseTime(rows.getString("started_at"));
-                section = new Section(rows.getString("module_code"),
-                        rows.getString("section_code"));
-                assessment = new Assessment(
-                        rows.getString("assessment_name"),
-                        rows.getString("assessment_module"));
-                addPlaceholders(assessment,
-                        rows.getString("placeholder_folders"));
-                scoreSheetFile = toPath(rows.getString(SCORE_SHEET_COLUMN));
+            rows = statement.executeQuery();
+            if (!rows.next()) {
+                return null;
             }
+            startedAt = parseTime(rows.getString("started_at"));
+            section = new Section(rows.getString("module_code"),
+                    rows.getString("section_code"));
+            assessment = new Assessment(
+                    rows.getString("assessment_name"),
+                    rows.getString("assessment_module"));
+            addPlaceholders(assessment,
+                    rows.getString("placeholder_folders"));
+            scoreSheetFile = toPath(rows.getString(SCORE_SHEET_COLUMN));
+        } finally {
+            closeQuery(rows, statement);
         }
 
-        try (PreparedStatement statement =
-                connection.prepareStatement(SELECT_QUESTIONS)) {
-            statement.setString(1, runId);
-            try (ResultSet rows = statement.executeQuery()) {
-                while (rows.next()) {
-                    assessment.addQuestion(new Question(
-                            rows.getString("question_id"),
-                            rows.getString("folder_name"),
-                            rows.getString("file_name"),
-                            rows.getDouble("max_score")));
-                }
-            }
-        }
+        readQuestions(runId, assessment);
         GradingRun gradingRun = new GradingRun(runId, assessment, section,
                 startedAt);
         gradingRun.setScoreSheetFile(scoreSheetFile);
         return gradingRun;
+    }
+
+    // Adds the saved questions of a run to its assessment, in order
+    private void readQuestions(String runId,
+            Assessment assessment) throws SQLException {
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_QUESTIONS);
+            statement.setString(1, runId);
+            rows = statement.executeQuery();
+            while (rows.next()) {
+                assessment.addQuestion(new Question(
+                        rows.getString("question_id"),
+                        rows.getString("folder_name"),
+                        rows.getString("file_name"),
+                        rows.getDouble("max_score")));
+            }
+        } finally {
+            closeQuery(rows, statement);
+        }
     }
 
     // Splits the saved placeholder names back into the assessment
@@ -859,17 +1022,20 @@ public class SqliteResultRepository implements ResultRepository {
     private Map<String, Submission> readSubmissions(GradingRun gradingRun)
             throws SQLException {
         Map<String, Submission> submissions = new HashMap<>();
-        try (PreparedStatement statement =
-                connection.prepareStatement(SELECT_SUBMISSIONS)) {
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_SUBMISSIONS);
             statement.setString(1, gradingRun.getId());
-            try (ResultSet rows = statement.executeQuery()) {
-                while (rows.next()) {
-                    Submission submission = readSubmission(rows,
-                            gradingRun.getSection());
-                    gradingRun.addSubmission(submission);
-                    submissions.put(submission.getUsername(), submission);
-                }
+            rows = statement.executeQuery();
+            while (rows.next()) {
+                Submission submission = readSubmission(rows,
+                        gradingRun.getSection());
+                gradingRun.addSubmission(submission);
+                submissions.put(submission.getUsername(), submission);
             }
+        } finally {
+            closeQuery(rows, statement);
         }
         return submissions;
     }
@@ -905,27 +1071,30 @@ public class SqliteResultRepository implements ResultRepository {
             Assessment assessment, Map<String, Submission> submissions)
             throws SQLException {
         Map<String, QuestionResult> results = new HashMap<>();
-        try (PreparedStatement statement =
-                connection.prepareStatement(SELECT_QUESTION_RESULTS)) {
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_QUESTION_RESULTS);
             statement.setString(1, runId);
-            try (ResultSet rows = statement.executeQuery()) {
-                while (rows.next()) {
-                    String username = rows.getString("username");
-                    String questionId = rows.getString("question_id");
-                    Submission submission = submissions.get(username);
-                    if (submission != null) {
-                        QuestionResult result = new QuestionResult(
-                                findQuestion(assessment, questionId));
-                        result.setScore(rows.getDouble("score"));
-                        result.setCompiled(rows.getBoolean("compiled"));
-                        result.setTimedOut(rows.getBoolean("timed_out"));
-                        result.setOutput(rows.getString("output"));
-                        submission.addQuestionResult(result);
-                        results.put(username + KEY_SEPARATOR + questionId,
-                                result);
-                    }
+            rows = statement.executeQuery();
+            while (rows.next()) {
+                String username = rows.getString("username");
+                String questionId = rows.getString("question_id");
+                Submission submission = submissions.get(username);
+                if (submission != null) {
+                    QuestionResult result = new QuestionResult(
+                            findQuestion(assessment, questionId));
+                    result.setScore(rows.getDouble("score"));
+                    result.setCompiled(rows.getBoolean("compiled"));
+                    result.setTimedOut(rows.getBoolean("timed_out"));
+                    result.setOutput(rows.getString("output"));
+                    submission.addQuestionResult(result);
+                    results.put(username + KEY_SEPARATOR + questionId,
+                            result);
                 }
             }
+        } finally {
+            closeQuery(rows, statement);
         }
         return results;
     }
@@ -933,40 +1102,46 @@ public class SqliteResultRepository implements ResultRepository {
     // Adds each saved test case to its question result
     private void readTestCases(String runId,
             Map<String, QuestionResult> results) throws SQLException {
-        try (PreparedStatement statement =
-                connection.prepareStatement(SELECT_TEST_CASES)) {
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_TEST_CASES);
             statement.setString(1, runId);
-            try (ResultSet rows = statement.executeQuery()) {
-                while (rows.next()) {
-                    QuestionResult result = results.get(
-                            rows.getString("username") + KEY_SEPARATOR
-                            + rows.getString("question_id"));
-                    if (result != null) {
-                        result.addTestCaseResult(new TestCaseResult(
-                                rows.getInt("test_number"),
-                                rows.getBoolean("passed"),
-                                rows.getString("detail")));
-                    }
+            rows = statement.executeQuery();
+            while (rows.next()) {
+                QuestionResult result = results.get(
+                        rows.getString("username") + KEY_SEPARATOR
+                        + rows.getString("question_id"));
+                if (result != null) {
+                    result.addTestCaseResult(new TestCaseResult(
+                            rows.getInt("test_number"),
+                            rows.getBoolean("passed"),
+                            rows.getString("detail")));
                 }
             }
+        } finally {
+            closeQuery(rows, statement);
         }
     }
 
     // Adds each saved anomaly, with its fix status, to its submission
     private void readAnomalies(String runId,
             Map<String, Submission> submissions) throws SQLException {
-        try (PreparedStatement statement =
-                connection.prepareStatement(SELECT_ANOMALIES)) {
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_ANOMALIES);
             statement.setString(1, runId);
-            try (ResultSet rows = statement.executeQuery()) {
-                while (rows.next()) {
-                    String username = rows.getString("username");
-                    Submission submission = submissions.get(username);
-                    if (submission != null) {
-                        submission.addAnomaly(readAnomaly(rows, username));
-                    }
+            rows = statement.executeQuery();
+            while (rows.next()) {
+                String username = rows.getString("username");
+                Submission submission = submissions.get(username);
+                if (submission != null) {
+                    submission.addAnomaly(readAnomaly(rows, username));
                 }
             }
+        } finally {
+            closeQuery(rows, statement);
         }
     }
 
@@ -975,10 +1150,20 @@ public class SqliteResultRepository implements ResultRepository {
             String username) throws SQLException {
         String type = row.getString("type");
         String severity = row.getString("severity");
-        Anomaly anomaly = new Anomaly(row.getString("anomaly_id"),
-                type == null ? null : AnomalyType.valueOf(type),
-                severity == null ? null : Severity.valueOf(severity),
-                username, row.getString("message"),
+        String anomalyId = row.getString("anomaly_id");
+
+        // A missing type or severity stays null
+        AnomalyType anomalyType = null;
+        if (type != null) {
+            anomalyType = AnomalyType.valueOf(type);
+        }
+        Severity anomalySeverity = null;
+        if (severity != null) {
+            anomalySeverity = Severity.valueOf(severity);
+        }
+
+        Anomaly anomaly = new Anomaly(anomalyId, anomalyType,
+                anomalySeverity, username, row.getString("message"),
                 row.getString("suggested_action"));
 
         String fixStatus = row.getString("fix_status");

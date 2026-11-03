@@ -42,7 +42,7 @@ public class BackupManager {
     private static final String TIMESTAMP_FORMAT =
             "%04d%02d%02d-%02d%02d%02d-%03d";
 
-    private static final int NANOSECONDS_PER_MILLISECOND = 1_000_000;
+    private static final int NANOSECONDS_PER_MILLISECOND = 1000000;
 
     // The newest backup is never deleted, whatever the setting says
     private static final int MIN_BACKUPS_KEPT = 1;

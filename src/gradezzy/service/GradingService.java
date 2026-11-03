@@ -10,6 +10,7 @@
  */
 package gradezzy.service;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
@@ -57,11 +58,23 @@ public class GradingService {
     // Start of the id of the warning added when a run cannot be saved
     private static final String SAVE_WARNING_ID_PREFIX = "save-";
 
+    // Start of the id of the warning added when a resumed run uses the
+    // tester folder in the settings
+    private static final String RESUME_WARNING_ID_PREFIX = "resume-";
+
+    // What the instructor can do when a resumed run used the settings'
+    // tester folder
+    private static final String RESUME_WARNING_ACTION = "Check the marks "
+            + "of this student, or grade the batch again with Set up.";
+
     // The audit log actions this service records
     private static final String GRADING_STARTED = "Grading started";
     private static final String GRADING_NOT_STARTED =
             "Grading could not start";
     private static final String SAVE_FAILED = "Save failed";
+    private static final String GRADING_CANCELLED = "Grading cancelled";
+    private static final String GRADING_RETRIED = "Grading retried";
+    private static final String GRADING_RESUMED = "Grading resumed";
 
     // What the instructor can do when a run cannot be saved. PersistStage
     // gives its warning the same text, so both are found as save warnings.
@@ -94,6 +107,11 @@ public class GradingService {
     // The shared information of the last run started, kept for Retry
     private GradingContext lastContext = null;
 
+    // Every run started or resumed in this session, so Statistics can
+    // show them even when the database is off or a save failed. Only
+    // read and changed in the synchronized methods below.
+    private final List<GradingRun> sessionRuns = new ArrayList<>();
+
     // The ids of the runs whose failed save is already in the audit log,
     // so a run that fails to save again is not logged twice
     private final Set<String> unsavedRunIds = new HashSet<>();
@@ -122,11 +140,29 @@ public class GradingService {
     public GradingService(AppConfig config, PipelineFactory pipelineFactory,
             AssessmentFactory assessmentFactory,
             ResultRepository repository) {
+        this(config, pipelineFactory, assessmentFactory, repository,
+                new AuditService(config, repository));
+    }
+
+    /**
+     * Creates a new grading service that saves each run and writes its
+     * actions to the given audit log.
+     *
+     * @param config the application settings
+     * @param pipelineFactory the helper that builds the pipeline
+     * @param assessmentFactory the helper that reads the assessment
+     * @param repository the store runs are saved to, or null to save
+     *        nothing
+     * @param auditService the log of instructor actions
+     */
+    public GradingService(AppConfig config, PipelineFactory pipelineFactory,
+            AssessmentFactory assessmentFactory,
+            ResultRepository repository, AuditService auditService) {
         this.config = config;
         this.pipelineFactory = pipelineFactory;
         this.assessmentFactory = assessmentFactory;
         this.repository = repository;
-        this.auditService = new AuditService(config, repository);
+        this.auditService = auditService;
     }
 
     /**
@@ -150,7 +186,21 @@ public class GradingService {
                 Path.of(config.getString(ConfigKeys.SCORE_SHEET_FILE)));
     }
 
-    /** Starts a run using the roster explicitly selected for this batch. */
+    /**
+     * Grades a whole batch against the score sheet chosen for it, with
+     * the starter folder in the settings.
+     *
+     * <p>Tier: MUST.
+     *
+     * @param inputPaths the zip files or folders the instructor chose
+     * @param section the section the batch belongs to
+     * @param testCaseSource where the tester files come from
+     * @param listener the object told about progress
+     * @param scoreSheetFile the score sheet for this batch, or null for
+     *        the one in the settings
+     * @return the finished run, holding every submission and its results
+     * @throws GradingException if the batch cannot start at all
+     */
     public GradingRun startGrading(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener,
             Path scoreSheetFile) throws GradingException {
@@ -164,6 +214,19 @@ public class GradingService {
      * settings. The starter folder is kept on the run, so Retry, and
      * Resume while this is still the last run, use it too. A start that
      * fails is written to the audit log with its reason.
+     *
+     * <p>Tier: MUST.
+     *
+     * @param inputPaths the zip files or folders the instructor chose
+     * @param section the section the batch belongs to
+     * @param testCaseSource where the tester files come from
+     * @param listener the object told about progress
+     * @param scoreSheetFile the score sheet for this batch, or null for
+     *        the one in the settings
+     * @param starterDirectory the starter folder for this batch, or null
+     *        for the one in the settings
+     * @return the finished run, holding every submission and its results
+     * @throws GradingException if the batch cannot start at all
      */
     public GradingRun startGrading(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener,
@@ -225,6 +288,12 @@ public class GradingService {
         // not the one in the settings
         gradingRun.setScoreSheetFile(rosterFile);
         gradingRun.setStarterDirectory(starterDirectory);
+        // Kept so Resume after a restart uses the same testers
+        if (testCaseSource instanceof UploadedTesterSource) {
+            UploadedTesterSource uploaded =
+                    (UploadedTesterSource) testCaseSource;
+            gradingRun.setTestersDirectory(uploaded.getTestersDirectory());
+        }
         GradingContext context = new GradingContext(config, assessment);
         context.setRunId(runId);
 
@@ -258,6 +327,7 @@ public class GradingService {
 
         lastRun = gradingRun;
         lastContext = context;
+        addSessionRun(gradingRun);
         return gradingRun;
     }
 
@@ -266,8 +336,39 @@ public class GradingService {
      *
      * <p>Tier: SHOULD.
      */
-    public void cancel() {
+    public synchronized void cancel() {
+        if (!cancellationToken.isCancelled()) {
+            String detail = "Grading was stopped.";
+            if (lastRun != null) {
+                detail = "Grading of " + lastRun.getId() + " was stopped.";
+            }
+            auditService.record(GRADING_CANCELLED, detail);
+        }
         cancellationToken.cancel();
+    }
+
+    /**
+     * Returns every run started or resumed in this session, oldest first,
+     * including runs that could not be saved.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @return a copy of the list of this session's runs
+     */
+    public synchronized List<GradingRun> getSessionRuns() {
+        return new ArrayList<>(sessionRuns);
+    }
+
+    // Remembers a run of this session once, keeping the newest object
+    // when the same run is loaded again.
+    private synchronized void addSessionRun(GradingRun gradingRun) {
+        for (int index = 0; index < sessionRuns.size(); index++) {
+            if (sessionRuns.get(index).getId().equals(gradingRun.getId())) {
+                sessionRuns.set(index, gradingRun);
+                return;
+            }
+        }
+        sessionRuns.add(gradingRun);
     }
 
     /**
@@ -323,6 +424,9 @@ public class GradingService {
             return gradingRun;
         }
 
+        auditService.record(GRADING_RETRIED, "Grading "
+                + retryRun.getSubmissions().size() + " submission(s) of "
+                + gradingRun.getId() + " again.");
         cancellationToken.reset();
         GradingPipeline pipeline = createPipeline(gradingRun);
         pipeline.run(retryRun, lastContext,
@@ -342,10 +446,13 @@ public class GradingService {
      * <p>The last run started or resumed in this session is continued
      * with the score sheet, testers and starter folder it was started
      * with. Any other run, even an earlier one of this session, is loaded
-     * from the database; the testers and starter folder chosen for that
-     * batch are not saved, so the ones in the settings (paths.testers.dir
-     * and paths.starter.dir) are used, with the students already matched
-     * in the saved run.
+     * from the database, with the students already matched in it. It is
+     * graded with the tester folder saved with it, if the database holds
+     * one. The database does not save the tester or starter folder yet,
+     * so for now such a run uses the ones in the settings
+     * (paths.testers.dir and paths.starter.dir), and every student graded
+     * again gets a warning saying so, because other testers can give
+     * other marks.
      *
      * <p>Tier: SHOULD.
      *
@@ -362,10 +469,22 @@ public class GradingService {
             throw new GradingException("Choose a run to resume.");
         }
 
+        // Set when the saved run does not say which testers it used
+        String testerWarning = null;
         if (lastRun == null || !runId.equals(lastRun.getId())) {
             GradingRun savedRun = loadSavedRun(runId);
             lastContext = prepareSavedContext(savedRun);
             lastRun = savedRun;
+            addSessionRun(savedRun);
+            if (savedRun.getTestersDirectory() == null) {
+                testerWarning = "This student was graded after the app "
+                        + "was restarted. The tester folder this run was "
+                        + "started with was not saved, so the one in the "
+                        + "settings was used: "
+                        + config.getString(ConfigKeys.TESTERS_DIR)
+                        + ". If that is a different folder, the marks can "
+                        + "differ from the rest of the run.";
+            }
         }
         GradingRun gradingRun = lastRun;
 
@@ -378,6 +497,13 @@ public class GradingService {
         for (Submission submission : gradingRun.getSubmissions()) {
             if (needsResume(submission)) {
                 resetForRetry(submission);
+                if (testerWarning != null) {
+                    submission.addAnomaly(new Anomaly(
+                            RESUME_WARNING_ID_PREFIX + UUID.randomUUID(),
+                            AnomalyType.INTERNAL_ERROR, Severity.WARNING,
+                            submission.getUsername(), testerWarning,
+                            RESUME_WARNING_ACTION));
+                }
                 resumeRun.addSubmission(submission);
             }
         }
@@ -386,6 +512,9 @@ public class GradingService {
             return gradingRun;
         }
 
+        auditService.record(GRADING_RESUMED, "Grading the "
+                + resumeRun.getSubmissions().size() + " unfinished "
+                + "submission(s) of " + gradingRun.getId() + ".");
         cancellationToken.reset();
         GradingPipeline pipeline = createPipeline(gradingRun);
         pipeline.run(resumeRun, lastContext,
@@ -448,8 +577,10 @@ public class GradingService {
     }
 
     // Builds the shared information for a run loaded from the database:
-    // the students matched before, the score sheet and the testers from
-    // the settings.
+    // the students matched before, the score sheet and the testers the
+    // run was started with, or those in the settings if they were not
+    // saved. A saved tester folder that is gone stops the resume, rather
+    // than grading the rest with other testers.
     private GradingContext prepareSavedContext(GradingRun savedRun)
             throws GradingException {
         Assessment assessment = savedRun.getAssessment();
@@ -472,10 +603,21 @@ public class GradingService {
         }
         readRoster(context, scoreSheetFile);
 
+        Path testersDirectory = savedRun.getTestersDirectory();
+        if (testersDirectory == null) {
+            testersDirectory = Paths.get(config.getString(
+                    ConfigKeys.TESTERS_DIR));
+        } else if (!Files.isDirectory(testersDirectory)) {
+            throw new GradingException("Run " + savedRun.getId()
+                    + " cannot be resumed: it was graded with the testers "
+                    + "in " + testersDirectory + ", which is no longer "
+                    + "there. Put the folder back, or grade the batch "
+                    + "again.");
+        }
+
         try {
             TestCaseSource testCaseSource = new UploadedTesterSource(
-                    Paths.get(config.getString(ConfigKeys.TESTERS_DIR)),
-                    config);
+                    testersDirectory, config);
             context.getTesters().addAll(
                     testCaseSource.prepareTesters(assessment));
         } catch (TestCaseException exception) {

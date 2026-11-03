@@ -9,7 +9,8 @@ package gradezzy.report;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+
+import gradezzy.util.TextUtils;
 
 /**
  * Builds JSON text by hand, without a library.
@@ -35,6 +36,14 @@ public class JsonWriter {
     // Format of a control character written as a unicode escape
     private static final String UNICODE_ESCAPE = "\\u%04x";
 
+    // The most characters one escaped character can take: a backslash,
+    // the letter u and four hex digits
+    private static final int MAX_ESCAPE_LENGTH = 6;
+
+    // The quotes around a JSON string, one at each end
+    private static final char QUOTE = '"';
+    private static final int QUOTE_COUNT = 2;
+
     /**
      * Creates a new json writer.
      */
@@ -53,31 +62,42 @@ public class JsonWriter {
             return NULL;
         }
 
-        StringBuilder quoted = new StringBuilder();
-        quoted.append('"');
+        // Tester output can be long, so the characters go into an array
+        // big enough for the worst case, every character escaped, plus
+        // the two quotes; count says how much of it is filled
+        char[] quoted = new char[text.length() * MAX_ESCAPE_LENGTH
+                + QUOTE_COUNT];
+        int count = 0;
+        quoted[count] = QUOTE;
+        count++;
         for (int index = 0; index < text.length(); index++) {
-            quoted.append(escape(text.charAt(index)));
+            String escaped = escape(text.charAt(index));
+            for (int i = 0; i < escaped.length(); i++) {
+                quoted[count] = escaped.charAt(i);
+                count++;
+            }
         }
-        quoted.append('"');
-        return quoted.toString();
+        quoted[count] = QUOTE;
+        count++;
+        return new String(quoted, 0, count);
     }
 
     /**
      * Builds a JSON object from names and ready-made values.
      *
-     * <p>Fields appear in the order the map returns them, so pass a
-     * LinkedHashMap to control the order. A null value is written as null.
+     * <p>Fields appear in the order they were added to the JsonFields.
+     * A null value is written as null.
      *
      * @param fields the fields
      * @return the JSON object text
      */
-    public String writeObject(Map<String, String> fields) {
+    public String writeObject(JsonFields fields) {
         List<String> pairs = new ArrayList<>();
-        for (Map.Entry<String, String> field : fields.entrySet()) {
-            pairs.add(quote(field.getKey()) + NAME_SEPARATOR
-                    + valueOrNull(field.getValue()));
+        for (String name : fields.getNames()) {
+            pairs.add(quote(name) + NAME_SEPARATOR
+                    + valueOrNull(fields.get(name)));
         }
-        return "{" + String.join(SEPARATOR, pairs) + "}";
+        return "{" + TextUtils.join(SEPARATOR, pairs) + "}";
     }
 
     /**
@@ -91,7 +111,7 @@ public class JsonWriter {
         for (String element : elements) {
             values.add(valueOrNull(element));
         }
-        return "[" + String.join(SEPARATOR, values) + "]";
+        return "[" + TextUtils.join(SEPARATOR, values) + "]";
     }
 
     // Returns the escaped form of one character of a JSON string

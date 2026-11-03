@@ -16,7 +16,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javafx.scene.control.TreeItem;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
@@ -37,7 +36,6 @@ import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.stats.StatisticsSummary;
-import gradezzy.ui.FileTreeBuilder;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
@@ -100,13 +98,13 @@ public final class DemoBackend implements DashboardBackend {
     private final Assessment assessment;
 
     // Hands out anomaly ids
-    private final DemoData.IdCounter ids = new DemoData.IdCounter();
+    private final DemoIdCounter ids = new DemoIdCounter();
 
     // The run shown for each section, by section label
     private final Map<String, GradingRun> runsBySection = new HashMap<>();
 
-    // Every run on the History screen, newest first
-    private final List<HistoryEntry> history = new ArrayList<>();
+    // Every run on the Runs tab, newest first
+    private final List<DemoHistoryItem> history = new ArrayList<>();
 
     // Review decisions, by anomaly id
     private final Map<String, ReviewDecision> decisions = new HashMap<>();
@@ -160,10 +158,10 @@ public final class DemoBackend implements DashboardBackend {
         settleSampleDecisions(sampleRun);
 
         runsBySection.put(section.getLabel(), sampleRun);
-        history.add(new HistoryEntry(sampleRun, snapshotText(sampleRun,
+        history.add(new DemoHistoryItem(sampleRun, snapshotText(sampleRun,
                 "A"), true));
-        history.add(new HistoryEntry(earlierRun, snapshotText(earlierRun,
-                "A"), true));
+        history.add(new DemoHistoryItem(earlierRun,
+                snapshotText(earlierRun, "A"), true));
         seedAudit();
     }
 
@@ -220,7 +218,10 @@ public final class DemoBackend implements DashboardBackend {
      * @return the count
      */
     public int getGradeCount(String username) {
-        return gradeCounts.getOrDefault(username, 0);
+        if (!gradeCounts.containsKey(username)) {
+            return 0;
+        }
+        return gradeCounts.get(username);
     }
 
     // ------------------------------------------------------------ mode
@@ -252,20 +253,6 @@ public final class DemoBackend implements DashboardBackend {
         codes.add(DemoData.MODULE_CODE);
         codes.add(DemoData.EMPTY_MODULE_CODE);
         return codes;
-    }
-
-    /**
-     * Returns the synthetic module name.
-     */
-    @Override
-    public String getModuleName(String moduleCode) {
-        if (DemoData.MODULE_CODE.equals(moduleCode)) {
-            return DemoData.MODULE_NAME;
-        }
-        if (DemoData.EMPTY_MODULE_CODE.equals(moduleCode)) {
-            return DemoData.EMPTY_MODULE_NAME;
-        }
-        return "";
     }
 
     /**
@@ -330,12 +317,13 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public List<RunRecord> listRuns() {
         List<RunRecord> records = new ArrayList<>();
-        for (HistoryEntry entry : history) {
+        for (DemoHistoryItem entry : history) {
+            GradingRun run = entry.getRun();
             GradingRun shown = runsBySection.get(
-                    entry.run.getSection().getLabel());
-            records.add(new RunRecord(entry.run, describeRun(entry.run),
-                    entry.backupText, entry.restorable,
-                    shown == entry.run));
+                    run.getSection().getLabel());
+            records.add(new RunRecord(run, describeRun(run),
+                    entry.getBackupText(), entry.isRestorable(),
+                    shown == run));
         }
         return records;
     }
@@ -361,15 +349,6 @@ public final class DemoBackend implements DashboardBackend {
             paths.add(DemoData.samplePath(DemoData.SAMPLE_STARTER));
         }
         return paths;
-    }
-
-    /**
-     * Returns a synthetic corrected copy of the unreadable sample ZIP.
-     */
-    @Override
-    public Path getSampleReplacement(ImportItem invalidItem) {
-        return DemoData.samplePath(invalidItem.getUsername()
-                + DemoData.REPLACEMENT_SUFFIX + DemoData.ZIP_EXTENSION);
     }
 
     /**
@@ -572,7 +551,10 @@ public final class DemoBackend implements DashboardBackend {
      */
     @Override
     public ReviewDecision getDecision(Anomaly anomaly) {
-        return decisions.getOrDefault(anomaly.getId(), ReviewDecision.OPEN);
+        if (!decisions.containsKey(anomaly.getId())) {
+            return ReviewDecision.OPEN;
+        }
+        return decisions.get(anomaly.getId());
     }
 
     /**
@@ -656,14 +638,6 @@ public final class DemoBackend implements DashboardBackend {
     // --------------------------------------------------- search, source
 
     /**
-     * Calls SearchService.search, which only reads the run in memory.
-     */
-    @Override
-    public List<Submission> search(GradingRun gradingRun, String keyword) {
-        return services.getSearchService().search(gradingRun, keyword);
-    }
-
-    /**
      * Searches the synthetic source files.
      */
     @Override
@@ -680,19 +654,6 @@ public final class DemoBackend implements DashboardBackend {
             }
         }
         return matches;
-    }
-
-    /**
-     * Builds the tree of the synthetic working copy.
-     */
-    @Override
-    public TreeItem<String> getFileTree(Submission submission) {
-        if (submission.getWorkingCopyPath() == null) {
-            return null;
-        }
-        return new FileTreeBuilder().buildFromPaths(
-                submission.getUsername(),
-                DemoData.sourceFiles(submission.getUsername()));
     }
 
     /**
@@ -821,14 +782,14 @@ public final class DemoBackend implements DashboardBackend {
      */
     @Override
     public ActionResult backupNow() {
-        HistoryEntry entry = findEntry(sampleRunShown());
+        DemoHistoryItem entry = findEntry(sampleRunShown());
         if (entry == null) {
             return ActionResult.failed("There is no run to back up yet.");
         }
-        entry.backupText = "Snapshot " + entry.run.getId() + "-B, "
-                + LocalDateTime.now().format(TIME_FORMAT);
-        entry.restorable = true;
-        return ActionResult.done("Backed up run " + entry.run.getId()
+        String runId = entry.getRun().getId();
+        entry.recordSnapshot("Snapshot " + runId + "-B, "
+                + LocalDateTime.now().format(TIME_FORMAT));
+        return ActionResult.done("Backed up run " + runId
                 + ". Demo mode keeps the snapshot in memory only.");
     }
 
@@ -848,11 +809,10 @@ public final class DemoBackend implements DashboardBackend {
 
         String label = record.getRun().getSection().getLabel();
         GradingRun current = runsBySection.get(label);
-        HistoryEntry currentEntry = findEntry(current);
+        DemoHistoryItem currentEntry = findEntry(current);
         if (currentEntry != null) {
-            currentEntry.backupText = "Recovery snapshot, "
-                    + LocalDateTime.now().format(TIME_FORMAT);
-            currentEntry.restorable = true;
+            currentEntry.recordSnapshot("Recovery snapshot, "
+                    + LocalDateTime.now().format(TIME_FORMAT));
         }
         runsBySection.put(label, record.getRun());
         if (record.getRun() != sampleRun) {
@@ -920,14 +880,25 @@ public final class DemoBackend implements DashboardBackend {
      */
     @Override
     public ActionResult saveSettings(Map<String, String> changes) {
-        for (Map.Entry<String, String> change : changes.entrySet()) {
-            String problem = validateSetting(change.getKey(),
-                    change.getValue());
+        return saveSettings(new ArrayList<>(changes.keySet()), changes);
+    }
+
+    /**
+     * Checks the changes in order and keeps them for this session only,
+     * not in config.properties.
+     */
+    @Override
+    public ActionResult saveSettings(List<String> keys,
+            Map<String, String> changes) {
+        for (String key : keys) {
+            String problem = validateSetting(key, changes.get(key));
             if (!problem.isEmpty()) {
                 return ActionResult.failed(problem);
             }
         }
-        settingChanges.putAll(changes);
+        for (String key : keys) {
+            settingChanges.put(key, changes.get(key));
+        }
         return ActionResult.done("Saved " + changes.size() + " setting"
                 + plural(changes.size()) + " for this demo session. "
                 + "config.properties was not changed.");
@@ -1004,31 +975,11 @@ public final class DemoBackend implements DashboardBackend {
 
     // ------------------------------------------------------- helpers
 
-    // One run on the History screen with its backup.
-    private static class HistoryEntry {
-
-        // The run
-        private final GradingRun run;
-
-        // A description of its latest snapshot
-        private String backupText;
-
-        // Whether a snapshot can be restored
-        private boolean restorable;
-
-        // Creates a history entry.
-        HistoryEntry(GradingRun run, String backupText, boolean restorable) {
-            this.run = run;
-            this.backupText = backupText;
-            this.restorable = restorable;
-        }
-    }
-
     // Starts a simulated run and reports when it ends.
     private void startGrader(GradingRun run, List<Submission> queue,
             ProgressListener listener, RunCallback callback,
             boolean newRun) {
-        DemoGrader.Outcome outcome = submission -> gradeOne(submission);
+        DemoOutcome outcome = submission -> gradeOne(submission);
         grader = new DemoGrader(run, queue, listener, outcome,
                 () -> finishRun(run, callback, newRun));
         grader.start(!manualStepping);
@@ -1046,7 +997,8 @@ public final class DemoBackend implements DashboardBackend {
             boolean newRun) {
         runsBySection.put(run.getSection().getLabel(), run);
         if (newRun) {
-            history.add(0, new HistoryEntry(run, "No snapshot yet", false));
+            history.add(0, new DemoHistoryItem(run, "No snapshot yet",
+                    false));
             useLarge = false;
         }
         callback.onFinished(run);
@@ -1154,9 +1106,9 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     // Finds the history entry of a run.
-    private HistoryEntry findEntry(GradingRun run) {
-        for (HistoryEntry entry : history) {
-            if (entry.run == run) {
+    private DemoHistoryItem findEntry(GradingRun run) {
+        for (DemoHistoryItem entry : history) {
+            if (entry.getRun() == run) {
                 return entry;
             }
         }

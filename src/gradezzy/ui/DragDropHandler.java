@@ -3,7 +3,7 @@
  *
  * Purpose: Lets the instructor drop files onto the window.
  *
- * Where it fits: Used by the upload screen next to the file picker. It
+ * Where it fits: Used by Set up next to the file picker. It
  * accepts ZIP files and folders only and never opens them.
  */
 package gradezzy.ui;
@@ -58,9 +58,17 @@ public class DragDropHandler {
      */
     public void install(Node target) {
         target.setOnDragOver(event -> handleDragOver(event, target));
-        target.setOnDragExited(event -> target.getStyleClass().remove(
-                DRAG_OVER_CLASS));
+        target.setOnDragExited(event -> clearDragOver(target));
         target.setOnDragDropped(event -> handleDrop(event, target));
+    }
+
+    /**
+     * Removes the hover highlight when the files leave the target.
+     *
+     * @param target the target
+     */
+    private void clearDragOver(Node target) {
+        target.getStyleClass().remove(DRAG_OVER_CLASS);
     }
 
     /**

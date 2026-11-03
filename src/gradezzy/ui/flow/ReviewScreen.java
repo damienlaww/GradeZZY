@@ -12,27 +12,26 @@
 package gradezzy.ui.flow;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 import javafx.animation.PauseTransition;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.collections.transformation.SortedList;
-import javafx.css.PseudoClass;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
-import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableRow;
+import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.scene.control.TableView;
+import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
@@ -124,10 +123,6 @@ public class ReviewScreen extends FlowScreen {
     // Averages are shown to one decimal place
     private static final double ONE_DECIMAL = 10.0;
 
-    // Marks the last row, so it has no line under it
-    private static final PseudoClass LAST_ROW =
-            PseudoClass.getPseudoClass("last-row");
-
     // The table and the panel side by side
     private final HBox view = new HBox();
 
@@ -209,7 +204,8 @@ public class ReviewScreen extends FlowScreen {
         createTable();
         banner.getStyleClass().add("banner");
 
-        HBox tools = Parts.row(Parts.GAP, createFilterBar(), Parts.grow());
+        HBox tools = Parts.row(Parts.GAP,
+                new Node[] {createFilterBar(), Parts.grow()});
         if (getBackend().supports(Capability.CODE_SEARCH)) {
             tools.getChildren().add(createSearchModeBar());
         }
@@ -239,6 +235,10 @@ public class ReviewScreen extends FlowScreen {
                 -> fitColumns());
     }
 
+    /**
+     * Returns the Review step, or an empty state when nothing has
+     * been graded yet.
+     */
     @Override
     public Node getView() {
         if (getState().getRun() == null) {
@@ -247,6 +247,10 @@ public class ReviewScreen extends FlowScreen {
         return view;
     }
 
+    /**
+     * Fills the table with the current run and sets up the action
+     * bar.
+     */
     @Override
     public void onShow() {
         GradingRun run = getState().getRun();
@@ -319,12 +323,22 @@ public class ReviewScreen extends FlowScreen {
         reviewButton.getStyleClass().add("center-pill");
         failedButton.getStyleClass().add("right-pill");
         group.selectedToggleProperty().addListener((observable, before,
-                after) -> {
-            if (after == null) {
-                before.setSelected(true);
-            }
-            applyFilter();
-        });
+                after) -> filterClicked(before, after));
+    }
+
+    /**
+     * Follows a click on All, Needs review or Failed. Clicking the
+     * button that is already on would turn every button off, so it
+     * stays on.
+     *
+     * @param before the button that was on
+     * @param after the button that is on now, or null for none
+     */
+    private void filterClicked(Toggle before, Toggle after) {
+        if (after == null) {
+            before.setSelected(true);
+        }
+        applyFilter();
     }
 
     // Puts the filter buttons side by side.
@@ -356,17 +370,26 @@ public class ReviewScreen extends FlowScreen {
         namesButton.getStyleClass().add("left-pill");
         codeButton.getStyleClass().add("right-pill");
         group.selectedToggleProperty().addListener((observable, before,
-                after) -> {
-            if (after == null) {
-                before.setSelected(true);
-                return;
-            }
-            searchModeChanged();
-        });
+                after) -> searchModeClicked(before, after));
         HBox bar = new HBox(namesButton, codeButton);
         bar.getStyleClass().addAll("segmented", "search-mode");
         bar.setMinWidth(HBox.USE_PREF_SIZE);
         return bar;
+    }
+
+    /**
+     * Follows a click on Names or Code. Clicking the button that is
+     * already on would turn both off, so it stays on.
+     *
+     * @param before the button that was on
+     * @param after the button that is on now, or null for none
+     */
+    private void searchModeClicked(Toggle before, Toggle after) {
+        if (after == null) {
+            before.setSelected(true);
+            return;
+        }
+        searchModeChanged();
     }
 
     // Builds the tick, student, total and status columns.
@@ -376,42 +399,35 @@ public class ReviewScreen extends FlowScreen {
         table.setFixedCellSize(ROW_HEIGHT);
         table.setColumnResizePolicy(
                 TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
-        table.setRowFactory(view -> new ResultRow());
+        table.setRowFactory(tableView -> new ReviewRow(table));
 
         TableColumn<Submission, Submission> tick = new TableColumn<>();
         tickAllBox.setOnAction(event -> tickAll(tickAllBox.isSelected()));
         tick.setGraphic(tickAllBox);
         tick.setSortable(false);
         fixWidth(tick, TICK_WIDTH);
-        tick.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(
-                cell.getValue()));
-        tick.setCellFactory(column -> new TickCell());
+        tick.setCellValueFactory(cell -> studentOf(cell));
+        tick.setCellFactory(column -> new ReviewTickCell(this));
 
         TableColumn<Submission, Submission> student =
                 new TableColumn<>("Student");
         student.setMinWidth(STUDENT_WIDTH);
-        student.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(
-                cell.getValue()));
-        student.setCellFactory(column -> new StudentCell());
-        student.setComparator(Comparator.comparing(
-                submission -> Students.name(submission).toLowerCase()));
+        student.setCellValueFactory(cell -> studentOf(cell));
+        student.setCellFactory(column -> new ReviewStudentCell());
+        student.setComparator(new StudentNameComparator());
 
         TableColumn<Submission, Double> total = new TableColumn<>("Total");
-        fixWidth(total, TOTAL_WIDTH);
-        total.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(
-                cell.getValue().getTotalScore()));
-        total.setCellFactory(column -> new MarkCell(true));
+        fixMarkWidth(total, TOTAL_WIDTH);
+        total.setCellValueFactory(cell -> totalOf(cell));
+        total.setCellFactory(column -> new ReviewMarkCell(true));
         total.getStyleClass().add("centred");
 
         TableColumn<Submission, Submission> status =
                 new TableColumn<>("Status");
         fixWidth(status, STATUS_WIDTH);
-        status.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(
-                cell.getValue()));
-        status.setCellFactory(column -> new StatusCell());
-        status.setComparator(Comparator.comparing(
-                submission -> Students.state(submission, getBackend())
-                .ordinal()));
+        status.setCellValueFactory(cell -> studentOf(cell));
+        status.setCellFactory(column -> new ReviewStatusCell(getBackend()));
+        status.setComparator(new StudentStateComparator(getBackend()));
 
         table.getColumns().add(tick);
         table.getColumns().add(student);
@@ -439,12 +455,58 @@ public class ReviewScreen extends FlowScreen {
         table.setClip(corners);
     }
 
-    // Gives a column one width that never changes.
-    private void fixWidth(TableColumn<Submission, ?> column, double width) {
+    // Gives a column of students one width that never changes.
+    private void fixWidth(TableColumn<Submission, Submission> column,
+            double width) {
         column.setMinWidth(width);
         column.setPrefWidth(width);
         column.setMaxWidth(width);
         column.setResizable(false);
+    }
+
+    // Gives a column of marks one width that never changes.
+    private void fixMarkWidth(TableColumn<Submission, Double> column,
+            double width) {
+        column.setMinWidth(width);
+        column.setPrefWidth(width);
+        column.setMaxWidth(width);
+        column.setResizable(false);
+    }
+
+    /**
+     * Returns the student of a row, as the value of a cell.
+     *
+     * @param cell the row and column of the cell
+     * @return the student, wrapped so the table can read it
+     */
+    private ObservableValue<Submission> studentOf(
+            CellDataFeatures<Submission, Submission> cell) {
+        return new ReadOnlyObjectWrapper<>(cell.getValue());
+    }
+
+    /**
+     * Returns the total of a row's student, as the value of a cell.
+     *
+     * @param cell the row and column of the cell
+     * @return the total, wrapped so the table can read it
+     */
+    private ObservableValue<Double> totalOf(
+            CellDataFeatures<Submission, Double> cell) {
+        return new ReadOnlyObjectWrapper<>(cell.getValue().getTotalScore());
+    }
+
+    /**
+     * Returns a row's student's mark for one question, as the value of a
+     * cell.
+     *
+     * @param cell the row and column of the cell
+     * @param questionId the question of the column
+     * @return the mark, or a wrapped null when there is none
+     */
+    private ObservableValue<Double> questionMarkOf(
+            CellDataFeatures<Submission, Double> cell, String questionId) {
+        return new ReadOnlyObjectWrapper<>(scoreOf(cell.getValue(),
+                questionId));
     }
 
     // Adds one column per question, between Student and Total.
@@ -457,11 +519,10 @@ public class ReviewScreen extends FlowScreen {
         for (Question question : assessment.getQuestions()) {
             TableColumn<Submission, Double> column = new TableColumn<>(
                     question.getId());
-            fixWidth(column, QUESTION_WIDTH);
+            fixMarkWidth(column, QUESTION_WIDTH);
             String id = question.getId();
-            column.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(
-                    scoreOf(cell.getValue(), id)));
-            column.setCellFactory(cell -> new MarkCell(false));
+            column.setCellValueFactory(cell -> questionMarkOf(cell, id));
+            column.setCellFactory(tableColumn -> new ReviewMarkCell(false));
             column.getStyleClass().add("centred");
             questionColumns.add(column);
             table.getColumns().add(index, column);
@@ -566,7 +627,10 @@ public class ReviewScreen extends FlowScreen {
 
     // Returns the Retry link, or why this run cannot be retried.
     private Node retryAction(GradingRun run, int couldNot) {
-        String them = couldNot == 1 ? "it" : "them";
+        String them = "them";
+        if (couldNot == 1) {
+            them = "it";
+        }
         if (getBackend().canRetryFailed(run)) {
             return Parts.link("Retry " + them,
                     () -> getWindow().retryRun(run));
@@ -620,27 +684,40 @@ public class ReviewScreen extends FlowScreen {
         boolean inCode = codeButton.isSelected();
         boolean onlyReview = reviewButton.isSelected();
         boolean onlyFailed = failedButton.isSelected();
-        filtered.setPredicate(submission -> {
-            if (onlyReview
-                    && Students.openCount(submission, getBackend()) == 0) {
-                return false;
-            }
-            if (onlyFailed && !Students.isFailed(Students.state(
-                    submission, getBackend()))) {
-                return false;
-            }
-            if (text.isEmpty()) {
-                return true;
-            }
-            if (inCode) {
-                return codeMatches.contains(submission);
-            }
-            return Students.name(submission).toLowerCase().contains(text)
-                    || submission.getUsername().toLowerCase()
-                    .contains(text);
-        });
+        filtered.setPredicate(submission -> passesFilter(submission, text,
+                inCode, onlyReview, onlyFailed));
         placeholder.setText(emptyNote(text, inCode, onlyReview,
                 onlyFailed));
+    }
+
+    /**
+     * Says whether a student passes the filter buttons and the search.
+     *
+     * @param submission the student
+     * @param text the search text in lower case, or an empty string
+     * @param inCode true when the search looks inside the code
+     * @param onlyReview true when only students to review are shown
+     * @param onlyFailed true when only students who failed are shown
+     * @return true when the student is shown
+     */
+    private boolean passesFilter(Submission submission, String text,
+            boolean inCode, boolean onlyReview, boolean onlyFailed) {
+        if (onlyReview
+                && Students.openCount(submission, getBackend()) == 0) {
+            return false;
+        }
+        if (onlyFailed && !Students.isFailed(Students.state(
+                submission, getBackend()))) {
+            return false;
+        }
+        if (text.isEmpty()) {
+            return true;
+        }
+        if (inCode) {
+            return codeMatches.contains(submission);
+        }
+        return Students.name(submission).toLowerCase().contains(text)
+                || submission.getUsername().toLowerCase().contains(text);
     }
 
     // Returns the note shown when no student passes the filter.
@@ -693,6 +770,34 @@ public class ReviewScreen extends FlowScreen {
         panel.setVisible(false);
         panel.setManaged(false);
         table.getSelectionModel().clearSelection();
+    }
+
+    /**
+     * Says whether a student is ticked for export.
+     *
+     * @param submission the student
+     * @return true when ticked
+     */
+    public boolean isTickedForExport(Submission submission) {
+        return getState().getSelected().contains(submission);
+    }
+
+    /**
+     * Ticks or unticks one student for export. Unticking a student also
+     * unticks the box that ticks every student.
+     *
+     * @param submission the student
+     * @param ticked true to tick, false to untick
+     */
+    public void setTickedForExport(Submission submission, boolean ticked) {
+        List<Submission> selected = getState().getSelected();
+        if (ticked && !selected.contains(submission)) {
+            selected.add(submission);
+        } else if (!ticked) {
+            selected.remove(submission);
+            tickAllBox.setSelected(false);
+        }
+        refreshActions();
     }
 
     // Ticks or unticks every student shown.
@@ -818,134 +923,5 @@ public class ReviewScreen extends FlowScreen {
                 + " not checked yet", "You can export now and come back "
                 + "to Review later. Marks do not change until you decide.",
                 "Continue anyway", () -> getWindow().advanceTo(Step.EXPORT));
-    }
-
-    // ------------------------------------------------------------ cells
-
-    // A row that knows whether it is the last, so it draws no line
-    // under itself on top of the table's border.
-    private class ResultRow extends TableRow<Submission> {
-
-        @Override
-        public void updateIndex(int index) {
-            super.updateIndex(index);
-            markLast();
-        }
-
-        @Override
-        protected void updateItem(Submission submission, boolean isEmpty) {
-            super.updateItem(submission, isEmpty);
-            markLast();
-        }
-
-        // Sets the last-row style when this row shows the last student.
-        private void markLast() {
-            boolean last = !isEmpty()
-                    && getIndex() == table.getItems().size() - 1;
-            pseudoClassStateChanged(LAST_ROW, last);
-        }
-    }
-
-    // A check box that adds the row's student to the export scope.
-    private class TickCell extends TableCell<Submission, Submission> {
-
-        // The check box
-        private final CheckBox box = new CheckBox();
-
-        // Creates the cell.
-        TickCell() {
-            box.setOnAction(event -> {
-                Submission submission = getItem();
-                List<Submission> selected = getState().getSelected();
-                if (box.isSelected() && !selected.contains(submission)) {
-                    selected.add(submission);
-                } else if (!box.isSelected()) {
-                    selected.remove(submission);
-                    tickAllBox.setSelected(false);
-                }
-                refreshActions();
-            });
-        }
-
-        @Override
-        protected void updateItem(Submission submission, boolean isEmpty) {
-            super.updateItem(submission, isEmpty);
-            if (isEmpty || submission == null) {
-                setGraphic(null);
-                return;
-            }
-            box.setSelected(getState().getSelected().contains(submission));
-            setGraphic(box);
-        }
-    }
-
-    // The student's name above the username.
-    private class StudentCell extends TableCell<Submission, Submission> {
-
-        @Override
-        protected void updateItem(Submission submission, boolean isEmpty) {
-            super.updateItem(submission, isEmpty);
-            if (isEmpty || submission == null) {
-                setGraphic(null);
-                return;
-            }
-            Label name = Parts.strong(Students.name(submission));
-            Label username = Parts.muted(submission.getUsername());
-            username.getStyleClass().add("small-text");
-            VBox box = new VBox(name, username);
-            box.getStyleClass().add("student-cell");
-            box.setAlignment(Pos.CENTER_LEFT);
-            box.setMinWidth(0);
-            setGraphic(box);
-        }
-    }
-
-    // A mark, grey when zero, a dash when there is none.
-    private static class MarkCell extends TableCell<Submission, Double> {
-
-        // True for the bold total column
-        private final boolean bold;
-
-        // Creates the cell.
-        MarkCell(boolean bold) {
-            this.bold = bold;
-            setAlignment(Pos.CENTER);
-        }
-
-        @Override
-        protected void updateItem(Double mark, boolean isEmpty) {
-            super.updateItem(mark, isEmpty);
-            getStyleClass().removeAll("zero", "total");
-            if (isEmpty) {
-                setText(null);
-                return;
-            }
-            if (mark == null) {
-                setText("-");
-                getStyleClass().add("zero");
-                return;
-            }
-            setText(Parts.mark(mark));
-            if (mark == 0.0) {
-                getStyleClass().add("zero");
-            }
-            if (bold) {
-                getStyleClass().add("total");
-            }
-        }
-    }
-
-    // The status pill.
-    private class StatusCell extends TableCell<Submission, Submission> {
-
-        @Override
-        protected void updateItem(Submission submission, boolean isEmpty) {
-            super.updateItem(submission, isEmpty);
-            if (isEmpty || submission == null) {
-                setGraphic(null);
-                return;
-            }
-            setGraphic(Students.pill(submission, getBackend()));
-        }
     }
 }

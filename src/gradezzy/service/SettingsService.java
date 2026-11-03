@@ -20,6 +20,7 @@ import java.util.regex.PatternSyntaxException;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.util.TextUtils;
 
 /**
  * Reads, checks and saves settings for the settings page. A new value is
@@ -161,19 +162,38 @@ public class SettingsService {
         ConfigKeys.PLACEHOLDER_FOLDER_NAMES
     };
 
+    // The audit log action this service records
+    private static final String SETTINGS_SAVED = "Settings saved";
+
     // The application settings
     private final AppConfig config;
+
+    // The log of instructor actions, or null to log nothing
+    private final AuditService auditService;
 
     // The keys changed since the last save, in the order they changed
     private final List<String> changedKeys = new ArrayList<>();
 
     /**
-     * Creates a new settings service.
+     * Creates a new settings service that logs nothing.
      *
      * @param config the application settings
      */
     public SettingsService(AppConfig config) {
+        this(config, null);
+    }
+
+    /**
+     * Creates a new settings service that writes every save to the audit
+     * log, with the settings that changed.
+     *
+     * @param config the application settings
+     * @param auditService the log of instructor actions, or null to log
+     *        nothing
+     */
+    public SettingsService(AppConfig config, AuditService auditService) {
         this.config = config;
+        this.auditService = auditService;
     }
 
     /**
@@ -332,7 +352,7 @@ public class SettingsService {
 
         List<String> lines = Files.readAllLines(configFile);
         List<String> writtenKeys = new ArrayList<>();
-        StringBuilder output = new StringBuilder();
+        String output = "";
         int index = 0;
 
         while (index < lines.size()) {
@@ -340,12 +360,12 @@ public class SettingsService {
             String key = readKey(lines.get(index));
 
             if (key != null && changedKeys.contains(key)) {
-                output.append(formatLine(key)).append(lineEnding);
+                output += formatLine(key) + lineEnding;
                 writtenKeys.add(key);
             } else {
                 for (int lineIndex = index; lineIndex <= lastIndex;
                         lineIndex++) {
-                    output.append(lines.get(lineIndex)).append(lineEnding);
+                    output += lines.get(lineIndex) + lineEnding;
                 }
             }
 
@@ -355,12 +375,29 @@ public class SettingsService {
         // A key that was not in the file yet goes at the end.
         for (String key : changedKeys) {
             if (!writtenKeys.contains(key)) {
-                output.append(formatLine(key)).append(lineEnding);
+                output += formatLine(key) + lineEnding;
             }
         }
 
-        writeSafely(configFile, output.toString());
+        writeSafely(configFile, output);
+        if (auditService != null) {
+            auditService.record(SETTINGS_SAVED, describeChanges());
+        }
         changedKeys.clear();
+    }
+
+    // Lists the changed settings with their new values, for the audit log.
+    private String describeChanges() {
+        String detail = "";
+
+        for (String key : changedKeys) {
+            if (!detail.isEmpty()) {
+                detail += ", ";
+            }
+            detail += key + KEY_VALUE_SEPARATOR + config.getString(key);
+        }
+
+        return "Changed " + detail + ".";
     }
 
     // Writes a copy first, so a failure halfway leaves the original
@@ -485,8 +522,8 @@ public class SettingsService {
             }
         }
 
-        return "'" + key + "' must be one of: " + String.join(", ", choices)
-                + ".";
+        return "'" + key + "' must be one of: "
+                + TextUtils.join(", ", choices) + ".";
     }
 
     // Checks that a value is a valid regular expression.

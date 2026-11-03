@@ -3,8 +3,8 @@
  *
  * Purpose: Holds the files for the next grading run and says if it may start.
  *
- * Where it fits: Kept in UiState so the choices survive navigation. The
- * Submissions screen fills it and DashboardBackend.startGrading reads it.
+ * Where it fits: Kept in FlowState so the choices survive navigation.
+ * Set up fills it and DashboardBackend.startGrading reads it.
  */
 package gradezzy.ui.backend;
 

@@ -37,14 +37,8 @@ public final class DemoData {
     /** The module shown in demo mode. */
     public static final String MODULE_CODE = "CS102";
 
-    /** The full name of the demo module. */
-    public static final String MODULE_NAME = "Programming Fundamentals II";
-
     /** A second module with no runs, to show empty states. */
     public static final String EMPTY_MODULE_CODE = "DEMO";
-
-    /** The full name of the empty module. */
-    public static final String EMPTY_MODULE_NAME = "Empty sample module";
 
     /** The only section of the empty module. */
     public static final String EMPTY_MODULE_SECTION = "D1";
@@ -79,7 +73,7 @@ public final class DemoData {
     /** The id of the sample run shown at start-up. */
     public static final String CURRENT_RUN_ID = "024";
 
-    /** The id of the earlier sample run on the History screen. */
+    /** The id of the earlier sample run on the Runs tab. */
     public static final String EARLIER_RUN_ID = "023";
 
     /** When the sample run started. */
@@ -143,6 +137,9 @@ public final class DemoData {
     // The number of characters in the long sample log
     private static final int LONG_LOG_CHARACTERS = 100000;
 
+    // Room past LONG_LOG_CHARACTERS for the last log line and the score
+    private static final int LOG_SPARE_CHARACTERS = 100;
+
     // The folder inside the sample folder that holds the working copies
     private static final String WORKING_FOLDER = "working";
 
@@ -186,25 +183,6 @@ public final class DemoData {
     }
 
     /**
-     * Hands out unique anomaly ids.
-     */
-    public static class IdCounter {
-
-        // The number of ids handed out so far
-        private int count = 0;
-
-        /**
-         * Returns the next anomaly id.
-         *
-         * @return an id such as A-0007
-         */
-        public String next() {
-            count++;
-            return String.format("A-%04d", count);
-        }
-    }
-
-    /**
      * Returns the synthetic student behind a username.
      *
      * @param username a sample or generated username
@@ -231,7 +209,7 @@ public final class DemoData {
      * @return the run
      */
     public static GradingRun buildCurrentRun(Assessment assessment,
-            Section section, int timeoutSeconds, IdCounter ids) {
+            Section section, int timeoutSeconds, DemoIdCounter ids) {
         GradingRun run = new GradingRun(CURRENT_RUN_ID, assessment,
                 section, CURRENT_RUN_STARTED);
         for (String username : USERNAMES) {
@@ -241,8 +219,8 @@ public final class DemoData {
                         AnomalyType.INVALID_ARCHIVE, Severity.ERROR,
                         username, username + ZIP_EXTENSION + " could not "
                         + "be opened as a ZIP file, so it was not graded.",
-                        "Replace the file on the Submissions screen, then "
-                        + "grade the batch again."));
+                        "Replace the file on Set up, then grade the batch "
+                        + "again."));
             } else {
                 applyOutcome(submission, assessment, timeoutSeconds, ids);
             }
@@ -252,7 +230,7 @@ public final class DemoData {
     }
 
     /**
-     * Builds the earlier run on the History screen, with one student not
+     * Builds the earlier run on the Runs tab, with one student not
      * on the roster and one failed submission.
      *
      * @param assessment the assessment
@@ -262,7 +240,7 @@ public final class DemoData {
      * @return the run
      */
     public static GradingRun buildEarlierRun(Assessment assessment,
-            Section section, int timeoutSeconds, IdCounter ids) {
+            Section section, int timeoutSeconds, DemoIdCounter ids) {
         GradingRun run = new GradingRun(EARLIER_RUN_ID, assessment,
                 section, EARLIER_RUN_STARTED);
         for (int index = 0; index < USERNAMES.length; index++) {
@@ -289,7 +267,7 @@ public final class DemoData {
      * @return the run
      */
     public static GradingRun buildLargeCohort(Assessment assessment,
-            Section section, int timeoutSeconds, IdCounter ids) {
+            Section section, int timeoutSeconds, DemoIdCounter ids) {
         GradingRun run = buildCurrentRun(assessment, section,
                 timeoutSeconds, ids);
         Random random = new Random(COHORT_SEED);
@@ -319,7 +297,7 @@ public final class DemoData {
      * @param ids the anomaly id counter
      */
     public static void applyOutcome(Submission submission,
-            Assessment assessment, int timeoutSeconds, IdCounter ids) {
+            Assessment assessment, int timeoutSeconds, DemoIdCounter ids) {
         int index = indexOf(submission.getUsername());
         if (index < 0) {
             return;
@@ -494,7 +472,7 @@ public final class DemoData {
 
     // A missing wrapper folder, repaired; the repair waits for approval.
     private static void addAlphaOutcome(Submission submission,
-            IdCounter ids) {
+            DemoIdCounter ids) {
         Anomaly wrapper = new Anomaly(ids.next(),
                 AnomalyType.MISSING_WRAPPER_FOLDER, Severity.INFO,
                 submission.getUsername(), "Q1, Q2 and Q3 were at the top of "
@@ -506,7 +484,7 @@ public final class DemoData {
 
     // A tester that timed out on its last case, and two repairs.
     private static void addBravoOutcome(Submission submission,
-            int timeoutSeconds, IdCounter ids) {
+            int timeoutSeconds, DemoIdCounter ids) {
         String username = submission.getUsername();
         QuestionResult q1a = submission.getQuestionResults().get(Q1A);
         q1a.getTestCaseResults().clear();
@@ -543,7 +521,7 @@ public final class DemoData {
 
     // A question that did not compile because of a wrong file name.
     private static void addCharlieOutcome(Submission submission,
-            IdCounter ids) {
+            DemoIdCounter ids) {
         String username = submission.getUsername();
         QuestionResult q2b = submission.getQuestionResults().get(Q2B);
         q2b.getTestCaseResults().clear();
@@ -558,7 +536,8 @@ public final class DemoData {
                 AnomalyType.COMPILE_ERROR, Severity.ERROR, username,
                 "Q2b did not compile: cannot find symbol class Q2b. The "
                 + "other questions were still graded.",
-                "Read the compiler output on the Logs tab."));
+                "Open code and test output on Review to read the "
+                    + "compiler output."));
 
         Path found = workingCopyPath(username).resolve("Q2")
                 .resolve("q2b.java");
@@ -572,7 +551,7 @@ public final class DemoData {
 
     // Untouched starter files, an empty answer and a missing folder.
     private static void addDeltaOutcome(Submission submission,
-            IdCounter ids) {
+            DemoIdCounter ids) {
         String username = submission.getUsername();
         markNotCompiled(submission.getQuestionResults().get(Q2A),
                 "The Q2 folder was not found, so Q2a was not compiled.");
@@ -598,7 +577,7 @@ public final class DemoData {
 
     // Flags that wait for review, a missing file and a very long log.
     private static void addEchoOutcome(Submission submission,
-            IdCounter ids) {
+            DemoIdCounter ids) {
         String username = submission.getUsername();
         QuestionResult q1a = submission.getQuestionResults().get(Q1A);
         q1a.getTestCaseResults().clear();
@@ -621,7 +600,8 @@ public final class DemoData {
         submission.addAnomaly(new Anomaly(ids.next(),
                 AnomalyType.RUNTIME_ERROR, Severity.ERROR, username,
                 "Q1a case 3 threw IllegalArgumentException. Cases 1 and 2 "
-                + "were scored.", "Read the log on the Logs tab."));
+                + "were scored.", "Open code and test output on Review "
+                + "to read the tester output."));
         submission.addAnomaly(new Anomaly(ids.next(),
                 AnomalyType.MISSING_FILE, Severity.ERROR, username,
                 "Q1/Q1b.java is missing. GradeZZY never writes a missing "
@@ -631,12 +611,12 @@ public final class DemoData {
                 AnomalyType.SIMILAR_CODE, Severity.INFO, username,
                 "Q2a.java is 84% similar to learner.alpha. This is a "
                 + "review aid, not a finding.",
-                "Compare the pair on the Similarity Review screen."));
+                "Use Compare in the Similar code card on Export."));
     }
 
     // A student not on the earlier run's score sheet, so not graded.
     private static void addNotOnRosterOutcome(Submission submission,
-            IdCounter ids) {
+            DemoIdCounter ids) {
         String username = submission.getUsername();
         submission.addAnomaly(new Anomaly(ids.next(),
                 AnomalyType.UNKNOWN_STUDENT, Severity.WARNING, username,
@@ -648,22 +628,22 @@ public final class DemoData {
 
     // Grading that stopped on the unreadable ZIP file in the earlier run.
     private static void addGraderFailedOutcome(Submission submission,
-            IdCounter ids) {
+            DemoIdCounter ids) {
         String username = submission.getUsername();
         submission.setStatus(SubmissionStatus.FAILED);
         submission.addAnomaly(new Anomaly(ids.next(),
                 AnomalyType.INTERNAL_ERROR, Severity.ERROR, username,
-                "Grading stopped on this submission in the Unpacking "
-                + "stage, so it has no marks. The other submissions were "
-                + "graded.",
-                "Replace " + username + ZIP_EXTENSION + " on the "
-                + "Submissions screen, then grade the batch again."));
+                "Grading stopped on this submission while it was "
+                + "being unpacked, so it has no marks. The other "
+                + "submissions were graded.",
+                "Replace " + username + ZIP_EXTENSION + " on Set up, "
+                + "then grade the batch again."));
     }
 
     // Gives a generated student an outcome picked by its number.
     private static void applyGeneratedOutcome(Submission submission,
             Assessment assessment, int number, Random random,
-            int timeoutSeconds, IdCounter ids) {
+            int timeoutSeconds, DemoIdCounter ids) {
         String username = submission.getUsername();
         if (number % UNGRADED_EVERY == 0) {
             return;
@@ -672,10 +652,9 @@ public final class DemoData {
             submission.setStatus(SubmissionStatus.FAILED);
             submission.addAnomaly(new Anomaly(ids.next(),
                     AnomalyType.INTERNAL_ERROR, Severity.ERROR, username,
-                    "Grading stopped on this submission in the Scoring "
-                    + "stage. The other submissions were graded.",
-                    "Retry the failed submissions from the Progress "
-                    + "screen."));
+                    "Grading stopped on this submission while it was "
+                    + "being scored. The other submissions were graded.",
+                    "Retry the failed submissions on Review."));
             return;
         }
 
@@ -695,7 +674,8 @@ public final class DemoData {
             submission.addAnomaly(new Anomaly(ids.next(),
                     AnomalyType.COMPILE_ERROR, Severity.ERROR, username,
                     "Q2a did not compile: ';' expected.",
-                    "Read the compiler output on the Logs tab."));
+                    "Open code and test output on Review to read the "
+                    + "compiler output."));
         }
         if (number % TIMEOUT_EVERY == 0) {
             submission.getQuestionResults().get(Q1A).setTimedOut(true);
@@ -752,32 +732,44 @@ public final class DemoData {
 
     // Builds tester output in the format the provided testers print.
     private static String testerOutput(int passed, int cases) {
-        StringBuilder output = new StringBuilder();
+        String output = "";
         for (int number = 1; number <= cases; number++) {
             if (number <= passed) {
-                output.append("Passed\n");
+                output += "Passed\n";
             } else {
-                output.append("Failed: expected ").append(number * 2)
-                        .append(" but got ").append(number * 2 - 1)
-                        .append('\n');
+                output += "Failed: expected " + (number * 2) + " but got "
+                        + (number * 2 - 1) + "\n";
             }
         }
-        output.append((double) passed);
-        return output.toString();
+        output += (double) passed;
+        return output;
     }
 
-    // Builds a log of about 100,000 characters, to test long output.
+    // Builds a log of about 100,000 characters, to test long output. The
+    // text is long, so it is built in a char array, not with + in a loop.
     private static String longLog() {
-        StringBuilder log = new StringBuilder("Passed\nFailed: expected 4 "
+        char[] log = new char[LONG_LOG_CHARACTERS + LOG_SPARE_CHARACTERS];
+        int count = copyInto(log, 0, "Passed\nFailed: expected 4 "
                 + "but got 3\nException in thread \"main\" "
                 + "java.lang.IllegalArgumentException: empty word list\n");
         int line = 1;
-        while (log.length() < LONG_LOG_CHARACTERS) {
-            log.append("    at Q1a.countWords(Q1a.java:27) [repeated call ")
-                    .append(line).append("]\n");
+        while (count < LONG_LOG_CHARACTERS) {
+            count = copyInto(log, count, "    at Q1a.countWords(Q1a.java:27)"
+                    + " [repeated call " + line + "]\n");
             line++;
         }
-        log.append("1.0");
-        return log.toString();
+        count = copyInto(log, count, "1.0");
+        return new String(log, 0, count);
+    }
+
+    // Copies text into the array from a position; returns the position
+    // after the last character copied.
+    private static int copyInto(char[] target, int start, String text) {
+        int position = start;
+        for (int index = 0; index < text.length(); index++) {
+            target[position] = text.charAt(index);
+            position++;
+        }
+        return position;
     }
 }

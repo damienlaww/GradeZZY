@@ -30,19 +30,6 @@ public class DemoGrader {
     /** The time between two simulated stages. */
     public static final Duration STEP_TIME = Duration.millis(110);
 
-    /**
-     * Gives a submission its simulated results when its last stage ends.
-     */
-    public interface Outcome {
-
-        /**
-         * Fills in the results of one submission.
-         *
-         * @param submission the submission that finished
-         */
-        void apply(Submission submission);
-    }
-
     // The value of stageIndex before a submission has started
     private static final int NOT_STARTED = -1;
 
@@ -56,7 +43,7 @@ public class DemoGrader {
     private final ProgressListener listener;
 
     // Fills in the results of a finished submission
-    private final Outcome outcome;
+    private final DemoOutcome outcome;
 
     // Called once on the JavaFX thread when the run ends
     private final Runnable onDone;
@@ -86,7 +73,7 @@ public class DemoGrader {
      * @param onDone called once when the run ends
      */
     public DemoGrader(GradingRun run, List<Submission> submissions,
-            ProgressListener listener, Outcome outcome, Runnable onDone) {
+            ProgressListener listener, DemoOutcome outcome, Runnable onDone) {
         this.run = run;
         this.queue.addAll(submissions);
         this.listener = listener;

@@ -14,6 +14,7 @@
 package gradezzy.ui.flow;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -282,7 +283,7 @@ public class SectionView {
         Label name = Parts.muted(text);
         name.getStyleClass().add("small-text");
         name.setMinWidth(Region.USE_PREF_SIZE);
-        return Parts.row(SWATCH_GAP, swatch, name);
+        return Parts.row(SWATCH_GAP, new Node[] {swatch, name});
     }
 
     // Says in words where most students fall.
@@ -351,7 +352,7 @@ public class SectionView {
         }
         legend.setMaxHeight(Region.USE_PREF_SIZE);
         HBox.setHgrow(legend, Priority.ALWAYS);
-        HBox body = Parts.row(RING_GAP, ring, legend);
+        HBox body = Parts.row(RING_GAP, new Node[] {ring, legend});
         return card(Parts.title("Where students are"), body);
     }
 
@@ -396,7 +397,7 @@ public class SectionView {
         nameLabel.setMinWidth(Region.USE_PREF_SIZE);
         Label detailLabel = smallMuted(detail);
         detailLabel.setMinWidth(0);
-        HBox row = Parts.row(Parts.GAP, nameLabel, detailLabel);
+        HBox row = Parts.row(Parts.GAP, new Node[] {nameLabel, detailLabel});
         return card(Parts.title("Most failed test"), row);
     }
 
@@ -544,13 +545,7 @@ public class SectionView {
 
         // Most common first; on a tie, in the order of the words
         List<String> reasons = new ArrayList<>(errors.keySet());
-        reasons.sort((first, second) -> {
-            int byCount = errors.get(second) - errors.get(first);
-            if (byCount != 0) {
-                return byCount;
-            }
-            return first.compareTo(second);
-        });
+        Collections.sort(reasons, new ErrorCountComparator(errors));
 
         VBox list = new VBox();
         int shown = Math.min(MOST_ERRORS, reasons.size());
@@ -563,7 +558,7 @@ public class SectionView {
             HBox.setHgrow(words, Priority.ALWAYS);
             Label count = Parts.strong(String.valueOf(errors.get(reason)));
             count.setMinWidth(Region.USE_PREF_SIZE);
-            HBox row = Parts.row(Parts.GAP, words, count);
+            HBox row = Parts.row(Parts.GAP, new Node[] {words, count});
             row.getStyleClass().add("card-row");
             if (index == 0) {
                 row.getStyleClass().add("first");
@@ -579,9 +574,9 @@ public class SectionView {
     // --------------------------------------------------------- helpers
 
     // Returns a card whose first row is a title or a title row.
-    private static VBox card(Node titleRow, Node... content) {
-        VBox card = Parts.card(null, titleRow);
-        card.getChildren().addAll(content);
+    private static VBox card(Node titleRow, Node content) {
+        VBox card = Parts.card(null, new Node[] {titleRow});
+        card.getChildren().add(content);
         card.getStyleClass().add("stats-card");
         card.setMinWidth(0);
         return card;
@@ -591,7 +586,7 @@ public class SectionView {
     private static HBox titleRow(String title, Node right) {
         Label name = Parts.title(title);
         name.setMinWidth(0);
-        return Parts.row(Parts.GAP, name, Parts.grow(), right);
+        return Parts.row(Parts.GAP, new Node[] {name, Parts.grow(), right});
     }
 
     // Says that a card only covers the latest run.

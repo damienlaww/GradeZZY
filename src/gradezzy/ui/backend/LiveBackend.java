@@ -43,8 +43,8 @@ import gradezzy.testcase.TestCaseSource;
 import gradezzy.testcase.TesterGenerator;
 import gradezzy.testcase.TypedTestCaseSource;
 import gradezzy.testcase.UploadedTesterSource;
-import gradezzy.ui.FileTreeBuilder;
 import gradezzy.ui.GradingTask;
+import gradezzy.ui.GradingTaskKind;
 import gradezzy.util.FileUtils;
 import gradezzy.util.InputValidator;
 
@@ -139,14 +139,6 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns an empty string: config.properties has no module names.
-     */
-    @Override
-    public String getModuleName(String moduleCode) {
-        return "";
-    }
-
-    /**
      * Returns the sections listed in config.properties.
      */
     @Override
@@ -220,14 +212,6 @@ public class LiveBackend implements DashboardBackend {
     @Override
     public List<Path> getSampleFiles(InputKind kind) {
         return new ArrayList<>();
-    }
-
-    /**
-     * Returns null, because live mode uses the system file picker.
-     */
-    @Override
-    public Path getSampleReplacement(ImportItem invalidItem) {
-        return null;
     }
 
     /**
@@ -311,7 +295,7 @@ public class LiveBackend implements DashboardBackend {
     public void resumeGrading(GradingRun gradingRun,
             ProgressListener listener, RunCallback callback) {
         GradingTask task = new GradingTask(services.getGradingService(),
-                GradingTask.Kind.RESUME, gradingRun, listener);
+                GradingTaskKind.RESUME, gradingRun, listener);
         setRunGradedAgain(gradingRun.getId());
         runInBackground(task, callback, Capability.RESUME_RUN);
     }
@@ -323,7 +307,7 @@ public class LiveBackend implements DashboardBackend {
     public void retryFailedSubmissions(GradingRun gradingRun,
             ProgressListener listener, RunCallback callback) {
         GradingTask task = new GradingTask(services.getGradingService(),
-                GradingTask.Kind.RETRY_FAILED, gradingRun, listener);
+                GradingTaskKind.RETRY_FAILED, gradingRun, listener);
         setRunGradedAgain(gradingRun.getId());
         runInBackground(task, callback, Capability.RETRY_FAILED);
     }
@@ -469,14 +453,6 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls SearchService.search.
-     */
-    @Override
-    public List<Submission> search(GradingRun gradingRun, String keyword) {
-        return services.getSearchService().search(gradingRun, keyword);
-    }
-
-    /**
      * Calls SearchService.searchCode.
      */
     @Override
@@ -484,18 +460,6 @@ public class LiveBackend implements DashboardBackend {
             String codeFragment) {
         return services.getSearchService().searchCode(gradingRun,
                 codeFragment);
-    }
-
-    /**
-     * Builds the tree of the working copy with FileTreeBuilder.
-     */
-    @Override
-    public TreeItem<String> getFileTree(Submission submission) {
-        Path workingCopy = submission.getWorkingCopyPath();
-        if (workingCopy == null) {
-            return null;
-        }
-        return new FileTreeBuilder().build(workingCopy);
     }
 
     /**
@@ -684,17 +648,26 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public ActionResult saveSettings(Map<String, String> changes) {
-        for (Map.Entry<String, String> change : changes.entrySet()) {
-            String problem = validateSetting(change.getKey(),
-                    change.getValue());
+        return saveSettings(new ArrayList<>(changes.keySet()), changes);
+    }
+
+    /**
+     * Validates every change in order, then saves them with
+     * SettingsService in the same order.
+     */
+    @Override
+    public ActionResult saveSettings(List<String> keys,
+            Map<String, String> changes) {
+        for (String key : keys) {
+            String problem = validateSetting(key, changes.get(key));
             if (!problem.isEmpty()) {
                 return ActionResult.failed(problem);
             }
         }
 
-        for (Map.Entry<String, String> change : changes.entrySet()) {
-            services.getSettingsService().updateSetting(change.getKey(),
-                    change.getValue());
+        for (String key : keys) {
+            services.getSettingsService().updateSetting(key,
+                    changes.get(key));
         }
         // Switching the database off or on changes the saved runs shown
         forgetSavedRuns();

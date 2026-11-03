@@ -3,8 +3,8 @@
  *
  * Purpose: One mark changed by hand, with the reason and the earlier mark.
  *
- * Where it fits: Created by DashboardBackend.adjustScore and shown on the
- * History tab of the Student Evidence screen.
+ * Where it fits: Created by DashboardBackend.adjustScore and listed in
+ * the student panel on Review.
  */
 package gradezzy.ui.backend;
 

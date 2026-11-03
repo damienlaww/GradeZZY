@@ -124,15 +124,6 @@ public class CompareChart extends Region {
     }
 
     /**
-     * Returns how many sections are drawn, for the developer checks.
-     *
-     * @return the count
-     */
-    public int getSeriesCount() {
-        return stats.size();
-    }
-
-    /**
      * Redraws the chart when its size has changed.
      */
     @Override

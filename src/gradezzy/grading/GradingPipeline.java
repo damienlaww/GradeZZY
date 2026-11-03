@@ -33,9 +33,12 @@ import gradezzy.model.SubmissionStatus;
  * submission is graded in its own working-copy folder and writes only to
  * its own {@code Submission} object, so the submissions do not interfere.
  * The state the workers share, the handout of the next submission, is
- * guarded by {@code synchronized}, and every call to the progress listener
- * goes through one lock so the listener is never touched by two threads at
- * once.
+ * guarded by {@code synchronized}, and every call to the progress
+ * listener goes through one lock so the listener is never touched by two
+ * threads at once. Each worker thread
+ * runs a {@code GradingWorker}, takes submissions from a
+ * {@code SubmissionHandout} and reports through a
+ * {@code SynchronizedProgressListener}; each is in its own file.
  *
  * <p>Tier: MUST. Owner: Jing Yuan.
  */
@@ -57,7 +60,7 @@ public class GradingPipeline {
     // The stages, in the order they run
     private final List<GradingStage> stages = new ArrayList<>();
 
-    // The flag checked before each submission
+    // The flag checked before each submission and before each stage
     private final CancellationToken cancellationToken;
 
     /**
@@ -134,7 +137,7 @@ public class GradingPipeline {
         List<Thread> workers = new ArrayList<>();
         for (int number = 0; number < workerCount; number++) {
             Thread worker = new Thread(
-                    new GradingWorker(handout, context, safeListener),
+                    new GradingWorker(this, handout, context, safeListener),
                     WORKER_NAME_PREFIX + number);
             workers.add(worker);
             worker.start();
@@ -166,11 +169,18 @@ public class GradingPipeline {
         }
     }
 
-    // Grades one submission: skipped and marked CANCELLED if the run was
-    // cancelled, otherwise run through the stages. Always tells the
-    // listener the submission is finished. Shared by the in-order and the
-    // parallel paths.
-    private void gradeOne(Submission submission, GradingContext context,
+    /**
+     * Grades one submission: skipped and marked CANCELLED if the run was
+     * cancelled, otherwise run through the stages. Always tells the
+     * listener the submission is finished. Shared by the in-order path
+     * and by each GradingWorker of the parallel path, which is why it is
+     * visible to the rest of the package.
+     *
+     * @param submission the submission to grade
+     * @param context the shared information the stages need
+     * @param listener the object told about progress
+     */
+    void gradeOne(Submission submission, GradingContext context,
             ProgressListener listener) {
         if (cancellationToken.isCancelled()) {
             submission.setStatus(SubmissionStatus.CANCELLED);
@@ -206,7 +216,10 @@ public class GradingPipeline {
         return requested;
     }
 
-    // Runs all stages for one submission and contains any failure.
+    // Runs all stages for one submission and contains any failure. Cancel
+    // is checked before each stage too, so a submission being graded
+    // stops at the next stage instead of running every tester first. It
+    // is then CANCELLED, and Resume grades it again from the start.
     private void processSubmission(Submission submission,
             GradingContext context, ProgressListener listener) {
         listener.onSubmissionStarted(submission);
@@ -218,6 +231,10 @@ public class GradingPipeline {
 
         try {
             for (GradingStage stage : stages) {
+                if (cancellationToken.isCancelled()) {
+                    submission.setStatus(SubmissionStatus.CANCELLED);
+                    return;
+                }
                 listener.onStageStarted(submission, stage.getName());
                 stage.process(submission, context);
             }
@@ -231,7 +248,8 @@ public class GradingPipeline {
         }
     }
 
-    // Turns a failure into an anomaly with an id unique across runs.
+    // Turns a failure into an anomaly with an id unique across runs. The
+    // submission is touched by only one worker, so no lock is needed.
     private void recordFailure(Submission submission, Exception exception) {
         String message = "Grading stopped early: " + exception.getMessage();
         Anomaly anomaly = new Anomaly(FAILURE_ID_PREFIX + UUID.randomUUID(),
@@ -240,110 +258,5 @@ public class GradingPipeline {
 
         submission.addAnomaly(anomaly);
         submission.setStatus(SubmissionStatus.FAILED);
-    }
-
-    /**
-     * Hands each submission to exactly one worker. The index is guarded by
-     * synchronized, so two workers never take the same submission and none
-     * is missed.
-     */
-    private static final class SubmissionHandout {
-
-        // The submissions, in batch order
-        private final List<Submission> submissions;
-
-        // The next submission to hand out
-        private int index = 0;
-
-        private SubmissionHandout(List<Submission> submissions) {
-            this.submissions = submissions;
-        }
-
-        // Returns the next submission, or null when there are none left.
-        private synchronized Submission next() {
-            if (index >= submissions.size()) {
-                return null;
-            }
-
-            Submission submission = submissions.get(index);
-            index++;
-            return submission;
-        }
-    }
-
-    /**
-     * A worker thread that grades submissions until the handout is empty.
-     */
-    private final class GradingWorker implements Runnable {
-
-        // Where the worker gets its next submission
-        private final SubmissionHandout handout;
-
-        // The shared read-only information the stages need
-        private final GradingContext context;
-
-        // The listener, already made safe for several threads
-        private final ProgressListener listener;
-
-        private GradingWorker(SubmissionHandout handout,
-                GradingContext context, ProgressListener listener) {
-            this.handout = handout;
-            this.context = context;
-            this.listener = listener;
-        }
-
-        @Override
-        public void run() {
-            Submission submission = handout.next();
-
-            while (submission != null) {
-                gradeOne(submission, context, listener);
-                submission = handout.next();
-            }
-        }
-    }
-
-    /**
-     * Wraps a progress listener so that only one worker is inside it at a
-     * time. This keeps the listener's own counters correct and stops two
-     * workers from interleaving the characters of one printed line. The
-     * lines of different submissions may still appear mixed together,
-     * which is expected when several are graded at once.
-     */
-    private static final class SynchronizedProgressListener
-            implements ProgressListener {
-
-        // The listener the window or console gave
-        private final ProgressListener delegate;
-
-        private SynchronizedProgressListener(ProgressListener delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public synchronized void onRunStarted(int totalSubmissions) {
-            delegate.onRunStarted(totalSubmissions);
-        }
-
-        @Override
-        public synchronized void onSubmissionStarted(Submission submission) {
-            delegate.onSubmissionStarted(submission);
-        }
-
-        @Override
-        public synchronized void onStageStarted(Submission submission,
-                String stageName) {
-            delegate.onStageStarted(submission, stageName);
-        }
-
-        @Override
-        public synchronized void onSubmissionFinished(Submission submission) {
-            delegate.onSubmissionFinished(submission);
-        }
-
-        @Override
-        public synchronized void onRunFinished(GradingRun gradingRun) {
-            delegate.onRunFinished(gradingRun);
-        }
     }
 }

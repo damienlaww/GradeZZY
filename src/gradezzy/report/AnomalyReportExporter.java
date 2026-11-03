@@ -36,8 +36,8 @@ public class AnomalyReportExporter implements Exporter {
     public static final String FILE_EXTENSION = "csv";
 
     // The header row, in the order of the values in each row
-    private static final List<String> HEADER = List.of("Username", "Type",
-            "Severity", "Message", "Suggested Action", "Fix Status");
+    private static final String[] HEADER = {"Username", "Type",
+        "Severity", "Message", "Suggested Action", "Fix Status"};
 
     // CSV files end each row with CRLF so spreadsheets read them cleanly
     private static final String LINE_ENDING = "\r\n";
@@ -87,17 +87,18 @@ public class AnomalyReportExporter implements Exporter {
                     "Nothing to export: the grading run or file is missing.");
         }
 
-        StringBuilder output = new StringBuilder();
-        output.append(TextUtils.joinCsvLine(HEADER)).append(LINE_ENDING);
+        // Every row, the header included, ends with LINE_ENDING
+        List<String> lines = new ArrayList<>();
+        lines.add(TextUtils.joinCsvLine(HEADER));
         for (Submission submission : gradingRun.getSubmissions()) {
             for (Anomaly anomaly : submission.getAnomalies()) {
-                output.append(TextUtils.joinCsvLine(toRow(anomaly)))
-                        .append(LINE_ENDING);
+                lines.add(TextUtils.joinCsvLine(toRow(anomaly)));
             }
         }
+        String output = TextUtils.join(LINE_ENDING, lines) + LINE_ENDING;
 
         try {
-            FileUtils.writeText(outputFile, output.toString());
+            FileUtils.writeText(outputFile, output);
         } catch (IOException exception) {
             throw new ExportException("Could not write the anomaly report to "
                     + outputFile + ". Check that the folder exists and is "

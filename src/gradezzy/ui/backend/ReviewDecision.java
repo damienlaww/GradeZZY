@@ -3,7 +3,7 @@
  *
  * Purpose: The instructor's decision about one flagged anomaly.
  *
- * Where it fits: Set on the Review Anomalies screen. A decision never
+ * Where it fits: Set from the student panel on Review. A decision never
  * changes a mark.
  */
 package gradezzy.ui.backend;

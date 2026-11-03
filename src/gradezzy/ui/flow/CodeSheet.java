@@ -93,7 +93,8 @@ public final class CodeSheet {
         VBox titles = new VBox(Parts.title(Students.name(submission)
                 + ": code and test output"), Parts.muted("Files after any "
                 + "fixes. The original zip is unchanged."));
-        HBox top = Parts.row(Parts.GAP, titles, Parts.grow(), close);
+        HBox top = Parts.row(Parts.GAP,
+                new Node[] {titles, Parts.grow(), close});
 
         VBox left = new VBox(CAPTION_GAP, caption("Question"), questions);
         left.setMinWidth(LIST_WIDTH);

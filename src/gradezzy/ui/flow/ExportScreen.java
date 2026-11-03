@@ -139,15 +139,22 @@ public class ExportScreen extends FlowScreen {
                 subtitle);
         header.getStyleClass().add("screen-header");
         similar.getStyleClass().add("flow-card");
-        view = Parts.narrowPage(header, createGlanceCard(),
-                createScoreSheetCard(), similar);
+        view = Parts.narrowPage(new Node[] {header, createGlanceCard(),
+                createScoreSheetCard(), similar});
     }
 
+    /**
+     * Returns the Export step built in the constructor.
+     */
     @Override
     public Node getView() {
         return view;
     }
 
+    /**
+     * Fills the figures, the score sheet card and the similar code
+     * card for the current run.
+     */
     @Override
     public void onShow() {
         GradingRun run = getState().getRun();
@@ -198,8 +205,8 @@ public class ExportScreen extends FlowScreen {
         all.setGraphic(Parts.icon(Parts.ARROW, ARROW_SIZE));
         all.setContentDisplay(ContentDisplay.RIGHT);
         all.getStyleClass().addAll("small-text", "arrow-link");
-        HBox top = Parts.row(Parts.GAP, Parts.title("Results at a glance"),
-                Parts.grow(), all);
+        HBox top = Parts.row(Parts.GAP, new Node[] {
+                Parts.title("Results at a glance"), Parts.grow(), all});
 
         chart.setPrefWidth(CHART_WIDTH);
         chart.setMinWidth(CHART_WIDTH);
@@ -213,7 +220,7 @@ public class ExportScreen extends FlowScreen {
         figures.getColumnConstraints().addAll(left, right);
         HBox.setHgrow(figures, Priority.ALWAYS);
         glance.getChildren().addAll(chart, figures);
-        return Parts.card(null, top, glance, noMarks);
+        return Parts.card(null, new Node[] {top, glance, noMarks});
     }
 
     // Builds the score sheet card with the export choices.
@@ -233,7 +240,8 @@ public class ExportScreen extends FlowScreen {
         about.setWrapText(true);
         result.setVisible(false);
         result.setManaged(false);
-        return Parts.card("Score sheet", about, choices, savedTo, result);
+        return Parts.card("Score sheet",
+                new Node[] {about, choices, savedTo, result});
     }
 
     // ---------------------------------------------------------- refresh
@@ -379,7 +387,8 @@ public class ExportScreen extends FlowScreen {
     // Fills the similar code card with the pairs found for a run. Live
     // mode offers to check again, as the files may have changed.
     private void showPairs(GradingRun run, List<SimilarityPair> pairs) {
-        HBox top = Parts.row(Parts.GAP, Parts.title("Similar code"));
+        HBox top = Parts.row(Parts.GAP,
+                new Node[] {Parts.title("Similar code")});
         if (!getBackend().isDemo()) {
             Hyperlink again = Parts.link("Check again", () -> checkAgain());
             again.getStyleClass().add("small-text");
@@ -420,9 +429,11 @@ public class ExportScreen extends FlowScreen {
         names.setMinWidth(0);
         Label question = Parts.muted(pair.getQuestionId());
         question.setMinWidth(Label.USE_PREF_SIZE);
-        HBox row = Parts.row(Parts.GAP, names, question, Parts.grow(),
-                Parts.pill(Math.round(pair.getSimilarity() * PERCENT)
-                + "% similar", Tone.WARN));
+        Node grow = Parts.grow();
+        Label similar = Parts.pill(Math.round(pair.getSimilarity()
+                * PERCENT) + "% similar", Tone.WARN);
+        HBox row = Parts.row(Parts.GAP,
+                new Node[] {names, question, grow, similar});
         if (getBackend().supports(Capability.SIMILARITY_DETAIL)) {
             Hyperlink compare = Parts.link("Compare", () -> compare(run,
                     pair));

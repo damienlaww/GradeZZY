@@ -79,17 +79,10 @@ public class WorkingCopyManager {
             Files.move(staging, target);
             submission.setWorkingCopyPath(target);
             return target;
-        } catch (IOException | IngestException exception) {
-            if (staging != null) {
-                try {
-                    FileUtils.deleteDirectory(staging);
-                } catch (IOException cleanup) {
-                    exception.addSuppressed(cleanup);
-                }
-            }
-            throw new IngestException("Could not create the working copy "
-                    + "for " + submission.getUsername() + ": "
-                    + exception.getMessage(), exception);
+        } catch (IOException exception) {
+            throw copyFailure(submission, staging, exception);
+        } catch (IngestException exception) {
+            throw copyFailure(submission, staging, exception);
         }
     }
 
@@ -143,6 +136,23 @@ public class WorkingCopyManager {
         }
     }
 
+    // Removes the half-built staging folder, if any, and builds the error
+    // for a working copy that could not be created. A failure to remove
+    // the folder is attached to the original error instead of hiding it.
+    private IngestException copyFailure(Submission submission, Path staging,
+            Exception exception) {
+        if (staging != null) {
+            try {
+                FileUtils.deleteDirectory(staging);
+            } catch (IOException cleanup) {
+                exception.addSuppressed(cleanup);
+            }
+        }
+        return new IngestException("Could not create the working copy "
+                + "for " + submission.getUsername() + ": "
+                + exception.getMessage(), exception);
+    }
+
     // A username is one directory name, never an arbitrary path.
     private Path workingPath(Submission submission) throws IOException {
         String username = submission.getUsername();
@@ -175,8 +185,9 @@ public class WorkingCopyManager {
     // Only ordinary files are deleted; links are rejected, not followed.
     private void removeClassFiles(Path directory, List<String> provided)
             throws IOException {
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(directory)) {
+        DirectoryStream<Path> children = null;
+        try {
+            children = Files.newDirectoryStream(directory);
             for (Path child : children) {
                 if (Files.isSymbolicLink(child)) {
                     throw new IOException("Linked working file: " + child);
@@ -190,14 +201,17 @@ public class WorkingCopyManager {
                     }
                 }
             }
+        } finally {
+            FileUtils.closeIfOpen(children);
         }
     }
 
     // Apply the same ignored-name setting to folder uploads as ZIPs.
     private void removeIgnoredFiles(Path directory) throws IOException {
         List<String> ignored = config.getList(ConfigKeys.IGNORED_FILE_NAMES);
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(directory)) {
+        DirectoryStream<Path> children = null;
+        try {
+            children = Files.newDirectoryStream(directory);
             for (Path child : children) {
                 if (ignored.contains(child.getFileName().toString())) {
                     FileUtils.deleteDirectory(child);
@@ -206,6 +220,8 @@ public class WorkingCopyManager {
                     removeIgnoredFiles(child);
                 }
             }
+        } finally {
+            FileUtils.closeIfOpen(children);
         }
     }
 }

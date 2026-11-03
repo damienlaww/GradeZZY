@@ -9,7 +9,7 @@
 package gradezzy.ui.demo;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,17 +69,23 @@ public final class DemoStatistics {
         }
 
         double maxTotal = run.getAssessment().getMaxTotal();
-        double[] totals = new double[graded.size()];
+        List<Double> sortedTotals = new ArrayList<>();
         double sum = 0.0;
         int passed = 0;
-        for (int index = 0; index < graded.size(); index++) {
-            totals[index] = graded.get(index).getTotalScore();
-            sum += totals[index];
-            if (isPass(totals[index], maxTotal, passMarkPercent)) {
+        for (Submission submission : graded) {
+            double total = submission.getTotalScore();
+            sortedTotals.add(total);
+            sum += total;
+            if (isPass(total, maxTotal, passMarkPercent)) {
                 passed++;
             }
         }
-        Arrays.sort(totals);
+        Collections.sort(sortedTotals);
+
+        double[] totals = new double[sortedTotals.size()];
+        for (int index = 0; index < totals.length; index++) {
+            totals[index] = sortedTotals.get(index);
+        }
 
         StatisticsSummary summary = new StatisticsSummary();
         summary.setMean(sum / totals.length);
@@ -158,7 +164,10 @@ public final class DemoStatistics {
                     }
                     String name = result.getQuestion().getId() + " case "
                             + testCase.getTestNumber();
-                    int count = failures.getOrDefault(name, 0) + 1;
+                    int count = 1;
+                    if (failures.containsKey(name)) {
+                        count = failures.get(name) + 1;
+                    }
                     failures.put(name, count);
                     if (count > worstCount) {
                         worst = name;
@@ -185,9 +194,13 @@ public final class DemoStatistics {
                     continue;
                 }
                 String reason = reasonOf(anomaly.getMessage());
-                int count = summary.getCommonCompileErrors()
-                        .getOrDefault(reason, 0);
-                summary.getCommonCompileErrors().put(reason, count + 1);
+                Map<String, Integer> errors =
+                        summary.getCommonCompileErrors();
+                int count = 0;
+                if (errors.containsKey(reason)) {
+                    count = errors.get(reason);
+                }
+                errors.put(reason, count + 1);
             }
         }
     }

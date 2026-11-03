@@ -14,7 +14,6 @@ import java.io.OutputStream;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
@@ -50,6 +49,9 @@ public class ZipExtractor {
     private static final String WINDOWS_DEVICE =
             "(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?";
 
+    // A ZIP entry made only of this, repeated, names the top folder itself
+    private static final String CURRENT_FOLDER = "./";
+
     // The application settings
     private final AppConfig config;
 
@@ -84,11 +86,14 @@ public class ZipExtractor {
                 throw new IOException("The archive is inside its target.");
             }
             Files.createDirectories(target);
-            try (DirectoryStream<Path> children =
-                    Files.newDirectoryStream(target)) {
+            DirectoryStream<Path> children = null;
+            try {
+                children = Files.newDirectoryStream(target);
                 if (children.iterator().hasNext()) {
                     throw new IOException("The target must be empty.");
                 }
+            } finally {
+                FileUtils.closeIfOpen(children);
             }
             ready = true;
             unpack(zipFile, target);
@@ -117,8 +122,23 @@ public class ZipExtractor {
      * @throws IngestException if the file is not a readable zip
      */
     public List<String> listFileNames(Path zipFile) throws IngestException {
+        try {
+            return readFileNames(zipFile);
+        } catch (IOException exception) {
+            throw unreadable(zipFile, exception);
+        } catch (IllegalArgumentException exception) {
+            // An entry name that is not valid text
+            throw unreadable(zipFile, exception);
+        }
+    }
+
+    // Reads the file names of a zip; the zip is closed even if reading
+    // fails.
+    private List<String> readFileNames(Path zipFile) throws IOException {
         List<String> names = new ArrayList<>();
-        try (ZipFile zip = new ZipFile(zipFile.toFile())) {
+        ZipFile zip = null;
+        try {
+            zip = new ZipFile(zipFile.toFile());
             Enumeration<? extends ZipEntry> entries = zip.entries();
             while (entries.hasMoreElements()) {
                 String name = entries.nextElement().getName()
@@ -127,12 +147,16 @@ public class ZipExtractor {
                     names.add(name);
                 }
             }
-        } catch (IOException | IllegalArgumentException exception) {
-            // IllegalArgumentException: an entry name that is not valid text
-            throw new IngestException("Could not read " + zipFile + ": "
-                    + exception.getMessage(), exception);
+        } finally {
+            FileUtils.closeIfOpen(zip);
         }
         return names;
+    }
+
+    // Builds the error for a zip whose file names cannot be read.
+    private IngestException unreadable(Path zipFile, Exception cause) {
+        return new IngestException("Could not read " + zipFile + ": "
+                + cause.getMessage(), cause);
     }
 
     /**
@@ -197,7 +221,9 @@ public class ZipExtractor {
         int fileCount = 0;
         List<String> ignored = config.getList(ConfigKeys.IGNORED_FILE_NAMES);
 
-        try (ZipFile zip = new ZipFile(archive.toFile())) {
+        ZipFile zip = null;
+        try {
+            zip = new ZipFile(archive.toFile());
             Enumeration<? extends ZipEntry> entries = zip.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
@@ -207,7 +233,7 @@ public class ZipExtractor {
                 }
                 String entryName = entry.getName().replace('\\', '/');
                 // Some ZIP tools emit an explicit ./ directory entry.
-                if (entryName.endsWith("/") && entryName.matches("(?:\\./)+")) {
+                if (isOnlyCurrentFolder(entryName)) {
                     continue;
                 }
                 if (!isSafeEntry(entryName, target)) {
@@ -230,6 +256,8 @@ public class ZipExtractor {
                     }
                 }
             }
+        } finally {
+            FileUtils.closeIfOpen(zip);
         }
         if (fileCount == 0) {
             throw new IOException("The ZIP has no submission files.");
@@ -247,8 +275,20 @@ public class ZipExtractor {
             destination = Files.newOutputStream(output,
                     StandardOpenOption.CREATE_NEW);
         }
-        try (OutputStream writer = destination;
-                InputStream reader = zip.getInputStream(entry)) {
+        try {
+            return copyEntry(zip, entry, destination, remaining);
+        } finally {
+            destination.close();
+        }
+    }
+
+    // Copies one entry into the destination, checking the size limit and
+    // the checksum, and returns the number of bytes copied.
+    private long copyEntry(ZipFile zip, ZipEntry entry, OutputStream writer,
+            long remaining) throws IOException {
+        InputStream reader = null;
+        try {
+            reader = zip.getInputStream(entry);
             byte[] buffer = new byte[BUFFER_SIZE];
             CRC32 checksum = new CRC32();
             long total = 0;
@@ -268,7 +308,22 @@ public class ZipExtractor {
                         + entry.getName());
             }
             return total;
+        } finally {
+            FileUtils.closeIfOpen(reader);
         }
+    }
+
+    // Says whether an entry name is one or more "./" in a row, such as
+    // "./" or "././".
+    private boolean isOnlyCurrentFolder(String entryName) {
+        if (entryName.isEmpty()) {
+            return false;
+        }
+        String rest = entryName;
+        while (rest.startsWith(CURRENT_FOLDER)) {
+            rest = rest.substring(CURRENT_FOLDER.length());
+        }
+        return rest.isEmpty();
     }
 
     // Ignore both the named file and every descendant of a named folder.

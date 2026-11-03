@@ -3,8 +3,8 @@
  *
  * Purpose: Holds one instance of every service.
  *
- * Where it fits: Built once by ApplicationContext and handed to each UI
- * controller, so controllers never create services themselves.
+ * Where it fits: Built once by ApplicationContext and handed to the
+ * backend, so the screens never create services themselves.
  */
 package gradezzy.service;
 

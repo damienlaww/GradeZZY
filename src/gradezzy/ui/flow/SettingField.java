@@ -30,7 +30,6 @@ import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
-import javafx.util.StringConverter;
 
 import atlantafx.base.controls.ToggleSwitch;
 
@@ -43,24 +42,6 @@ import gradezzy.ui.ThemeManager;
  * <p>Tier: SHOULD.
  */
 public class SettingField {
-
-    /**
-     * The kind of control a setting gets.
-     */
-    public enum Kind {
-        /** A wide text field. */
-        TEXT,
-        /** A short text field for a number. */
-        NUMBER,
-        /** A path field and a Choose button that picks a file. */
-        FILE,
-        /** A path field and a Choose button that picks a folder. */
-        FOLDER,
-        /** An on and off switch. */
-        SWITCH,
-        /** A list of fixed values. */
-        CHOICE
-    }
 
     /** The width of the name column. */
     public static final double NAME_WIDTH = 260.0;
@@ -116,7 +97,7 @@ public class SettingField {
     private final String description;
 
     // The kind of control
-    private final Kind kind;
+    private final SettingKind kind;
 
     // The text field, for text, number and path settings
     private final TextField field = new TextField();
@@ -158,7 +139,7 @@ public class SettingField {
      * @param choices the fixed values of a CHOICE setting
      */
     public SettingField(FlowWindow window, String key, String name,
-            String description, Kind kind, String... choices) {
+            String description, SettingKind kind, String[] choices) {
         this.window = window;
         this.key = key;
         this.name = name;
@@ -170,6 +151,23 @@ public class SettingField {
         setControlValue(original);
         listen();
         update();
+    }
+
+    /**
+     * Creates a setting row with the saved value, for a setting that
+     * has no fixed values.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param window the window
+     * @param key the setting's name in config.properties
+     * @param name the name shown
+     * @param description the description, or an empty string
+     * @param kind the kind of control
+     */
+    public SettingField(FlowWindow window, String key, String name,
+            String description, SettingKind kind) {
+        this(window, key, name, description, kind, new String[0]);
     }
 
     /**
@@ -202,13 +200,13 @@ public class SettingField {
      * @return the value
      */
     public String getValue() {
-        if (kind == Kind.SWITCH) {
+        if (kind == SettingKind.SWITCH) {
             if (toggle.isSelected()) {
                 return TRUE;
             }
             return FALSE;
         }
-        if (kind == Kind.CHOICE) {
+        if (kind == SettingKind.CHOICE) {
             if (choice.getValue() == null) {
                 return "";
             }
@@ -309,40 +307,9 @@ public class SettingField {
      *
      * @param names one name per value, in the same order
      */
-    public void showChoicesAs(String... names) {
-        choice.setConverter(new StringConverter<String>() {
-
-            /**
-             * Returns the name shown for a value.
-             *
-             * @param value the saved value
-             * @return its name, or the value itself when it has none
-             */
-            @Override
-            public String toString(String value) {
-                int position = choice.getItems().indexOf(value);
-                if (position < 0 || position >= names.length) {
-                    return value;
-                }
-                return names[position];
-            }
-
-            /**
-             * Returns the value of a shown name.
-             *
-             * @param text the name
-             * @return the saved value, or the text when it is no name
-             */
-            @Override
-            public String fromString(String text) {
-                for (int i = 0; i < names.length; i++) {
-                    if (names[i].equals(text)) {
-                        return choice.getItems().get(i);
-                    }
-                }
-                return text;
-            }
-        });
+    public void showChoicesAs(String[] names) {
+        choice.setConverter(new ChoiceNameConverter(choice.getItems(),
+                names));
     }
 
     /**
@@ -361,7 +328,7 @@ public class SettingField {
         Label title = Parts.strong(name);
         title.setMinWidth(0);
         dot.getStyleClass().add("setting-dot");
-        HBox nameLine = Parts.row(DOT_GAP, title, dot);
+        HBox nameLine = Parts.row(DOT_GAP, new Node[] {title, dot});
         VBox names = new VBox(LINE_GAP, nameLine);
         if (!description.isEmpty()) {
             Label help = Parts.muted(description);
@@ -387,24 +354,25 @@ public class SettingField {
 
     // Builds the control that fits the kind of setting.
     private Node createControl() {
-        if (kind == Kind.SWITCH) {
+        if (kind == SettingKind.SWITCH) {
             toggle.pseudoClassStateChanged(SUCCESS, true);
             return toggle;
         }
-        if (kind == Kind.CHOICE) {
+        if (kind == SettingKind.CHOICE) {
             choice.setPrefWidth(CHOICE_WIDTH);
             return choice;
         }
-        if (kind == Kind.FILE || kind == Kind.FOLDER) {
+        if (kind == SettingKind.FILE || kind == SettingKind.FOLDER) {
             field.setPrefWidth(PATH_WIDTH);
             field.setMaxWidth(PATH_WIDTH);
             chooseButton = Parts.small("Choose", () -> choose());
-            HBox line = Parts.row(Parts.GAP_SMALL, field, chooseButton);
+            HBox line = Parts.row(Parts.GAP_SMALL,
+                    new Node[] {field, chooseButton});
             HBox.setHgrow(field, Priority.SOMETIMES);
             return line;
         }
         double width = TEXT_WIDTH;
-        if (kind == Kind.NUMBER) {
+        if (kind == SettingKind.NUMBER) {
             width = NUMBER_WIDTH;
         }
         field.setPrefWidth(width);
@@ -418,18 +386,27 @@ public class SettingField {
                 -> update());
         toggle.selectedProperty().addListener((observable, before, after)
                 -> update());
-        choice.valueProperty().addListener((observable, before, after) -> {
-            if (ConfigKeys.UI_THEME.equals(key)) {
-                window.setDark(ThemeManager.DARK_THEME.equals(after));
-            }
-            update();
-        });
+        choice.valueProperty().addListener((observable, before, after)
+                -> choiceChanged(after));
+    }
+
+    /**
+     * Follows a new value of the list: the theme setting changes the
+     * window's theme at once, then the value is checked as usual.
+     *
+     * @param after the value picked
+     */
+    private void choiceChanged(String after) {
+        if (ConfigKeys.UI_THEME.equals(key)) {
+            window.setDark(ThemeManager.DARK_THEME.equals(after));
+        }
+        update();
     }
 
     // Checks the value, shows the dot and the message, and reports it.
     private void update() {
         String message = "";
-        if (kind != Kind.SWITCH && kind != Kind.CHOICE) {
+        if (kind != SettingKind.SWITCH && kind != SettingKind.CHOICE) {
             message = window.getBackend().validateSetting(key,
                     getValue());
         }
@@ -453,9 +430,9 @@ public class SettingField {
 
     // Puts a value in whichever control this setting uses.
     private void setControlValue(String value) {
-        if (kind == Kind.SWITCH) {
+        if (kind == SettingKind.SWITCH) {
             toggle.setSelected(TRUE.equalsIgnoreCase(value));
-        } else if (kind == Kind.CHOICE) {
+        } else if (kind == SettingKind.CHOICE) {
             choice.setValue(value);
         } else {
             field.setText(value);
@@ -481,7 +458,7 @@ public class SettingField {
     private void choose() {
         File start = startFolder();
         File picked = null;
-        if (kind == Kind.FOLDER) {
+        if (kind == SettingKind.FOLDER) {
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("Choose a folder for " + name);
             if (start != null) {
@@ -508,7 +485,7 @@ public class SettingField {
             return null;
         }
         Path path = Paths.get(text).toAbsolutePath();
-        if (kind == Kind.FILE) {
+        if (kind == SettingKind.FILE) {
             path = path.getParent();
         }
         if (path == null || !Files.isDirectory(path)) {

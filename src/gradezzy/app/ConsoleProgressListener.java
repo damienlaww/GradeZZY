@@ -3,7 +3,7 @@
  *
  * Purpose: Prints grading progress to the terminal.
  *
- * Where it fits: The console counterpart of the progress screen. It lets
+ * Where it fits: The console counterpart of the Grade step. It lets
  * the pipeline be watched and tested before any window exists.
  */
 package gradezzy.app;
@@ -14,7 +14,10 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Submission;
 
 /**
- * Prints grading progress to the terminal.
+ * Prints grading progress to the terminal. Several submissions can be
+ * graded at the same time, so nothing is printed while a submission is
+ * being graded: each one is printed as a single block when it finishes,
+ * headed by its username, so its lines never mix with another student's.
  *
  * <p>Tier: MUST. Owner: Jing Yuan.
  */
@@ -39,7 +42,7 @@ public class ConsoleProgressListener implements ProgressListener {
      * @param totalSubmissions the number of submissions in the run
      */
     @Override
-    public void onRunStarted(int totalSubmissions) {
+    public synchronized void onRunStarted(int totalSubmissions) {
         this.totalSubmissions = totalSubmissions;
         this.finishedSubmissions = 0;
         System.out.println("Grading " + totalSubmissions
@@ -47,38 +50,43 @@ public class ConsoleProgressListener implements ProgressListener {
     }
 
     /**
-     * Prints the submission that is about to be graded.
+     * Prints nothing: the submission is printed when it finishes.
      *
      * @param submission the submission being started
      */
     @Override
     public void onSubmissionStarted(Submission submission) {
-        System.out.println("[" + (finishedSubmissions + 1) + "/"
-                + totalSubmissions + "] " + submission.getUsername());
+        // See the class comment
     }
 
     /**
-     * Prints the stage that is about to run.
+     * Prints nothing: the submission is printed when it finishes.
      *
      * @param submission the submission being graded
      * @param stageName the name of the stage
      */
     @Override
     public void onStageStarted(Submission submission, String stageName) {
-        System.out.println("    " + stageName);
+        // See the class comment
     }
 
     /**
-     * Prints the status of a finished submission and each of its
-     * anomalies, so the reason for a FAILED submission is shown.
+     * Prints one block for a finished submission: how many are done, the
+     * username, the status and total, then each problem found, so the
+     * reason for a FAILED submission is shown. Synchronized so the
+     * counter and the block stay whole when several workers finish at
+     * once.
      *
      * @param submission the submission that is done
      */
     @Override
-    public void onSubmissionFinished(Submission submission) {
+    public synchronized void onSubmissionFinished(Submission submission) {
         finishedSubmissions++;
-        System.out.println("    -> " + submission.getStatus() + ", "
-                + submission.getAnomalies().size() + " anomaly(ies)");
+        System.out.println("[" + finishedSubmissions + "/"
+                + totalSubmissions + "] " + submission.getUsername()
+                + ": " + submission.getStatus() + ", total "
+                + submission.getTotalScore() + ", "
+                + submission.getAnomalies().size() + " problem(s)");
 
         for (Anomaly anomaly : submission.getAnomalies()) {
             System.out.println("       " + anomaly.getType() + ": "
@@ -92,7 +100,7 @@ public class ConsoleProgressListener implements ProgressListener {
      * @param gradingRun the run that has finished
      */
     @Override
-    public void onRunFinished(GradingRun gradingRun) {
+    public synchronized void onRunFinished(GradingRun gradingRun) {
         System.out.println("Finished run " + gradingRun.getId() + ".");
     }
 }

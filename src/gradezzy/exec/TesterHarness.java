@@ -11,11 +11,9 @@
 package gradezzy.exec;
 
 import java.io.IOException;
-import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
 
 /**
  * Starts a tester inside the student's java process and marks the lines
@@ -25,6 +23,7 @@ import java.util.Locale;
  * the tester's own code, with no student code running at that moment, is
  * written with the token in front. The parent then trusts only marked
  * lines, so a plain "Passed" printed by student code is not believed.
+ * The marking is done by TrustedPrintStream, in its own file.
  *
  * <p>Limit: the token is kept in this process, next to student code.
  * Student code that uses reflection to read the private token field can
@@ -52,12 +51,6 @@ public final class TesterHarness {
 
     // A value java does not accept, so starting a program always fails
     private static final String NO_LAUNCH = "DISABLED_BY_GRADEZZY";
-
-    // Any line break: \n, \r, \r\n and the Unicode ones
-    private static final String LINE_BREAK = "\\R";
-
-    // A single whole line splits into the line and an empty end
-    private static final int LINE_AND_END = 2;
 
     // Utility class: never created
     private TesterHarness() {
@@ -121,192 +114,6 @@ public final class TesterHarness {
             return false;
         } catch (Error exception) {
             return true;
-        }
-    }
-
-    /**
-     * Standard output that marks the lines printed by the tester itself.
-     * Only the calls the provided testers use for test headers, verdicts
-     * and the total are marked; every other line passes through unmarked.
-     * Unmarked output stops once it reaches its limit, so a student who
-     * prints a lot cannot push the tester's later lines past the output
-     * limit of ProcessRunner.
-     */
-    private static final class TrustedPrintStream extends PrintStream {
-
-        // The secret written in front of each trusted line
-        private final String token;
-
-        // The thread that runs the tester
-        private final Thread testerThread;
-
-        // The tester class; its own code is trusted
-        private final Class<?> tester;
-
-        // Lets the stream see which classes are calling it
-        private final StackWalker walker = StackWalker.getInstance(
-                StackWalker.Option.RETAIN_CLASS_REFERENCE);
-
-        // The most bytes of unmarked output passed on
-        private final long studentLimit;
-
-        // Bytes of unmarked output passed on so far
-        private long studentBytes = 0;
-
-        // True while a marked line is being written
-        private boolean writingMarked = false;
-
-        /**
-         * Creates a stream over the real standard output.
-         *
-         * @param out the real standard output
-         * @param token the secret token
-         * @param testerThread the thread that runs the tester
-         * @param tester the tester class
-         * @param studentLimit the most bytes of unmarked output to pass on
-         */
-        TrustedPrintStream(PrintStream out, String token,
-                Thread testerThread, Class<?> tester, long studentLimit) {
-            super(out, true);
-            this.token = token;
-            this.testerThread = testerThread;
-            this.tester = tester;
-            this.studentLimit = studentLimit;
-        }
-
-        /**
-         * Every print ends here as bytes. Marked lines always pass;
-         * unmarked bytes pass only while they are under the limit.
-         *
-         * @param buffer the bytes
-         * @param offset where the bytes start
-         * @param length how many bytes
-         */
-        @Override
-        public synchronized void write(byte[] buffer, int offset,
-                int length) {
-            if (writingMarked) {
-                super.write(buffer, offset, length);
-                return;
-            }
-            long room = studentLimit - studentBytes;
-            int kept = (int) Math.min(Math.max(room, 0), length);
-            if (kept > 0) {
-                super.write(buffer, offset, kept);
-                studentBytes += kept;
-            }
-        }
-
-        /**
-         * Writes one byte, under the same limit as the other writes.
-         *
-         * @param oneByte the byte
-         */
-        @Override
-        public void write(int oneByte) {
-            write(new byte[] {(byte) oneByte}, 0, 1);
-        }
-
-        @Override
-        public void println(String line) {
-            if (isTrustedCaller() && isOneLine(line)) {
-                printMarked(line);
-            } else {
-                super.println(line);
-            }
-        }
-
-        @Override
-        public void println(double value) {
-            if (isTrustedCaller()) {
-                printMarked(String.valueOf(value));
-            } else {
-                super.println(value);
-            }
-        }
-
-        @Override
-        public PrintStream format(String format, Object... args) {
-            return format(Locale.getDefault(Locale.Category.FORMAT), format,
-                    args);
-        }
-
-        @Override
-        public PrintStream format(Locale locale, String format,
-                Object... args) {
-            // Decided before the arguments are turned into text, because
-            // that can run student code such as a toString method
-            boolean trustedCaller = isTrustedCaller();
-            String text = String.format(locale, format, args);
-            String[] parts = text.split(LINE_BREAK, -1);
-
-            // A student's value inside the text could hold a line break
-            // and a fake verdict, so only a single whole line is marked
-            if (trustedCaller && parts.length == LINE_AND_END
-                    && parts[1].isEmpty()) {
-                printMarked(parts[0]);
-            } else {
-                super.print(text);
-            }
-            return this;
-        }
-
-        /**
-         * Prints one line with the token in front.
-         *
-         * @param line the line, without a line break
-         */
-        synchronized void printMarked(String line) {
-            writingMarked = true;
-            try {
-                super.print(token + line + System.lineSeparator());
-                super.flush();
-            } finally {
-                writingMarked = false;
-            }
-        }
-
-        /**
-         * Says whether the text holds no line break.
-         *
-         * @param text the text
-         * @return true if it is a single line
-         */
-        private boolean isOneLine(String text) {
-            return text != null && text.split(LINE_BREAK, -1).length == 1;
-        }
-
-        /**
-         * Says whether only the tester and Java itself are running on the
-         * tester's thread, with no student code anywhere in the call stack.
-         *
-         * @return true if the print comes from the tester itself
-         */
-        private boolean isTrustedCaller() {
-            if (Thread.currentThread() != testerThread) {
-                return false;
-            }
-            return walker.walk(frames -> frames.allMatch(
-                    frame -> isTrustedClass(frame.getDeclaringClass())));
-        }
-
-        /**
-         * Says whether a class is part of Java, this harness or the tester.
-         * Classes nested in the tester count as the tester; student classes
-         * and classes from any other class loader do not.
-         *
-         * @param type the class of one frame in the call stack
-         * @return true if the class is trusted
-         */
-        private boolean isTrustedClass(Class<?> type) {
-            ClassLoader loader = type.getClassLoader();
-            if (loader == null
-                    || loader == ClassLoader.getPlatformClassLoader()) {
-                return true;
-            }
-            Class<?> host = type.getNestHost();
-            return loader == TesterHarness.class.getClassLoader()
-                    && (host == tester || host == TesterHarness.class);
         }
     }
 }

@@ -59,8 +59,37 @@ public final class TestCasesSheet {
     // The style class of code text
     private static final String CODE = "code-text";
 
-    // Not used: every method is static.
-    private TestCasesSheet() {
+    // The window that shows the sheet
+    private final FlowWindow window;
+
+    // Called after a case is added or removed
+    private final Runnable onChange;
+
+    // The batch that keeps the cases
+    private final ImportBatch batch;
+
+    // The rows of the list of cases
+    private final VBox list = new VBox();
+
+    // The number of cases, under the list
+    private final Label count = Parts.muted("");
+
+    // The question of a new case
+    private final ComboBox<String> question = new ComboBox<>();
+
+    // The method, arguments and expected result of a new case
+    private final TextField method = codeField("countVowels");
+    private final TextField arguments = codeField("\"banana\", 2");
+    private final TextField expected = codeField("3");
+
+    // Says what is wrong with the case being typed
+    private final Label problem = new Label();
+
+    // Creates a sheet for the batch of a window; create builds it.
+    private TestCasesSheet(FlowWindow window, Runnable onChange) {
+        this.window = window;
+        this.onChange = onChange;
+        this.batch = window.getState().getBatch();
     }
 
     /**
@@ -71,16 +100,14 @@ public final class TestCasesSheet {
      * @return the sheet's content
      */
     public static Node create(FlowWindow window, Runnable onChange) {
-        ImportBatch batch = window.getState().getBatch();
-        VBox list = new VBox();
-        Label count = Parts.muted("");
-        count.getStyleClass().add("small-text");
-        Runnable redraw = () -> {
-            fillList(window, list, count, onChange);
-            onChange.run();
-        };
+        TestCasesSheet sheet = new TestCasesSheet(window, onChange);
+        return sheet.build();
+    }
 
-        ComboBox<String> question = new ComboBox<>();
+    // Builds the form, the list and the buttons of the sheet.
+    private Node build() {
+        count.getStyleClass().add("small-text");
+
         Assessment assessment = window.getBackend().getAssessment();
         if (assessment != null) {
             for (Question each : assessment.getQuestions()) {
@@ -93,26 +120,21 @@ public final class TestCasesSheet {
         question.setPrefWidth(QUESTION_WIDTH);
         question.setMaxWidth(Double.MAX_VALUE);
 
-        TextField method = codeField("countVowels");
-        TextField arguments = codeField("\"banana\", 2");
-        TextField expected = codeField("3");
-        Label problem = new Label();
         problem.getStyleClass().add("field-problem");
         problem.setWrapText(true);
         show(problem, false);
 
-        Button add = Parts.secondary("Add case", () -> addCase(batch,
-                question.getValue(), method, arguments, expected, problem,
-                redraw));
+        Button add = Parts.secondary("Add case", () -> addCase());
         expected.setOnAction(event -> add.fire());
 
         HBox form = Parts.row(Parts.GAP,
-                field("Question", question, false),
+                new Node[] {field("Question", question, false),
                 field("Method", method, true),
                 field("Arguments", arguments, true),
-                field("Expected result", expected, true));
+                field("Expected result", expected, true)});
         form.setAlignment(Pos.BOTTOM_LEFT);
-        HBox addRow = Parts.row(Parts.GAP, problem, Parts.grow(), add);
+        HBox addRow = Parts.row(Parts.GAP,
+                new Node[] {problem, Parts.grow(), add});
 
         ScrollPane scroll = new ScrollPane(list);
         scroll.setFitToWidth(true);
@@ -124,7 +146,8 @@ public final class TestCasesSheet {
 
         Button done = Parts.primary("Done");
         done.setOnAction(event -> window.closeSheet());
-        HBox bottom = Parts.row(Parts.GAP, count, Parts.grow(), done);
+        HBox bottom = Parts.row(Parts.GAP,
+                new Node[] {count, Parts.grow(), done});
 
         Label help = Parts.subtitle("Each case calls one method of the "
                 + "student's answer and compares what it returns with the "
@@ -135,7 +158,7 @@ public final class TestCasesSheet {
                 listCard, note(window), bottom);
         body.setPrefWidth(WIDTH);
         body.getStyleClass().add("test-cases-sheet");
-        fillList(window, list, count, onChange);
+        fillList();
         return body;
     }
 
@@ -145,8 +168,8 @@ public final class TestCasesSheet {
         close.setGraphic(Parts.icon(Parts.CLOSE, CLOSE_SIZE));
         close.getStyleClass().addAll("flat", "icon-button");
         close.setOnAction(event -> window.closeSheet());
-        return Parts.row(Parts.GAP, Parts.title("Type test cases"),
-                Parts.grow(), close);
+        return Parts.row(Parts.GAP, new Node[] {
+                Parts.title("Type test cases"), Parts.grow(), close});
     }
 
     // Explains what demo mode does with typed cases.
@@ -183,9 +206,8 @@ public final class TestCasesSheet {
     }
 
     // Checks the form, then adds the case to the batch.
-    private static void addCase(ImportBatch batch, String questionId,
-            TextField method, TextField arguments, TextField expected,
-            Label problem, Runnable redraw) {
+    private void addCase() {
+        String questionId = question.getValue();
         String name = method.getText().trim();
         String argumentText = arguments.getText().trim();
         String expectedText = expected.getText().trim();
@@ -202,7 +224,8 @@ public final class TestCasesSheet {
         arguments.clear();
         expected.clear();
         arguments.requestFocus();
-        redraw.run();
+        fillList();
+        onChange.run();
     }
 
     // Returns what is wrong with a typed case, or an empty string.
@@ -241,9 +264,7 @@ public final class TestCasesSheet {
     }
 
     // Redraws the list of cases and the count under it.
-    private static void fillList(FlowWindow window, VBox list, Label count,
-            Runnable onChange) {
-        ImportBatch batch = window.getState().getBatch();
+    private void fillList() {
         List<TestCase> cases = new ArrayList<>(batch.getTypedTestCases());
         list.getChildren().clear();
         count.setText(Parts.plural(cases.size(), "test case"));
@@ -256,8 +277,7 @@ public final class TestCasesSheet {
             return;
         }
         for (int index = 0; index < cases.size(); index++) {
-            HBox row = caseRow(window, cases.get(index), list, count,
-                    onChange);
+            HBox row = caseRow(cases.get(index));
             row.getStyleClass().add("case-row");
             if (index == 0) {
                 row.getStyleClass().add("first");
@@ -267,11 +287,10 @@ public final class TestCasesSheet {
     }
 
     // Builds one row of the list: question, the call, the result.
-    private static HBox caseRow(FlowWindow window, TestCase testCase,
-            VBox list, Label count, Runnable onChange) {
-        Label question = Parts.strong(testCase.getQuestionId());
-        question.setMinWidth(QUESTION_COLUMN);
-        question.setPrefWidth(QUESTION_COLUMN);
+    private HBox caseRow(TestCase testCase) {
+        Label questionLabel = Parts.strong(testCase.getQuestionId());
+        questionLabel.setMinWidth(QUESTION_COLUMN);
+        questionLabel.setPrefWidth(QUESTION_COLUMN);
         Label call = new Label(testCase.getMethodName() + "("
                 + testCase.getArgumentExpressions() + ")");
         call.getStyleClass().add(CODE);
@@ -281,28 +300,27 @@ public final class TestCasesSheet {
         Label result = new Label(testCase.getExpectedExpression());
         result.getStyleClass().add(CODE);
         result.setMinWidth(Label.USE_PREF_SIZE);
-        HBox what = Parts.row(Parts.GAP_SMALL, call, gives, result);
+        HBox what = Parts.row(Parts.GAP_SMALL,
+                new Node[] {call, gives, result});
         what.setMinWidth(0);
         HBox.setHgrow(what, Priority.ALWAYS);
 
-        Hyperlink remove = Parts.link("Remove", () -> removeCase(window,
-                testCase, list, count, onChange));
+        Hyperlink remove = Parts.link("Remove", () -> removeCase(testCase));
         remove.getStyleClass().add("small-text");
         remove.setMinWidth(LINK_WIDTH);
         remove.setPrefWidth(LINK_WIDTH);
         remove.setAlignment(Pos.CENTER_RIGHT);
-        return Parts.row(Parts.GAP, question, what, remove);
+        return Parts.row(Parts.GAP,
+                new Node[] {questionLabel, what, remove});
     }
 
     // Removes one case; with none left, grading goes back to the folder.
-    private static void removeCase(FlowWindow window, TestCase testCase,
-            VBox list, Label count, Runnable onChange) {
-        ImportBatch batch = window.getState().getBatch();
+    private void removeCase(TestCase testCase) {
         batch.getTypedTestCases().remove(testCase);
         if (batch.getTypedTestCases().isEmpty()) {
             batch.setUsingTypedTestCases(false);
         }
-        fillList(window, list, count, onChange);
+        fillList();
         onChange.run();
     }
 

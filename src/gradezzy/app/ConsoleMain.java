@@ -25,6 +25,7 @@ import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.testcase.TestCaseSource;
 import gradezzy.testcase.UploadedTesterSource;
+import gradezzy.util.TextUtils;
 
 /**
  * Console entry point: grades the submissions folder named in
@@ -144,7 +145,7 @@ public class ConsoleMain {
         }
 
         throw new ConfigException("Unknown " + kind + " '" + typed
-                + "'. Choose one of: " + String.join(", ", codes)
+                + "'. Choose one of: " + TextUtils.join(", ", codes)
                 + " (setting '" + key + "').");
     }
 

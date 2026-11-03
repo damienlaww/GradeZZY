@@ -3,8 +3,8 @@
  *
  * Purpose: The one state shown for a student's result.
  *
- * Where it fits: Shown on the Results, Overview, Statistics and Student
- * Evidence screens. It is worked out from the submission, never stored.
+ * Where it fits: Shown on Grade, Review and Statistics. It is worked out
+ * from the submission, never stored.
  */
 package gradezzy.ui.backend;
 

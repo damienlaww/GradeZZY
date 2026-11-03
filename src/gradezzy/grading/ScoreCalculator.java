@@ -1,18 +1,17 @@
 /*
  * File: ScoreCalculator.java
  *
- * Purpose: Adds up scores per question and per student.
+ * Purpose: Works out the mark of each question, kept between 0 and the
+ * question's maximum.
  *
- * Where it fits: Used by ScoreStage, the exporters and the statistics.
+ * Where it fits: Used by ScoreStage.
  */
 package gradezzy.grading;
 
-import gradezzy.model.Assessment;
 import gradezzy.model.QuestionResult;
-import gradezzy.model.Submission;
 
 /**
- * Adds up scores per question and per student.
+ * Works out the mark of each question.
  *
  * <p>Tier: MUST. Owner: Jing Yuan.
  */
@@ -54,42 +53,5 @@ public class ScoreCalculator {
         }
 
         return score;
-    }
-
-    /**
-     * Returns the total of a student over all questions, using the
-     * limited score of each question.
-     *
-     * @param submission the submission
-     * @return the student's total, or 0 if there is no submission
-     */
-    public double totalScore(Submission submission) {
-        double total = MIN_SCORE;
-
-        if (submission == null) {
-            return total;
-        }
-
-        for (QuestionResult questionResult
-                : submission.getQuestionResults()) {
-            total += questionScore(questionResult);
-        }
-
-        return total;
-    }
-
-    /**
-     * Returns the highest total possible for the assessment.
-     *
-     * @param assessment the assessment
-     * @return the denominator for the score sheet, or 0 if there is no
-     *         assessment
-     */
-    public double maxTotal(Assessment assessment) {
-        if (assessment == null) {
-            return MIN_SCORE;
-        }
-
-        return assessment.getMaxTotal();
     }
 }

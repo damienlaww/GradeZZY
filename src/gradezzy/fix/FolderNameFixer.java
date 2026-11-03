@@ -99,13 +99,18 @@ public class FolderNameFixer extends AbstractFixer {
     private List<Path> listTopFolders(Path workingCopy) throws FixException {
         List<Path> folders = new ArrayList<>();
 
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(workingCopy)) {
-            for (Path child : children) {
-                if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
-                        && !isHidden(child)) {
-                    folders.add(child);
+        try {
+            DirectoryStream<Path> children =
+                    Files.newDirectoryStream(workingCopy);
+            try {
+                for (Path child : children) {
+                    if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
+                            && !isHidden(child)) {
+                        folders.add(child);
+                    }
                 }
+            } finally {
+                children.close();
             }
         } catch (IOException exception) {
             throw new FixException("Could not list the working copy: "

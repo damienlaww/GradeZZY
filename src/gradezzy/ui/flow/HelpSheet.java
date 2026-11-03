@@ -10,6 +10,7 @@
 package gradezzy.ui.flow;
 
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
@@ -93,8 +94,9 @@ public final class HelpSheet {
                 Parts.title("Where files are saved"),
                 table(files, KEY_NAME_WIDTH, KEY_TEXT_WIDTH));
         HBox halves = new HBox(HALF_GAP, tabs, other);
-        return new VBox(Parts.GAP, halves, Parts.row(0, Parts.grow(),
-                Parts.secondary("Close", () -> window.closeSheet())));
+        Button close = Parts.secondary("Close", () -> window.closeSheet());
+        return new VBox(Parts.GAP, halves,
+                Parts.row(0, new Node[] {Parts.grow(), close}));
     }
 
     // Lays out pairs of words in two columns of fixed width.

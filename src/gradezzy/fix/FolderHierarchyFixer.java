@@ -341,12 +341,16 @@ public class FolderHierarchyFixer extends AbstractFixer {
             boolean includeHidden) throws FixException {
         List<Path> entries = new ArrayList<>();
 
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(folder)) {
-            for (Path child : children) {
-                if (includeHidden || !isHidden(child)) {
-                    entries.add(child);
+        try {
+            DirectoryStream<Path> children = Files.newDirectoryStream(folder);
+            try {
+                for (Path child : children) {
+                    if (includeHidden || !isHidden(child)) {
+                        entries.add(child);
+                    }
                 }
+            } finally {
+                children.close();
             }
         } catch (IOException exception) {
             throw new FixException("Could not list "

@@ -63,10 +63,13 @@ public final class SimilaritySheet {
         close.setGraphic(Parts.icon(Parts.CLOSE, CLOSE_SIZE));
         close.getStyleClass().addAll("flat", "icon-button");
         close.setOnAction(event -> window.closeSheet());
-        HBox top = Parts.row(Parts.GAP, Parts.title(first + " and "
-                + second + DOT + pair.getQuestionId()), Parts.grow(),
-                Parts.pill(Math.round(pair.getSimilarity() * PERCENT)
-                + "% similar", Tone.WARN), close);
+        Label title = Parts.title(first + " and " + second + DOT
+                + pair.getQuestionId());
+        Node grow = Parts.grow();
+        Label similar = Parts.pill(Math.round(pair.getSimilarity()
+                * PERCENT) + "% similar", Tone.WARN);
+        HBox top = Parts.row(Parts.GAP,
+                new Node[] {title, grow, similar, close});
 
         Label help = Parts.muted("Similar is not proof of copying. Read "
                 + "both before deciding; marks are not changed.");

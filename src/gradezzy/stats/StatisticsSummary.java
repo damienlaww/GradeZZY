@@ -1,10 +1,10 @@
 /*
  * File: StatisticsSummary.java
  *
- * Purpose: The numbers shown on the statistics dashboard.
+ * Purpose: The numbers shown on the Statistics tab.
  *
- * Where it fits: Built by StatisticsCalculator and displayed by the statistics
- * screen.
+ * Where it fits: Built by StatisticsCalculator and displayed on the
+ * Statistics tab.
  */
 package gradezzy.stats;
 
@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The numbers shown on the statistics dashboard.
+ * The numbers shown on the Statistics tab.
  *
  * <p>Tier: SHOULD. Owner: Huxley.
  */

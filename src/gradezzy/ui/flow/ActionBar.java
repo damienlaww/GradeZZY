@@ -24,8 +24,9 @@ public class ActionBar extends HBox {
     // The gap between the parts of the bar
     private static final double GAP = 12.0;
 
-    // Goes back one step
-    private final Button backButton = Parts.secondary("Back", () -> { });
+    // Goes back one step; does nothing until a screen sets its action
+    private final Button backButton = Parts.secondary("Back",
+            () -> doNothing());
 
     // Says why the blue button is disabled, or what happens next
     private final Label status = Parts.muted("");
@@ -152,6 +153,13 @@ public class ActionBar extends HBox {
             return;
         }
         primaryAction.run();
+    }
+
+    /**
+     * The action of Back before a screen sets one: nothing happens.
+     */
+    private void doNothing() {
+        // Back is hidden until a screen calls setBack
     }
 
     /**

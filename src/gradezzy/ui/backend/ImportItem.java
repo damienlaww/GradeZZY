@@ -4,7 +4,7 @@
  * Purpose: One file or folder chosen before grading, and whether it is usable.
  *
  * Where it fits: DashboardBackend.inspect creates these, ImportBatch holds
- * them and the Submissions screen lists them.
+ * them and Set up lists them.
  */
 package gradezzy.ui.backend;
 

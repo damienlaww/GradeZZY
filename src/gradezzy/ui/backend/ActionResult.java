@@ -4,7 +4,7 @@
  * Purpose: Tells a screen how a backend action went.
  *
  * Where it fits: Returned by the DashboardBackend methods that change
- * something. A screen shows the message, or a Not connected yet panel.
+ * something. The screen shows its message.
  */
 package gradezzy.ui.backend;
 
@@ -15,23 +15,8 @@ import java.nio.file.Path;
  */
 public class ActionResult {
 
-    /**
-     * The three possible outcomes.
-     */
-    public enum Outcome {
-
-        /** The action happened. */
-        DONE,
-
-        /** No backend provides this action yet. */
-        NOT_CONNECTED,
-
-        /** The action was tried and did not work. */
-        FAILED
-    }
-
     // What happened
-    private final Outcome outcome;
+    private final ActionOutcome outcome;
 
     // A plain sentence for the instructor
     private final String message;
@@ -46,7 +31,7 @@ public class ActionResult {
     private final Path path;
 
     // Creates a result; the factory methods call it.
-    private ActionResult(Outcome outcome, String message,
+    private ActionResult(ActionOutcome outcome, String message,
             Capability capability, String preview, Path path) {
         this.outcome = outcome;
         this.message = message;
@@ -62,7 +47,7 @@ public class ActionResult {
      * @return the result
      */
     public static ActionResult done(String message) {
-        return new ActionResult(Outcome.DONE, message, null, "", null);
+        return new ActionResult(ActionOutcome.DONE, message, null, "", null);
     }
 
     /**
@@ -73,7 +58,8 @@ public class ActionResult {
      * @return the result
      */
     public static ActionResult preview(String message, String preview) {
-        return new ActionResult(Outcome.DONE, message, null, preview, null);
+        return new ActionResult(ActionOutcome.DONE, message, null, preview,
+                null);
     }
 
     /**
@@ -84,7 +70,7 @@ public class ActionResult {
      * @return the result
      */
     public static ActionResult saved(String message, Path path) {
-        return new ActionResult(Outcome.DONE, message, null, "", path);
+        return new ActionResult(ActionOutcome.DONE, message, null, "", path);
     }
 
     /**
@@ -94,7 +80,7 @@ public class ActionResult {
      * @return the result
      */
     public static ActionResult notConnected(Capability capability) {
-        return new ActionResult(Outcome.NOT_CONNECTED,
+        return new ActionResult(ActionOutcome.NOT_CONNECTED,
                 capability.getTitle() + " is not connected yet.",
                 capability, "", null);
     }
@@ -106,7 +92,7 @@ public class ActionResult {
      * @return the result
      */
     public static ActionResult failed(String message) {
-        return new ActionResult(Outcome.FAILED, message, null, "", null);
+        return new ActionResult(ActionOutcome.FAILED, message, null, "", null);
     }
 
     /**
@@ -114,7 +100,7 @@ public class ActionResult {
      *
      * @return the outcome
      */
-    public Outcome getOutcome() {
+    public ActionOutcome getOutcome() {
         return outcome;
     }
 
@@ -124,7 +110,7 @@ public class ActionResult {
      * @return true when the outcome is DONE
      */
     public boolean isDone() {
-        return outcome == Outcome.DONE;
+        return outcome == ActionOutcome.DONE;
     }
 
     /**

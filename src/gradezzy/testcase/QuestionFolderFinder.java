@@ -20,6 +20,7 @@ import java.util.List;
 import gradezzy.model.Assessment;
 import gradezzy.model.Question;
 import gradezzy.model.Submission;
+import gradezzy.util.FileUtils;
 
 /**
  * Finds the folder of a question inside a working copy, whether or not the
@@ -131,8 +132,9 @@ public class QuestionFolderFinder {
     private static List<Path> listFolders(Path directory) throws IOException {
         List<Path> folders = new ArrayList<>();
 
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(directory)) {
+        DirectoryStream<Path> children = null;
+        try {
+            children = Files.newDirectoryStream(directory);
             for (Path child : children) {
                 String childName = child.getFileName().toString();
                 if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
@@ -140,6 +142,8 @@ public class QuestionFolderFinder {
                     folders.add(child);
                 }
             }
+        } finally {
+            FileUtils.closeIfOpen(children);
         }
         return folders;
     }

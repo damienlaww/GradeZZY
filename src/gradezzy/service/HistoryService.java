@@ -3,12 +3,15 @@
  *
  * Purpose: Lists earlier runs and handles backup and recovery.
  *
- * Where it fits: Used by the history screen.
+ * Where it fits: Used by the Runs tab.
  */
 package gradezzy.service;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,6 +29,15 @@ import gradezzy.persistence.ResultRepository;
  */
 public class HistoryService {
 
+    // Added to the name of the copy of a backup taken before a restore.
+    // It does not end in .db, so it is never listed as a backup and never
+    // deleted when old backups are cleared.
+    private static final String HELD_COPY_SUFFIX = ".held";
+
+    // The audit log actions this service records
+    private static final String BACKUP_MADE = "Backup made";
+    private static final String BACKUP_RESTORED = "Backup restored";
+
     // The application settings
     private final AppConfig config;
 
@@ -34,6 +46,9 @@ public class HistoryService {
 
     // The helper that copies the database
     private final BackupManager backupManager;
+
+    // The log of instructor actions
+    private final AuditService auditService;
 
     // The database file the repository was opened with. Read once, like
     // the repository does, so a later change on the settings screen
@@ -49,9 +64,25 @@ public class HistoryService {
      */
     public HistoryService(AppConfig config, ResultRepository repository,
             BackupManager backupManager) {
+        this(config, repository, backupManager,
+                new AuditService(config, repository));
+    }
+
+    /**
+     * Creates a new history service that writes backups and restores to
+     * the given audit log.
+     *
+     * @param config the application settings
+     * @param repository the store results are saved to
+     * @param backupManager the helper that copies the database
+     * @param auditService the log of instructor actions
+     */
+    public HistoryService(AppConfig config, ResultRepository repository,
+            BackupManager backupManager, AuditService auditService) {
         this.config = config;
         this.repository = repository;
         this.backupManager = backupManager;
+        this.auditService = auditService;
         this.databaseFile = Paths.get(config.getString(
                 ConfigKeys.DATABASE_FILE));
     }
@@ -90,7 +121,10 @@ public class HistoryService {
         // Held so no run is half written while the file is copied
         synchronized (repository) {
             try {
-                return backupManager.backup(databaseFile);
+                Path backupFile = backupManager.backup(databaseFile);
+                auditService.record(BACKUP_MADE, "Saved a copy of the "
+                        + "database as " + backupFile.getFileName() + ".");
+                return backupFile;
             } catch (PersistenceException exception) {
                 return null;
             }
@@ -102,14 +136,20 @@ public class HistoryService {
      * backup over it and opens it again. The database is opened again
      * even when the copy fails, so saving keeps working.
      *
+     * <p>The database is backed up first, so a restore can itself be
+     * undone by restoring that new backup. If that backup cannot be made,
+     * nothing is restored. The chosen backup is copied aside before, so
+     * clearing old backups cannot delete it on the way.
+     *
      * <p>Other threads that use the repository wait until the restore is
      * finished. A grading run still going on saves its next results into
      * the restored database, so restore when no run is being graded.
      *
      * @param backupFile the backup file
-     * @throws IllegalStateException if the database is switched off, or
-     *         the backup could not be restored or the database not opened
-     *         again; the message says which
+     * @throws IllegalStateException if the database is switched off, the
+     *         current database could not be backed up first, or the backup
+     *         could not be restored or the database not opened again; the
+     *         message says which
      */
     public void restore(Path backupFile) {
         if (!isDatabaseUsed()) {
@@ -118,18 +158,43 @@ public class HistoryService {
                     + ConfigKeys.DATABASE_ENABLED + " to true.");
         }
 
+        if (backupFile == null || !Files.isRegularFile(backupFile)) {
+            throw new IllegalStateException("The backup " + backupFile
+                    + " does not exist. Choose one from the list.");
+        }
+
         String problem = "";
+        Path safetyBackup = null;
+        Path heldCopy = backupFile.resolveSibling(backupFile.getFileName()
+                + HELD_COPY_SUFFIX);
 
         // Every repository method locks the repository, so holding the
         // same lock here stops other threads from using it while closed
         synchronized (repository) {
+            try {
+                Files.copy(backupFile, heldCopy,
+                        StandardCopyOption.REPLACE_EXISTING);
+                safetyBackup = backUpBeforeRestore();
+            } catch (IOException exception) {
+                deleteQuietly(heldCopy);
+                throw new IllegalStateException("The backup " + backupFile
+                        + " could not be read, so nothing was restored: "
+                        + exception.getMessage());
+            } catch (PersistenceException exception) {
+                deleteQuietly(heldCopy);
+                throw new IllegalStateException("The current database "
+                        + "could not be backed up first, so nothing was "
+                        + "restored: " + exception.getMessage());
+            }
+
             repository.close();
 
             try {
-                backupManager.restore(backupFile, databaseFile);
+                backupManager.restore(heldCopy, databaseFile);
             } catch (PersistenceException exception) {
                 problem = exception.getMessage();
             }
+            deleteQuietly(heldCopy);
 
             try {
                 repository.open();
@@ -137,10 +202,43 @@ public class HistoryService {
                 problem = problem + " The database could not be opened "
                         + "again: " + exception.getMessage();
             }
+
+            if (problem.isEmpty()) {
+                auditService.record(BACKUP_RESTORED, describeRestore(
+                        backupFile, safetyBackup));
+            }
         }
 
         if (!problem.isEmpty()) {
             throw new IllegalStateException(problem.trim());
+        }
+    }
+
+    // Backs up the database before a restore. Returns null when there is
+    // no database file yet, as then there is nothing to lose.
+    private Path backUpBeforeRestore() throws PersistenceException {
+        if (!Files.isRegularFile(databaseFile)) {
+            return null;
+        }
+        return backupManager.backup(databaseFile);
+    }
+
+    // Says which backup was restored and where the replaced database went.
+    private String describeRestore(Path backupFile, Path safetyBackup) {
+        String detail = "Restored " + backupFile.getFileName() + ".";
+        if (safetyBackup != null) {
+            detail += " The database before the restore was saved as "
+                    + safetyBackup.getFileName() + ".";
+        }
+        return detail;
+    }
+
+    // Deletes a file if it is there; a leftover copy is harmless.
+    private void deleteQuietly(Path file) {
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException exception) {
+            // Nothing else to do; see the comment above
         }
     }
 

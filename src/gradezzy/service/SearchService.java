@@ -1,9 +1,9 @@
 /*
  * File: SearchService.java
  *
- * Purpose: Searches, filters and sorts the submissions of a run.
+ * Purpose: Finds the submissions of a run whose code holds some text.
  *
- * Where it fits: Used by the results and anomaly screens.
+ * Where it fits: Used by the code search on Review.
  */
 package gradezzy.service;
 
@@ -16,17 +16,13 @@ import java.util.List;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
-import gradezzy.model.Anomaly;
-import gradezzy.model.AnomalyType;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
-import gradezzy.model.Student;
 import gradezzy.model.Submission;
-import gradezzy.model.SubmissionStatus;
 
 /**
- * Searches, filters and sorts the submissions of a run. Every method
- * returns a new list and leaves the run unchanged.
+ * Finds the submissions of a run whose code holds some text. It returns
+ * a new list and leaves the run unchanged.
  *
  * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
@@ -45,35 +41,6 @@ public class SearchService {
      */
     public SearchService(AppConfig config) {
         this.config = config;
-    }
-
-    /**
-     * Finds submissions whose username or name contains a keyword. The
-     * match ignores case and spaces around the keyword. The name is
-     * matched as "first last" and as "last first". A blank keyword
-     * matches every submission.
-     *
-     * @param gradingRun the grading run
-     * @param keyword the keyword
-     * @return the matching submissions, or an empty list if there is no
-     *         run
-     */
-    public List<Submission> search(GradingRun gradingRun, String keyword) {
-        List<Submission> matches = new ArrayList<>();
-
-        if (gradingRun == null) {
-            return matches;
-        }
-
-        String wanted = normalise(keyword);
-
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (wanted.isEmpty() || matchesKeyword(submission, wanted)) {
-                matches.add(submission);
-            }
-        }
-
-        return matches;
     }
 
     /**
@@ -109,120 +76,6 @@ public class SearchService {
         }
 
         return matches;
-    }
-
-    /**
-     * Keeps the submissions with a given status.
-     *
-     * @param gradingRun the grading run
-     * @param status the status
-     * @return the matching submissions, or an empty list if the run or
-     *         the status is missing
-     */
-    public List<Submission> filterByStatus(GradingRun gradingRun,
-            SubmissionStatus status) {
-        List<Submission> matches = new ArrayList<>();
-
-        if (gradingRun == null || status == null) {
-            return matches;
-        }
-
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (submission.getStatus() == status) {
-                matches.add(submission);
-            }
-        }
-
-        return matches;
-    }
-
-    /**
-     * Keeps the submissions that have a given kind of anomaly. A
-     * submission with several anomalies of that kind appears once.
-     *
-     * @param gradingRun the grading run
-     * @param anomalyType the anomaly type
-     * @return the matching submissions, or an empty list if the run or
-     *         the type is missing
-     */
-    public List<Submission> filterByAnomalyType(GradingRun gradingRun,
-            AnomalyType anomalyType) {
-        List<Submission> matches = new ArrayList<>();
-
-        if (gradingRun == null || anomalyType == null) {
-            return matches;
-        }
-
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (hasAnomalyType(submission, anomalyType)) {
-                matches.add(submission);
-            }
-        }
-
-        return matches;
-    }
-
-    /**
-     * Sorts submissions by total score. Submissions with the same total
-     * keep their original order. The list passed in is not changed.
-     *
-     * @param submissions the submissions
-     * @param ascending true for lowest first, false for highest first
-     * @return a new sorted list, or an empty list if there are no
-     *         submissions
-     */
-    public List<Submission> sortByScore(List<Submission> submissions,
-            boolean ascending) {
-        List<Submission> sorted = new ArrayList<>();
-
-        if (submissions == null) {
-            return sorted;
-        }
-
-        // Insertion sort: each submission moves left past every
-        // submission it must come before, so equal totals keep their
-        // original order.
-        for (Submission submission : submissions) {
-            int position = sorted.size();
-
-            while (position > 0 && comesBefore(submission,
-                    sorted.get(position - 1), ascending)) {
-                position--;
-            }
-
-            sorted.add(position, submission);
-        }
-
-        return sorted;
-    }
-
-    // Lower case with spaces at both ends removed; null becomes "".
-    private String normalise(String text) {
-        if (text == null) {
-            return "";
-        }
-
-        return text.trim().toLowerCase();
-    }
-
-    // Says whether the username or the student's name holds the keyword.
-    private boolean matchesKeyword(Submission submission, String wanted) {
-        if (normalise(submission.getUsername()).contains(wanted)) {
-            return true;
-        }
-
-        Student student = submission.getStudent();
-
-        if (student == null) {
-            return false;
-        }
-
-        String firstName = normalise(student.getFirstName());
-        String lastName = normalise(student.getLastName());
-        String fullName = firstName + " " + lastName;
-        String reversedName = lastName + " " + firstName;
-
-        return fullName.contains(wanted) || reversedName.contains(wanted);
     }
 
     // Says whether a .java file in or under a folder holds the fragment.
@@ -280,27 +133,5 @@ public class SearchService {
             // match; the search carries on with the other files.
             return false;
         }
-    }
-
-    // Says whether a submission has at least one anomaly of a type.
-    private boolean hasAnomalyType(Submission submission,
-            AnomalyType anomalyType) {
-        for (Anomaly anomaly : submission.getAnomalies()) {
-            if (anomaly.getType() == anomalyType) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    // Says whether the first submission must come before the second.
-    private boolean comesBefore(Submission first, Submission second,
-            boolean ascending) {
-        if (ascending) {
-            return first.getTotalScore() < second.getTotalScore();
-        }
-
-        return first.getTotalScore() > second.getTotalScore();
     }
 }

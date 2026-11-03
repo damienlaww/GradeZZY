@@ -146,19 +146,26 @@ public class SetUpScreen extends FlowScreen {
      */
     public SetUpScreen(FlowWindow window) {
         super(window);
-        view = Parts.narrowPage(
-                Parts.header("Set up a grading run", "Choose the class, "
-                + "add the students' zip files, then start grading."),
-                createClassCard(), createSubmissionCard(),
-                Parts.card("Class files", classFiles),
-                createSettingsCard());
+        Node header = Parts.header("Set up a grading run", "Choose the "
+                + "class, add the students' zip files, then start grading.");
+        view = Parts.narrowPage(new Node[] {header, createClassCard(),
+            createSubmissionCard(),
+            Parts.card("Class files", new Node[] {classFiles}),
+            createSettingsCard()});
     }
 
+    /**
+     * Returns the Set up step built in the constructor.
+     */
     @Override
     public Node getView() {
         return view;
     }
 
+    /**
+     * Fills the module and section choices, the first time also the
+     * configured files, then refreshes the checks and the action bar.
+     */
     @Override
     public void onShow() {
         fillChoices();
@@ -199,7 +206,7 @@ public class SetUpScreen extends FlowScreen {
         fields.add(field("Module", moduleBox), 0, 0);
         fields.add(field("Section", sectionBox), 1, 0);
         fields.add(field("Assessment", assessmentText), 2, 0);
-        return Parts.card("Class", fields, earlierRun);
+        return Parts.card("Class", new Node[] {fields, earlierRun});
     }
 
     // Builds the drop area and the file list.
@@ -213,23 +220,22 @@ public class SetUpScreen extends FlowScreen {
                 () -> chooseSubmissions());
         chooseLink.getStyleClass().add("small-text");
         VBox words = new VBox(Parts.strong("Drop zip files or a folder "
-                + "here"), Parts.row(0, choose, chooseLink));
+                + "here"), Parts.row(0, new Node[] {choose, chooseLink}));
         words.setAlignment(Pos.CENTER_LEFT);
         dropArea.getChildren().addAll(circle, words);
         dropArea.getStyleClass().add("drop-area");
         dropArea.setAlignment(Pos.CENTER);
         dropArea.setFillHeight(false);
         dropHandler.install(dropArea);
-        dropHandler.setOnDropped(() -> addSubmissions(
-                dropHandler.getDroppedPaths()));
+        dropHandler.setOnDropped(() -> addDroppedFiles());
 
         fileList.getStyleClass().add("file-list");
         duplicateNote.getStyleClass().add("small-text");
         duplicateNote.setWrapText(true);
-        HBox top = Parts.row(Parts.GAP, Parts.title("Submissions"),
-                Parts.grow(), fileSummary);
-        VBox card = Parts.card(null, top, dropArea, fileList,
-                duplicateNote);
+        HBox top = Parts.row(Parts.GAP, new Node[] {
+                Parts.title("Submissions"), Parts.grow(), fileSummary});
+        VBox card = Parts.card(null, new Node[] {top, dropArea, fileList,
+            duplicateNote});
         return card;
     }
 
@@ -241,10 +247,13 @@ public class SetUpScreen extends FlowScreen {
         }
         checksLine.getStyleClass().addAll("muted", "small-text");
         checksLine.setWrapText(true);
-        HBox top = Parts.row(Parts.GAP, Parts.title("Grading settings"),
-                Parts.grow(), smallLink("Change in Settings",
-                () -> getWindow().showPage(Page.SETTINGS)));
-        return Parts.card(null, top, facts, checksLine);
+        Label title = Parts.title("Grading settings");
+        Node grow = Parts.grow();
+        Hyperlink change = smallLink("Change in Settings",
+                () -> getWindow().showPage(Page.SETTINGS));
+        HBox top = Parts.row(Parts.GAP,
+                new Node[] {title, grow, change});
+        return Parts.card(null, new Node[] {top, facts, checksLine});
     }
 
     // Returns a column that takes a share of a grid's width.
@@ -401,6 +410,13 @@ public class SetUpScreen extends FlowScreen {
                 + ".");
     }
 
+    /**
+     * Adds the files just dropped on the drop area.
+     */
+    private void addDroppedFiles() {
+        addSubmissions(dropHandler.getDroppedPaths());
+    }
+
     // Removes one zip file from the batch.
     private void removeSubmission(ImportItem item) {
         getState().getBatch().remove(item);
@@ -541,8 +557,8 @@ public class SetUpScreen extends FlowScreen {
                 + " was graded" + when + " ("
                 + Parts.plural(run.getSubmissions().size(), "student")
                 + ")."),
-                Parts.link("Open its results", () -> getWindow()
-                .openRun(run)));
+                Parts.link("Open its results",
+                () -> getWindow().openRun(run)));
     }
 
     // Redraws the zip file list and the count above it.
@@ -599,7 +615,7 @@ public class SetUpScreen extends FlowScreen {
         ImportState state = getState().getBatch().getEffectiveState(item);
         Label name = Parts.strong(item.getName());
         name.setMinWidth(0);
-        HBox line = Parts.row(0, name);
+        HBox line = Parts.row(0, new Node[] {name});
         String who = item.getUsername();
         if (who.isEmpty() && item.getStudentCount() > 0) {
             who = Parts.plural(item.getStudentCount(), "student");
@@ -619,9 +635,11 @@ public class SetUpScreen extends FlowScreen {
         }
         text.setMinWidth(0);
         HBox.setHgrow(text, Priority.ALWAYS);
-        return Parts.row(Parts.GAP, iconColumn(Parts.FILE), text,
-                Parts.pill(stateText(state), toneOf(state)),
-                rowLink("Remove", () -> removeSubmission(item)));
+        Node icon = iconColumn(Parts.FILE);
+        Label status = Parts.pill(stateText(state), toneOf(state));
+        Hyperlink remove = rowLink("Remove", () -> removeSubmission(item));
+        return Parts.row(Parts.GAP,
+                new Node[] {icon, text, status, remove});
     }
 
     // Returns the note under a file: why it cannot be used, what to
@@ -666,12 +684,12 @@ public class SetUpScreen extends FlowScreen {
         List<ImportItem> items = getState().getBatch().getItems(kind);
         String detail;
         Label status;
-        if (items.isEmpty()) {
-            detail = kind.isRequired() ? "Not chosen yet."
-                    : "Not chosen. The starter folder in Settings is used.";
-            status = Parts.pill(kind.isRequired() ? "Missing"
-                    : "From Settings", kind.isRequired() ? Tone.BAD
-                    : Tone.NEUTRAL);
+        if (items.isEmpty() && kind.isRequired()) {
+            detail = "Not chosen yet.";
+            status = Parts.pill("Missing", Tone.BAD);
+        } else if (items.isEmpty()) {
+            detail = "Not chosen. The starter folder in Settings is used.";
+            status = Parts.pill("From Settings", Tone.NEUTRAL);
         } else {
             ImportItem item = items.get(0);
             ImportState state = getState().getBatch()
@@ -709,8 +727,12 @@ public class SetUpScreen extends FlowScreen {
                 + " typed in the app");
         detail.getChildren().add(smallLink("Edit test cases",
                 () -> openTestCases()));
-        Label status = cases > 0 ? Parts.pill("Ready", Tone.GOOD)
-                : Parts.pill("Missing", Tone.BAD);
+        Label status;
+        if (cases > 0) {
+            status = Parts.pill("Ready", Tone.GOOD);
+        } else {
+            status = Parts.pill("Missing", Tone.BAD);
+        }
         return classFileRow(Parts.CODE, "Tester files", detail, status,
                 rowLink("Change", () -> changeClassFile(
                 InputKind.TESTERS)));
@@ -723,7 +745,7 @@ public class SetUpScreen extends FlowScreen {
         label.getStyleClass().add("small-text");
         label.setMinWidth(0);
         label.setWrapText(true);
-        return Parts.row(Parts.GAP_SMALL, label);
+        return Parts.row(Parts.GAP_SMALL, new Node[] {label});
     }
 
     // Lays out a class file row: icon, name and detail, status, link.
@@ -732,17 +754,21 @@ public class SetUpScreen extends FlowScreen {
         VBox text = new VBox(Parts.strong(title), detail);
         text.setMinWidth(0);
         HBox.setHgrow(text, Priority.ALWAYS);
-        return Parts.row(Parts.GAP, iconColumn(iconPath), text, status,
-                change);
+        return Parts.row(Parts.GAP,
+                new Node[] {iconColumn(iconPath), text, status, change});
     }
 
     // Fills the four facts and the line about the checks.
     private void refreshSettings() {
         facts.getChildren().clear();
-        String fixes = isOn(ConfigKeys.AUTO_FIX_ENABLED)
-                ? "On, you approve" : "Off";
-        String similar = isOn(ConfigKeys.PLAGIARISM_ENABLED) ? "On"
-                : "Off";
+        String fixes = "Off";
+        if (isOn(ConfigKeys.AUTO_FIX_ENABLED)) {
+            fixes = "On, you approve";
+        }
+        String similar = "Off";
+        if (isOn(ConfigKeys.PLAGIARISM_ENABLED)) {
+            similar = "On";
+        }
         facts.add(fact("Time limit per test",
                 getBackend().getRunTimeoutSeconds() + " s", true), 0, 0);
         facts.add(fact("Compile time limit",
@@ -788,26 +814,34 @@ public class SetUpScreen extends FlowScreen {
                     + "off.";
         }
         String text = "Checks for " + join(on) + " answers "
-                + (on.size() == 1 ? "is" : "are") + " on";
+                + isOrAre(on.size()) + " on";
         if (!off.isEmpty()) {
-            text = text + "; " + join(off) + " "
-                    + (off.size() == 1 ? "is" : "are") + " off";
+            text = text + "; " + join(off) + " " + isOrAre(off.size())
+                    + " off";
         }
         return text + ". They only flag students; marks never change.";
     }
 
+    // Returns "is" for one thing and "are" for more.
+    private String isOrAre(int count) {
+        if (count == 1) {
+            return "is";
+        }
+        return "are";
+    }
+
     // Joins words as "a", "a and b" or "a, b and c".
     private String join(List<String> words) {
-        StringBuilder text = new StringBuilder();
+        String text = "";
         for (int index = 0; index < words.size(); index++) {
             if (index > 0 && index == words.size() - 1) {
-                text.append(" and ");
+                text += " and ";
             } else if (index > 0) {
-                text.append(", ");
+                text += ", ";
             }
-            text.append(words.get(index));
+            text += words.get(index);
         }
-        return text.toString();
+        return text;
     }
 
     // Says whether an on or off setting is on.
@@ -825,14 +859,17 @@ public class SetUpScreen extends FlowScreen {
         ActionBar actions = getActions();
         actions.reset();
         boolean ready = batch.isReady() && !getState().isGrading();
-        actions.setPrimary("Start grading", () -> getWindow()
-                .startGrading(), ready);
+        actions.setPrimary("Start grading",
+                () -> getWindow().startGrading(), ready);
         if (getState().isGrading()) {
             actions.setStatus("A batch is being graded. See step 2.");
         } else if (!batch.isReady()) {
             List<String> reasons = batch.getBlockingReasons();
-            actions.setStatus(reasons.isEmpty() ? ""
-                    : reasons.get(0));
+            if (reasons.isEmpty()) {
+                actions.setStatus("");
+            } else {
+                actions.setStatus(reasons.get(0));
+            }
         } else {
             actions.setStatus(Parts.plural(batch.countStudents(),
                     "student") + " ready to grade in "

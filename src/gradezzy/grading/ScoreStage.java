@@ -7,10 +7,17 @@
  */
 package gradezzy.grading;
 
+import java.util.UUID;
+
+import gradezzy.config.ConfigKeys;
+import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
+import gradezzy.model.Severity;
 import gradezzy.model.Submission;
+import gradezzy.testcase.TesterFile;
 
 /**
  * Works out the per-question and per-student scores.
@@ -23,6 +30,12 @@ public class ScoreStage implements GradingStage {
      * The name shown while this stage runs.
      */
     public static final String NAME = "Scoring";
+
+    // Start of the id of the flag for a question that has no tester
+    private static final String NO_TESTER_ID_PREFIX = "no-tester-";
+
+    // Added to a tester class name to give its file name
+    private static final String JAVA_EXTENSION = ".java";
 
     // The helper that adds up scores
     private final ScoreCalculator scoreCalculator;
@@ -54,6 +67,10 @@ public class ScoreStage implements GradingStage {
      * maximum; a tester that reports more than the maximum is clamped
      * without a warning.
      *
+     * <p>A question that has no tester at all gets an error flag on every
+     * submission, because its zero marks are not the student's doing and
+     * would otherwise go into the export unnoticed.
+     *
      * @param submission the submission
      * @param context the context
      * @throws GradingException if the context holds no assessment
@@ -68,6 +85,11 @@ public class ScoreStage implements GradingStage {
         }
 
         for (Question question : assessment.getQuestions()) {
+            if (TesterFile.findFor(context.getTesters(),
+                    question.getId()) == null) {
+                flagMissingTester(submission, question, context);
+            }
+
             if (!hasResult(submission, question)) {
                 // A question with no result (for example a missing file)
                 // still appears in the results, with zero marks.
@@ -80,6 +102,25 @@ public class ScoreStage implements GradingStage {
             questionResult.setScore(
                     scoreCalculator.questionScore(questionResult));
         }
+    }
+
+    // Adds an error flag saying that a question was not graded because
+    // the tester folder has no tester for it.
+    private void flagMissingTester(Submission submission, Question question,
+            GradingContext context) {
+        String testerFile = question.getId()
+                + context.getConfig().getString(
+                        ConfigKeys.TESTER_CLASS_SUFFIX)
+                + JAVA_EXTENSION;
+        String message = question.getId() + " was not graded: the tester "
+                + "folder has no " + testerFile + ", so it scores 0 for "
+                + "every student. This is not the student's error.";
+        String action = "Add " + testerFile + " to the tester folder, then "
+                + "grade again.";
+
+        submission.addAnomaly(new Anomaly(NO_TESTER_ID_PREFIX
+                + UUID.randomUUID(), AnomalyType.INTERNAL_ERROR,
+                Severity.ERROR, submission.getUsername(), message, action));
     }
 
     // Says whether the submission already has a result for a question.

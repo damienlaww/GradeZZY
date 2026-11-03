@@ -19,6 +19,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public class Submission {
 
+    // Totals are rounded to this many hundredths: 100 keeps two decimal
+    // places, which is finer than any tester's marks
+    private static final double ROUNDING_FACTOR = 100.0;
+
     // The username taken from the zip file name
     private final String username;
 
@@ -194,7 +198,9 @@ public class Submission {
     /**
      * Adds up the score of every question. The scores are used as they
      * are stored; ScoreStage has already kept each one within its
-     * question's maximum.
+     * question's maximum. The total is rounded to two decimal places,
+     * because adding doubles leaves tiny errors (0.1 + 0.2 is
+     * 0.30000000000000004) that would otherwise reach the export.
      *
      * @return the student's total
      */
@@ -205,6 +211,6 @@ public class Submission {
             total += questionResult.getScore();
         }
 
-        return total;
+        return Math.round(total * ROUNDING_FACTOR) / ROUNDING_FACTOR;
     }
 }

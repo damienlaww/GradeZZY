@@ -4,7 +4,7 @@
  * Purpose: One validation finding and the repair proposed for it.
  *
  * Where it fits: DashboardBackend.listRepairs builds these from a run's
- * anomalies, and the Validation screen lists them.
+ * anomalies, and the student panel on Review lists them.
  */
 package gradezzy.ui.backend;
 

@@ -99,11 +99,10 @@ public class RosterReader {
                         fields.get(header.indexOf(EMAIL_COLUMN))));
             }
             return students;
-        } catch (IOException | IllegalArgumentException exception) {
-            throw new IngestException("Could not read roster "
-                    + scoreSheetFile + ": " + exception.getMessage()
-                    + " Choose the score sheet CSV with student columns.",
-                    exception);
+        } catch (IOException exception) {
+            throw rosterFailure(scoreSheetFile, exception);
+        } catch (IllegalArgumentException exception) {
+            throw rosterFailure(scoreSheetFile, exception);
         }
     }
 
@@ -127,6 +126,15 @@ public class RosterReader {
         return null;
     }
 
+    // Builds the error shown when the roster cannot be read or is malformed.
+    private IngestException rosterFailure(Path scoreSheetFile,
+            Exception exception) {
+        return new IngestException("Could not read roster "
+                + scoreSheetFile + ": " + exception.getMessage()
+                + " Choose the score sheet CSV with student columns.",
+                exception);
+    }
+
     private void requireColumn(List<String> header, String name) {
         if (header.indexOf(name) < 0
                 || header.indexOf(name) != header.lastIndexOf(name)) {
@@ -145,10 +153,12 @@ public class RosterReader {
     }
 
     // A quoted name can contain a newline, so physical lines alone are
-    // not records. The field parser later rejects malformed quotes.
+    // not records. The field parser later rejects malformed quotes. A
+    // record is the text from just after one splitting newline up to the
+    // next one.
     private List<String> splitRecords(String text) {
         List<String> records = new ArrayList<>();
-        StringBuilder record = new StringBuilder();
+        int recordStart = 0;
         boolean quoted = false;
         for (int index = 0; index < text.length(); index++) {
             char current = text.charAt(index);
@@ -156,20 +166,21 @@ public class RosterReader {
                 quoted = !quoted;
             }
             if (current == '\n' && !quoted) {
-                if (!TextUtils.isBlank(record.toString())) {
-                    records.add(record.toString());
-                }
-                record.setLength(0);
-            } else {
-                record.append(current);
+                addRecord(records, text.substring(recordStart, index));
+                recordStart = index + 1;
             }
         }
         if (quoted) {
             throw new IllegalArgumentException("Unclosed roster CSV quote.");
         }
-        if (!TextUtils.isBlank(record.toString())) {
-            records.add(record.toString());
-        }
+        addRecord(records, text.substring(recordStart));
         return records;
+    }
+
+    // Keeps a record unless it is blank.
+    private void addRecord(List<String> records, String record) {
+        if (!TextUtils.isBlank(record)) {
+            records.add(record);
+        }
     }
 }

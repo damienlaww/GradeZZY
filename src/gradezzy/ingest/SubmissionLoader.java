@@ -417,13 +417,16 @@ public class SubmissionLoader {
     // by name, because directory order differs between operating systems.
     private List<Path> listVisibleChildren(Path folder) throws IOException {
         List<Path> children = new ArrayList<>();
-        try (DirectoryStream<Path> entries =
-                Files.newDirectoryStream(folder)) {
+        DirectoryStream<Path> entries = null;
+        try {
+            entries = Files.newDirectoryStream(folder);
             for (Path child : entries) {
                 if (!isHiddenOrIgnored(child.getFileName().toString())) {
                     children.add(child);
                 }
             }
+        } finally {
+            FileUtils.closeIfOpen(entries);
         }
         Collections.sort(children);
         return children;
@@ -698,13 +701,22 @@ public class SubmissionLoader {
             collectBatchZips(batch, innerZips);
             Collections.sort(innerZips);
             candidates.addAll(innerZips);
-        } catch (IOException | IngestException exception) {
-            try {
-                FileUtils.deleteDirectory(batch);
-            } catch (IOException cleanup) {
-                exception.addSuppressed(cleanup);
-            }
+        } catch (IOException exception) {
+            deleteFailedBatch(batch, exception);
             throw exception;
+        } catch (IngestException exception) {
+            deleteFailedBatch(batch, exception);
+            throw exception;
+        }
+    }
+
+    // Removes a half-unpacked batch folder. A failure to remove it is
+    // attached to the original error instead of hiding it.
+    private void deleteFailedBatch(Path batch, Exception failure) {
+        try {
+            FileUtils.deleteDirectory(batch);
+        } catch (IOException cleanup) {
+            failure.addSuppressed(cleanup);
         }
     }
 

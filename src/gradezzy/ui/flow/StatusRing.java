@@ -100,7 +100,11 @@ public class StatusRing extends Region {
 
         Text number = new Text(String.valueOf(total));
         number.getStyleClass().add("ring-total");
-        Text word = new Text(total == 1 ? "student" : "students");
+        String unit = "students";
+        if (total == 1) {
+            unit = "student";
+        }
+        Text word = new Text(unit);
         word.getStyleClass().add("chart-note");
         getChildren().addAll(number, word);
         number.applyCss();

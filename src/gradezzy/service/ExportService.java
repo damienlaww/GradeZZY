@@ -11,6 +11,7 @@ package gradezzy.service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,6 +32,10 @@ public class ExportService {
     // Stands in for a character that is not safe in a file name
     private static final char SAFE_CHARACTER = '_';
 
+    // Added to the file name while an export is being written, so a
+    // failed export never replaces the earlier file
+    private static final String TEMP_SUFFIX = ".part";
+
     // The registered exporters
     private final List<Exporter> exporters = new ArrayList<>();
 
@@ -39,15 +44,6 @@ public class ExportService {
      */
     public ExportService() {
         // nothing to set up yet
-    }
-
-    /**
-     * Returns the registered exporters.
-     *
-     * @return the registered exporters
-     */
-    public List<Exporter> getExporters() {
-        return exporters;
     }
 
     /**
@@ -96,7 +92,10 @@ public class ExportService {
      * run, module, section and format, for example
      * RUN-1792545961628-CS102-G2-JSON.json, so exports of different runs
      * or formats never overwrite each other. Exporting the same run in
-     * the same format again replaces the earlier file.
+     * the same format again replaces the earlier file, but only once the
+     * new file is complete: the exporter writes to a temporary file that
+     * is then moved into place, so an export that fails keeps the
+     * earlier file.
      *
      * <p>Tier: MUST.
      *
@@ -136,24 +135,43 @@ public class ExportService {
         Path outputFile = outputDirectory.resolve(
                 createFileName(gradingRun, exporter));
 
-        // An earlier file would hide an exporter that writes nothing.
+        Path tempFile = outputFile.resolveSibling(outputFile.getFileName()
+                + TEMP_SUFFIX);
+
         try {
-            Files.deleteIfExists(outputFile);
+            // A file left by an earlier failed export would hide an
+            // exporter that writes nothing.
+            deleteQuietly(tempFile);
+            exporter.export(gradingRun, tempFile);
+
+            // A screen would otherwise report a file that is not there.
+            if (!Files.isRegularFile(tempFile)) {
+                throw new ExportException("The " + exporter.getFormatName()
+                        + " exporter did not write " + outputFile + ".");
+            }
+
+            Files.move(tempFile, outputFile,
+                    StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException exception) {
             throw new ExportException("The earlier export " + outputFile
                     + " could not be replaced: " + exception.getMessage(),
                     exception);
-        }
-
-        exporter.export(gradingRun, outputFile);
-
-        // A screen would otherwise report a file that is not there.
-        if (!Files.isRegularFile(outputFile)) {
-            throw new ExportException("The " + exporter.getFormatName()
-                    + " exporter did not write " + outputFile + ".");
+        } finally {
+            // Only does something when writing or moving failed
+            deleteQuietly(tempFile);
         }
 
         return outputFile;
+    }
+
+    // Deletes a file if it is there. A file that cannot be deleted is
+    // left; it is only ever a half-written export.
+    private void deleteQuietly(Path file) {
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException exception) {
+            // Nothing else to do; see the comment above
+        }
     }
 
     // Builds the file name from the run id, module, section, format
@@ -171,33 +189,33 @@ public class ExportService {
     // Keeps letters, digits, dashes and underscores, so a code
     // from the settings cannot add a folder to the path.
     private String makeSafe(String text) {
-        StringBuilder safe = new StringBuilder();
+        String safe = "";
 
         for (int index = 0; index < text.length(); index++) {
             char current = text.charAt(index);
 
             if (Character.isLetterOrDigit(current) || current == '-'
                     || current == '_') {
-                safe.append(current);
+                safe += current;
             } else {
-                safe.append(SAFE_CHARACTER);
+                safe += SAFE_CHARACTER;
             }
         }
 
-        return safe.toString();
+        return safe;
     }
 
     // Lists the registered format names, for an error message.
     private String listFormatNames() {
-        StringBuilder names = new StringBuilder();
+        String names = "";
 
         for (Exporter exporter : exporters) {
             if (names.length() > 0) {
-                names.append(", ");
+                names += ", ";
             }
-            names.append(exporter.getFormatName());
+            names += exporter.getFormatName();
         }
 
-        return names.toString();
+        return names;
     }
 }

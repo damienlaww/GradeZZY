@@ -3,8 +3,8 @@
  *
  * Purpose: The four groups of files the instructor adds before grading.
  *
- * Where it fits: The Submissions screen shows one group per constant,
- * and ImportBatch keeps the files apart by group.
+ * Where it fits: Set up shows one group per constant, and ImportBatch
+ * keeps the files apart by group.
  */
 package gradezzy.ui.backend;
 
@@ -25,7 +25,7 @@ public enum InputKind {
     /** The starter folder, used to spot untouched answers. Optional. */
     STARTER("Starter resources", false);
 
-    // The heading shown on the Submissions screen
+    // The name of the group, used in messages and the file chooser
     private final String title;
 
     // Whether grading needs at least one file of this kind
@@ -38,7 +38,8 @@ public enum InputKind {
     }
 
     /**
-     * Returns the heading shown on the Submissions screen.
+     * Returns the name of the group, used in messages and the file
+     * chooser.
      *
      * @return the title
      */

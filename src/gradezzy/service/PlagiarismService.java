@@ -3,7 +3,7 @@
  *
  * Purpose: Runs the similarity check on a finished run.
  *
- * Where it fits: Used by the plagiarism screen.
+ * Where it fits: Used by LiveBackend for the Similar code card on Export.
  */
 package gradezzy.service;
 
@@ -41,7 +41,7 @@ public class PlagiarismService {
 
     // What the instructor can do about a Similar code anomaly
     private static final String SUGGESTED_ACTION =
-            "Compare the pair on the Similarity Review screen.";
+            "Use Compare in the Similar code card on Export.";
 
     // The application settings
     private final AppConfig config;
