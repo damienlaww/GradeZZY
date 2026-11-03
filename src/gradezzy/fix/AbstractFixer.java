@@ -336,9 +336,8 @@ public abstract class AbstractFixer implements Fixer {
     protected List<Path> listFolders(Path folder) throws FixException {
         List<Path> folders = new ArrayList<>();
 
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(folder)) {
-            for (Path child : children) {
+        try {
+            for (Path child : readFolder(folder)) {
                 if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
                         && !isHidden(child)) {
                     folders.add(child);
@@ -363,9 +362,8 @@ public abstract class AbstractFixer implements Fixer {
     protected List<Path> listFiles(Path folder) throws FixException {
         List<Path> files = new ArrayList<>();
 
-        try (DirectoryStream<Path> children =
-                Files.newDirectoryStream(folder)) {
-            for (Path child : children) {
+        try {
+            for (Path child : readFolder(folder)) {
                 if (Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS)) {
                     files.add(child);
                 }
@@ -377,6 +375,29 @@ public abstract class AbstractFixer implements Fixer {
 
         Collections.sort(files);
         return files;
+    }
+
+    /**
+     * Lists everything directly inside a folder, in the order the system
+     * gives. The listing is closed even if reading it fails.
+     *
+     * @param folder the folder to list
+     * @return the files and folders found
+     * @throws IOException if the folder cannot be listed or closed
+     */
+    private List<Path> readFolder(Path folder) throws IOException {
+        List<Path> children = new ArrayList<>();
+        DirectoryStream<Path> listing = null;
+
+        try {
+            listing = Files.newDirectoryStream(folder);
+            for (Path child : listing) {
+                children.add(child);
+            }
+        } finally {
+            FileUtils.closeIfOpen(listing);
+        }
+        return children;
     }
 
     /**

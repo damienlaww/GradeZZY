@@ -14,7 +14,8 @@
 package gradezzy.ui.flow;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javafx.application.Platform;
@@ -112,7 +113,10 @@ public class GradeScreen extends FlowScreen
     private final Label[] counts = new Label[WAITING + 1];
 
     // Every student of the run that has a result, by username
-    private final Map<String, Submission> results = new LinkedHashMap<>();
+    private final Map<String, Submission> results = new HashMap<>();
+
+    // The usernames in results, in the order they first got a result
+    private final List<String> resultOrder = new ArrayList<>();
 
     // How many students this run grades
     private int total = 0;
@@ -153,11 +157,18 @@ public class GradeScreen extends FlowScreen
                 new Node[] {header, createProgressCard(), cards});
     }
 
+    /**
+     * Returns the Grade step built in the constructor.
+     */
     @Override
     public Node getView() {
         return view;
     }
 
+    /**
+     * Shows the buttons that fit the run: Cancel while it grades, Resume
+     * when it stopped early, Review results when it is done.
+     */
     @Override
     public void onShow() {
         refreshActions();
@@ -193,7 +204,7 @@ public class GradeScreen extends FlowScreen
             if (isUnfinished(submission) || again) {
                 total++;
             } else {
-                results.put(submission.getUsername(), submission);
+                addResult(submission);
             }
         }
         updateCount();
@@ -284,49 +295,100 @@ public class GradeScreen extends FlowScreen
 
     // ------------------------------------------------ progress listener
 
+    /**
+     * Shows how many submissions the run will grade.
+     */
     @Override
     public void onRunStarted(int totalSubmissions) {
-        Platform.runLater(() -> {
-            total = totalSubmissions;
-            updateCount();
-        });
+        Platform.runLater(() -> showTotal(totalSubmissions));
     }
 
+    /**
+     * Shows which student is being graded now.
+     */
     @Override
     public void onSubmissionStarted(Submission submission) {
-        Platform.runLater(() -> now.setText("Now: "
-                + Students.name(submission)));
+        Platform.runLater(() -> showStudent(submission));
     }
 
+    /**
+     * Shows what is happening to the student now.
+     */
     @Override
     public void onStageStarted(Submission submission, String stageName) {
-        Platform.runLater(() -> {
-            int index = PipelineStages.indexOf(stageName);
-            String words = "working";
-            if (index >= 0 && index < STAGE_WORDS.length) {
-                words = STAGE_WORDS[index];
-            }
-            now.setText("Now: " + Students.name(submission) + DOT
-                    + words);
-        });
+        Platform.runLater(() -> showStage(submission, stageName));
     }
 
+    /**
+     * Counts the student as done and updates the bar and the chart.
+     */
     @Override
     public void onSubmissionFinished(Submission submission) {
-        Platform.runLater(() -> {
-            finished++;
-            results.put(submission.getUsername(), submission);
-            updateCount();
-        });
+        Platform.runLater(() -> countFinished(submission));
     }
 
+    /**
+     * Does nothing: onFinished, called after it, moves on.
+     */
     @Override
     public void onRunFinished(GradingRun gradingRun) {
         // The callback below moves on; nothing to do here
     }
 
+    /**
+     * Shows how many students the run grades. Runs on the JavaFX thread.
+     *
+     * @param totalSubmissions the number of students
+     */
+    private void showTotal(int totalSubmissions) {
+        total = totalSubmissions;
+        updateCount();
+    }
+
+    /**
+     * Shows which student is being graded. Runs on the JavaFX thread.
+     *
+     * @param submission the student
+     */
+    private void showStudent(Submission submission) {
+        now.setText("Now: " + Students.name(submission));
+    }
+
+    /**
+     * Shows which student is being graded and what is being done.
+     * Runs on the JavaFX thread.
+     *
+     * @param submission the student
+     * @param stageName the name of the step of grading
+     */
+    private void showStage(Submission submission, String stageName) {
+        int index = PipelineStages.indexOf(stageName);
+        String words = "working";
+        if (index >= 0 && index < STAGE_WORDS.length) {
+            words = STAGE_WORDS[index];
+        }
+        now.setText("Now: " + Students.name(submission) + DOT + words);
+    }
+
+    /**
+     * Counts a finished student and keeps its result. Runs on the
+     * JavaFX thread.
+     *
+     * @param submission the student
+     */
+    private void countFinished(Submission submission) {
+        finished++;
+        addResult(submission);
+        updateCount();
+    }
+
     // ----------------------------------------------------- run callback
 
+    /**
+     * Keeps the run and shows every result. A run that stopped early
+     * waits for Resume; a finished one opens Review if the instructor
+     * is still on this step.
+     */
     @Override
     public void onFinished(GradingRun gradingRun) {
         getState().setGrading(false);
@@ -335,7 +397,7 @@ public class GradeScreen extends FlowScreen
         if (gradingRun != null) {
             for (Submission submission : gradingRun.getSubmissions()) {
                 if (!isUnfinished(submission)) {
-                    results.put(submission.getUsername(), submission);
+                    addResult(submission);
                 }
             }
             updateCount();
@@ -358,6 +420,9 @@ public class GradeScreen extends FlowScreen
         refreshAfterGrading();
     }
 
+    /**
+     * Says that grading could not run and why.
+     */
     @Override
     public void onFailed(String message) {
         getState().setGrading(false);
@@ -377,9 +442,29 @@ public class GradeScreen extends FlowScreen
 
     // ---------------------------------------------------------- helpers
 
+    // Keeps a student's result; a student who already has one keeps
+    // their place in the order.
+    private void addResult(Submission submission) {
+        String username = submission.getUsername();
+        if (!results.containsKey(username)) {
+            resultOrder.add(username);
+        }
+        results.put(username, submission);
+    }
+
+    // Returns every kept result, in the order they first arrived.
+    private List<Submission> resultsInOrder() {
+        List<Submission> inOrder = new ArrayList<>();
+        for (String username : resultOrder) {
+            inOrder.add(results.get(username));
+        }
+        return inOrder;
+    }
+
     // Empties the screen for a new run.
     private void prepare(String sectionLabel) {
         results.clear();
+        resultOrder.clear();
         total = 0;
         finished = 0;
         cancelling = false;
@@ -410,7 +495,11 @@ public class GradeScreen extends FlowScreen
     private void updateCount() {
         done.setText(String.valueOf(finished));
         ofTotal.setText("of " + Parts.plural(total, "student"));
-        progress.set(total > 0 ? (double) finished / total : 0);
+        double share = 0;
+        if (total > 0) {
+            share = (double) finished / total;
+        }
+        progress.set(share);
         updateTimeLeft();
         updateChart();
         updateRows();
@@ -442,12 +531,16 @@ public class GradeScreen extends FlowScreen
         if (assessment == null) {
             return;
         }
-        MarkStats stats = MarkStats.of(new ArrayList<>(
-                results.values()), assessment.getMaxTotal(),
+        MarkStats stats = MarkStats.of(resultsInOrder(),
+                assessment.getMaxTotal(),
                 MarkStats.parsePassPercent(getBackend().getSetting(
                 ConfigKeys.PASS_MARK_PERCENT)));
         boolean empty = stats.isEmpty();
-        chart.setStats(empty ? null : stats);
+        if (empty) {
+            chart.setStats(null);
+        } else {
+            chart.setStats(stats);
+        }
         noMarks.setVisible(empty);
     }
 
@@ -455,7 +548,7 @@ public class GradeScreen extends FlowScreen
     private void updateRows() {
         int[] tally = new int[WAITING + 1];
         boolean onlyCompile = true;
-        for (Submission submission : results.values()) {
+        for (Submission submission : resultsInOrder()) {
             ResultState state = Students.state(submission, getBackend());
             if (state == ResultState.NEEDS_REVIEW) {
                 tally[REVIEW]++;
@@ -473,8 +566,11 @@ public class GradeScreen extends FlowScreen
         if (failure == null) {
             tally[WAITING] += Math.max(0, total - finished);
         }
-        pills[FAILED].setText(onlyCompile ? "Did not compile"
-                : "Could not grade");
+        if (onlyCompile) {
+            pills[FAILED].setText("Did not compile");
+        } else {
+            pills[FAILED].setText("Could not grade");
+        }
         for (int index = 0; index < tally.length; index++) {
             counts[index].setText(String.valueOf(tally[index]));
         }
@@ -525,10 +621,13 @@ public class GradeScreen extends FlowScreen
         GradingRun run = getState().getRun();
         if (getState().isGrading()) {
             actions.setBack("Cancel", () -> askCancel());
-            actions.setStatus(cancelling ? "Stopping after the current "
-                    + "student." : "Results open in Review when grading "
-                    + "finishes.");
-            actions.setPrimary("Review results", () -> { }, false);
+            if (cancelling) {
+                actions.setStatus("Stopping after the current student.");
+            } else {
+                actions.setStatus("Results open in Review when grading "
+                        + "finishes.");
+            }
+            actions.setPrimary("Review results", () -> doNothing(), false);
             return;
         }
         if (failure != null) {
@@ -545,8 +644,8 @@ public class GradeScreen extends FlowScreen
             return;
         }
         if (run != null) {
-            actions.setPrimary("Review results", () -> getWindow()
-                    .advanceTo(Step.REVIEW), true);
+            actions.setPrimary("Review results",
+                    () -> getWindow().advanceTo(Step.REVIEW), true);
         }
     }
 
@@ -554,11 +653,24 @@ public class GradeScreen extends FlowScreen
     private void askCancel() {
         getWindow().confirm("Cancel grading?", "Students already graded "
                 + "keep their marks. You can resume the rest later.",
-                "Cancel grading", () -> {
-                    cancelling = true;
-                    getBackend().cancelGrading();
-                    getActions().setStatus("Stopping after the current "
-                            + "student.");
-                });
+                "Cancel grading", () -> cancelGrading());
+    }
+
+    /**
+     * Asks the backend to stop after the current student, once the
+     * instructor has confirmed.
+     */
+    private void cancelGrading() {
+        cancelling = true;
+        getBackend().cancelGrading();
+        getActions().setStatus("Stopping after the current student.");
+    }
+
+    /**
+     * The action of Review results while grading runs: nothing happens,
+     * because the button is disabled until grading ends.
+     */
+    private void doNothing() {
+        // the button is disabled while grading runs
     }
 }

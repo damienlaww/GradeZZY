@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.util.TextUtils;
 
 /**
  * Runs one compiled tester class with java.
@@ -133,9 +134,12 @@ public class TesterRunner {
         if (!Files.isExecutable(Path.of(SANDBOX_COMMAND))) {
             return false;
         }
-        List<String> command = List.of(SANDBOX_COMMAND, PROFILE_OPTION,
-                PROBE_RULES, config.getString(ConfigKeys.JAVA_COMMAND),
-                VERSION_OPTION);
+        List<String> command = new ArrayList<>();
+        command.add(SANDBOX_COMMAND);
+        command.add(PROFILE_OPTION);
+        command.add(PROBE_RULES);
+        command.add(config.getString(ConfigKeys.JAVA_COMMAND));
+        command.add(VERSION_OPTION);
         try {
             ProcessResult probe = processRunner.run(command,
                     Path.of(CURRENT_FOLDER),
@@ -172,13 +176,16 @@ public class TesterRunner {
             command.add(PROFILE_OPTION);
             command.add(sandboxRules(questionFolder));
         }
-        command.addAll(List.of(
-                config.getString(ConfigKeys.JAVA_COMMAND),
-                LIMIT_MODULES_OPTION, NO_NATIVE_OPTION,
-                HOME_OPTION + folder, TEMP_OPTION + folder,
-                CLASSPATH_OPTION, classPath,
-                TesterHarness.class.getName(), testerClassName,
-                String.valueOf(studentLimit)));
+        command.add(config.getString(ConfigKeys.JAVA_COMMAND));
+        command.add(LIMIT_MODULES_OPTION);
+        command.add(NO_NATIVE_OPTION);
+        command.add(HOME_OPTION + folder);
+        command.add(TEMP_OPTION + folder);
+        command.add(CLASSPATH_OPTION);
+        command.add(classPath);
+        command.add(TesterHarness.class.getName());
+        command.add(testerClassName);
+        command.add(String.valueOf(studentLimit));
         long timeoutSeconds = config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS);
         // A new random token for every run, sent where only the harness
         // reads it before any student code starts
@@ -201,7 +208,9 @@ public class TesterRunner {
      */
     private ProcessResult separateStudentLines(ProcessResult raw,
             String token) {
-        StringBuilder output = new StringBuilder();
+        // The lines are joined once at the end: a student printing many
+        // short lines would make += copy the whole output again each time
+        List<String> lines = new ArrayList<>();
         boolean finished = false;
 
         for (String line : raw.getStandardOutput().split(LINE_BREAK)) {
@@ -211,8 +220,7 @@ public class TesterRunner {
                 studentPart = line.substring(0, tokenStart);
             }
             if (!studentPart.isEmpty()) {
-                output.append(STUDENT_LINE_PREFIX).append(studentPart)
-                        .append(NEW_LINE);
+                lines.add(STUDENT_LINE_PREFIX + studentPart + NEW_LINE);
             }
 
             String testerLine = "";
@@ -222,7 +230,7 @@ public class TesterRunner {
             if (testerLine.equals(TesterHarness.FINISHED_LINE)) {
                 finished = true;
             } else if (tokenStart >= 0) {
-                output.append(testerLine).append(NEW_LINE);
+                lines.add(testerLine + NEW_LINE);
             }
         }
 
@@ -230,7 +238,7 @@ public class TesterRunner {
         if (exitCode == SUCCESS_EXIT_CODE && !finished && !raw.isTimedOut()) {
             exitCode = EARLY_EXIT_CODE;
         }
-        return new ProcessResult(exitCode, output.toString(),
+        return new ProcessResult(exitCode, TextUtils.join("", lines),
                 raw.getStandardError(), raw.isTimedOut(),
                 raw.getDurationMillis());
     }

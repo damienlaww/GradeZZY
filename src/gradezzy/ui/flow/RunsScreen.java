@@ -27,6 +27,7 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
@@ -136,24 +137,34 @@ public class RunsScreen extends FlowScreen {
         createRunsTable();
         createActivity();
 
-        HBox headerRow = Parts.row(Parts.GAP, new Node[] {Parts.header("Runs",
-                "Every grading run, the backups of saved results, and "
-                + "what was done."), Parts.grow(), createSwitch()});
+        VBox header = Parts.header("Runs", "Every grading run, the backups "
+                + "of saved results, and what was done.");
+        HBox headerRow = Parts.row(Parts.GAP,
+                new Node[] {header, Parts.grow(), createSwitch()});
         page.getChildren().addAll(headerRow, body);
         view = Parts.widePage(new Node[] {page});
         body.setAlignment(Pos.TOP_LEFT);
     }
 
+    /**
+     * Returns the Runs tab built in the constructor.
+     */
     @Override
     public Node getView() {
         return view;
     }
 
+    /**
+     * Reloads the runs, backups and activity log.
+     */
     @Override
     public void onShow() {
         refresh();
     }
 
+    /**
+     * Returns false: the Runs tab has no action bar.
+     */
     @Override
     public boolean usesActionBar() {
         return false;
@@ -199,17 +210,26 @@ public class RunsScreen extends FlowScreen {
         activityButton.getStyleClass().add("right-pill");
         runsButton.setSelected(true);
         group.selectedToggleProperty().addListener((observable, before,
-                after) -> {
-            if (after == null) {
-                before.setSelected(true);
-                return;
-            }
-            refresh();
-        });
+                after) -> switchView(before, after));
         HBox bar = new HBox(runsButton, backupsButton, activityButton);
         bar.getStyleClass().add("runs-switch");
         bar.setMinWidth(HBox.USE_PREF_SIZE);
         return bar;
+    }
+
+    /**
+     * Follows a click on Runs, Backups or Activity. Clicking the button
+     * that is already on would turn every button off, so it stays on.
+     *
+     * @param before the button that was on
+     * @param after the button that is on now, or null for none
+     */
+    private void switchView(Toggle before, Toggle after) {
+        if (after == null) {
+            before.setSelected(true);
+            return;
+        }
+        refresh();
     }
 
     // Adds the columns of the runs table.
@@ -285,8 +305,8 @@ public class RunsScreen extends FlowScreen {
         if (savingIsOff()) {
             runsTable.showMessage(empty("Runs are not kept.", "Saving "
                     + "results is switched off in Settings.",
-                    "Open Settings", () -> getWindow().showPage(
-                    Page.SETTINGS)));
+                    "Open Settings",
+                    () -> getWindow().showPage(Page.SETTINGS)));
             return;
         }
         runsTable.showMessage(empty("No runs yet.", "Each batch you grade "
@@ -308,10 +328,10 @@ public class RunsScreen extends FlowScreen {
         Label students = new Label(String.valueOf(
                 run.getSubmissions().size()));
         runsTable.addRow(new Node[] {Parts.strong(module),
-                Parts.strong(sectionCode),
-                Parts.muted(run.getStartedAt().format(WHEN)), students,
-                average(run), status(run, shown, hasNewer),
-                actions(record, shown)});
+            Parts.strong(sectionCode),
+            Parts.muted(run.getStartedAt().format(WHEN)), students,
+            average(run), status(run, shown, hasNewer),
+            actions(record, shown)});
     }
 
     // Shows the average of a run as a small bar and "x / max".
@@ -370,13 +390,21 @@ public class RunsScreen extends FlowScreen {
         } else if (getBackend().supports(Capability.STATISTICS)
                 && run.getSection() != null) {
             buttons.getChildren().add(Parts.small("Statistics",
-                    () -> getWindow().openStatistics(
-                    run.getSection().getModuleCode(),
-                    run.getSection().getSectionCode())));
+                    () -> openStatistics(run)));
         }
         buttons.getChildren().add(Parts.small("Open",
                 () -> getWindow().openRun(run)));
         return buttons;
+    }
+
+    /**
+     * Opens the Statistics tab on the section of a run.
+     *
+     * @param run the run, which has a section
+     */
+    private void openStatistics(GradingRun run) {
+        getWindow().openStatistics(run.getSection().getModuleCode(),
+                run.getSection().getSectionCode());
     }
 
     // Says whether a run is the one shown for its section now. The shown
@@ -417,13 +445,21 @@ public class RunsScreen extends FlowScreen {
                 + section + " instead of the run shown now. A copy of "
                 + "the run shown now is kept, so you can restore it to go "
                 + "back. Original zip files and exports are not changed.",
-                "Restore", () -> {
-                    if (blockedByGrading()) {
-                        return;
-                    }
-                    ActionResult result = getBackend().restore(record);
-                    afterRestore(result);
-                });
+                "Restore", () -> restoreRun(record));
+    }
+
+    /**
+     * Shows an earlier run in place of the one shown now, once the
+     * instructor has confirmed.
+     *
+     * @param record the earlier run
+     */
+    private void restoreRun(RunRecord record) {
+        if (blockedByGrading()) {
+            return;
+        }
+        ActionResult result = getBackend().restore(record);
+        afterRestore(result);
     }
 
     // Says what a restore did. After a restore the run on Review may no
@@ -512,10 +548,12 @@ public class RunsScreen extends FlowScreen {
         text.setWrapText(true);
         VBox words = new VBox(Parts.GAP_SMALL / 2,
                 Parts.strong("Back up the saved results"), text);
-        Button backUp = Parts.secondary("Back up now", () -> backUp());
-        backUp.setDisable(getState().isGrading());
+        Node grow = Parts.grow();
+        Button backUpButton = Parts.secondary("Back up now",
+                () -> backUp());
+        backUpButton.setDisable(getState().isGrading());
         HBox row = Parts.row(Parts.GAP,
-                new Node[] {words, Parts.grow(), backUp});
+                new Node[] {words, grow, backUpButton});
         return Parts.card(null, new Node[] {row});
     }
 
@@ -527,11 +565,12 @@ public class RunsScreen extends FlowScreen {
         text.setWrapText(true);
         VBox words = new VBox(Parts.GAP_SMALL / 2,
                 Parts.strong("Restore from a backup file"), text);
-        Button choose = Parts.secondary("Choose a backup",
+        Node grow = Parts.grow();
+        Button chooseButton = Parts.secondary("Choose a backup",
                 () -> chooseBackup());
-        choose.setDisable(getState().isGrading());
+        chooseButton.setDisable(getState().isGrading());
         HBox row = Parts.row(Parts.GAP,
-                new Node[] {words, Parts.grow(), choose});
+                new Node[] {words, grow, chooseButton});
         return Parts.card(null, new Node[] {row});
     }
 
@@ -586,9 +625,9 @@ public class RunsScreen extends FlowScreen {
             buttons.getChildren().add(restoreButton(record));
         }
         table.addRow(new Node[] {Parts.strong(module),
-                Parts.strong(sectionCode),
-                Parts.muted(run.getStartedAt().format(WHEN)),
-                new Label(record.getBackupText()), shownCell, buttons});
+            Parts.strong(sectionCode),
+            Parts.muted(run.getStartedAt().format(WHEN)),
+            new Label(record.getBackupText()), shownCell, buttons});
     }
 
     // Backs up the saved results now.
@@ -622,14 +661,21 @@ public class RunsScreen extends FlowScreen {
                 "The saved results are replaced by the ones in this file. "
                 + "The results saved now are not backed up first. "
                 + "Original zip files and exports are not changed.",
-                "Restore", () -> {
-                    if (blockedByGrading()) {
-                        return;
-                    }
-                    ActionResult result = getBackend().restoreBackup(
-                            backupFile);
-                    afterRestore(result);
-                });
+                "Restore", () -> restoreFile(backupFile));
+    }
+
+    /**
+     * Puts back the saved results from a backup file, once the
+     * instructor has confirmed.
+     *
+     * @param backupFile the backup file
+     */
+    private void restoreFile(Path backupFile) {
+        if (blockedByGrading()) {
+            return;
+        }
+        ActionResult result = getBackend().restoreBackup(backupFile);
+        afterRestore(result);
     }
 
     // --------------------------------------------------------- activity
@@ -643,8 +689,8 @@ public class RunsScreen extends FlowScreen {
             activitySearch.setDisable(true);
             activityTable.showMessage(empty("The activity log is off.",
                     "Switch on Keep an activity log in Settings.",
-                    "Open Settings", () -> getWindow().showPage(
-                    Page.SETTINGS)));
+                    "Open Settings",
+                    () -> getWindow().showPage(Page.SETTINGS)));
             return;
         }
         activitySearch.setDisable(false);
@@ -688,7 +734,7 @@ public class RunsScreen extends FlowScreen {
         detail.setTooltip(new Tooltip(entry.getDetail()));
         Label when = Parts.muted(entry.getTimestamp().format(WHEN));
         activityTable.addRow(new Node[] {when,
-                Parts.strong(entry.getAction()), detail});
+            Parts.strong(entry.getAction()), detail});
     }
 
     // ----------------------------------------------------------- shared

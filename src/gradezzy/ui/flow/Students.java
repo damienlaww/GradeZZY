@@ -20,6 +20,7 @@ import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.ResultState;
+import gradezzy.util.TextUtils;
 
 /**
  * Names and statuses of students.
@@ -134,15 +135,7 @@ public final class Students {
         } else if (questionIds.size() > MAX_NAMED_QUESTIONS) {
             return questionIds.size() + " questions did not compile";
         }
-        StringBuilder text = new StringBuilder();
-        for (int index = 0; index < questionIds.size(); index++) {
-            if (index > 0) {
-                text.append(", ");
-            }
-            text.append(questionIds.get(index));
-        }
-        text.append(" did not compile");
-        return text.toString();
+        return TextUtils.join(", ", questionIds) + " did not compile";
     }
 
     /**

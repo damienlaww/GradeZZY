@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
@@ -194,7 +195,7 @@ public class CompileStage implements GradingStage {
                         copy.resolve(testerSource),
                         StandardCopyOption.REPLACE_EXISTING);
                 ProcessResult result = runCompiler(copy,
-                        List.of(question.getFileName(), testerSource));
+                        sourceFiles(question, testerSource));
                 if (result.getExitCode() == SUCCESS_EXIT_CODE
                         || result.isTimedOut()) {
                     return NO_TESTER_ERROR;
@@ -248,9 +249,8 @@ public class CompileStage implements GradingStage {
             Question question, TesterFile tester, Path folder)
             throws GradingException {
         String testerSource = tester.getClassName() + JAVA_EXTENSION;
-        List<String> sourceFiles = List.of(question.getFileName(),
-                testerSource);
-        ProcessResult compileResult = runCompiler(folder, sourceFiles);
+        ProcessResult compileResult = runCompiler(folder,
+                sourceFiles(question, testerSource));
         removeTesterSource(folder.resolve(testerSource));
 
         // A slow compiler says nothing about the student's code: the
@@ -278,6 +278,22 @@ public class CompileStage implements GradingStage {
                     COMPILE_ERROR_ACTION));
         }
         return result;
+    }
+
+    /**
+     * Lists the two files javac compiles for a question: the student's
+     * file, then the tester.
+     *
+     * @param question the question
+     * @param testerSource the file name of the tester source
+     * @return the file names
+     */
+    private List<String> sourceFiles(Question question,
+            String testerSource) {
+        List<String> files = new ArrayList<>();
+        files.add(question.getFileName());
+        files.add(testerSource);
+        return files;
     }
 
     /**

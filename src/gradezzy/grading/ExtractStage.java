@@ -77,8 +77,8 @@ public class ExtractStage implements GradingStage {
         submission.setStudent(rosterReader.findByUsername(
                 context.getRoster(), submission.getUsername()));
         if (submission.getStudent() == null) {
-            submission.addAnomaly(new Anomaly("UNKNOWN-"
-                    + java.util.UUID.randomUUID(),
+            submission.addAnomaly(new Anomaly(
+                    "UNKNOWN-" + java.util.UUID.randomUUID(),
                     AnomalyType.UNKNOWN_STUDENT, Severity.WARNING,
                     submission.getUsername(), submission.getUsername()
                             + " is not on the roster.",
@@ -90,10 +90,18 @@ public class ExtractStage implements GradingStage {
             submission.setWorkingCopyPath(workingCopy);
             workingCopyManager.removeStudentClassFiles(workingCopy,
                     context.getAssessment());
-        } catch (IngestException | UncheckedIOException exception) {
-            throw new GradingException("Could not prepare "
-                    + submission.getUsername() + ": "
-                    + exception.getMessage(), exception);
+        } catch (IngestException exception) {
+            throw prepareFailure(submission, exception);
+        } catch (UncheckedIOException exception) {
+            throw prepareFailure(submission, exception);
         }
+    }
+
+    // Builds the error for a working copy that could not be prepared.
+    private GradingException prepareFailure(Submission submission,
+            Exception exception) {
+        return new GradingException("Could not prepare "
+                + submission.getUsername() + ": "
+                + exception.getMessage(), exception);
     }
 }

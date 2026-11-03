@@ -122,8 +122,23 @@ public class ZipExtractor {
      * @throws IngestException if the file is not a readable zip
      */
     public List<String> listFileNames(Path zipFile) throws IngestException {
+        try {
+            return readFileNames(zipFile);
+        } catch (IOException exception) {
+            throw unreadable(zipFile, exception);
+        } catch (IllegalArgumentException exception) {
+            // An entry name that is not valid text
+            throw unreadable(zipFile, exception);
+        }
+    }
+
+    // Reads the file names of a zip; the zip is closed even if reading
+    // fails.
+    private List<String> readFileNames(Path zipFile) throws IOException {
         List<String> names = new ArrayList<>();
-        try (ZipFile zip = new ZipFile(zipFile.toFile())) {
+        ZipFile zip = null;
+        try {
+            zip = new ZipFile(zipFile.toFile());
             Enumeration<? extends ZipEntry> entries = zip.entries();
             while (entries.hasMoreElements()) {
                 String name = entries.nextElement().getName()
@@ -132,12 +147,16 @@ public class ZipExtractor {
                     names.add(name);
                 }
             }
-        } catch (IOException | IllegalArgumentException exception) {
-            // IllegalArgumentException: an entry name that is not valid text
-            throw new IngestException("Could not read " + zipFile + ": "
-                    + exception.getMessage(), exception);
+        } finally {
+            FileUtils.closeIfOpen(zip);
         }
         return names;
+    }
+
+    // Builds the error for a zip whose file names cannot be read.
+    private IngestException unreadable(Path zipFile, Exception cause) {
+        return new IngestException("Could not read " + zipFile + ": "
+                + cause.getMessage(), cause);
     }
 
     /**
