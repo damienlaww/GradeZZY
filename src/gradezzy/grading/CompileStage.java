@@ -9,6 +9,7 @@
 package gradezzy.grading;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -67,6 +68,16 @@ public class CompileStage implements GradingStage {
     // What the instructor can do about a tester that does not compile
     private static final String BROKEN_TESTER_ACTION =
             "Fix the tester file, then grade again.";
+
+    // Extension of a compiled class file
+    private static final String CLASS_EXTENSION = ".class";
+
+    // Joins a class and its member type in a class file name, as Q1a$Node
+    private static final String MEMBER_SEPARATOR = "$";
+
+    // What the instructor can do about a type that hides a tester's type
+    private static final String HIDDEN_TYPE_ACTION = "Read the code on Review: "
+            + "the tester may have checked the student's class instead.";
 
     // Start of the name of the temporary folder for the tester check
     private static final String CHECK_FOLDER_PREFIX = "gradezzy-tester-check-";
@@ -287,8 +298,101 @@ public class CompileStage implements GradingStage {
                     AnomalyType.COMPILE_ERROR, Severity.ERROR,
                     submission.getUsername(), message,
                     COMPILE_ERROR_ACTION));
+        } else {
+            flagHiddenTypes(submission, question, tester, folder);
         }
         return result;
+    }
+
+    /**
+     * Flags each member type of the student class whose name the tester
+     * also uses. The tester extends the student class, so a member type
+     * named ArrayList replaces java.util.ArrayList inside the tester and
+     * can make its checks always pass. Only a flag: the mark is kept.
+     *
+     * @param submission the submission
+     * @param question the question
+     * @param tester the tester of the question
+     * @param folder the question folder, holding the compiled classes
+     */
+    private void flagHiddenTypes(Submission submission, Question question,
+            TesterFile tester, Path folder) {
+        String fileName = question.getFileName();
+        String studentClass = fileName.substring(0,
+                fileName.length() - JAVA_EXTENSION.length());
+        String prefix = studentClass + MEMBER_SEPARATOR;
+        String testerSource = "";
+        List<Path> classFiles = new ArrayList<>();
+        try {
+            // ISO-8859-1 reads any bytes; the names searched are ASCII
+            testerSource = Files.readString(tester.getSourceFile(),
+                    StandardCharsets.ISO_8859_1);
+            classFiles = FileUtils.listFiles(folder, CLASS_EXTENSION);
+        } catch (IOException exception) {
+            // The check could not be done; grading goes on as before
+            return;
+        }
+
+        for (Path classFile : classFiles) {
+            String name = classFile.getFileName().toString();
+            if (name.startsWith(prefix)) {
+                String memberName = name.substring(prefix.length(),
+                        name.length() - CLASS_EXTENSION.length());
+                if (isMemberTypeName(memberName)
+                        && usesName(testerSource, memberName)) {
+                    submission.addAnomaly(new Anomaly(ID_PREFIX
+                            + UUID.randomUUID(),
+                            AnomalyType.HARD_CODED_ANSWER, Severity.WARNING,
+                            submission.getUsername(), fileName
+                            + " declares its own type " + memberName
+                            + ", a name " + tester.getClassName()
+                            + " also uses. The tester extends "
+                            + studentClass + ", so it may have used the "
+                            + "student's " + memberName + " instead. The "
+                            + "mark was not changed.", HIDDEN_TYPE_ACTION));
+                }
+            }
+        }
+    }
+
+    /**
+     * Says whether the part of a class file name after Q1a$ names a
+     * member type. Anonymous and local classes start with a digit, as
+     * Q1a$1, and types nested deeper hold another $; neither is seen by
+     * the tester.
+     *
+     * @param memberName the part after the student class and $
+     * @return true for a member type of the student class
+     */
+    private boolean isMemberTypeName(String memberName) {
+        return !memberName.isEmpty()
+                && !Character.isDigit(memberName.charAt(0))
+                && !memberName.contains(MEMBER_SEPARATOR);
+    }
+
+    /**
+     * Says whether the source holds the name as a whole word, so Node is
+     * not found inside NodeList.
+     *
+     * @param source the source text
+     * @param name the name to find
+     * @return true if the name appears as a whole word
+     */
+    private boolean usesName(String source, String name) {
+        int index = source.indexOf(name);
+        while (index >= 0) {
+            int end = index + name.length();
+            boolean startsWord = index == 0
+                    || !Character.isJavaIdentifierPart(
+                            source.charAt(index - 1));
+            boolean endsWord = end == source.length()
+                    || !Character.isJavaIdentifierPart(source.charAt(end));
+            if (startsWord && endsWord) {
+                return true;
+            }
+            index = source.indexOf(name, index + 1);
+        }
+        return false;
     }
 
     /**
