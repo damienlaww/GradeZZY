@@ -161,6 +161,7 @@ public class MainApp extends Application {
         stage.setMinWidth(MIN_WIDTH);
         stage.setMinHeight(MIN_HEIGHT);
         stage.setScene(scene);
+        stage.setOnCloseRequest(event -> window.closeRequested(event));
         stage.show();
     }
 

@@ -93,15 +93,15 @@ Recording first). Both are explained in `design/UI-INTEGRATION.md`.
 
 | Check | macOS Apple Silicon, JDK 25.0.4 | macOS Intel | Windows |
 |---|---|---|---|
-| `compile.sh`, zero errors and warnings | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
-| `compile.sh core` (no JavaFX) | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
-| `run.sh console` | Passed | Not tested | Passed (Git Bash, JDK 25.0.4) |
-| `run.sh --check` (every tab and step, live and demo, both themes, two sizes) | Passed (new window, 2026-10-28) | Not tested | Not tested since the redesign |
-| `run.sh --selftest` (7 demo flows) | Passed (new window, 2026-10-28) | Not tested | Not tested since the redesign |
-| `run.sh` (window opens) | Opened off screen by `--check`; not clicked through by hand | Not tested | Not tested since the redesign |
-| `run.sh --snapshot` | Passed (new window, 2026-10-28) | Not tested | Not tested since the redesign |
-| `run.sh --windowtest` | Not run: macOS blocked the robot's clicks (needs Accessibility and Screen Recording permission) | Not tested | Not tested since the redesign |
-| `.bat` scripts | Not applicable | Not applicable | Passed (Command Prompt, JDK 25.0.4) |
+| `compile.sh`, zero errors and warnings | Passed | Not tested | Passed (Git Bash, JDK 25.0.4, 2026-11-03) |
+| `compile.sh core` (no JavaFX) | Passed | Not tested | Passed (Git Bash, JDK 25.0.4, 2026-11-03) |
+| `run.sh console` | Passed | Not tested | Ran with no error (Git Bash, JDK 25.0.4, 2026-11-03). Five totals match; xing.yan.2023 gets 1.0, not 15: its Q2a tester times out on test 2, also with a 60 s limit |
+| `run.sh --check` (every tab and step, live and demo, both themes, two sizes) | Passed (new window, 2026-10-28) | Not tested | Passed (Git Bash, JDK 25.0.4, 2026-11-03) |
+| `run.sh --selftest` (7 demo flows) | Passed (new window, 2026-10-28) | Not tested | Passed, 7 of 7 (Git Bash, JDK 25.0.4, 2026-11-03) |
+| `run.sh` (window opens) | Opened off screen by `--check`; not clicked through by hand | Not tested | Opened off screen by `--check`; not clicked through by hand |
+| `run.sh --snapshot` | Passed (new window, 2026-10-28) | Not tested | Passed (Git Bash, JDK 25.0.4, 2026-11-03) |
+| `run.sh --windowtest` | Not run: macOS blocked the robot's clicks (needs Accessibility and Screen Recording permission) | Not tested | Not run |
+| `.bat` scripts | Not applicable | Not applicable | Passed (Command Prompt, JDK 25.0.4, 2026-11-03): `compile.bat`, `compile.bat core`, `run.bat --check`, `run.bat --selftest` (7 of 7), `run.bat console G2` (same totals as `run.sh console`) |
 
 **A teammate on Windows and one on an Intel Mac must run the scripts and
 report back.** The brief takes up to 50% off if the code does not compile
@@ -744,8 +744,9 @@ Facts from the provided files:
   must be compiled and run with the question folder as the working
   directory (`javac Q1aTester.java`, then `java Q1aTester`, inside `Q1`).
 - The Q2 testers open `personstester.txt` and `studentstester.txt` by
-  relative name. Those files are inside the sample zips but not in
-  `Tester-Files`; ask the team where the instructor will supply them.
+  relative name. The instructor supplies them in the tester folder
+  (`Tester-Files` has them). A student's own copy is deleted before
+  grading, so an edited data file cannot change a mark.
 - `Q2` needs the provided `DataException.class`, and `Q3` needs
   `Shape.class`, `Circle.class` and `Rectangle.class`, in the folder.
 - For each test case a tester prints `Passed` or a line starting with
@@ -1060,7 +1061,7 @@ by this section.
 | One-line lambdas `event -> exportResults()` | 26 files in `ui` | Button handlers, table cells and callbacks. | Short for a small class that implements the handler interface (like `AgeComparator implements Comparator`) and whose one method calls `exportResults()`. Every lambda is one line that calls one method. |
 | `Runnable`, `Consumer` | `ui.flow` (`ActionBar`, `Parts`, `StepBar`, `TabBar`, ...), `exec.TrustedFrameCheck` | The type of a lambda parameter, for example "what to do when this button is pressed". | Interfaces with one method, so a screen can pass "run this later" to another class. |
 | `java.nio.file` (`Path`, `Paths`, `Files`, `DirectoryStream`, `StandardCopyOption`, `LinkOption`) | About 60 files | Every file and folder the system reads, copies, moves or writes. | `Path` is a file or folder location (like `File`); `Files` has static methods to read, copy, move and list them, and can refuse to follow links. |
-| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen` | Grading, exports and backups run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
+| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.CodeSearch`, `ui.flow.ExportJob`, `ui.flow.TesterCheck` | Grading, checking chosen files and the tester folder, searching code, exports and backups run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
 | Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |

@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -75,8 +76,7 @@ public class TesterInstaller {
                     Path sourceFile = tester.getSourceFile();
                     copyReplacing(sourceFile, questionFolder);
                     copyDataFiles(sourceFile.getParent(), questionFolder);
-                    flagMissingDataFiles(sourceFile, questionFolder,
-                            submission);
+                    flagMissingDataFiles(sourceFile, submission);
                 }
             }
         } catch (IOException exception) {
@@ -87,9 +87,10 @@ public class TesterInstaller {
     }
 
     /**
-     * Copies the data files listed in config next to a tester. Only files
-     * found in the tester folder are copied; when the instructor did not
-     * supply one, the copy inside the submission is used.
+     * Copies the data files listed in config next to a tester. The
+     * student's own copy of each file is deleted first, so a student
+     * cannot change the data the tester checks against. Only the tester
+     * folder's copy is used.
      *
      * @param sourceDirectory the source directory
      * @param questionFolder the question folder
@@ -102,6 +103,7 @@ public class TesterInstaller {
 
         try {
             for (String dataFileName : dataFileNames) {
+                Files.deleteIfExists(questionFolder.resolve(dataFileName));
                 Path dataFile = sourceDirectory.resolve(dataFileName);
                 if (Files.isRegularFile(dataFile)) {
                     copyReplacing(dataFile, questionFolder);
@@ -113,33 +115,49 @@ public class TesterInstaller {
         }
     }
 
-    // Adds an anomaly for each data file the tester reads that is in
-    // neither the tester folder nor the submission, since the tester
-    // would then fail those cases with no warning. The score is not
-    // changed.
-    private void flagMissingDataFiles(Path testerFile, Path questionFolder,
-            Submission submission) throws IOException {
+    /**
+     * Lists the data files a tester reads that are not in its folder.
+     * Tier: SHOULD.
+     *
+     * @param testerFile the tester source file
+     * @return the names of the missing data files
+     * @throws IOException if the tester cannot be read
+     */
+    public List<String> findMissingDataFiles(Path testerFile)
+            throws IOException {
         // ISO-8859-1 reads any bytes, so a tester saved in another
         // encoding cannot stop grading; the names searched are ASCII
         String testerSource = Files.readString(testerFile,
                 StandardCharsets.ISO_8859_1);
         List<String> dataFileNames = config.getList(
                 ConfigKeys.TESTER_DATA_FILES);
+        List<String> missing = new ArrayList<>();
 
         for (String dataFileName : dataFileNames) {
             boolean needed = testerSource.contains(dataFileName);
             boolean present = Files.isRegularFile(
-                    questionFolder.resolve(dataFileName));
+                    testerFile.resolveSibling(dataFileName));
             if (needed && !present) {
-                submission.addAnomaly(new Anomaly(
-                        ID_PREFIX + UUID.randomUUID(),
-                        AnomalyType.MISSING_FILE, Severity.ERROR,
-                        submission.getUsername(),
-                        testerFile.getFileName() + " reads " + dataFileName
-                        + ", which is in neither the tester folder nor "
-                        + "the submission, so its cases will fail.",
-                        MISSING_DATA_ACTION));
+                missing.add(dataFileName);
             }
+        }
+        return missing;
+    }
+
+    // Adds an anomaly for each data file the tester reads that is not in
+    // the tester folder, since the tester would then fail those cases
+    // with no warning. The score is not changed.
+    private void flagMissingDataFiles(Path testerFile,
+            Submission submission) throws IOException {
+        for (String dataFileName : findMissingDataFiles(testerFile)) {
+            submission.addAnomaly(new Anomaly(
+                    ID_PREFIX + UUID.randomUUID(),
+                    AnomalyType.MISSING_FILE, Severity.ERROR,
+                    submission.getUsername(),
+                    testerFile.getFileName() + " reads " + dataFileName
+                    + ", which is not in the tester folder, so its "
+                    + "cases will fail.",
+                    MISSING_DATA_ACTION));
         }
     }
 

@@ -74,16 +74,16 @@ public enum Capability {
             "Nothing; it lists whatever the stages recorded."),
 
     /** Approve or undo automatic fixes, one at a time or several. */
-    REPAIR_DECISIONS("Approve and undo repairs",
-            "Lets you accept or undo each automatic repair of a working "
+    REPAIR_DECISIONS("Approve and undo fixes",
+            "Lets you accept or undo each automatic fix of a working "
             + "copy.", "Jing Yuan, Jun Sheng",
             "AnomalyService.approveFix, undoFix",
             CapabilityStatus.WORKS_NOW,
             "Nothing; undo needs the run graded in this session."),
 
     /** The original and proposed value of each repair. */
-    REPAIR_VALUES("Original and proposed repair values",
-            "Shows what each repair changed, before and after, side by "
+    REPAIR_VALUES("Original and proposed fix values",
+            "Shows what each fix changed, before and after, side by "
             + "side.", "Jun Sheng",
             "AnomalyService.findFixRecord, FixRecord.getValueBefore, "
             + "getValueAfter", CapabilityStatus.WORKS_NOW,
@@ -91,8 +91,8 @@ public enum Capability {
             + "no Before and After."),
 
     /** Returns an approved or undone repair to Applied. */
-    REPAIR_DECISION_UNDO("Undo a repair decision",
-            "Takes back an approve or undo decision on a repair.",
+    REPAIR_DECISION_UNDO("Undo a fix decision",
+            "Takes back an approve or undo decision on a fix.",
             "Jing Yuan, Jun Sheng", null, CapabilityStatus.PROPOSED,
             "A method that returns an approved or undone fix to Applied."),
 

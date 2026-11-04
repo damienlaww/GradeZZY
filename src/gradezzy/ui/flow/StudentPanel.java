@@ -452,16 +452,22 @@ public class StudentPanel extends ScrollPane {
         Anomaly anomaly = repair.getAnomaly();
         FixStatus status = anomaly.getFixStatus();
         Label tag;
+        String title = Problems.fixedTitle(anomaly.getType());
         if (status == FixStatus.APPROVED) {
             tag = Parts.pill("Fix approved", Tone.GOOD);
         } else if (status == FixStatus.UNDONE) {
             tag = Parts.pill("Fix undone", Tone.NEUTRAL);
+            title = Problems.title(anomaly.getType());
         } else if (status == FixStatus.APPLIED) {
             tag = Parts.pill("Fixed for you", Tone.WARN);
-        } else {
+        } else if (backend.needsReview(anomaly)) {
             tag = Parts.pill("Could not fix", Tone.BAD);
+            title = Problems.title(anomaly.getType());
+        } else {
+            tag = Parts.pill("Checked", Tone.NEUTRAL);
+            title = Problems.title(anomaly.getType());
         }
-        VBox card = createCard(tag, anomaly);
+        VBox card = createCard(tag, title, anomaly);
 
         String before = repair.getOriginalValue();
         if (backend.supports(Capability.REPAIR_VALUES) && before != null
@@ -478,7 +484,11 @@ public class StudentPanel extends ScrollPane {
             Label note = Parts.muted(repair.getNote());
             note.getStyleClass().add("small-text");
             note.setWrapText(true);
-            buttons.getChildren().add(note);
+            card.getChildren().add(note);
+            if (backend.needsReview(anomaly)) {
+                addAdvice(card, anomaly);
+            }
+            addCheckButton(buttons, anomaly, backend);
         } else if (status == FixStatus.APPLIED) {
             buttons.getChildren().addAll(
                     Parts.small("Approve",
@@ -492,6 +502,23 @@ public class StudentPanel extends ScrollPane {
         }
         addButtons(card, buttons);
         return card;
+    }
+
+    // Adds Mark as checked to a fix that could not be made, or Reopen
+    // once it is checked.
+    private void addCheckButton(HBox buttons, Anomaly anomaly,
+            DashboardBackend backend) {
+        if (!backend.supports(Capability.FLAG_REVIEW)) {
+            return;
+        }
+        if (backend.needsReview(anomaly)) {
+            buttons.getChildren().add(Parts.small("Mark as checked",
+                    () -> decide(backend, anomaly,
+                    ReviewDecision.REVIEWED)));
+        } else {
+            buttons.getChildren().add(Parts.small("Reopen",
+                    () -> decide(backend, anomaly, ReviewDecision.OPEN)));
+        }
     }
 
     // ---------------------------------------------------------- problems
@@ -519,7 +546,11 @@ public class StudentPanel extends ScrollPane {
         } else {
             tag = Parts.pill("Problem", Tone.BAD);
         }
-        VBox card = createCard(tag, anomaly);
+        VBox card = createCard(tag, Problems.title(anomaly.getType()),
+                anomaly);
+        if (open) {
+            addAdvice(card, anomaly);
+        }
         if (!backend.supports(Capability.FLAG_REVIEW)) {
             return card;
         }
@@ -544,10 +575,11 @@ public class StudentPanel extends ScrollPane {
     }
 
     // Builds a card with its tag, title and detail.
-    private VBox createCard(Label tag, Anomaly anomaly) {
-        Label title = Parts.strong(Problems.title(anomaly.getType()));
+    private VBox createCard(Label tag, String titleText, Anomaly anomaly) {
+        Label title = Parts.strong(titleText);
         title.setWrapText(true);
-        Label detail = Parts.muted(anomaly.getMessage());
+        Label detail = Parts.muted(Problems.shortenPaths(
+                anomaly.getMessage(), submission));
         detail.setWrapText(true);
         detail.getStyleClass().add("small-text");
         VBox text = new VBox(LINE_GAP, title, detail);
@@ -555,6 +587,18 @@ public class StudentPanel extends ScrollPane {
         card.getStyleClass().add("fix-card");
         card.setAlignment(Pos.TOP_LEFT);
         return card;
+    }
+
+    // Adds what the instructor can do about a problem, if it says.
+    private void addAdvice(VBox card, Anomaly anomaly) {
+        String action = anomaly.getSuggestedAction();
+        if (action == null || action.trim().isEmpty()) {
+            return;
+        }
+        Label advice = Parts.muted(action);
+        advice.setWrapText(true);
+        advice.getStyleClass().add("small-text");
+        card.getChildren().add(advice);
     }
 
     // Adds a row of buttons to a card, unless it is empty.

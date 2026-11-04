@@ -98,8 +98,11 @@ public class StructureValidator extends AbstractValidator {
             Submission submission, Assessment assessment, Path contentRoot)
             throws IOException {
         List<Path> folders = listFolders(contentRoot);
-        String nestingHint = describeNesting(contentRoot, folders,
+        Path extraFolder = findExtraFolder(folders, assessment);
+        String nestingHint = describeNesting(contentRoot, extraFolder);
+        List<String> nestedNames = listNestedNames(folders, extraFolder,
                 assessment);
+        boolean firstNested = true;
 
         for (String folderName : getQuestionFolderNames(assessment)) {
             boolean present = findExact(folders, folderName) != null;
@@ -111,6 +114,19 @@ public class StructureValidator extends AbstractValidator {
                         "The " + folderName + " folder is missing. A folder "
                         + "named " + nearMatch.getFileName() + " was found, "
                         + "but folder names must match exactly."));
+            } else if (!present && isInside(extraFolder, folderName)) {
+                // The fix moves every nested folder at once and keeps only
+                // the first card, so that card names them all
+                String subject = folderName + " was";
+                if (firstNested && nestedNames.size() > 1) {
+                    subject = joinNames(nestedNames) + " were";
+                }
+                firstNested = false;
+                anomalies.add(createAnomaly(submission,
+                        AnomalyType.MISSING_QUESTION_FOLDER,
+                        Severity.WARNING, subject + " one level too "
+                        + "deep, inside " + contentRoot.getFileName() + "/"
+                        + extraFolder.getFileName() + "."));
             } else if (!present) {
                 anomalies.add(createAnomaly(submission,
                         AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
@@ -120,22 +136,71 @@ public class StructureValidator extends AbstractValidator {
         }
     }
 
-    // Explains when the question folders sit one level too deep, inside
-    // the only folder of the content root, or returns empty text.
-    private String describeNesting(Path contentRoot, List<Path> folders,
-            Assessment assessment) throws IOException {
+    // Returns the only folder of the content root when it holds question
+    // folders one level too deep, or null.
+    private Path findExtraFolder(List<Path> folders, Assessment assessment)
+            throws IOException {
         if (folders.size() != 1) {
-            return "";
+            return null;
         }
 
         Path inner = folders.get(0);
 
         if (!holdsQuestionFolder(listFolders(inner), assessment)) {
+            return null;
+        }
+        return inner;
+    }
+
+    // Lists the question folders that are absent here but sit inside the
+    // extra folder, in question order.
+    private List<String> listNestedNames(List<Path> folders,
+            Path extraFolder, Assessment assessment) throws IOException {
+        List<String> names = new ArrayList<>();
+
+        for (String folderName : getQuestionFolderNames(assessment)) {
+            boolean absent = findExact(folders, folderName) == null
+                    && findIgnoringCase(folders, folderName) == null;
+            if (absent && isInside(extraFolder, folderName)) {
+                names.add(folderName);
+            }
+        }
+        return names;
+    }
+
+    // Joins folder names as "Q1, Q2 and Q3".
+    private String joinNames(List<String> names) {
+        String joined = "";
+        int last = names.size() - 1;
+
+        for (int i = 0; i < names.size(); i++) {
+            if (i == last && i > 0) {
+                joined = joined + " and ";
+            } else if (i > 0) {
+                joined = joined + ", ";
+            }
+            joined = joined + names.get(i);
+        }
+        return joined;
+    }
+
+    // Says whether the extra folder holds the question folder.
+    private boolean isInside(Path extraFolder, String folderName)
+            throws IOException {
+        return extraFolder != null
+                && findIgnoringCase(listFolders(extraFolder),
+                folderName) != null;
+    }
+
+    // Explains where the question folders sit one level too deep, or
+    // returns empty text.
+    private String describeNesting(Path contentRoot, Path extraFolder) {
+        if (extraFolder == null) {
             return "";
         }
 
         return " The question folders were found one level too deep, in "
-                + contentRoot.getFileName() + "/" + inner.getFileName()
+                + contentRoot.getFileName() + "/" + extraFolder.getFileName()
                 + ".";
     }
 

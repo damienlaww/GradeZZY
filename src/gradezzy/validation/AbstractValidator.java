@@ -40,7 +40,7 @@ public abstract class AbstractValidator implements Validator {
 
     // The suggested actions, one for each type a validator reports
     private static final String WRAPPER_ACTION =
-            "Approve the repair if the new username folder is right.";
+            "Approve the fix if the new username folder is right.";
     private static final String FOLDER_NAME_ACTION =
             "Approve the rename to the username, or reject it.";
     private static final String QUESTION_FOLDER_ACTION =

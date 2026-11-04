@@ -2,8 +2,9 @@
  * File: ReviewScreen.java
  *
  * Purpose: Step 3. One table of every student with a mark per question,
- * the total and a status, filtered by All, Needs review or Failed and
- * searchable by name or, where the backend can, inside the code.
+ * the total and a status, filtered by All, Needs review, Failed or No
+ * submission and searchable by name or, where the backend can, inside
+ * the code.
  * Clicking a student opens the student panel beside it.
  *
  * Where it fits: Replaces the old Results and Review Anomalies screens.
@@ -49,6 +50,7 @@ import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
+import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.RepairItem;
@@ -148,11 +150,20 @@ public class ReviewScreen extends FlowScreen {
     private final ToggleButton reviewButton =
             new ToggleButton("Needs review");
     private final ToggleButton failedButton = new ToggleButton("Failed");
+    private final ToggleButton missingButton =
+            new ToggleButton("No submission");
 
     // The counts beside the filter names
     private final Label allCount = new Label();
     private final Label reviewCount = new Label();
     private final Label failedCount = new Label();
+    private final Label missingCount = new Label();
+
+    // The rows made for students on the score sheet with no submission
+    private final List<Submission> missingRows = new ArrayList<>();
+
+    // The run the missing rows were made for, or null
+    private GradingRun missingRowsRun = null;
 
     // The search field
     private final CustomTextField search = new CustomTextField();
@@ -168,11 +179,17 @@ public class ReviewScreen extends FlowScreen {
     // The students whose code holds the search text
     private final List<Submission> codeMatches = new ArrayList<>();
 
+    // The code search still running whose result is wanted, or null
+    private CodeSearch latestSearch = null;
+
     // The line under the heading
     private final Label subtitle = Parts.subtitle("");
 
-    // A note when some students could not be graded
+    // A note when some students could not be graded, in the filter row
     private final HBox banner = Parts.row(Parts.GAP);
+
+    // One note per problem every student shares, above the table
+    private final VBox sharedBanner = new VBox(Parts.GAP_SMALL);
 
     // The details of the clicked student
     private final StudentPanel panel;
@@ -203,9 +220,12 @@ public class ReviewScreen extends FlowScreen {
         createSearch();
         createTable();
         banner.getStyleClass().add("banner");
+        banner.setMinWidth(0);
+        HBox.setHgrow(banner, Priority.SOMETIMES);
+        sharedBanner.getStyleClass().addAll("banner", "warn");
 
         HBox tools = Parts.row(Parts.GAP,
-                new Node[] {createFilterBar(), Parts.grow()});
+                new Node[] {createFilterBar(), banner, Parts.grow()});
         if (getBackend().supports(Capability.CODE_SEARCH)) {
             tools.getChildren().add(createSearchModeBar());
         }
@@ -214,7 +234,7 @@ public class ReviewScreen extends FlowScreen {
 
         VBox header = new VBox(HEADING_GAP, Parts.heading(
                 "Review the results"), subtitle);
-        main.getChildren().addAll(header, tools, banner, table);
+        main.getChildren().addAll(header, tools, sharedBanner, table);
         main.getStyleClass().add("review-main");
         VBox.setVgrow(table, Priority.ALWAYS);
         HBox.setHgrow(main, Priority.ALWAYS);
@@ -262,6 +282,7 @@ public class ReviewScreen extends FlowScreen {
             addQuestionColumns();
         }
         rows.setAll(run.getSubmissions());
+        rows.addAll(findMissingRows(run));
         codeMatches.clear();
         if (codeButton.isSelected()) {
             searchCode();
@@ -282,6 +303,14 @@ public class ReviewScreen extends FlowScreen {
     public void selectStudent(Submission submission) {
         table.getSelectionModel().select(submission);
         showStudent(submission);
+    }
+
+    /**
+     * Puts the cursor in the search field.
+     */
+    public void focusSearch() {
+        search.requestFocus();
+        search.selectAll();
     }
 
     /**
@@ -307,11 +336,37 @@ public class ReviewScreen extends FlowScreen {
 
     // ------------------------------------------------------------ build
 
-    // Builds the All, Needs review and Failed buttons with their counts.
+    /**
+     * Returns one row for each student on the score sheet with no
+     * submission in the run. The rows are made once per run, so a row
+     * stays the same object while the run is shown.
+     *
+     * @param run the run
+     * @return the rows, empty when every student has a submission
+     */
+    private List<Submission> findMissingRows(GradingRun run) {
+        if (run == missingRowsRun) {
+            return missingRows;
+        }
+        missingRows.clear();
+        missingRowsRun = run;
+        for (Student student : getBackend().listMissingStudents(run)) {
+            Submission row = new Submission(student.getUsername(),
+                    run.getSection(), null);
+            row.setStudent(student);
+            row.setIngestFailure(ResultState.NO_SUBMISSION_REASON);
+            missingRows.add(row);
+        }
+        return missingRows;
+    }
+
+    // Builds the All, Needs review, Failed and No submission buttons with
+    // their counts.
     private void createFilters() {
         ToggleGroup group = new ToggleGroup();
-        ToggleButton[] buttons = {allButton, reviewButton, failedButton};
-        Label[] counts = {allCount, reviewCount, failedCount};
+        ToggleButton[] buttons = {allButton, reviewButton, failedButton,
+            missingButton};
+        Label[] counts = {allCount, reviewCount, failedCount, missingCount};
         for (int index = 0; index < buttons.length; index++) {
             buttons[index].setToggleGroup(group);
             counts[index].getStyleClass().add("count");
@@ -321,7 +376,8 @@ public class ReviewScreen extends FlowScreen {
         allButton.setSelected(true);
         allButton.getStyleClass().add("left-pill");
         reviewButton.getStyleClass().add("center-pill");
-        failedButton.getStyleClass().add("right-pill");
+        failedButton.getStyleClass().add("center-pill");
+        missingButton.getStyleClass().add("right-pill");
         group.selectedToggleProperty().addListener((observable, before,
                 after) -> filterClicked(before, after));
     }
@@ -343,7 +399,8 @@ public class ReviewScreen extends FlowScreen {
 
     // Puts the filter buttons side by side.
     private HBox createFilterBar() {
-        HBox bar = new HBox(allButton, reviewButton, failedButton);
+        HBox bar = new HBox(allButton, reviewButton, failedButton,
+                missingButton);
         bar.getStyleClass().add("segmented");
         bar.setMinWidth(HBox.USE_PREF_SIZE);
         return bar;
@@ -356,6 +413,7 @@ public class ReviewScreen extends FlowScreen {
         search.setPrefWidth(SEARCH_WIDTH);
         search.setMinWidth(SEARCH_MIN_WIDTH);
         search.getStyleClass().add("review-search");
+        search.setAccessibleText("Search students");
         search.textProperty().addListener((observable, before, after)
                 -> searchChanged());
         codeDelay.setOnFinished(event -> searchCode());
@@ -403,6 +461,7 @@ public class ReviewScreen extends FlowScreen {
 
         TableColumn<Submission, Submission> tick = new TableColumn<>();
         tickAllBox.setOnAction(event -> tickAll(tickAllBox.isSelected()));
+        tickAllBox.setAccessibleText("Tick every student shown");
         tick.setGraphic(tickAllBox);
         tick.setSortable(false);
         fixWidth(tick, TICK_WIDTH);
@@ -485,14 +544,19 @@ public class ReviewScreen extends FlowScreen {
     }
 
     /**
-     * Returns the total of a row's student, as the value of a cell.
+     * Returns the total of a row's student, as the value of a cell. A
+     * student with no marks yet has none, so the cell shows a dash.
      *
      * @param cell the row and column of the cell
-     * @return the total, wrapped so the table can read it
+     * @return the total, or a wrapped null when there are no marks
      */
     private ObservableValue<Double> totalOf(
             CellDataFeatures<Submission, Double> cell) {
-        return new ReadOnlyObjectWrapper<>(cell.getValue().getTotalScore());
+        Submission submission = cell.getValue();
+        if (submission.getQuestionResults().isEmpty()) {
+            return new ReadOnlyObjectWrapper<>(null);
+        }
+        return new ReadOnlyObjectWrapper<>(submission.getTotalScore());
     }
 
     /**
@@ -560,30 +624,34 @@ public class ReviewScreen extends FlowScreen {
         }
         int needReview = countNeedingReview();
         int failed = 0;
-        double sum = 0;
         for (Submission submission : rows) {
             if (Students.isFailed(Students.state(submission,
                     getBackend()))) {
                 failed++;
             }
-            sum += submission.getTotalScore();
         }
         allCount.setText(String.valueOf(rows.size()));
         reviewCount.setText(String.valueOf(needReview));
         failedCount.setText(String.valueOf(failed));
+        missingCount.setText(String.valueOf(missingRows.size()));
 
+        // The same figures as Export and Statistics: graded students only
         String average = "";
-        Assessment assessment = getBackend().getAssessment();
-        if (!rows.isEmpty() && assessment != null) {
+        MarkStats stats = MarkStats.of(rows,
+                run.getAssessment().getMaxTotal(),
+                MarkStats.DEFAULT_PASS_PERCENT);
+        if (!stats.isEmpty()) {
             average = " · average " + Parts.mark(Math.round(
-                    sum / rows.size() * ONE_DECIMAL) / ONE_DECIMAL)
-                    + " out of " + Parts.mark(assessment.getMaxTotal());
+                    stats.getMean() * ONE_DECIMAL) / ONE_DECIMAL)
+                    + " out of " + Parts.mark(stats.getMaxTotal())
+                    + ", of " + stats.getCount() + " graded";
         }
         subtitle.setText(run.getSection().getModuleCode() + " · "
                 + run.getSection().getSectionCode() + " · "
                 + run.getAssessment().getName() + average);
 
         refreshBanner(run);
+        refreshSharedBanner(run);
         applyFilter();
         table.refresh();
         refreshActions();
@@ -625,6 +693,77 @@ public class ReviewScreen extends FlowScreen {
         }
     }
 
+    /**
+     * Shows one note for each problem that every graded student of the
+     * run shares, such as a question with no tester. Such a problem is
+     * in the tester folder, not in the students' work.
+     *
+     * @param run the run
+     */
+    private void refreshSharedBanner(GradingRun run) {
+        sharedBanner.getChildren().clear();
+        List<Anomaly> shared = findSharedProblems(run);
+        for (Anomaly anomaly : shared) {
+            Label text = Parts.strong(anomaly.getMessage());
+            text.setWrapText(true);
+            text.setMinWidth(0);
+            HBox note = Parts.row(Parts.GAP, new Node[] {Parts.pill(
+                    "Every student", Tone.WARN), text});
+            sharedBanner.getChildren().add(note);
+        }
+        boolean show = !shared.isEmpty();
+        sharedBanner.setVisible(show);
+        sharedBanner.setManaged(show);
+    }
+
+    /**
+     * Finds the problems with the same type and words on every graded
+     * student, when at least two were graded. Each is returned once.
+     *
+     * @param run the run
+     * @return one anomaly per shared problem
+     */
+    private List<Anomaly> findSharedProblems(GradingRun run) {
+        List<Anomaly> shared = new ArrayList<>();
+        List<Submission> graded = new ArrayList<>();
+        for (Submission submission : run.getSubmissions()) {
+            if (ResultState.hasTotal(submission)) {
+                graded.add(submission);
+            }
+        }
+        if (graded.size() < 2) {
+            return shared;
+        }
+
+        for (Anomaly anomaly : graded.get(0).getAnomalies()) {
+            if (isOnEvery(anomaly, graded)) {
+                shared.add(anomaly);
+            }
+        }
+        return shared;
+    }
+
+    // Says whether every student has a problem of the same type and words.
+    private boolean isOnEvery(Anomaly anomaly, List<Submission> students) {
+        for (Submission submission : students) {
+            if (!hasSameProblem(submission, anomaly)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Says whether a student has a problem of the same type and words.
+    private boolean hasSameProblem(Submission submission, Anomaly anomaly) {
+        for (Anomaly other : submission.getAnomalies()) {
+            if (other.getType() == anomaly.getType()
+                    && other.getMessage().equals(anomaly.getMessage())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Returns the Retry link, or why this run cannot be retried.
     private Node retryAction(GradingRun run, int couldNot) {
         String them = "them";
@@ -658,6 +797,7 @@ public class ReviewScreen extends FlowScreen {
     private void searchModeChanged() {
         codeDelay.stop();
         codeMatches.clear();
+        latestSearch = null;
         if (codeButton.isSelected()) {
             search.setPromptText(CODE_PROMPT);
             searchCode();
@@ -668,13 +808,39 @@ public class ReviewScreen extends FlowScreen {
     }
 
     // Asks the backend which students' code holds the search text.
+    // Live mode reads the files on a background thread; the demo reads
+    // no files.
     private void searchCode() {
         codeMatches.clear();
+        latestSearch = null;
         String text = search.getText().trim();
         GradingRun run = getState().getRun();
-        if (!text.isEmpty() && run != null) {
-            codeMatches.addAll(getBackend().searchCode(run, text));
+        if (text.isEmpty() || run == null) {
+            applyFilter();
+            return;
         }
+        if (getBackend().isDemo()) {
+            codeMatches.addAll(getBackend().searchCode(run, text));
+            applyFilter();
+            return;
+        }
+        CodeSearch codeSearch = new CodeSearch(getBackend(), run, text);
+        codeSearch.setOnSucceeded(event -> searchDone(codeSearch));
+        latestSearch = codeSearch;
+        applyFilter();
+        placeholder.setText("Searching the code...");
+        Thread worker = new Thread(codeSearch, "gradezzy-search");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Shows the students a search found, unless a newer search started.
+    private void searchDone(CodeSearch codeSearch) {
+        if (codeSearch != latestSearch) {
+            return;
+        }
+        latestSearch = null;
+        codeMatches.addAll(codeSearch.getValue());
         applyFilter();
     }
 
@@ -684,10 +850,11 @@ public class ReviewScreen extends FlowScreen {
         boolean inCode = codeButton.isSelected();
         boolean onlyReview = reviewButton.isSelected();
         boolean onlyFailed = failedButton.isSelected();
+        boolean onlyMissing = missingButton.isSelected();
         filtered.setPredicate(submission -> passesFilter(submission, text,
-                inCode, onlyReview, onlyFailed));
+                inCode, onlyReview, onlyFailed, onlyMissing));
         placeholder.setText(emptyNote(text, inCode, onlyReview,
-                onlyFailed));
+                onlyFailed, onlyMissing));
     }
 
     /**
@@ -698,10 +865,16 @@ public class ReviewScreen extends FlowScreen {
      * @param inCode true when the search looks inside the code
      * @param onlyReview true when only students to review are shown
      * @param onlyFailed true when only students who failed are shown
+     * @param onlyMissing true when only students with no submission are
+     *        shown
      * @return true when the student is shown
      */
     private boolean passesFilter(Submission submission, String text,
-            boolean inCode, boolean onlyReview, boolean onlyFailed) {
+            boolean inCode, boolean onlyReview, boolean onlyFailed,
+            boolean onlyMissing) {
+        if (onlyMissing && !ResultState.isNoSubmission(submission)) {
+            return false;
+        }
         if (onlyReview
                 && Students.openCount(submission, getBackend()) == 0) {
             return false;
@@ -722,7 +895,7 @@ public class ReviewScreen extends FlowScreen {
 
     // Returns the note shown when no student passes the filter.
     private String emptyNote(String text, boolean inCode,
-            boolean onlyReview, boolean onlyFailed) {
+            boolean onlyReview, boolean onlyFailed, boolean onlyMissing) {
         if (!text.isEmpty() && inCode) {
             return "No student's code contains \"" + search.getText().trim()
                     + "\". The search is case sensitive.";
@@ -733,6 +906,8 @@ public class ReviewScreen extends FlowScreen {
             return "Every student is checked.";
         } else if (onlyFailed) {
             return "No student failed to grade.";
+        } else if (onlyMissing) {
+            return "Every student on the score sheet has a submission.";
         }
         return "No students in this run.";
     }
@@ -740,8 +915,16 @@ public class ReviewScreen extends FlowScreen {
     // ------------------------------------------------------------ panel
 
     // Shows a student in the panel.
+    // A student with no submission has nothing to show, so the panel
+    // closes instead.
     private void showStudent(Submission submission) {
         if (submission == null) {
+            return;
+        }
+        if (ResultState.isNoSubmission(submission)) {
+            panel.show(null);
+            panel.setVisible(false);
+            panel.setManaged(false);
             return;
         }
         panel.show(submission);
@@ -804,8 +987,16 @@ public class ReviewScreen extends FlowScreen {
     private void tickAll(boolean ticked) {
         List<Submission> selected = getState().getSelected();
         selected.clear();
-        if (ticked) {
-            selected.addAll(filtered);
+        if (!ticked) {
+            table.refresh();
+            refreshActions();
+            return;
+        }
+        // A student with no submission has no marks to export
+        for (Submission submission : filtered) {
+            if (!ResultState.isNoSubmission(submission)) {
+                selected.add(submission);
+            }
         }
         table.refresh();
         refreshActions();

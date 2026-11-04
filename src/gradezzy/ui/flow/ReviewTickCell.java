@@ -14,6 +14,7 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.TableCell;
 
 import gradezzy.model.Submission;
+import gradezzy.ui.backend.ResultState;
 
 /**
  * A check box that adds the row's student to the export scope.
@@ -45,11 +46,14 @@ public class ReviewTickCell extends TableCell<Submission, Submission> {
     @Override
     protected void updateItem(Submission submission, boolean isEmpty) {
         super.updateItem(submission, isEmpty);
-        if (isEmpty || submission == null) {
+        // A student with no submission has no marks to export
+        if (isEmpty || submission == null
+                || ResultState.isNoSubmission(submission)) {
             setGraphic(null);
             return;
         }
         box.setSelected(screen.isTickedForExport(submission));
+        box.setAccessibleText("Tick " + submission.getUsername());
         setGraphic(box);
     }
 

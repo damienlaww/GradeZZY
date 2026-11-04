@@ -22,8 +22,14 @@ import javafx.scene.control.TreeItem;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.exec.ProcessRunner;
+import gradezzy.exec.SourceCompiler;
 import gradezzy.fix.FixRecord;
+import gradezzy.grading.CompileStage;
+import gradezzy.grading.GradingException;
 import gradezzy.grading.ProgressListener;
+import gradezzy.ingest.IngestException;
+import gradezzy.ingest.RosterReader;
 import gradezzy.model.Anomaly;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
@@ -31,6 +37,7 @@ import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.Section;
+import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.plagiarism.SimilarityPair;
@@ -266,6 +273,68 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
+     * Calls CompileStage.checkTesterFolder with the starter folder in
+     * Settings. A tester folder that cannot be checked at all is one
+     * problem.
+     */
+    @Override
+    public List<String> checkTesters(Path testersDirectory) {
+        CompileStage stage = new CompileStage(new SourceCompiler(config,
+                new ProcessRunner(config)), null);
+        try {
+            return stage.checkTesterFolder(config, assessment,
+                    testersDirectory);
+        } catch (GradingException exception) {
+            List<String> problems = new ArrayList<>();
+            problems.add("The testers could not be checked: "
+                    + exception.getMessage());
+            return problems;
+        }
+    }
+
+    /**
+     * Reads the run's score sheet with RosterReader, or the one in
+     * Settings when the run has none, and keeps the students with no
+     * submission in the run.
+     */
+    @Override
+    public List<Student> listMissingStudents(GradingRun gradingRun) {
+        List<Student> missing = new ArrayList<>();
+        if (gradingRun == null) {
+            return missing;
+        }
+
+        Path scoreSheet = gradingRun.getScoreSheetFile();
+        if (scoreSheet == null) {
+            scoreSheet = getConfiguredPath(InputKind.ROSTER);
+        }
+
+        List<Student> roster = new ArrayList<>();
+        try {
+            roster = new RosterReader(config).readRoster(scoreSheet);
+        } catch (IngestException exception) {
+            return missing;
+        }
+
+        for (Student student : roster) {
+            if (!hasSubmission(gradingRun, student.getUsername())) {
+                missing.add(student);
+            }
+        }
+        return missing;
+    }
+
+    // Says whether the run has a submission of a username.
+    private boolean hasSubmission(GradingRun gradingRun, String username) {
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (submission.getUsername().equalsIgnoreCase(username)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Starts GradingService.startGrading in a GradingTask. A starter
      * folder that cannot be used is not passed, so grading uses the one
      * in Settings, as its row on Set up says.
@@ -428,10 +497,10 @@ public class LiveBackend implements DashboardBackend {
         forgetSavedRuns();
 
         if (anomaly.getFixStatus() == FixStatus.APPROVED) {
-            return ActionResult.done("Approved the repair for "
+            return ActionResult.done("Approved the fix for "
                     + anomaly.getUsername() + ".");
         }
-        return ActionResult.failed("The repair for " + anomaly.getUsername()
+        return ActionResult.failed("The fix for " + anomaly.getUsername()
                 + " was not approved, because it is "
                 + describeFixStatus(anomaly.getFixStatus()) + ".");
     }
@@ -445,7 +514,7 @@ public class LiveBackend implements DashboardBackend {
         Anomaly anomaly = repair.getAnomaly();
         FixStatus before = anomaly.getFixStatus();
         if (before != FixStatus.APPLIED && before != FixStatus.APPROVED) {
-            return ActionResult.failed("The repair for "
+            return ActionResult.failed("The fix for "
                     + anomaly.getUsername() + " was not undone, because "
                     + "it is " + describeFixStatus(before) + ".");
         }
@@ -453,7 +522,7 @@ public class LiveBackend implements DashboardBackend {
         services.getAnomalyService().undoFix(anomaly);
         forgetSavedRuns();
         if (anomaly.getFixStatus() == FixStatus.UNDONE) {
-            return ActionResult.done("Rejected the repair for "
+            return ActionResult.done("Undid the fix for "
                     + anomaly.getUsername()
                     + ". The working copy was put back.");
         }
@@ -1011,7 +1080,7 @@ public class LiveBackend implements DashboardBackend {
         } else if (status == FixStatus.PENDING) {
             return "not applied yet";
         }
-        return "not a repair GradeZZY made";
+        return "not a fix GradeZZY made";
     }
 
     // Returns why the automatic fix for an anomaly failed, or null.
@@ -1032,15 +1101,15 @@ public class LiveBackend implements DashboardBackend {
     // FixManager keeps the record of each fix only in memory, and forgets
     // a student's fixes when the student is graded again.
     private String explainUndoFailure(Anomaly anomaly) {
-        String start = "The repair for " + anomaly.getUsername()
+        String start = "The fix for " + anomaly.getUsername()
                 + " could not be undone, so it still shows as applied. ";
         if (!anomaliesFoundNow.contains(anomaly.getId())) {
             return start + "Its run was graded before GradeZZY was last "
-                    + "opened, and GradeZZY can only undo a repair made "
+                    + "opened, and GradeZZY can only undo a fix made "
                     + "since then.";
         }
         return start + "Either the student was graded again since, or "
-                + "the files the repair changed were moved or deleted.";
+                + "the files the fix changed were moved or deleted.";
     }
 
     // Explains why HistoryService.backupNow wrote no backup.
