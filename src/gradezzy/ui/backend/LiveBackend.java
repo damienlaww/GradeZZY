@@ -290,6 +290,24 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public Path getConfiguredPath(InputKind kind) {
+        return configuredPath(kind);
+    }
+
+    // The score sheet a run used, else its section's own score sheet,
+    // else the one for everyone.
+    private Path scoreSheetOf(GradingRun gradingRun) {
+        if (gradingRun.getScoreSheetFile() != null) {
+            return gradingRun.getScoreSheetFile();
+        }
+        try {
+            return Paths.get(getScoreSheet(gradingRun.getSection()));
+        } catch (java.nio.file.InvalidPathException exception) {
+            return configuredPath(InputKind.ROSTER);
+        }
+    }
+
+    // Reads a path setting.
+    private Path configuredPath(InputKind kind) {
         if (kind == InputKind.ROSTER) {
             return Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE));
         } else if (kind == InputKind.TESTERS) {
@@ -409,10 +427,7 @@ public class LiveBackend implements DashboardBackend {
         if (gradingRun == null) {
             return ClassFileMatch.fits();
         }
-        Path sheet = gradingRun.getScoreSheetFile();
-        if (sheet == null) {
-            sheet = getConfiguredPath(InputKind.ROSTER);
-        }
+        Path sheet = scoreSheetOf(gradingRun);
 
         List<String> usernames = new ArrayList<>();
         List<Path> uploads = new ArrayList<>();
@@ -487,10 +502,7 @@ public class LiveBackend implements DashboardBackend {
             return missing;
         }
 
-        Path scoreSheet = gradingRun.getScoreSheetFile();
-        if (scoreSheet == null) {
-            scoreSheet = getConfiguredPath(InputKind.ROSTER);
-        }
+        Path scoreSheet = scoreSheetOf(gradingRun);
 
         List<Student> roster = new ArrayList<>();
         try {
