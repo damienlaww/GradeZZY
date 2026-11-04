@@ -127,7 +127,7 @@ or run on the instructor's laptop.
 | `README.md` | This file. |
 | `docs/` | The project brief and coding style PDFs. Not in git. |
 | `samples/` | The provided testers, score sheet, starter folder and six sample submissions. Not in git. |
-| `test/` | `make-dummies.sh`, which builds the dummy submissions in `samples/dummy-submissions/` from the provided samples. |
+| `samples/e2e/` | The end-to-end test set: 42 students for section G4, with duplicate, damaged, late and copied uploads. `make_e2e.py` rebuilds it; its `README.md` lists the expected marks. Graded with `samples/Tester-Files`. |
 | `workspace/` | Created while grading: working copies, exports, database. Not in git. |
 
 Two things to know:
@@ -523,12 +523,10 @@ What to build, in order:
    `Q2` folder, a missing `Q1b.java`, a file named `q1a.java`, an empty
    zip, a file that is not a zip, and a `Q1a.java` holding
    `while (true) { }`. Share them with the team; they test everyone's
-   stage, and the brief rewards extra edge cases. Done:
-   `sh test/make-dummies.sh` builds these six plus a username folder
-   inside a username folder and the untouched starter folder, in
-   `samples/dummy-submissions/`. Only the script is in git, because the
-   dummies are built from the restricted samples. Add that folder on the
-   Set up step to grade them; none of them stops the batch.
+   stage, and the brief rewards extra edge cases. Done: the end-to-end
+   set in `samples/e2e/` covers all six and many more (see its
+   `README.md`). `python3 -I samples/e2e/make_e2e.py .` rebuilds it from
+   the provided samples. None of its uploads stops the batch.
 5. As each teammate finishes a service, open its screen in live mode
    (`sh run.sh`) and check that the real data looks right.
    `design/UI-INTEGRATION.md` says which screen shows which service;
