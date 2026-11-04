@@ -4,11 +4,19 @@
  * Purpose: Writes the provided score sheet with the final grade filled in.
  *
  * Where it fits: The export required by the brief. Columns, the id prefix, the
- * end marker and the line ending stay exactly as provided.
+ * end marker, quotes, the encoding and the line ending stay exactly as
+ * provided.
  */
 package gradezzy.report;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -21,7 +29,6 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
-import gradezzy.util.FileUtils;
 import gradezzy.util.TextUtils;
 
 /**
@@ -54,6 +61,22 @@ public class CsvScoreSheetExporter implements Exporter {
     private static final String CRLF = "\r\n";
 
     private static final String LF = "\n";
+
+    private static final char QUOTE = '"';
+
+    private static final char COMMA = ',';
+
+    private static final char CARRIAGE_RETURN = '\r';
+
+    private static final char LINE_FEED = '\n';
+
+    // A sheet that is not valid UTF-8 was saved by Excel on Windows
+    private static final String WINDOWS_CHARSET = "windows-1252";
+
+    // Places in the int[] that findField returns
+    private static final int FIELD_START = 0;
+
+    private static final int FIELD_END = 1;
 
     // Written when a student has no graded submission
     private static final String NO_SCORE = "";
@@ -100,9 +123,11 @@ public class CsvScoreSheetExporter implements Exporter {
     /**
      * Writes the provided score sheet with the final grade filled in.
      *
-     * <p>Every row and value of the template is kept as it is, apart from
-     * the numerator, which receives the student's total. A student without
-     * a graded submission is left blank so the instructor notices.
+     * <p>Every row and value of the template is kept as it is, quotes
+     * included, apart from the numerator, which receives the student's
+     * total. A student without a graded submission is left blank so the
+     * instructor notices. The file is written in the encoding the template
+     * was saved in.
      *
      * @param gradingRun the grading run
      * @param outputFile the output file
@@ -117,35 +142,39 @@ public class CsvScoreSheetExporter implements Exporter {
         }
 
         Path template = chooseTemplate(gradingRun);
-        List<String> lines = readTemplateLines(template);
-        if (lines.isEmpty()) {
+        byte[] templateBytes = readTemplateBytes(template);
+        Charset charset = chooseCharset(templateBytes);
+        List<String> records = splitRecords(
+                new String(templateBytes, charset));
+        if (records.isEmpty()) {
             throw new ExportException("The score sheet template "
                     + template + " is empty.");
         }
 
         // Find the two columns by name so a reordered sheet still works
-        List<String> header = splitLine(lines.get(0), 1);
+        List<String> header = splitLine(records.get(0), 1);
         int usernameIndex = findColumn(header, USERNAME_COLUMN);
         int numeratorIndex = findColumn(header, NUMERATOR_COLUMN);
 
         Map<String, Submission> submissionsByUsername =
                 indexByUsername(gradingRun.getSubmissions());
         String lineEnding = getLineEnding();
-        List<String> outputLines = new ArrayList<>();
-        outputLines.add(lines.get(0));
+        List<String> outputRecords = new ArrayList<>();
+        outputRecords.add(records.get(0));
 
-        for (int index = 1; index < lines.size(); index++) {
-            String line = lines.get(index);
-            String filledLine = fillRow(line, index + 1, usernameIndex,
+        for (int index = 1; index < records.size(); index++) {
+            String record = records.get(index);
+            String filledRecord = fillRow(record, index + 1, usernameIndex,
                     numeratorIndex, submissionsByUsername);
-            outputLines.add(filledLine);
+            outputRecords.add(filledRecord);
         }
 
-        // Every line, the header included, ends with the line ending
-        String output = TextUtils.join(lineEnding, outputLines) + lineEnding;
+        // Every record, the header included, ends with the line ending
+        String output = TextUtils.join(lineEnding, outputRecords)
+                + lineEnding;
 
         try {
-            FileUtils.writeText(outputFile, output);
+            Files.write(outputFile, output.getBytes(charset));
         } catch (IOException exception) {
             throw new ExportException("Could not write the score sheet to "
                     + outputFile + ". Check that the folder exists and is "
@@ -163,35 +192,71 @@ public class CsvScoreSheetExporter implements Exporter {
         return templateScoreSheet;
     }
 
-    // Reads the template and returns its lines without line endings.
-    // The final line ending does not create an extra empty line.
-    private List<String> readTemplateLines(Path template)
-            throws ExportException {
-        String text = "";
+    // Reads the template as bytes, so its encoding can be checked
+    private byte[] readTemplateBytes(Path template) throws ExportException {
         try {
-            text = FileUtils.readText(template);
+            return Files.readAllBytes(template);
         } catch (IOException exception) {
             throw new ExportException("Could not read the score sheet "
                     + template + " that this batch was graded against. "
                     + "Put the file back, or grade the batch again with "
                     + "a score sheet that exists.", exception);
         }
+    }
 
-        String normalised = TextUtils.normaliseLineEndings(text);
-        List<String> lines = new ArrayList<>();
-        int lineStart = 0;
-        int lineEnd = normalised.indexOf(LF);
-        while (lineEnd >= 0) {
-            lines.add(normalised.substring(lineStart, lineEnd));
-            lineStart = lineEnd + LF.length();
-            lineEnd = normalised.indexOf(LF, lineStart);
+    // UTF-8 when the bytes are valid UTF-8, otherwise Windows-1252, the
+    // encoding Excel uses on Windows. A UTF-8 byte order mark is kept as
+    // part of the first header, so it is written back too.
+    private Charset chooseCharset(byte[] bytes) {
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
+        decoder.onMalformedInput(CodingErrorAction.REPORT);
+        decoder.onUnmappableCharacter(CodingErrorAction.REPORT);
+
+        try {
+            decoder.decode(ByteBuffer.wrap(bytes));
+            return StandardCharsets.UTF_8;
+        } catch (CharacterCodingException exception) {
+            return Charset.forName(WINDOWS_CHARSET);
+        }
+    }
+
+    // Splits the template into records without their line endings. A line
+    // ending inside quotes belongs to the value (a name over two lines),
+    // so it stays in the record exactly as it was. CRLF, LF and CR all end
+    // a record, and the final line ending does not make an empty record.
+    private List<String> splitRecords(String text) throws ExportException {
+        List<String> records = new ArrayList<>();
+        int recordStart = 0;
+        boolean quoted = false;
+        int index = 0;
+        while (index < text.length()) {
+            char current = text.charAt(index);
+            if (current == QUOTE) {
+                quoted = !quoted;
+            } else if (!quoted && current == CARRIAGE_RETURN) {
+                records.add(text.substring(recordStart, index));
+                if (index + 1 < text.length()
+                        && text.charAt(index + 1) == LINE_FEED) {
+                    index++;
+                }
+                recordStart = index + 1;
+            } else if (!quoted && current == LINE_FEED) {
+                records.add(text.substring(recordStart, index));
+                recordStart = index + 1;
+            }
+            index++;
         }
 
-        // Keep a last line that has no line ending after it
-        if (lineStart < normalised.length()) {
-            lines.add(normalised.substring(lineStart));
+        if (quoted) {
+            throw new ExportException("The score sheet template has a "
+                    + "quote that is never closed.");
         }
-        return lines;
+
+        // Keep a last record that has no line ending after it
+        if (recordStart < text.length()) {
+            records.add(text.substring(recordStart));
+        }
+        return records;
     }
 
     // Returns the position of a column, or fails if it is not in the header
@@ -221,35 +286,71 @@ public class CsvScoreSheetExporter implements Exporter {
         return submissionsByUsername;
     }
 
-    // Returns the row with the numerator filled in. A blank line, or a row
-    // too short to hold both columns, is kept exactly as it was.
-    private String fillRow(String line, int lineNumber, int usernameIndex,
-            int numeratorIndex, Map<String, Submission> submissionsByUsername)
+    // Returns the record with the numerator filled in. Only the text of
+    // the numerator field changes; every other character, quotes
+    // included, is copied as it is. A blank record, or one too short to
+    // hold both columns, is kept exactly as it was.
+    private String fillRow(String record, int recordNumber,
+            int usernameIndex, int numeratorIndex,
+            Map<String, Submission> submissionsByUsername)
             throws ExportException {
-        if (TextUtils.isBlank(line)) {
-            return line;
+        if (TextUtils.isBlank(record)) {
+            return record;
         }
 
-        List<String> values = splitLine(line, lineNumber);
-        if (values.size() <= Math.max(usernameIndex, numeratorIndex)) {
-            return line;
+        int[] usernameField = findField(record, usernameIndex);
+        int[] numeratorField = findField(record, numeratorIndex);
+        if (usernameField == null || numeratorField == null) {
+            return record;
         }
 
-        String username = removeIdPrefix(values.get(usernameIndex));
+        // The username field may be quoted, so read its value properly
+        String usernameText = record.substring(usernameField[FIELD_START],
+                usernameField[FIELD_END]);
+        List<String> usernameValues = splitLine(usernameText, recordNumber);
+        String username = removeIdPrefix(usernameValues.get(0));
         Submission submission = submissionsByUsername.get(
                 username.toLowerCase(Locale.ROOT));
-        values.set(numeratorIndex, formatScore(submission));
-        return TextUtils.joinCsvLine(values);
+
+        return record.substring(0, numeratorField[FIELD_START])
+                + formatScore(submission)
+                + record.substring(numeratorField[FIELD_END]);
     }
 
-    // Splits one line, naming the line if its quotes are broken
-    private List<String> splitLine(String line,
-            int lineNumber) throws ExportException {
+    // Finds where field number fieldIndex starts and ends in a record, as
+    // {start, end} with end just after its last character, or null if the
+    // record has fewer fields. A comma inside quotes is part of a value.
+    private int[] findField(String record, int fieldIndex) {
+        int fieldNumber = 0;
+        int fieldStart = 0;
+        boolean quoted = false;
+        for (int index = 0; index < record.length(); index++) {
+            char current = record.charAt(index);
+            if (current == QUOTE) {
+                quoted = !quoted;
+            } else if (!quoted && current == COMMA) {
+                if (fieldNumber == fieldIndex) {
+                    return new int[] {fieldStart, index};
+                }
+                fieldNumber++;
+                fieldStart = index + 1;
+            }
+        }
+
+        if (fieldNumber == fieldIndex) {
+            return new int[] {fieldStart, record.length()};
+        }
+        return null;
+    }
+
+    // Splits one record, naming the record if its quotes are broken
+    private List<String> splitLine(String record,
+            int recordNumber) throws ExportException {
         try {
-            return TextUtils.splitCsvLine(line);
+            return TextUtils.splitCsvLine(record);
         } catch (IllegalArgumentException exception) {
-            throw new ExportException("Line " + lineNumber + " of the score "
-                    + "sheet template is not valid CSV: "
+            throw new ExportException("Record " + recordNumber + " of the "
+                    + "score sheet template is not valid CSV: "
                     + exception.getMessage(), exception);
         }
     }

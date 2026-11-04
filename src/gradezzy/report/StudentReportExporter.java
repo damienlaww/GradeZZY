@@ -1,15 +1,18 @@
 /*
  * File: StudentReportExporter.java
  *
- * Purpose: Writes the individual report of one student.
+ * Purpose: Writes the individual report of one student, or of every
+ * student in a run.
  *
- * Where it fits: Not registered in ApplicationContext yet, so no screen
- * offers it (see the README feature list).
+ * Where it fits: Registered in ApplicationContext without a student, so an
+ * export of a run writes every student's report into one file.
  */
 package gradezzy.report;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 import gradezzy.model.Anomaly;
 import gradezzy.model.Assessment;
@@ -59,16 +62,28 @@ public class StudentReportExporter implements Exporter {
 
     private static final String NEW_LINE = System.lineSeparator();
 
-    // The student the report is for
+    // Printed between two students' reports in one file
+    private static final String REPORT_SEPARATOR = "-";
+
+    // The student the report is for, or null for every student
     private final String username;
 
     /**
-     * Creates a new student report exporter.
+     * Creates a new student report exporter for one student.
      *
      * @param username the student the report is for
      */
     public StudentReportExporter(String username) {
         this.username = username;
+    }
+
+    /**
+     * Creates a new student report exporter that writes the report of
+     * every student in the run, one after another, into one file. This is
+     * the one ApplicationContext registers.
+     */
+    public StudentReportExporter() {
+        this.username = null;
     }
 
     /**
@@ -109,20 +124,17 @@ public class StudentReportExporter implements Exporter {
             throw new ExportException(
                     "Nothing to export: the grading run or file is missing.");
         }
+        String report = "";
         if (TextUtils.isBlank(username)) {
-            throw new ExportException("Choose a student for the report.");
+            report = writeEveryReport(gradingRun);
+        } else {
+            Submission submission = findSubmission(gradingRun);
+            if (submission == null) {
+                throw new ExportException("There is no submission for "
+                        + username + " in run " + gradingRun.getId() + ".");
+            }
+            report = writeReport(gradingRun, submission);
         }
-
-        Submission submission = findSubmission(gradingRun);
-        if (submission == null) {
-            throw new ExportException("There is no submission for "
-                    + username + " in run " + gradingRun.getId() + ".");
-        }
-
-        String report = writeDetails(gradingRun, submission)
-                + writeScores(submission)
-                + writeFailedTests(submission)
-                + writeAnomalies(submission);
 
         try {
             FileUtils.writeText(outputFile, report);
@@ -131,6 +143,34 @@ public class StudentReportExporter implements Exporter {
                     + "to " + outputFile + ". Check that the folder exists "
                     + "and is not read-only.", exception);
         }
+    }
+
+    // The reports of every student in the run, in run order, with a line
+    // between two reports
+    private String writeEveryReport(GradingRun gradingRun)
+            throws ExportException {
+        List<Submission> submissions = gradingRun.getSubmissions();
+        if (submissions.isEmpty()) {
+            throw new ExportException("Run " + gradingRun.getId()
+                    + " has no students to report on.");
+        }
+
+        String separator = REPORT_SEPARATOR.repeat(TITLE.length())
+                + NEW_LINE + NEW_LINE;
+        List<String> reports = new ArrayList<>();
+        for (Submission submission : submissions) {
+            reports.add(writeReport(gradingRun, submission));
+        }
+        return TextUtils.join(separator, reports);
+    }
+
+    // The whole report of one student
+    private String writeReport(GradingRun gradingRun,
+            Submission submission) {
+        return writeDetails(gradingRun, submission)
+                + writeScores(submission)
+                + writeFailedTests(submission)
+                + writeAnomalies(submission);
     }
 
     // Returns the submission of the chosen student, or null if absent
@@ -150,12 +190,16 @@ public class StudentReportExporter implements Exporter {
         report += String.valueOf(UNDERLINE).repeat(TITLE.length())
                 + NEW_LINE + NEW_LINE;
 
+        // The submission's own username, so the report of every student
+        // names the right one
+        String studentUsername = submission.getUsername();
         Student student = submission.getStudent();
         if (student == null) {
-            report += labelLine("Student:", username + " (not on the roster)");
+            report += labelLine("Student:", studentUsername
+                    + " (not on the roster)");
         } else {
             report += labelLine("Student:", fullName(student) + " ("
-                    + username + ")");
+                    + studentUsername + ")");
             report += labelLine("Email:", student.getEmail());
         }
 

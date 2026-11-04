@@ -9,6 +9,7 @@
 package gradezzy.persistence;
 
 import java.util.List;
+import java.util.Map;
 
 import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
@@ -78,6 +79,29 @@ public interface ResultRepository {
      */
     void updateFixStatus(String anomalyId,
             FixStatus fixStatus) throws PersistenceException;
+
+    /**
+     * Saves the instructor's review decision on one flagged anomaly, for
+     * example REVIEWED or REJECTED. The decision is stored as text, so
+     * this package does not depend on the window's own decision type.
+     *
+     * @param anomalyId the anomaly id
+     * @param decision the decision name, or null to clear it
+     * @throws PersistenceException if the operation fails
+     */
+    void updateDecision(String anomalyId,
+            String decision) throws PersistenceException;
+
+    /**
+     * Loads the saved review decisions of a run.
+     *
+     * @param runId the run id
+     * @return the decision names by anomaly id; anomalies with no
+     *         decision are left out
+     * @throws PersistenceException if the operation fails
+     */
+    Map<String, String> loadDecisions(String runId)
+            throws PersistenceException;
 
     /**
      * Adds one entry to the audit log.

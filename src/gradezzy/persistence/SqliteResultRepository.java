@@ -68,7 +68,9 @@ public class SqliteResultRepository implements ResultRepository {
                 + "assessment_name TEXT, "
                 + "assessment_module TEXT, "
                 + "placeholder_folders TEXT, "
-                + "score_sheet_file TEXT)",
+                + "score_sheet_file TEXT, "
+                + "testers_dir TEXT, "
+                + "starter_dir TEXT)",
         "CREATE TABLE IF NOT EXISTS run_questions ("
                 + "run_id TEXT NOT NULL, "
                 + "position INTEGER NOT NULL, "
@@ -120,6 +122,7 @@ public class SqliteResultRepository implements ResultRepository {
                 + "message TEXT, "
                 + "suggested_action TEXT, "
                 + "fix_status TEXT, "
+                + "decision TEXT, "
                 + "PRIMARY KEY (run_id, username, position))",
         "CREATE INDEX IF NOT EXISTS anomalies_by_id "
                 + "ON anomalies (anomaly_id)",
@@ -130,20 +133,40 @@ public class SqliteResultRepository implements ResultRepository {
                 + "detail TEXT)"
     };
 
-    // The score sheet column was added after the first release. A database
-    // made before it has no such column, so open adds it.
+    // These columns were added after the first release. A database made
+    // before them has no such columns, so open adds them.
     private static final String SCORE_SHEET_COLUMN = "score_sheet_file";
+    private static final String TESTERS_DIR_COLUMN = "testers_dir";
+    private static final String STARTER_DIR_COLUMN = "starter_dir";
+    private static final String DECISION_COLUMN = "decision";
 
-    // Lists the columns of the runs table, one row per column
+    // List the columns of a table, one row per column
     private static final String LIST_RUN_COLUMNS = "PRAGMA table_info(runs)";
+    private static final String LIST_ANOMALY_COLUMNS =
+            "PRAGMA table_info(anomalies)";
 
     private static final String ADD_SCORE_SHEET_COLUMN = "ALTER TABLE runs "
             + "ADD COLUMN score_sheet_file TEXT";
 
+    private static final String ADD_TESTERS_DIR_COLUMN = "ALTER TABLE runs "
+            + "ADD COLUMN testers_dir TEXT";
+
+    private static final String ADD_STARTER_DIR_COLUMN = "ALTER TABLE runs "
+            + "ADD COLUMN starter_dir TEXT";
+
+    private static final String ADD_DECISION_COLUMN = "ALTER TABLE "
+            + "anomalies ADD COLUMN decision TEXT";
+
+    // How long a write waits for another GradeZZY to finish its own
+    // write before it fails, in milliseconds
+    private static final String SET_BUSY_TIMEOUT =
+            "PRAGMA busy_timeout = 5000";
+
     private static final String INSERT_RUN = "INSERT OR REPLACE INTO runs "
             + "(run_id, started_at, module_code, section_code, "
             + "assessment_name, assessment_module, placeholder_folders, "
-            + "score_sheet_file) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            + "score_sheet_file, testers_dir, starter_dir) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String INSERT_QUESTION = "INSERT INTO "
             + "run_questions (run_id, position, question_id, folder_name, "
@@ -191,8 +214,8 @@ public class SqliteResultRepository implements ResultRepository {
 
     private static final String SELECT_RUN = "SELECT started_at, "
             + "module_code, section_code, assessment_name, "
-            + "assessment_module, placeholder_folders, score_sheet_file "
-            + "FROM runs WHERE run_id = ?";
+            + "assessment_module, placeholder_folders, score_sheet_file, "
+            + "testers_dir, starter_dir FROM runs WHERE run_id = ?";
 
     // Newest first; a run without a start time comes last
     private static final String SELECT_RUN_IDS = "SELECT run_id FROM runs "
@@ -233,6 +256,13 @@ public class SqliteResultRepository implements ResultRepository {
 
     private static final String UPDATE_FIX_STATUS = "UPDATE anomalies "
             + "SET fix_status = ? WHERE anomaly_id = ?";
+
+    private static final String UPDATE_DECISION = "UPDATE anomalies "
+            + "SET decision = ? WHERE anomaly_id = ?";
+
+    private static final String SELECT_DECISIONS = "SELECT anomaly_id, "
+            + "decision FROM anomalies WHERE run_id = ? "
+            + "AND decision IS NOT NULL";
 
     private static final String SELECT_AUDIT = "SELECT logged_at, action, "
             + "detail FROM audit_entries ORDER BY entry_id";
@@ -432,9 +462,14 @@ public class SqliteResultRepository implements ResultRepository {
                     + "listed: " + exception.getMessage(), exception);
         }
 
+        // A run that cannot be read is left out, so one bad row does not
+        // empty History and Statistics
         List<GradingRun> runs = new ArrayList<>();
         for (String runId : runIds) {
-            runs.add(loadRun(runId));
+            GradingRun gradingRun = loadReadableRun(runId);
+            if (gradingRun != null) {
+                runs.add(gradingRun);
+            }
         }
         return runs;
     }
@@ -516,6 +551,60 @@ public class SqliteResultRepository implements ResultRepository {
     }
 
     /**
+     * Saves the instructor's review decision on one flagged anomaly.
+     *
+     * <p>Like a fix status, a decision for an anomaly that was never saved
+     * has no row to change; that is not an error. Grading a student again
+     * saves new anomalies with no decision.
+     *
+     * @param anomalyId the anomaly id
+     * @param decision the decision name, or null to clear it
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized void updateDecision(String anomalyId,
+            String decision) throws PersistenceException {
+        requireOpen();
+        if (anomalyId == null) {
+            throw new PersistenceException("There is no decision to "
+                    + "save.");
+        }
+
+        try {
+            writeDecision(anomalyId, decision);
+        } catch (SQLException exception) {
+            throw new PersistenceException("The decision on anomaly "
+                    + anomalyId + " could not be saved: "
+                    + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Loads the saved review decisions of a run.
+     *
+     * @param runId the run id
+     * @return the decision names by anomaly id; anomalies with no
+     *         decision are left out
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized Map<String, String> loadDecisions(String runId)
+            throws PersistenceException {
+        requireOpen();
+        if (runId == null) {
+            return new HashMap<>();
+        }
+
+        try {
+            return readDecisions(runId);
+        } catch (SQLException exception) {
+            throw new PersistenceException("The decisions of run " + runId
+                    + " could not be read: " + exception.getMessage(),
+                    exception);
+        }
+    }
+
+    /**
      * Adds one entry to the audit log.
      *
      * @param auditEntry the audit entry
@@ -582,11 +671,28 @@ public class SqliteResultRepository implements ResultRepository {
         Statement statement = null;
         try {
             statement = connection.createStatement();
+            // Another GradeZZY writing at the same moment makes this one
+            // wait instead of failing at once
+            statement.executeUpdate(SET_BUSY_TIMEOUT);
+
             for (String sql : CREATE_TABLES) {
                 statement.executeUpdate(sql);
             }
-            if (!hasScoreSheetColumn(statement)) {
+            if (!hasColumn(statement, LIST_RUN_COLUMNS,
+                    SCORE_SHEET_COLUMN)) {
                 statement.executeUpdate(ADD_SCORE_SHEET_COLUMN);
+            }
+            if (!hasColumn(statement, LIST_RUN_COLUMNS,
+                    TESTERS_DIR_COLUMN)) {
+                statement.executeUpdate(ADD_TESTERS_DIR_COLUMN);
+            }
+            if (!hasColumn(statement, LIST_RUN_COLUMNS,
+                    STARTER_DIR_COLUMN)) {
+                statement.executeUpdate(ADD_STARTER_DIR_COLUMN);
+            }
+            if (!hasColumn(statement, LIST_ANOMALY_COLUMNS,
+                    DECISION_COLUMN)) {
+                statement.executeUpdate(ADD_DECISION_COLUMN);
             }
         } finally {
             closeStatement(statement);
@@ -691,16 +797,17 @@ public class SqliteResultRepository implements ResultRepository {
         }
     }
 
-    // Says whether the runs table already has the score sheet column. A
-    // database made before the column existed does not.
-    private boolean hasScoreSheetColumn(Statement statement)
-            throws SQLException {
+    // Says whether a table already has the named column. A database made
+    // before the column existed does not. listColumnsSql is one of the
+    // fixed PRAGMA table_info texts above.
+    private boolean hasColumn(Statement statement, String listColumnsSql,
+            String columnName) throws SQLException {
         boolean found = false;
         ResultSet columns = null;
         try {
-            columns = statement.executeQuery(LIST_RUN_COLUMNS);
+            columns = statement.executeQuery(listColumnsSql);
             while (columns.next()) {
-                if (SCORE_SHEET_COLUMN.equals(columns.getString("name"))) {
+                if (columnName.equals(columns.getString("name"))) {
                     found = true;
                 }
             }
@@ -771,6 +878,10 @@ public class SqliteResultRepository implements ResultRepository {
             statement.setString(6, assessmentModule);
             statement.setString(7, placeholders);
             statement.setString(8, textOf(gradingRun.getScoreSheetFile()));
+            statement.setString(9,
+                    textOf(gradingRun.getTestersDirectory()));
+            statement.setString(10,
+                    textOf(gradingRun.getStarterDirectory()));
             statement.executeUpdate();
         } finally {
             closeStatement(statement);
@@ -957,6 +1068,8 @@ public class SqliteResultRepository implements ResultRepository {
         Section section = null;
         LocalDateTime startedAt = null;
         Path scoreSheetFile = null;
+        Path testersDirectory = null;
+        Path starterDirectory = null;
         PreparedStatement statement = null;
         ResultSet rows = null;
         try {
@@ -975,6 +1088,8 @@ public class SqliteResultRepository implements ResultRepository {
             addPlaceholders(assessment,
                     rows.getString("placeholder_folders"));
             scoreSheetFile = toPath(rows.getString(SCORE_SHEET_COLUMN));
+            testersDirectory = toPath(rows.getString(TESTERS_DIR_COLUMN));
+            starterDirectory = toPath(rows.getString(STARTER_DIR_COLUMN));
         } finally {
             closeQuery(rows, statement);
         }
@@ -983,6 +1098,8 @@ public class SqliteResultRepository implements ResultRepository {
         GradingRun gradingRun = new GradingRun(runId, assessment, section,
                 startedAt);
         gradingRun.setScoreSheetFile(scoreSheetFile);
+        gradingRun.setTestersDirectory(testersDirectory);
+        gradingRun.setStarterDirectory(starterDirectory);
         return gradingRun;
     }
 
@@ -1051,7 +1168,7 @@ public class SqliteResultRepository implements ResultRepository {
 
         String status = row.getString("status");
         if (status != null) {
-            submission.setStatus(SubmissionStatus.valueOf(status));
+            submission.setStatus(submissionStatusOf(status));
         }
 
         String orgDefinedId = row.getString("org_defined_id");
@@ -1155,22 +1272,108 @@ public class SqliteResultRepository implements ResultRepository {
         // A missing type or severity stays null
         AnomalyType anomalyType = null;
         if (type != null) {
-            anomalyType = AnomalyType.valueOf(type);
+            anomalyType = anomalyTypeOf(type);
         }
         Severity anomalySeverity = null;
         if (severity != null) {
-            anomalySeverity = Severity.valueOf(severity);
+            anomalySeverity = severityOf(severity);
         }
 
         Anomaly anomaly = new Anomaly(anomalyId, anomalyType,
                 anomalySeverity, username, row.getString("message"),
                 row.getString("suggested_action"));
 
-        String fixStatus = row.getString("fix_status");
+        FixStatus fixStatus = fixStatusOf(row.getString("fix_status"));
         if (fixStatus != null) {
-            anomaly.setFixStatus(FixStatus.valueOf(fixStatus));
+            anomaly.setFixStatus(fixStatus);
         }
         return anomaly;
+    }
+
+    // Reads a saved submission status. A name this version does not know
+    // becomes FAILED, so the student still shows and can be graded again.
+    private SubmissionStatus submissionStatusOf(String name) {
+        try {
+            return SubmissionStatus.valueOf(name);
+        } catch (IllegalArgumentException exception) {
+            return SubmissionStatus.FAILED;
+        }
+    }
+
+    // Reads a saved anomaly type. A type removed from AnomalyType becomes
+    // INTERNAL_ERROR, so the flag still shows for review.
+    private AnomalyType anomalyTypeOf(String name) {
+        try {
+            return AnomalyType.valueOf(name);
+        } catch (IllegalArgumentException exception) {
+            return AnomalyType.INTERNAL_ERROR;
+        }
+    }
+
+    // Reads a saved severity. An unknown name stays null, the same as a
+    // missing one.
+    private Severity severityOf(String name) {
+        try {
+            return Severity.valueOf(name);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    // Reads a saved fix status. A missing or unknown name gives null, and
+    // the anomaly keeps its default status.
+    private FixStatus fixStatusOf(String name) {
+        if (name == null) {
+            return null;
+        }
+        try {
+            return FixStatus.valueOf(name);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    // Changes the saved review decision of one anomaly
+    private void writeDecision(String anomalyId, String decision)
+            throws SQLException {
+        PreparedStatement statement = null;
+        try {
+            statement = connection.prepareStatement(UPDATE_DECISION);
+            statement.setString(1, decision);
+            statement.setString(2, anomalyId);
+            statement.executeUpdate();
+        } finally {
+            closeStatement(statement);
+        }
+    }
+
+    // Reads the saved review decisions of a run, by anomaly id
+    private Map<String, String> readDecisions(String runId)
+            throws SQLException {
+        Map<String, String> decisions = new HashMap<>();
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_DECISIONS);
+            statement.setString(1, runId);
+            rows = statement.executeQuery();
+            while (rows.next()) {
+                decisions.put(rows.getString("anomaly_id"),
+                        rows.getString(DECISION_COLUMN));
+            }
+        } finally {
+            closeQuery(rows, statement);
+        }
+        return decisions;
+    }
+
+    // Loads one run for listRuns, or null if it cannot be read
+    private GradingRun loadReadableRun(String runId) {
+        try {
+            return loadRun(runId);
+        } catch (PersistenceException exception) {
+            return null;
+        }
     }
 
     // The question of the saved assessment, or a stand-in with no marks
