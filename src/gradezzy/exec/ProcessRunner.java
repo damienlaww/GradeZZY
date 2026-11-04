@@ -167,7 +167,10 @@ public class ProcessRunner {
                 if (System.currentTimeMillis() > deadlineMillis) {
                     stopKeepingOutput(process);
                     timedOut = true;
-                } else {
+                } else if (output.available() == 0
+                        && error.available() == 0) {
+                    // Sleeping with output waiting would slow a program
+                    // that prints a lot to one pipe buffer per pause
                     Thread.sleep(POLL_INTERVAL_MILLIS);
                 }
             }

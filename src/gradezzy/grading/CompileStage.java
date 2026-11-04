@@ -9,7 +9,6 @@
 package gradezzy.grading;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -36,6 +35,7 @@ import gradezzy.testcase.QuestionWorkspace;
 import gradezzy.testcase.TestCaseException;
 import gradezzy.testcase.TesterFile;
 import gradezzy.testcase.TesterInstaller;
+import gradezzy.testcase.TesterMarks;
 import gradezzy.testcase.UploadedTesterSource;
 import gradezzy.util.FileUtils;
 
@@ -160,7 +160,8 @@ public class CompileStage implements GradingStage {
                     Path copy = prepareCopy(submission, assessment,
                             question);
                     QuestionResult result = compileQuestion(submission,
-                            question, tester, copy, context.getTesters());
+                            question, tester, copy, context.getTesters(),
+                            context.getConfig());
                     submission.addQuestionResult(result);
                     if (result.isCompiled()) {
                         saveSnapshot(context.getConfig(), submission,
@@ -284,11 +285,7 @@ public class CompileStage implements GradingStage {
      */
     private String compileWithStarter(AppConfig config, Question question,
             TesterFile tester) throws GradingException {
-        Path starterRoot = starterDirectory;
-        if (starterRoot == null) {
-            starterRoot = Path.of(config.getString(ConfigKeys.STARTER_DIR));
-        }
-        Path starterFolder = starterRoot.resolve(question.getFolderName());
+        Path starterFolder = findStarterFolder(config, question);
         if (!Files.isRegularFile(
                 starterFolder.resolve(question.getFileName()))) {
             return NO_TESTER_ERROR;
@@ -355,12 +352,14 @@ public class CompileStage implements GradingStage {
      * @param tester the tester of the question
      * @param folder the copy of the question folder
      * @param testers every tester of the run
+     * @param config the application settings
      * @return the result, marked compiled or not
      * @throws GradingException if javac cannot be run or runs too long
      */
     private QuestionResult compileQuestion(Submission submission,
             Question question, TesterFile tester, Path folder,
-            List<TesterFile> testers) throws GradingException {
+            List<TesterFile> testers, AppConfig config)
+            throws GradingException {
         String testerSource = tester.getClassName() + JAVA_EXTENSION;
         ProcessResult compileResult = runCompiler(folder,
                 sourceFiles(question, testerSource));
@@ -395,24 +394,26 @@ public class CompileStage implements GradingStage {
                     submission.getUsername(), message,
                     COMPILE_ERROR_ACTION));
         } else {
-            flagHiddenTypes(submission, question, tester, folder);
+            flagHiddenTypes(submission, question, tester, folder, config);
         }
         return result;
     }
 
     /**
-     * Flags each member type of the student class whose name the tester
-     * also uses. The tester extends the student class, so a member type
-     * named ArrayList replaces java.util.ArrayList inside the tester and
-     * can make its checks always pass. Only a flag: the mark is kept.
+     * Flags each type of the student's whose name the tester also uses.
+     * The tester extends the student class and shares its folder, so a
+     * member type or a class named ArrayList replaces java.util.ArrayList
+     * inside the tester and can make its checks always pass. Only a flag:
+     * the mark is kept.
      *
      * @param submission the submission
      * @param question the question
      * @param tester the tester of the question
      * @param folder the question folder, holding the compiled classes
+     * @param config the application settings
      */
     private void flagHiddenTypes(Submission submission, Question question,
-            TesterFile tester, Path folder) {
+            TesterFile tester, Path folder, AppConfig config) {
         String fileName = question.getFileName();
         String studentClass = fileName.substring(0,
                 fileName.length() - JAVA_EXTENSION.length());
@@ -420,9 +421,9 @@ public class CompileStage implements GradingStage {
         String testerSource = "";
         List<Path> classFiles = new ArrayList<>();
         try {
-            // ISO-8859-1 reads any bytes; the names searched are ASCII
-            testerSource = Files.readString(tester.getSourceFile(),
-                    StandardCharsets.ISO_8859_1);
+            // Without comments and quoted text, so the word Test in a
+            // printed header does not match a student's class named Test
+            testerSource = TesterMarks.readCode(tester.getSourceFile());
             classFiles = FileUtils.listFiles(folder, CLASS_EXTENSION);
         } catch (IOException exception) {
             // The check could not be done; grading goes on as before
@@ -431,24 +432,84 @@ public class CompileStage implements GradingStage {
 
         for (Path classFile : classFiles) {
             String name = classFile.getFileName().toString();
+            String typeName = name.substring(0,
+                    name.length() - CLASS_EXTENSION.length());
             if (name.startsWith(prefix)) {
-                String memberName = name.substring(prefix.length(),
-                        name.length() - CLASS_EXTENSION.length());
-                if (isMemberTypeName(memberName)
-                        && usesName(testerSource, memberName)) {
-                    submission.addAnomaly(new Anomaly(ID_PREFIX
-                            + UUID.randomUUID(),
-                            AnomalyType.HARD_CODED_ANSWER, Severity.WARNING,
-                            submission.getUsername(), fileName
-                            + " declares its own type " + memberName
-                            + ", a name " + tester.getClassName()
-                            + " also uses. The tester extends "
-                            + studentClass + ", so it may have used the "
-                            + "student's " + memberName + " instead. The "
-                            + "mark was not changed.", HIDDEN_TYPE_ACTION));
+                typeName = typeName.substring(prefix.length());
+                if (isMemberTypeName(typeName)
+                        && usesName(testerSource, typeName)) {
+                    flagHiddenType(submission, fileName, typeName, tester,
+                            "extends " + studentClass);
                 }
+            } else if (isExtraType(config, question, tester, studentClass,
+                    typeName) && usesName(testerSource, typeName)) {
+                flagHiddenType(submission, question.getFolderName()
+                        + " folder", typeName, tester, "shares its folder");
             }
         }
+    }
+
+    /**
+     * Records that a type of the student's may have replaced one in the
+     * tester.
+     *
+     * @param submission the submission
+     * @param place what declares the type
+     * @param typeName the name of the type
+     * @param tester the tester of the question
+     * @param link how the tester comes to see the type
+     */
+    private void flagHiddenType(Submission submission, String place,
+            String typeName, TesterFile tester, String link) {
+        submission.addAnomaly(new Anomaly(ID_PREFIX + UUID.randomUUID(),
+                AnomalyType.HARD_CODED_ANSWER, Severity.WARNING,
+                submission.getUsername(), "The " + place
+                + " declares its own type " + typeName + ", a name "
+                + tester.getClassName() + " also uses. The tester " + link
+                + ", so it may have used the student's " + typeName
+                + " instead. The mark was not changed.", HIDDEN_TYPE_ACTION));
+    }
+
+    /**
+     * Says whether a top-level class in a question folder came from the
+     * student and is not part of the question: not the student class,
+     * not the tester, not a provided class and not in the starter folder,
+     * so ShapeComparator, which the student must write, is left alone.
+     *
+     * @param config the application settings
+     * @param question the question
+     * @param tester the tester of the question
+     * @param studentClass the name of the student class
+     * @param typeName the name of the class
+     * @return true for a class the question did not ask for
+     */
+    private boolean isExtraType(AppConfig config, Question question,
+            TesterFile tester, String studentClass, String typeName) {
+        Path starterFolder = findStarterFolder(config, question);
+        String classFile = typeName + CLASS_EXTENSION;
+        return !typeName.contains(MEMBER_SEPARATOR)
+                && !typeName.equals(studentClass)
+                && !typeName.equals(tester.getClassName())
+                && !config.getList(ConfigKeys.PROVIDED_CLASS_FILES)
+                        .contains(classFile)
+                && !Files.exists(starterFolder.resolve(classFile))
+                && !Files.exists(starterFolder.resolve(
+                        typeName + JAVA_EXTENSION));
+    }
+
+    /**
+     * Returns the starter folder of a question.
+     *
+     * @param config the application settings
+     * @param question the question
+     * @return the folder, which may not exist
+     */
+    private Path findStarterFolder(AppConfig config, Question question) {
+        Path starterRoot = starterDirectory;
+        if (starterRoot == null) {
+            starterRoot = Path.of(config.getString(ConfigKeys.STARTER_DIR));
+        }
+        return starterRoot.resolve(question.getFolderName());
     }
 
     /**

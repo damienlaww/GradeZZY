@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -71,9 +72,32 @@ public final class TesterMarks {
     public static double readMaxScore(Path testerSource) throws IOException {
         List<String> problems = new ArrayList<>();
         double total = countMarks(readCode(testerSource),
-                fileNameOf(testerSource), problems);
+                fileNameOf(testerSource), problems, new ArrayList<>());
         if (!problems.isEmpty()) {
             return UNKNOWN;
+        }
+        return total;
+    }
+
+    /**
+     * Adds up the largest marks of a tester: the most that a number of
+     * passed cases can be worth, whichever cases they were.
+     *
+     * @param testerSource the tester's .java file
+     * @param passes the number of passed cases
+     * @return the sum of the largest marks, one per passed case
+     * @throws IOException if the file cannot be read
+     */
+    public static double readBestMarks(Path testerSource, int passes)
+            throws IOException {
+        List<Double> marks = new ArrayList<>();
+        countMarks(readCode(testerSource), fileNameOf(testerSource),
+                new ArrayList<>(), marks);
+        Collections.sort(marks, Collections.reverseOrder());
+
+        double total = 0.0;
+        for (int index = 0; index < passes && index < marks.size(); index++) {
+            total += marks.get(index);
         }
         return total;
     }
@@ -92,7 +116,7 @@ public final class TesterMarks {
         List<String> problems = new ArrayList<>();
         String fileName = fileNameOf(testerSource);
         double total = countMarks(readCode(testerSource), fileName,
-                problems);
+                problems, new ArrayList<>());
         if (problems.isEmpty() && total <= UNKNOWN) {
             problems.add(fileName + " has no \"score += <number>;\" line, "
                     + "so its question has no maximum mark. Add one per "
@@ -101,10 +125,16 @@ public final class TesterMarks {
         return problems;
     }
 
-    // Reads the tester with its comments and quoted text blanked out.
-    // ISO-8859-1 reads every byte, so a tester saved as Windows-1252
-    // still opens; the code that changes the score is plain ASCII.
-    private static String readCode(Path testerSource) throws IOException {
+    /**
+     * Reads the tester with its comments and quoted text blanked out.
+     * ISO-8859-1 reads every byte, so a tester saved as Windows-1252 still
+     * opens; the code that changes the score is plain ASCII.
+     *
+     * @param testerSource the tester's .java file
+     * @return the code of the tester
+     * @throws IOException if the file cannot be read
+     */
+    public static String readCode(Path testerSource) throws IOException {
         String source = new String(Files.readAllBytes(testerSource),
                 StandardCharsets.ISO_8859_1);
         return removeCommentsAndText(source);
@@ -188,9 +218,9 @@ public final class TesterMarks {
 
     // Adds up the score += <number> statements and lists every other
     // change to the score. Braces are followed so that a change inside a
-    // loop is caught.
+    // loop is caught. Each mark found is also added to marks.
     private static double countMarks(String code, String fileName,
-            List<String> problems) {
+            List<String> problems, List<Double> marks) {
         double total = 0.0;
         int lineNumber = 1;
         int parenDepth = 0;
@@ -208,8 +238,12 @@ public final class TesterMarks {
                     loopStarting = true;
                 } else if (word.equals(SCORE)) {
                     boolean inLoop = loopDepth > 0 || loopStarting;
-                    total += readChange(code, index, wordEnd, inLoop,
+                    double mark = readChange(code, index, wordEnd, inLoop,
                             fileName + " line " + lineNumber, problems);
+                    total += mark;
+                    if (mark > 0) {
+                        marks.add(mark);
+                    }
                 }
                 index = wordEnd;
             } else {

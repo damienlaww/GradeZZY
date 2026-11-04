@@ -10,6 +10,7 @@ package gradezzy.grading;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,6 +28,7 @@ import gradezzy.model.TestCaseResult;
 import gradezzy.testcase.FolderSnapshot;
 import gradezzy.testcase.QuestionWorkspace;
 import gradezzy.testcase.TesterFile;
+import gradezzy.testcase.TesterMarks;
 import gradezzy.util.TextUtils;
 
 /**
@@ -61,6 +63,9 @@ public class ExecuteStage implements GradingStage {
 
     // Separates the file names in a message
     private static final String NAME_SEPARATOR = ", ";
+
+    // Stands for "no test case hung"
+    private static final int NO_CASE = 0;
 
     // Allowed rounding gap when a printed total is compared with the cap
     private static final double SCORE_TOLERANCE = 0.000001;
@@ -127,17 +132,32 @@ public class ExecuteStage implements GradingStage {
             return;
         }
 
-        restoreFiles(submission, question, tester);
+        FolderSnapshot snapshot = restoreFiles(submission, question, tester);
         // The copy the compile stage made for this question only
         Path folder = QuestionWorkspace.find(submission, question);
         if (folder == null) {
             return;
         }
 
-        ProcessResult run = runTester(folder, tester.getClassName());
+        // As the brief says: a case that hangs is removed and the tester
+        // is run again, so the cases after it are still marked. Each pass
+        // skips one more case, so this ends after the last case.
+        List<Integer> skippedCases = new ArrayList<>();
+        ProcessResult run = runTester(folder, tester.getClassName(),
+                skippedCases);
+        ProcessResult firstRun = run;
         QuestionResult parsed = scoreParser.parse(question, run);
+        int stoppedCase = findStoppedCase(run, parsed, skippedCases);
+        while (stoppedCase != NO_CASE) {
+            skippedCases.add(stoppedCase);
+            putBackFiles(snapshot, question);
+            run = runTester(folder, tester.getClassName(), skippedCases);
+            parsed = scoreParser.parse(question, run);
+            stoppedCase = findStoppedCase(run, parsed, skippedCases);
+        }
+
         result.setScore(parsed.getScore());
-        result.setTimedOut(parsed.isTimedOut());
+        result.setTimedOut(firstRun.isTimedOut());
         result.setOutput(parsed.getOutput());
         for (TestCaseResult testCase : parsed.getTestCaseResults()) {
             result.addTestCaseResult(testCase);
@@ -149,8 +169,8 @@ public class ExecuteStage implements GradingStage {
         boolean finished = !run.isTimedOut()
                 && run.getExitCode() == SUCCESS_EXIT_CODE;
         if (finished && caseCount > 0) {
-            double earned = passCount(parsed) * question.getMaxScore()
-                    / caseCount;
+            double earned = marksEarned(tester, question, passCount(parsed),
+                    caseCount);
             if (parsed.getScore() > earned + SCORE_TOLERANCE) {
                 result.setScore(earned);
                 addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
@@ -162,28 +182,117 @@ public class ExecuteStage implements GradingStage {
             }
         }
 
-        if (run.isTimedOut()) {
+        String outcome = passCount(parsed) + " case(s) passed and their "
+                + "marks are kept." + describeSkipped(skippedCases);
+        if (firstRun.isTimedOut()) {
             long limitSeconds = context.getConfig().getLong(
                     ConfigKeys.RUN_TIMEOUT_SECONDS);
             addAnomaly(submission, AnomalyType.TIMEOUT, "The "
                     + question.getId() + " tester was stopped at the "
-                    + limitSeconds + " s limit. " + passCount(parsed)
-                    + " case(s) passed before that and their marks are "
-                    + "kept.", "Check the loops in " + question.getFileName()
+                    + limitSeconds + " s limit. " + outcome,
+                    "Check the loops in " + question.getFileName()
                     + ", then retry " + question.getId() + ".");
-        } else if (run.getExitCode() == TesterRunner.EARLY_EXIT_CODE) {
+        } else if (firstRun.getExitCode() == TesterRunner.EARLY_EXIT_CODE) {
             addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
                     + question.getId() + " tester did not reach its end: "
                     + "the program was ended early, for example by "
                     + "System.exit in " + question.getFileName() + ". "
-                    + passCount(parsed) + " case(s) passed and were scored.",
-                    RUNTIME_ERROR_ACTION);
-        } else if (run.getExitCode() != SUCCESS_EXIT_CODE) {
+                    + outcome, RUNTIME_ERROR_ACTION);
+        } else if (firstRun.getExitCode() != SUCCESS_EXIT_CODE) {
             addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
                     + question.getId() + " tester ended with an error (exit "
-                    + "code " + run.getExitCode() + "). " + passCount(parsed)
-                    + " case(s) passed and were scored.",
+                    + "code " + firstRun.getExitCode() + "). " + outcome,
                     RUNTIME_ERROR_ACTION);
+        }
+    }
+
+    /**
+     * Finds the test case that hung in a timed-out run: the last one
+     * started, if it has no result and was not already skipped. A skip
+     * that did not help, as with a tester whose header is outside its try
+     * block, is not tried twice. A run ended by a crash or System.exit is
+     * left as it is: the brief removes only cases that hang.
+     *
+     * @param run the finished run
+     * @param parsed the parsed result of the run
+     * @param skippedCases the cases already skipped
+     * @return the number of the case, or NO_CASE
+     */
+    private int findStoppedCase(ProcessResult run, QuestionResult parsed,
+            List<Integer> skippedCases) {
+        List<TestCaseResult> cases = parsed.getTestCaseResults();
+        if (!run.isTimedOut() || cases.isEmpty()) {
+            return NO_CASE;
+        }
+
+        TestCaseResult lastCase = cases.get(cases.size() - 1);
+        if (!TesterOutputScoreParser.NOT_FINISHED.equals(lastCase.getDetail())
+                || skippedCases.contains(lastCase.getTestNumber())) {
+            return NO_CASE;
+        }
+        return lastCase.getTestNumber();
+    }
+
+    /**
+     * Says which cases were skipped, for the end of a message.
+     *
+     * @param skippedCases the cases skipped
+     * @return a sentence with a space in front, or empty if none were
+     */
+    private String describeSkipped(List<Integer> skippedCases) {
+        if (skippedCases.isEmpty()) {
+            return "";
+        }
+
+        List<String> numbers = new ArrayList<>();
+        for (Integer skippedCase : skippedCases) {
+            numbers.add(String.valueOf(skippedCase));
+        }
+        return " Case(s) " + TextUtils.join(NAME_SEPARATOR, numbers)
+                + " hung, so they got no marks and the tester was run "
+                + "again for the cases after them.";
+    }
+
+    /**
+     * Works out the most a number of passed cases can earn. The tester's
+     * own marks are used, so a case worth 2 marks counts as 2.
+     *
+     * @param tester the tester of the question
+     * @param question the question
+     * @param passes the number of passed cases
+     * @param caseCount the number of cases
+     * @return the most those cases can earn
+     */
+    private double marksEarned(TesterFile tester, Question question,
+            int passes, int caseCount) {
+        try {
+            return TesterMarks.readBestMarks(tester.getSourceFile(), passes);
+        } catch (IOException exception) {
+            // The tester cannot be read now, so every case counts the same
+            return passes * question.getMaxScore() / caseCount;
+        }
+    }
+
+    /**
+     * Puts the compiled files back before the tester is run again, so
+     * what a stopped run changed cannot affect the next run.
+     *
+     * @param snapshot the snapshot of the folder, or null if there is none
+     * @param question the question
+     * @throws GradingException if the files cannot be put back
+     */
+    private void putBackFiles(FolderSnapshot snapshot, Question question)
+            throws GradingException {
+        if (snapshot == null) {
+            return;
+        }
+
+        try {
+            snapshot.restore();
+        } catch (IOException exception) {
+            throw new GradingException("The files of " + question.getId()
+                    + " could not be put back: " + exception.getMessage(),
+                    exception);
         }
     }
 
@@ -196,14 +305,15 @@ public class ExecuteStage implements GradingStage {
      * @param submission the submission
      * @param question the question
      * @param tester the tester of the question
+     * @return the snapshot, or null if there is none
      * @throws GradingException if the files cannot be put back
      */
-    private void restoreFiles(Submission submission, Question question,
-            TesterFile tester) throws GradingException {
+    private FolderSnapshot restoreFiles(Submission submission,
+            Question question, TesterFile tester) throws GradingException {
         FolderSnapshot snapshot = tester.takeSnapshot(
                 submission.getUsername());
         if (snapshot == null) {
-            return;
+            return null;
         }
 
         try {
@@ -220,6 +330,7 @@ public class ExecuteStage implements GradingStage {
                         + "them. The originals were put back.",
                         FILES_CHANGED_ACTION));
             }
+            return snapshot;
         } catch (IOException exception) {
             throw new GradingException("The files of " + question.getId()
                     + " could not be put back: " + exception.getMessage(),
@@ -233,13 +344,15 @@ public class ExecuteStage implements GradingStage {
      *
      * @param folder the question folder
      * @param testerClassName the tester class
+     * @param skippedCases the test cases to skip, counted from 1
      * @return the tester result
      * @throws GradingException if java cannot be run
      */
-    private ProcessResult runTester(Path folder, String testerClassName)
-            throws GradingException {
+    private ProcessResult runTester(Path folder, String testerClassName,
+            List<Integer> skippedCases) throws GradingException {
         try {
-            return testerRunner.runTester(folder, testerClassName);
+            return testerRunner.runTester(folder, testerClassName,
+                    skippedCases);
         } catch (ProcessExecutionException exception) {
             throw new GradingException("The tester could not be run: "
                     + exception.getMessage(), exception);

@@ -76,7 +76,9 @@ public class TypedTestCaseSource implements TestCaseSource {
     }
 
     /**
-     * Generates one tester per question from the typed cases.
+     * Generates one tester per question from the typed cases. Each
+     * question's maximum becomes what its typed cases can earn, so a
+     * question with no typed case is worth nothing.
      *
      * @param assessment the assessment
      * @return one tester file per question that has tests
@@ -96,13 +98,20 @@ public class TypedTestCaseSource implements TestCaseSource {
         }
 
         List<TesterFile> testers = new ArrayList<>();
-        for (Question question : assessment.getQuestions()) {
+        List<Question> questions = assessment.getQuestions();
+        for (int index = 0; index < questions.size(); index++) {
+            Question question = questions.get(index);
             List<TestCase> casesOfQuestion = new ArrayList<>();
             for (TestCase testCase : testCases) {
                 if (question.getId().equals(testCase.getQuestionId())) {
                     casesOfQuestion.add(testCase);
                 }
             }
+
+            questions.set(index, new Question(question.getId(),
+                    question.getFolderName(), question.getFileName(),
+                    casesOfQuestion.size()
+                    * TesterGenerator.MARKS_PER_CASE));
 
             if (!casesOfQuestion.isEmpty()) {
                 Path file = testerGenerator.writeTester(question,

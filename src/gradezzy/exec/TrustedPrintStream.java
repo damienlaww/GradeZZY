@@ -10,6 +10,7 @@
 package gradezzy.exec;
 
 import java.io.PrintStream;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -46,6 +47,15 @@ class TrustedPrintStream extends PrintStream {
     // The most bytes of unmarked output passed on
     private final long studentLimit;
 
+    // Start of the line the tester prints before each test case
+    private final String headerMarker;
+
+    // The test cases to skip, counted from 1
+    private final List<Integer> skippedCases;
+
+    // How many test cases the tester has started so far
+    private int casesStarted = 0;
+
     // Bytes of unmarked output passed on so far
     private long studentBytes = 0;
 
@@ -60,14 +70,19 @@ class TrustedPrintStream extends PrintStream {
      * @param testerThread the thread that runs the tester
      * @param tester the tester class
      * @param studentLimit the most bytes of unmarked output to pass on
+     * @param headerMarker the start of a test case's header line
+     * @param skippedCases the test cases to skip, counted from 1
      */
     TrustedPrintStream(PrintStream out, String token,
-            Thread testerThread, Class<?> tester, long studentLimit) {
+            Thread testerThread, Class<?> tester, long studentLimit,
+            String headerMarker, List<Integer> skippedCases) {
         super(out, true);
         this.token = token;
         this.testerThread = testerThread;
         this.tester = tester;
         this.studentLimit = studentLimit;
+        this.headerMarker = headerMarker;
+        this.skippedCases = skippedCases;
     }
 
     /**
@@ -110,7 +125,7 @@ class TrustedPrintStream extends PrintStream {
     @Override
     public void println(String line) {
         if (isTrustedCaller() && isOneLine(line)) {
-            printMarked(line);
+            printTesterLine(line);
         } else {
             super.println(line);
         }
@@ -168,11 +183,30 @@ class TrustedPrintStream extends PrintStream {
         // and a fake verdict, so only a single whole line is marked
         if (trustedCaller && parts.length == LINE_AND_END
                 && parts[1].isEmpty()) {
-            printMarked(parts[0]);
+            printTesterLine(parts[0]);
         } else {
             super.print(text);
         }
         return this;
+    }
+
+    /**
+     * Prints a line of the tester. Each tester prints a case's header
+     * inside the case's try block, just before it calls the student's
+     * code, so throwing here skips that call: the tester's own catch
+     * fails the case and it goes on to the next one.
+     *
+     * @param line the line, without a line break
+     */
+    private void printTesterLine(String line) {
+        printMarked(line);
+        if (line.startsWith(headerMarker)) {
+            casesStarted++;
+            if (skippedCases.contains(casesStarted)) {
+                throw new IllegalStateException("GradeZZY skipped this test "
+                        + "case: it hung on an earlier run.");
+            }
+        }
     }
 
     /**

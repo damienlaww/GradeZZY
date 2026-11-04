@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
@@ -31,8 +32,10 @@ import gradezzy.model.Question;
  */
 public class TesterGenerator {
 
-    // The marks one passed test case earns, like the provided testers
-    private static final int MARKS_PER_CASE = 1;
+    /**
+     * The marks one passed test case earns, like the provided testers.
+     */
+    public static final int MARKS_PER_CASE = 1;
 
     // The line printed between test cases, like the provided testers
     private static final String SEPARATOR =
@@ -59,7 +62,8 @@ public class TesterGenerator {
      *
      * <p>Each case compares the expected expression with the result using
      * {@code Objects.deepEquals}, so the return type need not be known and
-     * arrays are compared by content.
+     * arrays are compared by content. Two numbers are compared by value,
+     * so an expected {@code -1} matches a method that returns a double.
      *
      * @param question the question
      * @param testCases the test cases
@@ -87,12 +91,24 @@ public class TesterGenerator {
 
         addLine(source, "        System.out.println(score);");
         addLine(source, "    }");
+        addLine(source, "");
+        addLine(source, "    private static boolean sameValue(Object expected,"
+                + " Object result) {");
+        addLine(source, "        if (expected instanceof Number"
+                + " && result instanceof Number) {");
+        addLine(source, "            return ((Number) expected).doubleValue()"
+                + " == ((Number) result).doubleValue();");
+        addLine(source, "        }");
+        addLine(source, "        return Objects.deepEquals(expected, result);");
+        addLine(source, "    }");
         addLine(source, "}");
         return source.toString();
     }
 
     /**
-     * Writes the generated tester to a file.
+     * Writes the generated tester to a file, with the data files from the
+     * tester folder in the settings next to it, because the tester
+     * installer copies data files from a tester's own folder.
      *
      * @param question the question
      * @param testCases the test cases
@@ -109,6 +125,7 @@ public class TesterGenerator {
         try {
             Files.createDirectories(outputDirectory);
             Files.write(file, source.getBytes(StandardCharsets.UTF_8));
+            copyDataFiles(outputDirectory);
         } catch (IOException exception) {
             throw new TestCaseException("Could not write the tester "
                     + file + ".", exception);
@@ -126,6 +143,20 @@ public class TesterGenerator {
     public String getClassName(Question question) {
         return question.getId()
                 + config.getString(ConfigKeys.TESTER_CLASS_SUFFIX);
+    }
+
+    // Copies each data file the tester folder in the settings has
+    private void copyDataFiles(Path outputDirectory) throws IOException {
+        Path testersDirectory = Path.of(
+                config.getString(ConfigKeys.TESTERS_DIR));
+        for (String dataFileName : config.getList(
+                ConfigKeys.TESTER_DATA_FILES)) {
+            Path dataFile = testersDirectory.resolve(dataFileName);
+            if (Files.isRegularFile(dataFile)) {
+                Files.copy(dataFile, outputDirectory.resolve(dataFileName),
+                        StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
     }
 
     // Adds the block that runs one test case
@@ -146,8 +177,7 @@ public class TesterGenerator {
                 + " + expected + \"|\");");
         addLine(source, "                System.out.println(\"Actual    :|\""
                 + " + result + \"|\");");
-        addLine(source, "                if (Objects.deepEquals(expected, "
-                + "result)) {");
+        addLine(source, "                if (sameValue(expected, result)) {");
         addLine(source, "                    score += " + MARKS_PER_CASE + ";");
         addLine(source, "                    System.out.println(\""
                 + passMarker + "\");");

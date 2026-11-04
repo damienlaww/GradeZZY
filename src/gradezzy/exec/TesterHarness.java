@@ -14,6 +14,8 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Starts a tester inside the student's java process and marks the lines
@@ -59,6 +61,9 @@ public final class TesterHarness {
     // Milliseconds in a second
     private static final long MILLIS_PER_SECOND = 1000;
 
+    // Where the numbers of the test cases to skip start in the arguments
+    private static final int FIRST_SKIPPED_ARGUMENT = 4;
+
     // Utility class: never created
     private TesterHarness() {
     }
@@ -67,7 +72,9 @@ public final class TesterHarness {
      * Reads the token, then runs the tester named in the first argument.
      *
      * @param args the tester class name, the most bytes of student output
-     *             to pass on, then the time limit in seconds
+     *             to pass on, the time limit in seconds, the start of a
+     *             test case's header line, then the number of each test
+     *             case to skip
      * @throws IOException if the token cannot be read
      * @throws ReflectiveOperationException if the tester cannot be found
      */
@@ -90,8 +97,14 @@ public final class TesterHarness {
         // code runs later, after the marking stream is in place
         Class<?> tester = Class.forName(args[0], false,
                 TesterHarness.class.getClassLoader());
+        List<Integer> skippedCases = new ArrayList<>();
+        for (int index = FIRST_SKIPPED_ARGUMENT; index < args.length;
+                index++) {
+            skippedCases.add(Integer.valueOf(args[index]));
+        }
         TrustedPrintStream trusted = new TrustedPrintStream(System.out,
-                token, Thread.currentThread(), tester, studentLimit);
+                token, Thread.currentThread(), tester, studentLimit,
+                args[FIRST_SKIPPED_ARGUMENT - 1], skippedCases);
         System.setOut(trusted);
 
         Method testerMain = tester.getMethod("main", String[].class);

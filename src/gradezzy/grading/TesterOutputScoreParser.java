@@ -32,8 +32,10 @@ public class TesterOutputScoreParser implements ScoreParser {
     // Exit code of a tester that finished normally
     private static final int SUCCESS_EXIT_CODE = 0;
 
-    // Detail of a test case that was still running when the tester stopped
-    private static final String NOT_FINISHED = "Not finished: the tester "
+    /**
+     * Detail of a test case that was still running when the tester stopped.
+     */
+    public static final String NOT_FINISHED = "Not finished: the tester "
             + "stopped before this case printed a result.";
 
     // The application settings
