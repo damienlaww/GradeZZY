@@ -33,6 +33,7 @@ import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
+import gradezzy.service.ClassFileMatch;
 import gradezzy.model.TestCaseResult;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.service.AssessmentFactory;
@@ -528,6 +529,16 @@ public final class DemoBackend implements DashboardBackend {
     public List<String> checkTesters(Path testersDirectory,
             Path starterDirectory) {
         return new ArrayList<>();
+    }
+
+    /**
+     * Says that every class file fits, because the demo's synthetic
+     * files all belong to the same lab test.
+     */
+    @Override
+    public ClassFileMatch checkClassFileMatch(InputKind kind, Path chosen,
+            List<ImportItem> submissions) {
+        return ClassFileMatch.fits();
     }
 
     /**

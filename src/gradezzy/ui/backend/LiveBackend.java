@@ -51,6 +51,8 @@ import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.report.ExportException;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
+import gradezzy.service.ClassFileMatch;
+import gradezzy.service.ClassFileMatcher;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.stats.StatisticsFilter;
 import gradezzy.stats.StatisticsSummary;
@@ -357,6 +359,32 @@ public class LiveBackend implements DashboardBackend {
             problems.add(problem.replace(fullPath, folderName));
         }
         return problems;
+    }
+
+    /**
+     * Calls ClassFileMatcher with the uploads' paths and usernames, for
+     * the assessment in use.
+     */
+    @Override
+    public ClassFileMatch checkClassFileMatch(InputKind kind, Path chosen,
+            List<ImportItem> submissions) {
+        List<Path> uploads = new ArrayList<>();
+        List<String> usernames = new ArrayList<>();
+        for (ImportItem item : submissions) {
+            uploads.add(item.getPath());
+            usernames.addAll(item.getStudents());
+        }
+
+        ClassFileMatcher matcher = new ClassFileMatcher(config,
+                getAssessment());
+        if (kind == InputKind.ROSTER) {
+            return matcher.checkScoreSheet(chosen, usernames, uploads);
+        } else if (kind == InputKind.TESTERS) {
+            return matcher.checkTesters(chosen, uploads);
+        } else if (kind == InputKind.STARTER) {
+            return matcher.checkStarter(chosen, uploads);
+        }
+        return ClassFileMatch.fits();
     }
 
     // Says whether a folder holds at least one tester file.

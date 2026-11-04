@@ -161,7 +161,7 @@ The base package is `gradezzy`. Each package has one job.
 | `report` | One class per export format. | `Exporter` (interface), `CsvScoreSheetExporter`, `JsonExporter`, `StudentReportExporter`, `AnomalyReportExporter`, `AuditLogExporter`, `JsonWriter`, `JsonFields` |
 | `stats` | Statistics for the dashboard. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
-| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AssessmentLibrary`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ServiceRegistry` |
+| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AssessmentLibrary`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ClassFileMatcher`, `ServiceRegistry` |
 | `ui` | JavaFX only: starting the window and small shared helpers. | `MainApp`, `ThemeManager`, `GradingTask`, `DragDropHandler` |
 | `ui.flow` | The window: tabs Home (a card per section), Marking (Set up, Grade, Review, Export), Statistics, Runs and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `HomeScreen`, `AssessmentsSheet`, `AssessmentEditor`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts`, the review table cells `Review...Cell`, and comparators such as `StudentNameComparator` |
 | `ui.backend` | The one interface the screens call, and its live version that calls the services. | `DashboardBackend`, `LiveBackend`, `Capability`, small view classes such as `RepairItem` and `RunRecord` |
@@ -1205,6 +1205,12 @@ implemented. `[x]` means it works now.
   Resume skip them too
 - [x] Flag untouched starter files, empty answers and hard-coded answers
   (`detection` package)
+- [x] Set up checks that the score sheet, tester folder and starter
+  folder belong with the uploads, and offers a better one nearby with
+  "Use this file instead" (`service.ClassFileMatcher`,
+  `ui.flow.ClassFileMatchCheck`). A score sheet fits when at least half
+  the uploads are on it; testers and starter files fit when they use the
+  methods the students' files declare. It only warns: grading can start
 - [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
   `TesterGenerator`, `ui.flow.TestCasesSheet`)
 - [x] Progress bar and estimated time of completion

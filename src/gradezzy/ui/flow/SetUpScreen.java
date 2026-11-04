@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javafx.geometry.HPos;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -33,6 +34,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextFlow;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 
@@ -41,6 +44,7 @@ import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.SavedAssessment;
 import gradezzy.model.Question;
+import gradezzy.service.ClassFileMatch;
 import gradezzy.ui.DragDropHandler;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.CapabilityStatus;
@@ -187,6 +191,18 @@ public class SetUpScreen extends FlowScreen {
 
     // The problems found in that tester folder
     private final List<String> testerProblems = new ArrayList<>();
+
+    // The check of the class files against the uploads still running,
+    // or null
+    private ClassFileMatchCheck matchCheck = null;
+
+    // The uploads and class files the matches below were found with, or
+    // null when they must be checked again
+    private String matchedFiles = null;
+
+    // Whether the score sheet, tester and starter folder belong with the
+    // uploads, in that order
+    private final List<ClassFileMatch> matches = new ArrayList<>();
 
     /**
      * Creates the Set up step.
@@ -655,6 +671,12 @@ public class SetUpScreen extends FlowScreen {
         if (path == null) {
             return;
         }
+        useChosenClassFile(kind, path);
+    }
+
+    // Uses a score sheet, tester or starter folder the instructor chose,
+    // or one a suggestion offered instead of the chosen one.
+    private void useChosenClassFile(InputKind kind, Path path) {
         if (kind == InputKind.TESTERS) {
             getState().getBatch().setUsingTypedTestCases(false);
         }
@@ -932,6 +954,7 @@ public class SetUpScreen extends FlowScreen {
     // Redraws the score sheet, tester and starter rows.
     private void refreshClassFiles() {
         checkTestersIfChanged();
+        checkMatchesIfChanged();
         HBox[] rows = {
             createClassFileRow(InputKind.ROSTER, "Score sheet", null),
             createTesterRow(),
@@ -1142,6 +1165,143 @@ public class SetUpScreen extends FlowScreen {
         testerProblems.addAll(problems);
     }
 
+    // Starts checking the class files against the uploads when either
+    // changed. Until it ends, the rows show no match problem.
+    private void checkMatchesIfChanged() {
+        List<ImportItem> uploads = findUsableSubmissions();
+        Path[] classFiles = {findChosenPath(InputKind.ROSTER),
+            findUsableTesters(), findChosenPath(InputKind.STARTER)};
+        String files = describeMatchFiles(uploads, classFiles);
+        if (files.equals(matchedFiles)) {
+            return;
+        }
+        if (matchCheck != null && files.equals(matchCheck.getFiles())) {
+            return;
+        }
+        showMatches(null, new ArrayList<>());
+        if (uploads.isEmpty()) {
+            matchedFiles = files;
+            return;
+        }
+
+        ClassFileMatchCheck check = new ClassFileMatchCheck(getBackend(),
+                uploads, classFiles, files);
+        if (getBackend().isDemo()) {
+            showMatches(files, check.checkAll());
+            return;
+        }
+        check.setOnSucceeded(event -> matchCheckDone(check));
+        check.setOnFailed(event -> matchCheckFailed(check));
+        matchCheck = check;
+        Thread worker = new Thread(check, "gradezzy-match");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Shows what a finished match check found, unless a newer one
+    // started.
+    private void matchCheckDone(ClassFileMatchCheck check) {
+        if (check != matchCheck) {
+            return;
+        }
+        matchCheck = null;
+        showMatches(check.getFiles(), check.getValue());
+        refreshClassFiles();
+    }
+
+    // Shows no match problem when the check stopped before it finished:
+    // it only helps, so grading goes on as before.
+    private void matchCheckFailed(ClassFileMatchCheck check) {
+        if (check != matchCheck) {
+            return;
+        }
+        matchCheck = null;
+        showMatches(check.getFiles(), new ArrayList<>());
+        refreshClassFiles();
+    }
+
+    // Keeps the matches found with a set of uploads and class files.
+    private void showMatches(String files, List<ClassFileMatch> found) {
+        matchedFiles = files;
+        matches.clear();
+        matches.addAll(found);
+    }
+
+    // Returns what the match check found for a class file's row.
+    private ClassFileMatch findMatch(InputKind kind) {
+        int index = 2;
+        if (kind == InputKind.ROSTER) {
+            index = 0;
+        } else if (kind == InputKind.TESTERS) {
+            index = 1;
+        }
+        if (index >= matches.size()) {
+            return ClassFileMatch.fits();
+        }
+        return matches.get(index);
+    }
+
+    // Lists the chosen uploads that can be graded.
+    private List<ImportItem> findUsableSubmissions() {
+        ImportBatch batch = getState().getBatch();
+        List<ImportItem> usable = new ArrayList<>();
+        for (ImportItem item : batch.getItems(InputKind.SUBMISSION)) {
+            if (batch.getEffectiveState(item).isUsable()) {
+                usable.add(item);
+            }
+        }
+        return usable;
+    }
+
+    // Returns the chosen file of a kind, even one that cannot be used,
+    // or null when none is chosen.
+    private Path findChosenPath(InputKind kind) {
+        List<ImportItem> items = getState().getBatch().getItems(kind);
+        if (items.isEmpty()) {
+            return null;
+        }
+        return items.get(0).getPath();
+    }
+
+    // Names the uploads and class files a match check uses, so a change
+    // to any of them starts a new check.
+    private String describeMatchFiles(List<ImportItem> uploads,
+            Path[] classFiles) {
+        String files = "";
+        for (Path path : classFiles) {
+            files = files + path + "|";
+        }
+        for (ImportItem item : uploads) {
+            files = files + item.getPath() + "|";
+        }
+        return files;
+    }
+
+    // Builds the box that offers a better file than the chosen one, with
+    // a button that uses it instead.
+    private HBox createSuggestion(InputKind kind, ClassFileMatch match) {
+        Text name = new Text(match.getSuggestionName());
+        name.getStyleClass().addAll("match-suggestion-text",
+                "match-suggestion-name");
+        Text rest = new Text(match.getSuggestionDetail());
+        rest.getStyleClass().add("match-suggestion-text");
+        TextFlow words = new TextFlow(new Node[] {name, rest});
+        words.setMinWidth(0);
+        HBox.setHgrow(words, Priority.ALWAYS);
+
+        String label = "Use this folder instead";
+        if (kind == InputKind.ROSTER) {
+            label = "Use this file instead";
+        }
+        Path suggestion = match.getSuggestion();
+        Button use = Parts.small(label,
+                () -> useChosenClassFile(kind, suggestion));
+        HBox box = Parts.row(Parts.GAP, new Node[] {words, use});
+        box.getStyleClass().add("match-suggestion");
+        VBox.setMargin(box, new Insets(Parts.GAP_SMALL, 0, 0, 0));
+        return box;
+    }
+
     // Adds the tester check's progress or problems to the tester row's
     // detail, and returns the pill to show instead, or null.
     private Label addTesterNotes(VBox notes) {
@@ -1179,6 +1339,7 @@ public class SetUpScreen extends FlowScreen {
         List<ImportItem> items = getState().getBatch().getItems(kind);
         String detail;
         Label status;
+        ClassFileMatch match = ClassFileMatch.fits();
         if (items.isEmpty() && kind.isRequired()) {
             detail = "Not chosen yet.";
             status = Parts.pill("Missing", Tone.BAD);
@@ -1191,6 +1352,11 @@ public class SetUpScreen extends FlowScreen {
                     .getEffectiveState(item);
             detail = item.getName() + DOT + item.getMessage();
             status = Parts.pill(stateText(state), toneOf(state));
+            match = findMatch(kind);
+            if (match.hasProblem() && state.isUsable()) {
+                detail = item.getName() + DOT + match.getProblem();
+                status = Parts.pill("Check", Tone.WARN);
+            }
         }
         String iconPath = Parts.FOLDER;
         if (kind == InputKind.ROSTER) {
@@ -1201,6 +1367,9 @@ public class SetUpScreen extends FlowScreen {
             line.getChildren().add(extra);
         }
         VBox details = new VBox(line);
+        if (match.hasSuggestion()) {
+            details.getChildren().add(createSuggestion(kind, match));
+        }
         if (kind == InputKind.TESTERS) {
             Label warning = addTesterNotes(details);
             if (warning != null) {
