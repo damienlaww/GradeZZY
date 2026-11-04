@@ -13,6 +13,7 @@ package gradezzy.config;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
@@ -90,6 +91,20 @@ public class AppConfig {
      */
     public boolean hasKey(String key) {
         return properties.getProperty(key) != null;
+    }
+
+    /**
+     * Returns the name of every setting in the file, in alphabetical
+     * order, so all of them can be checked at start-up.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @return the setting names
+     */
+    public List<String> getKeys() {
+        List<String> keys = new ArrayList<>(properties.stringPropertyNames());
+        Collections.sort(keys);
+        return keys;
     }
 
     /**
