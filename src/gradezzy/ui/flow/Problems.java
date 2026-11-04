@@ -10,7 +10,11 @@
  */
 package gradezzy.ui.flow;
 
+import java.io.File;
+import java.nio.file.Path;
+
 import gradezzy.model.AnomalyType;
+import gradezzy.model.Submission;
 
 /**
  * Plain words for problem types.
@@ -66,6 +70,66 @@ public final class Problems {
             return "GradeZZY could not finish grading this student";
         }
         return "Something to check";
+    }
+
+    /**
+     * Returns a short title for a kind of problem that a fix has put
+     * right.
+     *
+     * @param type the kind
+     * @return the title
+     */
+    public static String fixedTitle(AnomalyType type) {
+        if (type == AnomalyType.MISSING_QUESTION_FOLDER) {
+            return "A question folder was moved or renamed";
+        }
+        return title(type);
+    }
+
+    /**
+     * Shortens the paths in a problem's message for the screen: a file in
+     * the working copy is shown from the student's folder, such as
+     * david.2024/Q3/Q3.java, and the uploaded file by its name only.
+     *
+     * @param message the message
+     * @param submission the student's submission
+     * @return the message with short paths
+     */
+    public static String shortenPaths(String message,
+            Submission submission) {
+        if (message == null) {
+            return "";
+        }
+        String shown = message;
+        Path workingCopy = submission.getWorkingCopyPath();
+        if (workingCopy != null) {
+            shown = shortenFrom(shown, workingCopy.toString());
+        }
+        Path upload = submission.getOriginalPath();
+        if (upload != null && upload.getFileName() != null) {
+            shown = shown.replace(upload.toString(),
+                    upload.getFileName().toString());
+        }
+        return shown;
+    }
+
+    // Removes a folder from the start of the path that follows it in the
+    // message, and writes the rest with forward slashes.
+    private static String shortenFrom(String message, String folder) {
+        int start = message.indexOf(folder + File.separator);
+        if (start < 0) {
+            return message;
+        }
+        String before = message.substring(0, start);
+        String rest = message.substring(start + folder.length()
+                + File.separator.length());
+        int end = rest.indexOf(' ');
+        if (end < 0) {
+            end = rest.length();
+        }
+        String path = rest.substring(0, end).replace(File.separatorChar,
+                '/');
+        return before + path + rest.substring(end);
     }
 
     /**

@@ -428,10 +428,10 @@ public class LiveBackend implements DashboardBackend {
         forgetSavedRuns();
 
         if (anomaly.getFixStatus() == FixStatus.APPROVED) {
-            return ActionResult.done("Approved the repair for "
+            return ActionResult.done("Approved the fix for "
                     + anomaly.getUsername() + ".");
         }
-        return ActionResult.failed("The repair for " + anomaly.getUsername()
+        return ActionResult.failed("The fix for " + anomaly.getUsername()
                 + " was not approved, because it is "
                 + describeFixStatus(anomaly.getFixStatus()) + ".");
     }
@@ -445,7 +445,7 @@ public class LiveBackend implements DashboardBackend {
         Anomaly anomaly = repair.getAnomaly();
         FixStatus before = anomaly.getFixStatus();
         if (before != FixStatus.APPLIED && before != FixStatus.APPROVED) {
-            return ActionResult.failed("The repair for "
+            return ActionResult.failed("The fix for "
                     + anomaly.getUsername() + " was not undone, because "
                     + "it is " + describeFixStatus(before) + ".");
         }
@@ -453,7 +453,7 @@ public class LiveBackend implements DashboardBackend {
         services.getAnomalyService().undoFix(anomaly);
         forgetSavedRuns();
         if (anomaly.getFixStatus() == FixStatus.UNDONE) {
-            return ActionResult.done("Rejected the repair for "
+            return ActionResult.done("Undid the fix for "
                     + anomaly.getUsername()
                     + ". The working copy was put back.");
         }
@@ -1011,7 +1011,7 @@ public class LiveBackend implements DashboardBackend {
         } else if (status == FixStatus.PENDING) {
             return "not applied yet";
         }
-        return "not a repair GradeZZY made";
+        return "not a fix GradeZZY made";
     }
 
     // Returns why the automatic fix for an anomaly failed, or null.
@@ -1032,15 +1032,15 @@ public class LiveBackend implements DashboardBackend {
     // FixManager keeps the record of each fix only in memory, and forgets
     // a student's fixes when the student is graded again.
     private String explainUndoFailure(Anomaly anomaly) {
-        String start = "The repair for " + anomaly.getUsername()
+        String start = "The fix for " + anomaly.getUsername()
                 + " could not be undone, so it still shows as applied. ";
         if (!anomaliesFoundNow.contains(anomaly.getId())) {
             return start + "Its run was graded before GradeZZY was last "
-                    + "opened, and GradeZZY can only undo a repair made "
+                    + "opened, and GradeZZY can only undo a fix made "
                     + "since then.";
         }
         return start + "Either the student was graded again since, or "
-                + "the files the repair changed were moved or deleted.";
+                + "the files the fix changed were moved or deleted.";
     }
 
     // Explains why HistoryService.backupNow wrote no backup.

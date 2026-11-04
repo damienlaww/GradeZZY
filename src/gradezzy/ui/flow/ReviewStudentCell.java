@@ -12,6 +12,7 @@ package gradezzy.ui.flow;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.VBox;
 
 import gradezzy.model.Submission;
@@ -39,8 +40,12 @@ public class ReviewStudentCell extends TableCell<Submission, Submission> {
         super.updateItem(submission, isEmpty);
         if (isEmpty || submission == null) {
             setGraphic(null);
+            setTooltip(null);
             return;
         }
+        // The whole name, for a name too long for the column
+        setTooltip(new Tooltip(Students.name(submission) + "\n"
+                + submission.getUsername()));
         Label name = Parts.strong(Students.name(submission));
         Label username = Parts.muted(submission.getUsername());
         username.getStyleClass().add("small-text");

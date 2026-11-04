@@ -139,6 +139,9 @@ public class SetUpScreen extends FlowScreen {
     // True while the choices are being filled, so no change is handled
     private boolean filling = false;
 
+    // How many chosen files are still being checked in the background
+    private int filesBeingChecked = 0;
+
     /**
      * Creates the Set up step.
      *
@@ -396,17 +399,57 @@ public class SetUpScreen extends FlowScreen {
         addSubmissions(paths);
     }
 
-    // Checks each path and adds it to the batch.
+    // Checks each path and adds it to the batch. Live mode opens the
+    // files on a background thread; the demo reads no files.
     private void addSubmissions(List<Path> paths) {
         if (paths.isEmpty()) {
             return;
         }
-        ImportBatch batch = getState().getBatch();
+        if (!getBackend().isDemo()) {
+            startInspection(paths);
+            return;
+        }
+        List<ImportItem> items = new ArrayList<>();
         for (Path path : paths) {
-            batch.add(getBackend().inspect(InputKind.SUBMISSION, path));
+            items.add(getBackend().inspect(InputKind.SUBMISSION, path));
+        }
+        addInspected(items);
+    }
+
+    // Starts checking files on a background thread.
+    private void startInspection(List<Path> paths) {
+        FileInspection inspection = new FileInspection(getBackend(), paths);
+        inspection.setOnSucceeded(event -> inspectionDone(inspection));
+        inspection.setOnFailed(event -> inspectionFailed(inspection));
+        filesBeingChecked += inspection.getPathCount();
+        refreshActions();
+        Thread worker = new Thread(inspection, "gradezzy-inspect");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Adds the files a background check has finished.
+    private void inspectionDone(FileInspection inspection) {
+        filesBeingChecked -= inspection.getPathCount();
+        addInspected(inspection.getValue());
+    }
+
+    // Says that a background check stopped before it finished.
+    private void inspectionFailed(FileInspection inspection) {
+        filesBeingChecked -= inspection.getPathCount();
+        refreshActions();
+        getWindow().notify("Could not check the chosen files: "
+                + inspection.getException().getMessage());
+    }
+
+    // Adds checked files to the batch and says how many were added.
+    private void addInspected(List<ImportItem> items) {
+        ImportBatch batch = getState().getBatch();
+        for (ImportItem item : items) {
+            batch.add(item);
         }
         refresh();
-        getWindow().notify("Added " + Parts.plural(paths.size(), "file")
+        getWindow().notify("Added " + Parts.plural(items.size(), "file")
                 + ".");
     }
 
@@ -564,7 +607,7 @@ public class SetUpScreen extends FlowScreen {
     // Redraws the zip file list and the count above it.
     private void refreshFiles() {
         ImportBatch batch = getState().getBatch();
-        List<ImportItem> items = batch.getItems(InputKind.SUBMISSION);
+        List<ImportItem> items = problemsFirst(batch);
         fileList.getChildren().clear();
         for (int index = 0; index < items.size(); index++) {
             HBox row = createFileRow(items.get(index));
@@ -585,6 +628,23 @@ public class SetUpScreen extends FlowScreen {
         count.getStyleClass().add("small-text");
         fileSummary.getChildren().addAll(count,
                 smallLink("Clear all", () -> clearSubmissions()));
+    }
+
+    // Lists the zip files with the ones that cannot be used first, then
+    // warnings and duplicates, then the rest, each in the order added.
+    private List<ImportItem> problemsFirst(ImportBatch batch) {
+        ImportState[] order = {ImportState.INVALID, ImportState.WARNING,
+            ImportState.DUPLICATE, ImportState.ACCEPTED};
+        List<ImportItem> items = batch.getItems(InputKind.SUBMISSION);
+        List<ImportItem> sorted = new ArrayList<>();
+        for (ImportState state : order) {
+            for (ImportItem item : items) {
+                if (batch.getEffectiveState(item) == state) {
+                    sorted.add(item);
+                }
+            }
+        }
+        return sorted;
     }
 
     // Names the students found in more than one chosen file or folder.
@@ -858,11 +918,15 @@ public class SetUpScreen extends FlowScreen {
         ImportBatch batch = getState().getBatch();
         ActionBar actions = getActions();
         actions.reset();
-        boolean ready = batch.isReady() && !getState().isGrading();
+        boolean ready = batch.isReady() && !getState().isGrading()
+                && filesBeingChecked == 0;
         actions.setPrimary("Start grading",
                 () -> getWindow().startGrading(), ready);
         if (getState().isGrading()) {
             actions.setStatus("A batch is being graded. See step 2.");
+        } else if (filesBeingChecked > 0) {
+            actions.setStatus("Checking " + Parts.plural(filesBeingChecked,
+                    "file") + "...");
         } else if (!batch.isReady()) {
             List<String> reasons = batch.getBlockingReasons();
             if (reasons.isEmpty()) {

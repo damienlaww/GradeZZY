@@ -50,6 +50,7 @@ public class ReviewTickCell extends TableCell<Submission, Submission> {
             return;
         }
         box.setSelected(screen.isTickedForExport(submission));
+        box.setAccessibleText("Tick " + submission.getUsername());
         setGraphic(box);
     }
 
