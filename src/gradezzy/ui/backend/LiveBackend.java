@@ -182,9 +182,8 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public Assessment getAssessment(Path testersDirectory) {
-        if (testersDirectory == null) {
-            return assessment;
-        }
+        // Read now, even for the folder in Settings, so the marks match
+        // what checkMaxScores reads at the same moment
         return new AssessmentFactory(config).create(
                 assessment.getModuleCode(), testersDirectory);
     }
@@ -403,8 +402,7 @@ public class LiveBackend implements DashboardBackend {
         return false;
     }
 
-    // Returns the tester file name of the first question, such as
-    // Q1aTester.java.
+    // Returns the first question's tester file name, such as Q1aTester.java.
     private String firstTesterName() {
         String suffix = config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
                 + ".java";

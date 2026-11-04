@@ -11,7 +11,9 @@
 package gradezzy.ui.flow;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
@@ -50,14 +52,16 @@ public class FlowState {
     // The students ticked on Review, used as the export scope
     private final List<Submission> selected = new ArrayList<>();
 
-    // The chosen files grading skipped because they cannot be used
-    private final List<ImportItem> skippedFiles = new ArrayList<>();
-
-    // The run the skipped files belong to, or null before it ends
-    private GradingRun skippedRun = null;
+    // The chosen files the grading now running skips, until it ends
+    private final List<ImportItem> pendingSkipped = new ArrayList<>();
 
     // True from the start of grading until the skipped files have a run
     private boolean skippedWaiting = false;
+
+    // The skipped files of each run graded since GradeZZY opened, by run
+    // id, so a run opened again from Runs still has them
+    private final Map<String, List<ImportItem>> skippedByRun =
+            new HashMap<>();
 
     // The students on the score sheet with no submission, and their run
     private List<Student> missingStudents = null;
@@ -180,15 +184,15 @@ public class FlowState {
      * @param files the files that cannot be used
      */
     public void setSkippedFiles(List<ImportItem> files) {
-        skippedFiles.clear();
-        skippedFiles.addAll(files);
-        skippedRun = null;
+        pendingSkipped.clear();
+        pendingSkipped.addAll(files);
         skippedWaiting = true;
     }
 
     /**
      * Ties the skipped files to the run that has just ended. Only the
-     * first run to end after grading started gets them.
+     * first run to end after grading started gets them. A late batch
+     * added to an earlier run adds its skipped files to that run's.
      *
      * @param gradingRun the run, or null when grading failed
      */
@@ -197,19 +201,31 @@ public class FlowState {
             return;
         }
         skippedWaiting = false;
-        skippedRun = gradingRun;
+        if (gradingRun == null || pendingSkipped.isEmpty()) {
+            return;
+        }
+        List<ImportItem> files = skippedByRun.get(gradingRun.getId());
+        if (files == null) {
+            files = new ArrayList<>();
+            skippedByRun.put(gradingRun.getId(), files);
+        }
+        files.addAll(pendingSkipped);
     }
 
     /**
-     * Returns the files grading skipped for a run.
+     * Returns the files grading skipped for a run, found by its id.
      *
      * @param gradingRun the run
-     * @return the files, empty for another run
+     * @return the files, empty when none were skipped
      */
     public List<ImportItem> getSkippedFiles(GradingRun gradingRun) {
         List<ImportItem> files = new ArrayList<>();
-        if (gradingRun != null && gradingRun == skippedRun) {
-            files.addAll(skippedFiles);
+        if (gradingRun == null) {
+            return files;
+        }
+        List<ImportItem> kept = skippedByRun.get(gradingRun.getId());
+        if (kept != null) {
+            files.addAll(kept);
         }
         return files;
     }

@@ -233,8 +233,8 @@ public class ExportScreen extends FlowScreen {
         everyone.setToggleGroup(scope);
         tickedOnly.setToggleGroup(scope);
         everyone.setSelected(true);
-        scope.selectedToggleProperty().addListener((observable, before,
-                after) -> refreshBlanks());
+        everyone.setOnAction(event -> refreshBlanks());
+        tickedOnly.setOnAction(event -> refreshBlanks());
         json.setSelected(true);
         tickedReason.getStyleClass().addAll("small-text", "choice-reason");
         tickedRow.getChildren().addAll(tickedOnly, tickedReason);
@@ -290,11 +290,7 @@ public class ExportScreen extends FlowScreen {
         blanks.setManaged(!text.isEmpty());
     }
 
-    // Counts the score sheet rows the export fills in and why the others
-    // are left blank, such as "16 marks filled, 2 left blank: 1 could not
-    // be graded, 1 no submission". A student not on the score sheet has
-    // no row, so is not counted. Empty text while the score sheet is
-    // read in the background.
+    // Says how many score sheet marks are filled and why the rest are blank.
     private String describeBlanks(GradingRun run, List<Submission> scope) {
         List<Student> missing = getWindow().findMissingStudents(run,
                 () -> missingFound());
@@ -354,8 +350,13 @@ public class ExportScreen extends FlowScreen {
 
     // Says whether grading skipped a file of a username.
     private boolean isSkipped(GradingRun run, String username) {
+        String wanted = username.toLowerCase();
         for (ImportItem item : getState().getSkippedFiles(run)) {
-            if (item.getUsername().equalsIgnoreCase(username)) {
+            String itemUser = item.getUsername().toLowerCase();
+            if (itemUser.equals(wanted)) {
+                return true;
+            } else if (itemUser.isEmpty()
+                    && item.getName().toLowerCase().contains(wanted)) {
                 return true;
             }
         }

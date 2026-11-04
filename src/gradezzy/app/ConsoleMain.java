@@ -20,10 +20,14 @@ import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigException;
 import gradezzy.config.ConfigKeys;
 import gradezzy.grading.GradingException;
+import gradezzy.ingest.RosterReader;
+import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Question;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.testcase.TestCaseSource;
+import gradezzy.service.AssessmentFactory;
 import gradezzy.testcase.UploadedTesterSource;
 import gradezzy.util.TextUtils;
 
@@ -109,11 +113,14 @@ public class ConsoleMain {
         inputPaths.add(Paths.get(
                 config.getString(ConfigKeys.SUBMISSIONS_DIR)));
 
+        Path testersDirectory = Paths.get(config.getString(
+                ConfigKeys.TESTERS_DIR));
         TestCaseSource testCaseSource = new UploadedTesterSource(
-                Paths.get(config.getString(ConfigKeys.TESTERS_DIR)), config);
+                testersDirectory, config);
 
         System.out.println("GradeZZY console, section "
                 + section.getLabel());
+        printMarks(config, section, testersDirectory);
 
         return context.getServices().getGradingService().startGrading(
                 inputPaths, section, testCaseSource,
@@ -147,6 +154,40 @@ public class ConsoleMain {
         throw new ConfigException("Unknown " + kind + " '" + typed
                 + "'. Choose one of: " + TextUtils.join(", ", codes)
                 + " (setting '" + key + "').");
+    }
+
+    // Prints each question's maximum mark as read from the testers, and
+    // warns when the total does not match the score sheet's denominator.
+    // The console cannot ask, so it shows what the window would confirm.
+    private static void printMarks(AppConfig config, Section section,
+            Path testersDirectory) {
+        AssessmentFactory factory = new AssessmentFactory(config);
+        Assessment assessment = factory.create(section.getModuleCode(),
+                testersDirectory);
+
+        List<String> marks = new ArrayList<>();
+        for (Question question : assessment.getQuestions()) {
+            marks.add(question.getId() + " " + question.getMaxScore());
+        }
+        System.out.println("Maximum marks from the testers: "
+                + TextUtils.join(", ", marks) + "; total "
+                + assessment.getMaxTotal() + ".");
+
+        double denominator = new RosterReader(config).readDenominator(
+                Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE)));
+        if (denominator < 0) {
+            System.out.println("Warning: the score sheet has no single "
+                    + "denominator to check this total against.");
+        } else if (denominator != assessment.getMaxTotal()) {
+            System.out.println("Warning: the score sheet's denominator is "
+                    + denominator + ", but the questions add up to "
+                    + assessment.getMaxTotal() + ".");
+        }
+
+        for (String key : factory.findIgnoredMaxScoreSettings()) {
+            System.out.println("Note: " + key + " in config.properties is "
+                    + "ignored. Each maximum now comes from the tester.");
+        }
     }
 
     // Prints one line per submission and the totals.

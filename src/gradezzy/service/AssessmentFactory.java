@@ -34,6 +34,9 @@ public class AssessmentFactory {
 
     private static final String JAVA_EXTENSION = ".java";
 
+    // The end of the old setting that held a question's maximum score
+    private static final String OLD_MAX_SCORE_SUFFIX = ".max.score";
+
     // The application settings
     private final AppConfig config;
 
@@ -125,14 +128,14 @@ public class AssessmentFactory {
     }
 
     /**
-     * Lists the questions whose tester is in testersDirectory but has no
-     * {@code score += <number>} line, so their maximum score is unknown.
-     * Grading must not start while this list is not empty. A question
-     * with no tester at all is not listed; the tester check reports it.
+     * Lists why some questions have no maximum mark: their tester is not
+     * in testersDirectory, cannot be read, never adds to the score, or
+     * changes the score in a way TesterMarks cannot count. Grading must
+     * not start while this list is not empty.
      *
      * @param testersDirectory the batch's tester folder, or null for the
      *        one in the settings
-     * @return one sentence per problem, empty when every tester is fine
+     * @return one sentence per problem, empty when every maximum is known
      */
     public List<String> findMaxScoreProblems(Path testersDirectory) {
         List<String> problems = new ArrayList<>();
@@ -140,14 +143,46 @@ public class AssessmentFactory {
 
         for (String questionId : config.getList(ConfigKeys.QUESTION_IDS)) {
             Path testerFile = findTesterFile(questionId, testers);
-            if (Files.isRegularFile(testerFile)
-                    && readMaxScore(testerFile) <= TesterMarks.UNKNOWN) {
-                problems.add(testerFile.getFileName() + " has no \"score "
-                        + "+= <number>\" line, so " + questionId
-                        + " has no maximum mark. Add one per test case.");
+            if (!Files.isRegularFile(testerFile)) {
+                problems.add(questionId + " has no tester ("
+                        + testerFile.getFileName() + " is not in "
+                        + testers + "), so it has no maximum mark.");
+            } else {
+                addTesterProblems(testerFile, questionId, problems);
             }
         }
         return problems;
+    }
+
+    /**
+     * Lists the old max.score settings that are still in the configuration.
+     * They are no longer used, because each maximum now comes from the
+     * question's tester, so the instructor is told they are ignored.
+     *
+     * @return the names of the ignored settings, empty when there are none
+     */
+    public List<String> findIgnoredMaxScoreSettings() {
+        List<String> ignored = new ArrayList<>();
+        for (String questionId : config.getList(ConfigKeys.QUESTION_IDS)) {
+            String key = ConfigKeys.QUESTION_PREFIX + questionId
+                    + OLD_MAX_SCORE_SUFFIX;
+            if (config.hasKey(key)) {
+                ignored.add(key);
+            }
+        }
+        return ignored;
+    }
+
+    // Adds what TesterMarks found wrong with one tester
+    private void addTesterProblems(Path testerFile, String questionId,
+            List<String> problems) {
+        try {
+            problems.addAll(TesterMarks.findProblems(testerFile));
+        } catch (IOException exception) {
+            problems.add(testerFile.getFileName() + " could not be read, "
+                    + "so " + questionId + " has no maximum mark: "
+                    + exception.getMessage());
+        }
     }
 
     // Reads the folder and file of one question, and its maximum score

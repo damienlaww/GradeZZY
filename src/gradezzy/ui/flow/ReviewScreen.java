@@ -121,7 +121,7 @@ public class ReviewScreen extends FlowScreen {
 
     // A class file problem is shown once only when at least this many
     // graded students share it
-    private static final int MIN_SHARED_STUDENTS = 2;
+    private static final int MIN_SHARED_STUDENTS = 3;
 
     // Where the first question column goes, after tick and student
     private static final int FIRST_QUESTION_COLUMN = 2;
@@ -349,8 +349,7 @@ public class ReviewScreen extends FlowScreen {
 
     // ------------------------------------------------------------ build
 
-    // Returns a "Could not open" row for each chosen file grading skipped,
-    // made once per run so a row stays the same object.
+    // Returns one "Could not open" row per skipped file of an ungraded user.
     private List<Submission> findSkippedRows(GradingRun run) {
         if (run == skippedRowsRun) {
             return skippedRows;
@@ -359,22 +358,38 @@ public class ReviewScreen extends FlowScreen {
         skippedRowsRun = run;
         for (ImportItem item : getState().getSkippedFiles(run)) {
             String username = item.getUsername();
+            // A student graded from another file is shown as graded
             if (username.isEmpty()) {
-                username = item.getName();
+                skippedRows.add(createSkippedRow(run, item, item.getName()));
+            } else if (!isInRun(run, username)) {
+                skippedRows.add(createSkippedRow(run, item, username));
             }
-            Submission row = new Submission(username, run.getSection(),
-                    item.getPath());
-            row.setStatus(SubmissionStatus.FAILED);
-            row.setIngestFailure(ResultState.COULD_NOT_OPEN_PREFIX
-                    + item.getName() + ". " + item.getMessage());
-            skippedRows.add(row);
         }
         return skippedRows;
     }
 
-    // Returns a "No submission" row for each student on the score sheet
-    // with no submission and no skipped file, made once per run. While
-    // the score sheet is read in the background there are none yet.
+    // Makes the "Could not open" row of a skipped file.
+    private Submission createSkippedRow(GradingRun run, ImportItem item,
+            String username) {
+        Submission row = new Submission(username, run.getSection(),
+                item.getPath());
+        row.setStatus(SubmissionStatus.FAILED);
+        row.setIngestFailure(ResultState.COULD_NOT_OPEN_PREFIX
+                + item.getName() + ". " + item.getMessage());
+        return row;
+    }
+
+    // Says whether the run graded a submission of a username.
+    private boolean isInRun(GradingRun run, String username) {
+        for (Submission submission : run.getSubmissions()) {
+            if (submission.getUsername().equalsIgnoreCase(username)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Returns a "No submission" row per student with no file, once read.
     private List<Submission> findMissingRows(GradingRun run) {
         if (run == missingRowsRun) {
             return missingRows;
@@ -387,8 +402,11 @@ public class ReviewScreen extends FlowScreen {
         missingRows.clear();
         missingRowsRun = run;
         for (Student student : missing) {
-            if (!hasSkippedRow(student.getUsername())) {
+            Submission skipped = findSkippedRowOf(student);
+            if (skipped == null) {
                 missingRows.add(createMissingRow(run, student));
+            } else if (skipped.getStudent() == null) {
+                skipped.setStudent(student);
             }
         }
         return missingRows;
@@ -403,14 +421,24 @@ public class ReviewScreen extends FlowScreen {
         return row;
     }
 
-    // Says whether a skipped file has a username.
-    private boolean hasSkippedRow(String username) {
+    // Returns the skipped file row of a student, by username or file name.
+    private Submission findSkippedRowOf(Student student) {
+        String username = student.getUsername().toLowerCase();
         for (Submission row : skippedRows) {
-            if (row.getUsername().equalsIgnoreCase(username)) {
-                return true;
+            String shown = row.getUsername().toLowerCase();
+            if (shown.equals(username)) {
+                return row;
+            } else if (isNameless(row) && shown.contains(username)) {
+                return row;
             }
         }
-        return false;
+        return null;
+    }
+
+    // Says whether a skipped file row has no username, only a file name.
+    private boolean isNameless(Submission row) {
+        return row.getOriginalPath() != null && row.getUsername().equals(
+                String.valueOf(row.getOriginalPath().getFileName()));
     }
 
     // Shows the students with no submission once the score sheet is read.
@@ -786,9 +814,7 @@ public class ReviewScreen extends FlowScreen {
         }
     }
 
-    // Shows one note per problem in the class files that every graded
-    // student shares, such as a missing tester, and leaves out its card
-    // on each student.
+    // Shows each class file problem all graded students share, once.
     private void refreshSharedBanner(GradingRun run) {
         sharedBanner.getChildren().clear();
         List<Anomaly> shared = findSharedProblems(run);
@@ -812,9 +838,7 @@ public class ReviewScreen extends FlowScreen {
         sharedBanner.setManaged(show);
     }
 
-    // Finds, once each, the class file problems with the same words on
-    // every graded student. Only a problem that is not the student's
-    // error counts, so students who made the same mistake do not.
+    // Finds the class file problems that every graded student shares.
     private List<Anomaly> findSharedProblems(GradingRun run) {
         List<Anomaly> shared = new ArrayList<>();
         List<Submission> graded = new ArrayList<>();
@@ -978,8 +1002,7 @@ public class ReviewScreen extends FlowScreen {
 
     // ------------------------------------------------------------ panel
 
-    // Shows a student in the panel. A row made on Review has no work to
-    // show, so the panel closes and a notice says why instead.
+    // Opens a student in the panel, or says why a made-up row has none.
     private void showStudent(Submission submission) {
         if (submission == null) {
             return;

@@ -627,8 +627,7 @@ public class FlowWindow {
         runMissingCallbacks();
     }
 
-    // Treats a failed lookup as no student missing, so it is not retried
-    // on every redraw.
+    // Treats a failed lookup as no student missing, so it is not retried.
     private void missingNotFound(MissingStudentsLookup lookup) {
         if (lookup != missingLookup) {
             return;

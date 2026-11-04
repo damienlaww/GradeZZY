@@ -760,9 +760,15 @@ Facts from the provided files:
 - Maximum scores are 3, 3, 5, 5 and 4. They are not a setting: each
   question's maximum is the sum of the `score += <number>` lines in its
   tester (`testcase.TesterMarks`), read from the batch's tester folder.
-  A tester with no such line stops Start grading, and Set up asks the
+  Comments and quoted text are ignored, and every `score +=` on a line
+  counts. Start grading is stopped, with the reason, when a question has
+  no tester, its tester never adds to the score, or it changes the score
+  in a way that cannot be counted (`score = score + 1`, `score++`,
+  `score += MARK`, or a `score +=` inside a loop). Set up then asks the
   instructor to confirm the marks, warning when they do not add up to the
-  score sheet's `Calculated Final Grade Denominator`.
+  score sheet's `Calculated Final Grade Denominator`; the console prints
+  the same marks and warning. Old `max.score` lines in a personal
+  `config.properties` are ignored, and the console says so.
 
 Rules that matter here:
 
@@ -1070,7 +1076,7 @@ by this section.
 | One-line lambdas `event -> exportResults()` | 26 files in `ui` | Button handlers, table cells and callbacks. | Short for a small class that implements the handler interface (like `AgeComparator implements Comparator`) and whose one method calls `exportResults()`. Every lambda is one line that calls one method. |
 | `Runnable`, `Consumer` | `ui.flow` (`ActionBar`, `Parts`, `StepBar`, `TabBar`, ...), `exec.TrustedFrameCheck` | The type of a lambda parameter, for example "what to do when this button is pressed". | Interfaces with one method, so a screen can pass "run this later" to another class. |
 | `java.nio.file` (`Path`, `Paths`, `Files`, `DirectoryStream`, `StandardCopyOption`, `LinkOption`) | About 60 files | Every file and folder the system reads, copies, moves or writes. | `Path` is a file or folder location (like `File`); `Files` has static methods to read, copy, move and list them, and can refuse to follow links. |
-| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.CodeSearch`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.SetUpScreen`, `ui.flow.ReviewScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.UndoFixJob` | Grading, checking chosen files, the class files and the tester folder, reading the score sheet for students with no submission, searching code, exports, backups and undoing a fix (which grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
+| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.UndoFixJob`, `ui.flow.SetUpScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.StudentPanel`, `ui.flow.CodeSheet` | Grading, checking chosen files, the class files and the tester folder, reading the score sheet for students with no submission, grading a question again, exports, backups and undoing a fix (which grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
 | Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |
@@ -1086,7 +1092,8 @@ by this section.
 | `java` options `--limit-modules`, `--illegal-native-access=deny`; `UUID` | `exec.TesterRunner` (`UUID` also for anomaly ids) | Student code gets only core Java and no native code; a new random token for every tester run. | Command-line options that shrink what student code can reach; a `UUID` is a random id nobody can guess. |
 | `java.util.zip` (`ZipFile`, `ZipEntry`, `Enumeration`, `CRC32`) | `ingest.ZipExtractor` | Unzips submissions safely. | Opens a zip and hands us its entries one at a time, like an `Iterator`. |
 | `java.util.regex.Pattern`, `matches`, `replaceFirst` | `service.SettingsService`, `ingest.SubmissionLoader`, `ingest.ZipExtractor.isSafeEntry` | The zip name setting is itself a pattern; unsafe Windows file names are a pattern too. | A pattern describes a family of strings, such as "2023-2024-" followed by a username. |
-| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream`, `testcase.TesterMarks` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
+| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
+| `StandardCharsets.ISO_8859_1` | `testcase.TesterMarks` | Opens a tester file whatever encoding it was saved in, to read its `score +=` lines. | A way of turning bytes into characters that accepts every byte, so a tester saved in Windows-1252 still opens. |
 | `java.time` (`LocalDateTime`, `DateTimeFormatter`) | `model`, `persistence`, `report.AuditLogExporter`, `service`, `ui.demo` | Run and audit times. | The current date and time, and how to print it. |
 | `java.util.Random` | `ui.demo.DemoData` | Synthetic marks for `--demo`, always from the same seed. | Gives the same "random" numbers every time, so the demo looks the same. |
 

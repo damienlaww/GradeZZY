@@ -17,7 +17,9 @@ import java.io.File;
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
@@ -182,6 +184,11 @@ public class SetUpScreen extends FlowScreen {
     // How many chosen files are still being checked in the background
     private int filesBeingChecked = 0;
 
+    // The newest check of each kind of class file, so an older pick that
+    // finishes later is ignored
+    private final Map<InputKind, FileInspection> latestClassChecks =
+            new HashMap<>();
+
     // The tester folder check still running, or null
     private TesterCheck testerCheck = null;
 
@@ -203,6 +210,16 @@ public class SetUpScreen extends FlowScreen {
     // Whether the score sheet, tester and starter folder belong with the
     // uploads, in that order
     private final List<ClassFileMatch> matches = new ArrayList<>();
+
+    // The marks read from the testers, kept so the tester files are read
+    // again only when the folder or the assessment in use changes, not on
+    // every redraw. markedTesters and markedBase say what they were read
+    // for; markedAssessment is null until the first read.
+    private Assessment markedAssessment = null;
+    private final List<String> markProblems = new ArrayList<>();
+    private Path markedTesters = null;
+    private Assessment markedBase = null;
+    private boolean markedTyped = false;
 
     /**
      * Creates the Set up step.
@@ -563,8 +580,17 @@ public class SetUpScreen extends FlowScreen {
     private void inspectionFailed(FileInspection inspection) {
         filesBeingChecked -= inspection.getPathCount();
         refreshActions();
-        getWindow().notify("Could not check the chosen files: "
-                + inspection.getException().getMessage());
+        getWindow().notify("Could not check the chosen files"
+                + describeError(inspection.getException()));
+    }
+
+    // Returns ": " and an error's message, or "." when it has none.
+    private String describeError(Throwable error) {
+        if (error == null || error.getMessage() == null
+                || error.getMessage().isBlank()) {
+            return ". Try choosing them again.";
+        }
+        return ": " + error.getMessage();
     }
 
     // Adds checked files to the batch and says how many were added.
@@ -684,9 +710,7 @@ public class SetUpScreen extends FlowScreen {
         refresh();
     }
 
-    // Checks a score sheet, tester or starter folder and puts it in the
-    // batch. Live mode reads it on a background thread; the demo reads no
-    // files.
+    // Checks a class file in the background, or at once in the demo.
     private void inspectClassFile(InputKind kind, Path path) {
         if (getBackend().isDemo()) {
             useClassFile(getBackend().inspect(kind, path));
@@ -697,24 +721,38 @@ public class SetUpScreen extends FlowScreen {
         FileInspection inspection = new FileInspection(getBackend(), kind,
                 paths);
         inspection.setOnSucceeded(event -> classFileInspected(inspection));
-        inspection.setOnFailed(event -> inspectionFailed(inspection));
+        inspection.setOnFailed(event -> classFileFailed(inspection));
+        latestClassChecks.put(kind, inspection);
         filesBeingChecked += inspection.getPathCount();
         Thread worker = new Thread(inspection, "gradezzy-inspect");
         worker.setDaemon(true);
         worker.start();
     }
 
-    // Uses the class file a background check has finished.
+    // Uses a finished class file check, unless a newer pick replaced it.
     private void classFileInspected(FileInspection inspection) {
         filesBeingChecked -= inspection.getPathCount();
-        for (ImportItem item : inspection.getValue()) {
-            useClassFile(item);
+        if (latestClassChecks.get(inspection.getKind()) == inspection) {
+            latestClassChecks.remove(inspection.getKind());
+            for (ImportItem item : inspection.getValue()) {
+                useClassFile(item);
+            }
         }
         refresh();
     }
 
-    // Replaces the batch's file of the item's kind with the item. A new
-    // tester or starter folder is checked again for tester problems.
+    // Says a class file check failed, unless a newer pick replaced it.
+    private void classFileFailed(FileInspection inspection) {
+        if (latestClassChecks.get(inspection.getKind()) != inspection) {
+            filesBeingChecked -= inspection.getPathCount();
+            refreshActions();
+            return;
+        }
+        latestClassChecks.remove(inspection.getKind());
+        inspectionFailed(inspection);
+    }
+
+    // Puts a checked class file in the batch and re-checks the testers.
     private void useClassFile(ImportItem item) {
         ImportBatch batch = getState().getBatch();
         batch.clear(item.getKind());
@@ -771,6 +809,7 @@ public class SetUpScreen extends FlowScreen {
 
     // Redraws the lists, the settings and the action bar.
     private void refresh() {
+        readMarksIfChanged();
         refreshAssessment();
         refreshEarlierRun();
         refreshFiles();
@@ -783,8 +822,8 @@ public class SetUpScreen extends FlowScreen {
     // choice. The marks come from the chosen tester folder, so a new
     // folder updates them.
     private void refreshAssessment() {
-        Assessment assessment = getBackend().getAssessment(
-                findUsableTesters());
+        readMarksIfChanged();
+        Assessment assessment = markedAssessment;
         if (assessment == null) {
             assessmentText.setText("None is set yet.");
             return;
@@ -966,8 +1005,7 @@ public class SetUpScreen extends FlowScreen {
         }
     }
 
-    // Returns the chosen tester folder when it can be used and typed test
-    // cases are off, or null.
+    // Returns the usable chosen tester folder, or null when there is none.
     private Path findUsableTesters() {
         ImportBatch batch = getState().getBatch();
         List<ImportItem> items = batch.getItems(InputKind.TESTERS);
@@ -995,8 +1033,7 @@ public class SetUpScreen extends FlowScreen {
         return item.getPath();
     }
 
-    // Returns the chosen starter folder when it can be used, or null for
-    // the one in Settings.
+    // Returns the usable chosen starter folder, or null for Settings.
     private Path findUsableStarter() {
         ImportBatch batch = getState().getBatch();
         List<ImportItem> items = batch.getItems(InputKind.STARTER);
@@ -1010,21 +1047,53 @@ public class SetUpScreen extends FlowScreen {
         return item.getPath();
     }
 
-    // Lists the testers with no "score += <number>" line. Typed test
-    // cases have no tester folder, so they have nothing to list.
-    private List<String> findMarkProblems() {
-        if (getState().getBatch().isUsingTypedTestCases()) {
-            return new ArrayList<>();
+    // Reads the marks and their problems from the testers when the tester
+    // folder, the assessment in use or the typed test cases choice has
+    // changed since the last read.
+    private void readMarksIfChanged() {
+        Path testers = findUsableTesters();
+        Assessment base = getBackend().getAssessment();
+        boolean typed = getState().getBatch().isUsingTypedTestCases();
+        boolean sameFolder = (testers == null && markedTesters == null)
+                || (testers != null && testers.equals(markedTesters));
+        if (markedAssessment != null && sameFolder && base == markedBase
+                && typed == markedTyped) {
+            return;
         }
-        return getBackend().checkMaxScores(findUsableTesters());
+        readMarks();
+    }
+
+    // Reads the marks and their problems from the testers now. Both come
+    // from the same folder at the same moment, so they always agree.
+    private void readMarks() {
+        Path testers = findUsableTesters();
+        markedTesters = testers;
+        markedBase = getBackend().getAssessment();
+        markedTyped = getState().getBatch().isUsingTypedTestCases();
+        markedAssessment = getBackend().getAssessment(testers);
+        markProblems.clear();
+        // Typed test cases have no tester folder, so nothing to check
+        if (!markedTyped) {
+            markProblems.addAll(getBackend().checkMaxScores(testers));
+        }
+    }
+
+    // Lists why some questions have no maximum mark, from the last read
+    private List<String> findMarkProblems() {
+        return markProblems;
     }
 
     // Shows each question's maximum mark in a table and asks the
     // instructor to confirm them before grading starts. Warns when they
-    // do not add up to the score sheet's denominator.
+    // do not add up to the score sheet's denominator. The testers are
+    // read again first, in case a file changed since Set up opened.
     private void confirmStart() {
-        Assessment assessment = getBackend().getAssessment(
-                findUsableTesters());
+        readMarks();
+        if (!markProblems.isEmpty()) {
+            refreshActions();
+            return;
+        }
+        Assessment assessment = markedAssessment;
         double denominator = getBackend().getScoreSheetDenominator(
                 findUsableScoreSheet());
         VBox content = new VBox(Parts.GAP, createMarksTable(assessment),
@@ -1091,14 +1160,12 @@ public class SetUpScreen extends FlowScreen {
         return block;
     }
 
-    // Names the tester and starter folders a check uses, so a change to
-    // either starts a new check.
+    // Names the tester and starter folders a tester check uses.
     private String describeFolders(Path testers, Path starter) {
         return testers + "|" + starter;
     }
 
-    // Makes the next refresh check the testers again, even when the same
-    // folders are chosen, as their files may have changed.
+    // Makes the next refresh check the testers again from scratch.
     private void forgetTesterCheck() {
         checkedFolders = null;
         testerCheck = null;
@@ -1152,8 +1219,8 @@ public class SetUpScreen extends FlowScreen {
         }
         testerCheck = null;
         List<String> problems = new ArrayList<>();
-        problems.add("The testers could not be checked: "
-                + check.getException().getMessage());
+        problems.add("The testers could not be checked"
+                + describeError(check.getException()));
         showTesterProblems(check.getFolders(), problems);
         refreshClassFiles();
     }
@@ -1302,8 +1369,7 @@ public class SetUpScreen extends FlowScreen {
         return box;
     }
 
-    // Adds the tester check's progress or problems to the tester row's
-    // detail, and returns the pill to show instead, or null.
+    // Adds the tester check notes to a row; returns its pill, or null.
     private Label addTesterNotes(VBox notes) {
         Path testers = findUsableTesters();
         if (testers == null) {
@@ -1549,17 +1615,18 @@ public class SetUpScreen extends FlowScreen {
         actions.reset();
         // A tester with no "score += <number>" line has no maximum mark,
         // so grading cannot start until it is fixed
-        List<String> markProblems = findMarkProblems();
+        readMarksIfChanged();
+        List<String> unknownMarks = findMarkProblems();
         boolean ready = batch.isReady() && !getState().isGrading()
-                && filesBeingChecked == 0 && markProblems.isEmpty();
+                && filesBeingChecked == 0 && unknownMarks.isEmpty();
         actions.setPrimary("Start grading", () -> confirmStart(), ready);
         if (getState().isGrading()) {
             actions.setStatus("A batch is being graded. See step 2.");
         } else if (filesBeingChecked > 0) {
             actions.setStatus("Checking " + Parts.plural(filesBeingChecked,
                     "file") + "...");
-        } else if (!markProblems.isEmpty()) {
-            actions.setStatus(markProblems.get(0));
+        } else if (!unknownMarks.isEmpty()) {
+            actions.setStatus(unknownMarks.get(0));
         } else if (!batch.isReady()) {
             List<String> reasons = batch.getBlockingReasons();
             if (reasons.isEmpty()) {
