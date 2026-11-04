@@ -64,7 +64,8 @@ Most of your list is done on `jingyuan/taught-java`:
   - Every setting is checked at start-up
     (`SettingsService.findProblems`).
 
-What is left, in order:
+The 3 November list below is kept for reference; everything in it is
+done (see above).
 
 ## Decided on 3 November
 
@@ -117,14 +118,24 @@ What is left, in order:
 
 ## Team and repo
 
-- Merge the pull request from `jingyuan/taught-java` early, so everyone
-  branches from the same `main`.
-- Tell Zach that `UploadedTesterSource` gained `getTestersDirectory()`.
-- About 38 untracked files from the old window are in your local folder:
-  `src/gradezzy/ui/*Controller.java`, `ui/view/`, `ui/fxml/`,
-  `ui/component/`, `ui/css/app*.css`, the old `ui/check` classes and
-  `service/ProgressEstimator.java`. `compile.sh` compiles every file in
-  `ui/`, so an in-place build may pick them up. They are not in git;
-  delete them when you are sure you do not need them.
-- Share `samples/e2e-cohort` and `samples/e2e-weird` with the team.
-  Everyone's "done when" checks use them.
+- Done: the pull request from `jingyuan/taught-java` is merged (#18).
+- Done: the old window's untracked files are deleted from the local
+  folder (4 November). OneDrive had put them back, which broke
+  `sh compile.sh`; if a build fails with "package gradezzy.ui.component
+  does not exist", check `git status` for them first.
+- Done: `samples/e2e-cohort` and `samples/e2e-weird` are in git
+  (`19a22cc`).
+- Done: Huxley's `testers_dir` column, so Resume after a restart uses the
+  run's own testers.
+- Still to do: tell Zach that `UploadedTesterSource` gained
+  `getTestersDirectory()`.
+- Waiting on Huxley: the `rejected_fixes` column, so undone fixes stay
+  undone after a restart.
+
+Checked on 4 November after merging `main` (with the revert of #24): all
+16 graded cohort totals match the README table, priya.nair.2024 fails,
+only huimin.lee.2024 and ivan.goh.2024 are similar, kenneth.yeo.2024 goes
+from 20 to 16 on Undo and stays there, a second bryan.ng.2024 zip
+replaces the first in the G3 run, another tester folder is refused, and
+the summary reads "16 marks filled, 2 left blank: 1 could not be graded,
+1 no submission."
