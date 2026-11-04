@@ -163,6 +163,41 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
+     * Calls AssessmentFactory.create with the tester folder.
+     */
+    @Override
+    public Assessment getAssessment(Path testersDirectory) {
+        if (testersDirectory == null) {
+            return assessment;
+        }
+        return new AssessmentFactory(config).create(
+                assessment.getModuleCode(), testersDirectory);
+    }
+
+    /**
+     * Calls AssessmentFactory.findMaxScoreProblems.
+     */
+    @Override
+    public List<String> checkMaxScores(Path testersDirectory) {
+        return new AssessmentFactory(config).findMaxScoreProblems(
+                testersDirectory);
+    }
+
+    /**
+     * Calls RosterReader.readDenominator on the score sheet, or the one in
+     * Settings when none is given.
+     */
+    @Override
+    public double getScoreSheetDenominator(Path scoreSheetFile) {
+        Path sheet = scoreSheetFile;
+        if (sheet == null) {
+            sheet = Paths.get(config.getString(
+                    ConfigKeys.SCORE_SHEET_FILE));
+        }
+        return new RosterReader(config).readDenominator(sheet);
+    }
+
+    /**
      * Returns exec.run.timeout.seconds.
      */
     @Override
@@ -282,8 +317,12 @@ public class LiveBackend implements DashboardBackend {
         CompileStage stage = new CompileStage(new SourceCompiler(config,
                 new ProcessRunner(config)), null);
         try {
-            return stage.checkTesterFolder(config, assessment,
-                    testersDirectory);
+            // The testers with no "score += <number>" line are listed too,
+            // so the tester row names them
+            List<String> problems = stage.checkTesterFolder(config,
+                    assessment, testersDirectory);
+            problems.addAll(checkMaxScores(testersDirectory));
+            return problems;
         } catch (GradingException exception) {
             List<String> problems = new ArrayList<>();
             problems.add("The testers could not be checked: "

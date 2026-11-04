@@ -277,6 +277,30 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
+     * Returns the same assessment: the demo has no tester files.
+     */
+    @Override
+    public Assessment getAssessment(Path testersDirectory) {
+        return assessment;
+    }
+
+    /**
+     * Returns no problems: the demo has no tester files.
+     */
+    @Override
+    public List<String> checkMaxScores(Path testersDirectory) {
+        return new ArrayList<>();
+    }
+
+    /**
+     * Returns the assessment's total, so the demo always adds up.
+     */
+    @Override
+    public double getScoreSheetDenominator(Path scoreSheetFile) {
+        return assessment.getMaxTotal();
+    }
+
+    /**
      * Returns the configured tester time limit.
      */
     @Override
