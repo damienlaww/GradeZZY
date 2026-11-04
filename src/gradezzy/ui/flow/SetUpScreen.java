@@ -36,6 +36,7 @@ import javafx.stage.FileChooser;
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Question;
 import gradezzy.ui.DragDropHandler;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.CapabilityStatus;
@@ -65,6 +66,13 @@ public class SetUpScreen extends FlowScreen {
 
     // The separator between a file and what is known about it
     private static final String DOT = "  ·  ";
+
+    // The table of questions and marks shown before grading starts
+    private static final double MARKS_TABLE_WIDTH = 420.0;
+    private static final double MARKS_ROW_HEIGHT = 32.0;
+    private static final double MARKS_QUESTION_WIDTH = 84.0;
+    private static final double MARKS_FOLDER_WIDTH = 110.0;
+    private static final double MARKS_MAX_WIDTH = 64.0;
 
     // How grading picks one file when a student has several
     private static final String ONE_FILE_RULE = "Only one file per "
@@ -568,9 +576,11 @@ public class SetUpScreen extends FlowScreen {
         refreshActions();
     }
 
-    // Shows the assessment's name, questions and marks.
+    // Shows the assessment's name, questions and marks. The marks come
+    // from the chosen tester folder, so a new folder updates them.
     private void refreshAssessment() {
-        Assessment assessment = getBackend().getAssessment();
+        Assessment assessment = getBackend().getAssessment(
+                findUsableTesters());
         if (assessment == null) {
             assessmentText.setText("Not set in the settings");
             return;
@@ -736,6 +746,116 @@ public class SetUpScreen extends FlowScreen {
             markRow(rows[index], index, rows.length);
             classFiles.getChildren().add(rows[index]);
         }
+    }
+
+    // Returns the chosen tester folder when it can be used and typed test
+    // cases are off, or null.
+    private Path findUsableTesters() {
+        ImportBatch batch = getState().getBatch();
+        List<ImportItem> items = batch.getItems(InputKind.TESTERS);
+        if (batch.isUsingTypedTestCases() || items.isEmpty()) {
+            return null;
+        }
+        ImportItem item = items.get(0);
+        if (batch.getEffectiveState(item) == ImportState.INVALID) {
+            return null;
+        }
+        return item.getPath();
+    }
+
+    // Returns the chosen score sheet, or null to use the one in Settings.
+    private Path findUsableScoreSheet() {
+        ImportBatch batch = getState().getBatch();
+        List<ImportItem> items = batch.getItems(InputKind.ROSTER);
+        if (items.isEmpty()) {
+            return null;
+        }
+        ImportItem item = items.get(0);
+        if (batch.getEffectiveState(item) == ImportState.INVALID) {
+            return null;
+        }
+        return item.getPath();
+    }
+
+    // Lists the testers with no "score += <number>" line. Typed test
+    // cases have no tester folder, so they have nothing to list.
+    private List<String> findMarkProblems() {
+        if (getState().getBatch().isUsingTypedTestCases()) {
+            return new ArrayList<>();
+        }
+        return getBackend().checkMaxScores(findUsableTesters());
+    }
+
+    // Shows each question's maximum mark in a table and asks the
+    // instructor to confirm them before grading starts. Warns when they
+    // do not add up to the score sheet's denominator.
+    private void confirmStart() {
+        Assessment assessment = getBackend().getAssessment(
+                findUsableTesters());
+        double denominator = getBackend().getScoreSheetDenominator(
+                findUsableScoreSheet());
+        VBox content = new VBox(Parts.GAP, createMarksTable(assessment),
+                createDenominatorRow(assessment.getMaxTotal(),
+                denominator));
+        getWindow().confirm("Are these questions and marks right?",
+                content, "Start grading", () -> getWindow().startGrading());
+    }
+
+    // One row per question with its folder, file and maximum mark, then
+    // the total. The maximums come from the testers.
+    private PlainTable createMarksTable(Assessment assessment) {
+        PlainTable table = new PlainTable(MARKS_ROW_HEIGHT);
+        table.getStyleClass().add("compact");
+        table.addColumn("Question", MARKS_QUESTION_WIDTH, Pos.CENTER_LEFT);
+        table.addColumn("Folder", MARKS_FOLDER_WIDTH, Pos.CENTER_LEFT);
+        table.addColumn("File", PlainTable.GROW, Pos.CENTER_LEFT);
+        table.addColumn("Max", MARKS_MAX_WIDTH, Pos.CENTER_RIGHT);
+        for (Question question : assessment.getQuestions()) {
+            table.addRow(new Node[] {Parts.strong(question.getId()),
+                new Label(question.getFolderName()),
+                new Label(question.getFileName()),
+                new Label(Parts.mark(question.getMaxScore()))});
+        }
+        table.addRow(new Node[] {Parts.strong("Total"), new Label(""),
+            new Label(""), Parts.strong(Parts.mark(
+            assessment.getMaxTotal()))});
+        table.setPrefWidth(MARKS_TABLE_WIDTH);
+        table.setMaxWidth(MARKS_TABLE_WIDTH);
+        return table;
+    }
+
+    // The score sheet's denominator next to whether the total matches it.
+    // A negative denominator means the sheet gives none.
+    private VBox createDenominatorRow(double total, double denominator) {
+        String value = "Not found";
+        Label status = Parts.pill("Cannot check", Tone.NEUTRAL);
+        String note = "The score sheet has no single denominator to check "
+                + "the total against.";
+        if (denominator >= 0 && denominator == total) {
+            value = Parts.mark(denominator);
+            status = Parts.pill("Matches", Tone.GOOD);
+            note = "";
+        } else if (denominator >= 0) {
+            value = Parts.mark(denominator);
+            status = Parts.pill("Does not match", Tone.WARN);
+            note = "The questions add up to " + Parts.mark(total)
+                    + ". Check the testers or the score sheet before you "
+                    + "go on.";
+        }
+
+        Label name = Parts.muted("Score sheet denominator");
+        HBox row = Parts.row(Parts.GAP, new Node[] {name,
+            Parts.strong(value), Parts.grow(), status});
+        row.setMaxWidth(MARKS_TABLE_WIDTH);
+        VBox block = new VBox(Parts.GAP_SMALL, row);
+        if (!note.isEmpty()) {
+            Label noteLabel = Parts.muted(note);
+            noteLabel.getStyleClass().add("small-text");
+            noteLabel.setWrapText(true);
+            noteLabel.setMaxWidth(MARKS_TABLE_WIDTH);
+            block.getChildren().add(noteLabel);
+        }
+        return block;
     }
 
     // Builds one class file row, with an optional link after the detail.
@@ -918,15 +1038,19 @@ public class SetUpScreen extends FlowScreen {
         ImportBatch batch = getState().getBatch();
         ActionBar actions = getActions();
         actions.reset();
+        // A tester with no "score += <number>" line has no maximum mark,
+        // so grading cannot start until it is fixed
+        List<String> markProblems = findMarkProblems();
         boolean ready = batch.isReady() && !getState().isGrading()
-                && filesBeingChecked == 0;
-        actions.setPrimary("Start grading",
-                () -> getWindow().startGrading(), ready);
+                && filesBeingChecked == 0 && markProblems.isEmpty();
+        actions.setPrimary("Start grading", () -> confirmStart(), ready);
         if (getState().isGrading()) {
             actions.setStatus("A batch is being graded. See step 2.");
         } else if (filesBeingChecked > 0) {
             actions.setStatus("Checking " + Parts.plural(filesBeingChecked,
                     "file") + "...");
+        } else if (!markProblems.isEmpty()) {
+            actions.setStatus(markProblems.get(0));
         } else if (!batch.isReady()) {
             List<String> reasons = batch.getBlockingReasons();
             if (reasons.isEmpty()) {

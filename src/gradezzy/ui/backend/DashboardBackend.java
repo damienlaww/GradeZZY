@@ -71,6 +71,38 @@ public interface DashboardBackend {
     Assessment getAssessment();
 
     /**
+     * Returns the assessment with each question's maximum mark read from
+     * the testers in a folder, as a batch graded with them would use.
+     *
+     * @param testersDirectory the batch's tester folder, or null for the
+     *        one in Settings
+     * @return the assessment
+     */
+    Assessment getAssessment(Path testersDirectory);
+
+    /**
+     * Lists the testers in a folder that have no "score += <number>"
+     * line, so their question has no maximum mark. Grading cannot start
+     * while this list is not empty.
+     *
+     * @param testersDirectory the tester folder, or null for the one in
+     *        Settings
+     * @return one sentence per problem, empty when every tester is fine
+     */
+    List<String> checkMaxScores(Path testersDirectory);
+
+    /**
+     * Reads the score sheet's Calculated Final Grade Denominator, which
+     * the question maximums should add up to.
+     *
+     * @param scoreSheetFile the score sheet, or null for the one in
+     *        Settings
+     * @return the denominator, or a negative number when the sheet gives
+     *         no single one
+     */
+    double getScoreSheetDenominator(Path scoreSheetFile);
+
+    /**
      * Returns the time limit for one tester run.
      *
      * @return the limit in seconds

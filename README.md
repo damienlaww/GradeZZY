@@ -150,7 +150,7 @@ The base package is `gradezzy`. Each package has one job.
 | `validation` | One class per structural check. | `Validator` (interface), `AbstractValidator`, `StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`, `HeaderNameValidator`, `ValidationRunner` |
 | `fix` | One class per automatic correction, each with apply and undo. | `Fixer` (interface), `AbstractFixer`, `EncodingFixer`, `FolderNameFixer`, `FolderHierarchyFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
 | `exec` | Runs `javac` and `java` in a separate process with a time limit. | `ProcessRunner`, `ProcessResult`, `SourceCompiler`, `TesterRunner`, and inside the tester's run `TesterHarness`, `TrustedPrintStream`, `TrustedFrameCheck` |
-| `testcase` | Where tester files come from. | `TestCaseSource` (interface), `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TestCase`, `TesterFile` |
+| `testcase` | Where tester files come from. | `TestCaseSource` (interface), `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TestCase`, `TesterFile`, `TesterMarks` |
 | `grading` | The pipeline, its stages and scoring. | `GradingStage` (interface), `GradingPipeline`, `GradingContext`, the nine `...Stage` classes, `ScoreParser` (interface), `TesterOutputScoreParser`, `ScoreCalculator`, `ProgressListener`, `CancellationToken`, and for parallel grading `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener` |
 | `detection` | Flags answers for review. Never changes a mark. | `Detector` (interface), `UntouchedStarterDetector`, `EmptyAnswerDetector`, `HardCodedAnswerDetector` |
 | `plagiarism` | Compares submissions for copied code. | `SimilarityDetector` (interface), `TokenSimilarityDetector`, `SimilarityPair` |
@@ -753,7 +753,12 @@ Facts from the provided files:
   `Failed`. The last line of output is the total as a decimal, such as
   `3.0`. An exception inside a test prints a stack trace to standard
   error and the tester carries on.
-- Maximum scores are 3, 3, 5, 5 and 4.
+- Maximum scores are 3, 3, 5, 5 and 4. They are not a setting: each
+  question's maximum is the sum of the `score += <number>` lines in its
+  tester (`testcase.TesterMarks`), read from the batch's tester folder.
+  A tester with no such line stops Start grading, and Set up asks the
+  instructor to confirm the marks, warning when they do not add up to the
+  score sheet's `Calculated Final Grade Denominator`.
 
 Rules that matter here:
 
@@ -969,7 +974,6 @@ file: `java -Dgradezzy.config=other.properties ...`.
 | `assessment.question.ids` | `Q1a,Q1b,Q2a,Q2b,Q3` | The questions, in order. |
 | `assessment.question.<id>.folder` | for example `Q1` | Folder the question's file must be in. |
 | `assessment.question.<id>.file` | for example `Q1a.java` | The required source file. |
-| `assessment.question.<id>.max.score` | `3`, `3`, `5`, `5`, `4` | Maximum score of the question. |
 | `assessment.placeholder.folder.names` | `RenameToYourUsername,RenameToYourStudentID` | Folder names that mean the student forgot to rename. |
 | `assessment.provided.class.files` | `DataException.class`, ... | Compiled files that are kept in the working copy. |
 | `assessment.tester.data.files` | `personstester.txt,studentstester.txt` | Data files copied next to the testers. |
@@ -1073,7 +1077,7 @@ by this section.
 | `java` options `--limit-modules`, `--illegal-native-access=deny`; `UUID` | `exec.TesterRunner` (`UUID` also for anomaly ids) | Student code gets only core Java and no native code; a new random token for every tester run. | Command-line options that shrink what student code can reach; a `UUID` is a random id nobody can guess. |
 | `java.util.zip` (`ZipFile`, `ZipEntry`, `Enumeration`, `CRC32`) | `ingest.ZipExtractor` | Unzips submissions safely. | Opens a zip and hands us its entries one at a time, like an `Iterator`. |
 | `java.util.regex.Pattern`, `matches`, `replaceFirst` | `service.SettingsService`, `ingest.SubmissionLoader`, `ingest.ZipExtractor.isSafeEntry` | The zip name setting is itself a pattern; unsafe Windows file names are a pattern too. | A pattern describes a family of strings, such as "2023-2024-" followed by a username. |
-| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
+| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream`, `testcase.TesterMarks` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
 | `java.time` (`LocalDateTime`, `DateTimeFormatter`) | `model`, `persistence`, `report.AuditLogExporter`, `service`, `ui.demo` | Run and audit times. | The current date and time, and how to print it. |
 | `java.util.Random` | `ui.demo.DemoData` | Synthetic marks for `--demo`, always from the same seed. | Gives the same "random" numbers every time, so the demo looks the same. |
 

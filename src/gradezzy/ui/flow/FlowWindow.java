@@ -383,14 +383,28 @@ public class FlowWindow {
      */
     public void confirm(String title, String detail, String okText,
             Runnable onOk) {
+        Label text = Parts.subtitle(detail);
+        text.setMaxWidth(Parts.TEXT_WIDTH);
+        confirm(title, text, okText, onOk);
+    }
+
+    /**
+     * Asks a yes or no question in a sheet, with something richer than
+     * a sentence under it, such as a table.
+     *
+     * @param title the question
+     * @param content what is shown under the question
+     * @param okText the text of the button that goes ahead
+     * @param onOk what to do when the instructor goes ahead
+     */
+    public void confirm(String title, Node content, String okText,
+            Runnable onOk) {
         Button cancel = Parts.secondary("Cancel", () -> closeSheet());
         Button ok = Parts.primary(okText);
         ok.setOnAction(event -> confirmed(onOk));
-        Label text = Parts.subtitle(detail);
-        text.setMaxWidth(Parts.TEXT_WIDTH);
         HBox buttons = Parts.row(Parts.GAP,
                 new Node[] {Parts.grow(), cancel, ok});
-        VBox body = new VBox(Parts.GAP, Parts.title(title), text,
+        VBox body = new VBox(Parts.GAP, Parts.title(title), content,
                 buttons);
         body.getStyleClass().add("confirm");
         showSheet(body);

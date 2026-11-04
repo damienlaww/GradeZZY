@@ -274,6 +274,14 @@ public class FlowSelfTest {
     // Grade: watch progress, cancel with the sheet, resume, reach Review.
     private void flowGrade() {
         press(window.getActionBar().getPrimaryButton(), "Start grading");
+        Node marksSheet = sheet();
+        check(marksSheet != null && SceneFinder.shows(marksSheet,
+                "Total"), "Start grading asks to confirm the questions and "
+                + "their marks");
+        if (marksSheet != null) {
+            press(SceneFinder.button(marksSheet, "Start grading"),
+                    "Start grading");
+        }
         check(window.getCurrentStep() == Step.GRADE, "the Grade step opened");
         check(window.getState().isGrading(), "grading started");
 
