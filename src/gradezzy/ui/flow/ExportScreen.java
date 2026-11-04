@@ -128,6 +128,9 @@ public class ExportScreen extends FlowScreen {
     // True after a successful export
     private boolean exported = false;
 
+    // True while the files are being written in the background
+    private boolean exporting = false;
+
     /**
      * Creates the Export step.
      *
@@ -467,6 +470,11 @@ public class ExportScreen extends FlowScreen {
     private void refreshActions() {
         ActionBar actions = getActions();
         actions.reset();
+        if (exporting) {
+            actions.setStatus("Saving the files...");
+            actions.setPrimary("Export score sheet", () -> export(), false);
+            return;
+        }
         actions.setBack(() -> getWindow().show(Step.REVIEW));
         if (exported) {
             actions.addSecondary(Parts.secondary("Export again",
@@ -491,33 +499,48 @@ public class ExportScreen extends FlowScreen {
         getWindow().show(Step.SET_UP);
     }
 
-    // Writes the CSV and, if chosen, the JSON file.
+    // Writes the CSV and, if chosen, the JSON file. Live mode writes on a
+    // background thread; the demo writes no file.
     private void export() {
         GradingRun run = getState().getRun();
-        if (run == null) {
+        if (run == null || exporting) {
             return;
         }
         List<Submission> scope = new ArrayList<>(run.getSubmissions());
         if (tickedOnly.isSelected()) {
             scope = new ArrayList<>(getState().getSelected());
         }
-        ActionResult csv = getBackend().export(run, scope, "csv");
-        if (!csv.isDone()) {
-            showResult(false, csv.getMessage());
+        ExportJob job = new ExportJob(getBackend(), run, scope,
+                json.isSelected());
+        if (getBackend().isDemo()) {
+            exportDone(job.exportNow());
             return;
         }
-        String message = csv.getMessage();
-        if (json.isSelected()) {
-            ActionResult jsonResult = getBackend().export(run, scope,
-                    "json");
-            if (!jsonResult.isDone()) {
-                message = message + " The JSON file failed: "
-                        + jsonResult.getMessage();
-            }
+        job.setOnSucceeded(event -> exportDone(job.getValue()));
+        job.setOnFailed(event -> exportFailed(job));
+        exporting = true;
+        refreshActions();
+        Thread worker = new Thread(job, "gradezzy-export");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Shows why an export stopped before it finished.
+    private void exportFailed(ExportJob job) {
+        exportDone(ActionResult.failed(job.getException().getMessage()));
+    }
+
+    // Shows the outcome of an export and records it when it worked.
+    private void exportDone(ActionResult outcome) {
+        exporting = false;
+        if (!outcome.isDone()) {
+            showResult(false, outcome.getMessage());
+            refreshActions();
+            return;
         }
-        getBackend().recordAudit("Exported", message);
+        getBackend().recordAudit("Exported", outcome.getMessage());
         exported = true;
-        showResult(true, message);
+        showResult(true, outcome.getMessage());
         getState().reach(Step.EXPORT);
         refreshActions();
     }

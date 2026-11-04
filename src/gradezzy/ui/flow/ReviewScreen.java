@@ -168,6 +168,9 @@ public class ReviewScreen extends FlowScreen {
     // The students whose code holds the search text
     private final List<Submission> codeMatches = new ArrayList<>();
 
+    // The code search still running whose result is wanted, or null
+    private CodeSearch latestSearch = null;
+
     // The line under the heading
     private final Label subtitle = Parts.subtitle("");
 
@@ -285,6 +288,14 @@ public class ReviewScreen extends FlowScreen {
     }
 
     /**
+     * Puts the cursor in the search field.
+     */
+    public void focusSearch() {
+        search.requestFocus();
+        search.selectAll();
+    }
+
+    /**
      * Closes the panel and shows only the students who need review.
      * Used by the developer checks.
      */
@@ -356,6 +367,7 @@ public class ReviewScreen extends FlowScreen {
         search.setPrefWidth(SEARCH_WIDTH);
         search.setMinWidth(SEARCH_MIN_WIDTH);
         search.getStyleClass().add("review-search");
+        search.setAccessibleText("Search students");
         search.textProperty().addListener((observable, before, after)
                 -> searchChanged());
         codeDelay.setOnFinished(event -> searchCode());
@@ -403,6 +415,7 @@ public class ReviewScreen extends FlowScreen {
 
         TableColumn<Submission, Submission> tick = new TableColumn<>();
         tickAllBox.setOnAction(event -> tickAll(tickAllBox.isSelected()));
+        tickAllBox.setAccessibleText("Tick every student shown");
         tick.setGraphic(tickAllBox);
         tick.setSortable(false);
         fixWidth(tick, TICK_WIDTH);
@@ -485,14 +498,19 @@ public class ReviewScreen extends FlowScreen {
     }
 
     /**
-     * Returns the total of a row's student, as the value of a cell.
+     * Returns the total of a row's student, as the value of a cell. A
+     * student with no marks yet has none, so the cell shows a dash.
      *
      * @param cell the row and column of the cell
-     * @return the total, wrapped so the table can read it
+     * @return the total, or a wrapped null when there are no marks
      */
     private ObservableValue<Double> totalOf(
             CellDataFeatures<Submission, Double> cell) {
-        return new ReadOnlyObjectWrapper<>(cell.getValue().getTotalScore());
+        Submission submission = cell.getValue();
+        if (submission.getQuestionResults().isEmpty()) {
+            return new ReadOnlyObjectWrapper<>(null);
+        }
+        return new ReadOnlyObjectWrapper<>(submission.getTotalScore());
     }
 
     /**
@@ -560,24 +578,26 @@ public class ReviewScreen extends FlowScreen {
         }
         int needReview = countNeedingReview();
         int failed = 0;
-        double sum = 0;
         for (Submission submission : rows) {
             if (Students.isFailed(Students.state(submission,
                     getBackend()))) {
                 failed++;
             }
-            sum += submission.getTotalScore();
         }
         allCount.setText(String.valueOf(rows.size()));
         reviewCount.setText(String.valueOf(needReview));
         failedCount.setText(String.valueOf(failed));
 
+        // The same figures as Export and Statistics: graded students only
         String average = "";
-        Assessment assessment = getBackend().getAssessment();
-        if (!rows.isEmpty() && assessment != null) {
+        MarkStats stats = MarkStats.of(rows,
+                run.getAssessment().getMaxTotal(),
+                MarkStats.DEFAULT_PASS_PERCENT);
+        if (!stats.isEmpty()) {
             average = " · average " + Parts.mark(Math.round(
-                    sum / rows.size() * ONE_DECIMAL) / ONE_DECIMAL)
-                    + " out of " + Parts.mark(assessment.getMaxTotal());
+                    stats.getMean() * ONE_DECIMAL) / ONE_DECIMAL)
+                    + " out of " + Parts.mark(stats.getMaxTotal())
+                    + ", of " + stats.getCount() + " graded";
         }
         subtitle.setText(run.getSection().getModuleCode() + " · "
                 + run.getSection().getSectionCode() + " · "
@@ -658,6 +678,7 @@ public class ReviewScreen extends FlowScreen {
     private void searchModeChanged() {
         codeDelay.stop();
         codeMatches.clear();
+        latestSearch = null;
         if (codeButton.isSelected()) {
             search.setPromptText(CODE_PROMPT);
             searchCode();
@@ -668,13 +689,39 @@ public class ReviewScreen extends FlowScreen {
     }
 
     // Asks the backend which students' code holds the search text.
+    // Live mode reads the files on a background thread; the demo reads
+    // no files.
     private void searchCode() {
         codeMatches.clear();
+        latestSearch = null;
         String text = search.getText().trim();
         GradingRun run = getState().getRun();
-        if (!text.isEmpty() && run != null) {
-            codeMatches.addAll(getBackend().searchCode(run, text));
+        if (text.isEmpty() || run == null) {
+            applyFilter();
+            return;
         }
+        if (getBackend().isDemo()) {
+            codeMatches.addAll(getBackend().searchCode(run, text));
+            applyFilter();
+            return;
+        }
+        CodeSearch codeSearch = new CodeSearch(getBackend(), run, text);
+        codeSearch.setOnSucceeded(event -> searchDone(codeSearch));
+        latestSearch = codeSearch;
+        applyFilter();
+        placeholder.setText("Searching the code...");
+        Thread worker = new Thread(codeSearch, "gradezzy-search");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Shows the students a search found, unless a newer search started.
+    private void searchDone(CodeSearch codeSearch) {
+        if (codeSearch != latestSearch) {
+            return;
+        }
+        latestSearch = null;
+        codeMatches.addAll(codeSearch.getValue());
         applyFilter();
     }
 

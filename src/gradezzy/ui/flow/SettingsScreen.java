@@ -243,6 +243,22 @@ public class SettingsScreen extends FlowScreen {
     }
 
     /**
+     * Says whether any setting has a change that is not saved yet.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @return true if a setting was changed and not saved
+     */
+    public boolean hasUnsavedChanges() {
+        for (SettingField field : fields) {
+            if (field.isChanged()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Puts every saved value back in its control.
      *
      * <p>Tier: SHOULD.

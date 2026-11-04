@@ -32,6 +32,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
+import javafx.stage.WindowEvent;
 import javafx.util.Duration;
 
 import gradezzy.model.GradingRun;
@@ -49,12 +50,21 @@ public class FlowWindow {
     // How long a notice stays on screen
     private static final Duration NOTICE_TIME = Duration.seconds(3.5);
 
+    // How often to check whether a stopped batch has finished, before
+    // closing
+    private static final Duration CLOSE_CHECK_TIME = Duration.millis(200);
+
     // The size of the icon of the Help button
     private static final double TOP_ICON_SIZE = 16.0;
 
     // The shortcut that presses the blue button: Ctrl or Cmd and Enter
     private static final KeyCombination NEXT_KEYS = new KeyCodeCombination(
             KeyCode.ENTER, KeyCombination.SHORTCUT_DOWN);
+
+    // The shortcut that puts the cursor in the Review search: Ctrl or
+    // Cmd and F
+    private static final KeyCombination FIND_KEYS = new KeyCodeCombination(
+            KeyCode.F, KeyCombination.SHORTCUT_DOWN);
 
     // With Ctrl or Cmd, the keys that open steps 1 to 4
     private static final KeyCode[] STEP_KEYS = {KeyCode.DIGIT1,
@@ -388,6 +398,61 @@ public class FlowWindow {
     }
 
     /**
+     * Asks before the window closes while a batch is being graded or a
+     * setting is not saved. Closes at once otherwise.
+     *
+     * @param event the request to close the window
+     */
+    public void closeRequested(WindowEvent event) {
+        if (state.isGrading()) {
+            event.consume();
+            confirm("Grading is still running. Stop and close?",
+                    "Students already graded keep their marks. GradeZZY "
+                    + "closes after the current student.", "Stop and close",
+                    () -> stopAndClose());
+        } else if (hasUnsavedSettings()) {
+            event.consume();
+            confirm("Close without saving?", "Your changes in Settings "
+                    + "are not saved yet.", "Close without saving",
+                    () -> closeWindow());
+        }
+    }
+
+    // Says whether the Settings page holds changes that are not saved.
+    private boolean hasUnsavedSettings() {
+        FlowScreen screen = pages.get(Page.SETTINGS);
+        if (!(screen instanceof SettingsScreen)) {
+            return false;
+        }
+        return ((SettingsScreen) screen).hasUnsavedChanges();
+    }
+
+    // Stops grading after the current student, then closes the window.
+    private void stopAndClose() {
+        backend.cancelGrading();
+        actionBar.setStatus("Stopping after the current student, then "
+                + "closing.");
+        closeWhenStopped();
+    }
+
+    // Closes the window once grading has stopped, checking again later
+    // while it has not.
+    private void closeWhenStopped() {
+        if (!state.isGrading()) {
+            closeWindow();
+            return;
+        }
+        PauseTransition wait = new PauseTransition(CLOSE_CHECK_TIME);
+        wait.setOnFinished(event -> closeWhenStopped());
+        wait.play();
+    }
+
+    // Closes the window without asking again.
+    private void closeWindow() {
+        frame.getScene().getWindow().hide();
+    }
+
+    /**
      * Closes the question's sheet, then goes ahead.
      *
      * @param onOk what to do when the instructor goes ahead
@@ -638,14 +703,18 @@ public class FlowWindow {
 
     /**
      * Acts on a key press before any control sees it: Ctrl or Cmd and
-     * Enter presses the blue button, Escape closes a sheet or goes back,
-     * and Ctrl or Cmd and 1 to 4 open a step.
+     * Enter presses the blue button, Ctrl or Cmd and F puts the cursor
+     * in the Review search, Escape closes a sheet or goes back, and Ctrl
+     * or Cmd and 1 to 4 open a step.
      *
      * @param event the key press; consumed when it was a shortcut
      */
     private void handleShortcut(KeyEvent event) {
         if (NEXT_KEYS.match(event)) {
             actionBar.firePrimary();
+            event.consume();
+        } else if (FIND_KEYS.match(event) && isReviewShown()) {
+            ((ReviewScreen) getScreen(Step.REVIEW)).focusSearch();
             event.consume();
         } else if (event.getCode() == KeyCode.ESCAPE && sheet != null) {
             closeSheet();
@@ -661,6 +730,13 @@ public class FlowWindow {
                 }
             }
         }
+    }
+
+    // Says whether the Review step is on screen with no sheet over it.
+    private boolean isReviewShown() {
+        return sheet == null && currentPage == Page.MARKING
+                && currentStep == Step.REVIEW
+                && state.getRun() != null;
     }
 
     // Returns the theme name ThemeManager expects.
