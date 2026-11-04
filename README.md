@@ -163,7 +163,7 @@ The base package is `gradezzy`. Each package has one job.
 | `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
 | `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AssessmentLibrary`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ClassFileMatcher`, `ServiceRegistry` |
 | `ui` | JavaFX only: starting the window and small shared helpers. | `MainApp`, `ThemeManager`, `GradingTask`, `DragDropHandler` |
-| `ui.flow` | The window: tabs Home (a card per section), Marking (Set up, Grade, Review, Export), Statistics, Runs and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `HomeScreen`, `AssessmentsSheet`, `AssessmentEditor`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts`, the review table cells `Review...Cell`, and comparators such as `StudentNameComparator` |
+| `ui.flow` | The window: tabs Home (a card per section), Grading (Set up, Grade, Review, Export), Statistics, History (runs, backups and activity) and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `HomeScreen`, `AssessmentsSheet`, `AssessmentEditor`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts`, the review table cells `Review...Cell`, and comparators such as `StudentNameComparator` |
 | `ui.backend` | The one interface the screens call, and its live version that calls the services. | `DashboardBackend`, `LiveBackend`, `Capability`, small view classes such as `RepairItem` and `RunRecord` |
 | `ui.demo` | Synthetic data for `--demo`. Never reads, grades or saves real files. | `DemoBackend`, `DemoData`, `DemoGrader` |
 | `ui.check` | Developer checks behind the `--check`, `--selftest`, `--snapshot` and `--windowtest` options. Not used when grading. | `FlowCheck`, `FlowSelfTest`, `FlowWindowTest`, `RobotDriver` |
@@ -317,7 +317,7 @@ demo backends, and the developer checks. So are the `fix`, `detection` and
   `PipelineFactory.createPipeline(...)`.
 - **Screen:** add a class in `src/gradezzy/ui/flow/` that extends
   `FlowScreen`, build it from the pieces in `Parts`, style it in
-  `css/flow.css`, and show it from `FlowWindow` (a step of Marking or a
+  `css/flow.css`, and show it from `FlowWindow` (a step of Grading or a
   tab). Anything it needs from a service goes through a new
   `DashboardBackend` method, written in both `LiveBackend` and
   `DemoBackend`. Add it to `FlowCheck` so `run.sh --check` opens it.

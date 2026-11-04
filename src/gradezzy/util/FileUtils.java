@@ -34,6 +34,10 @@ public final class FileUtils {
     // How many times a move is tried before giving up
     private static final int MOVE_ATTEMPTS = 5;
 
+    // The Windows file attributes and their read-only flag
+    private static final String DOS_VIEW = "dos";
+    private static final String DOS_READ_ONLY = "dos:readonly";
+
     // How long to wait between tries, in milliseconds
     private static final long MOVE_WAIT_MILLIS = 500;
 
@@ -88,7 +92,38 @@ public final class FileUtils {
                 closeIfOpen(children);
             }
         }
-        Files.deleteIfExists(directory);
+        deleteWithRetry(directory);
+    }
+
+    // Deletes one file or empty folder. On Windows a read-only file
+    // cannot be deleted, and antivirus or a process that just stopped
+    // can hold a file for a moment, so it clears read-only and tries
+    // again a few times; the last try reports the real error.
+    private static void deleteWithRetry(Path path) throws IOException {
+        for (int attempt = 1; attempt < MOVE_ATTEMPTS; attempt++) {
+            try {
+                Files.deleteIfExists(path);
+                return;
+            } catch (IOException exception) {
+                clearReadOnly(path);
+                waitBeforeRetry();
+            }
+        }
+        Files.deleteIfExists(path);
+    }
+
+    // Clears the Windows read-only flag, where there is one.
+    private static void clearReadOnly(Path path) {
+        try {
+            if (Files.getFileStore(path).supportsFileAttributeView(
+                    DOS_VIEW)) {
+                Files.setAttribute(path, DOS_READ_ONLY, false,
+                        LinkOption.NOFOLLOW_LINKS);
+            }
+        } catch (IOException | UnsupportedOperationException
+                | IllegalArgumentException exception) {
+            // Not a Windows file system, or the file is gone
+        }
     }
 
     /**

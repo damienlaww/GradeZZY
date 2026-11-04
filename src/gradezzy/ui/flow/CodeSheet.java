@@ -93,6 +93,15 @@ public final class CodeSheet {
     // The answer file of the question shown
     private final TextArea code = new TextArea();
 
+    // The width of one digit of the line numbers, in IBM Plex Mono 12px
+    private static final double DIGIT_WIDTH = 7.5;
+
+    // The space around the line numbers, left and right together
+    private static final double GUTTER_PADDING = 26.0;
+
+    // The line numbers beside the code, scrolled with it
+    private final TextArea lineNumbers = new TextArea();
+
     // The tester output or compiler messages of the question shown
     private final TextArea output = new TextArea();
 
@@ -120,6 +129,9 @@ public final class CodeSheet {
 
     // The question shown, or null
     private Question shown = null;
+
+    // The issue shown above the code with its buttons, or null
+    private Node issue = null;
 
     // The run of the tests still going whose result is wanted, or null
     private QuestionRerun running = null;
@@ -151,7 +163,25 @@ public final class CodeSheet {
      */
     public static Node create(FlowWindow window, Submission submission,
             String questionId) {
-        return new CodeSheet(window, submission).build(questionId);
+        return create(window, submission, questionId, null);
+    }
+
+    /**
+     * Builds the sheet for one student, showing one question first, with
+     * an issue and its buttons above the code, so the issue can be
+     * decided while the code is open.
+     *
+     * @param window the window that shows it
+     * @param submission the student
+     * @param questionId the question shown first, or null for the first
+     * @param issue the issue's card, or null for none
+     * @return the sheet's content
+     */
+    public static Node create(FlowWindow window, Submission submission,
+            String questionId, Node issue) {
+        CodeSheet sheet = new CodeSheet(window, submission);
+        sheet.issue = issue;
+        return sheet.build(questionId);
     }
 
     // ------------------------------------------------------------ build
@@ -187,6 +217,9 @@ public final class CodeSheet {
         VBox.setVgrow(middle, Priority.ALWAYS);
 
         VBox body = new VBox(Parts.GAP + Parts.GAP_SMALL, top, middle);
+        if (issue != null) {
+            body.getChildren().add(1, issue);
+        }
         body.getStyleClass().add("code-sheet");
         body.setPrefSize(WIDTH, HEIGHT);
         body.sceneProperty().addListener((observable, before, after)
@@ -268,9 +301,40 @@ public final class CodeSheet {
         HBox header = Parts.row(Parts.GAP, new Node[] {
             panelTitle("Answer file"), file, Parts.grow(), readOnly});
         header.getStyleClass().add("code-panel-header");
-        VBox panel = new VBox(header, code);
+        lineNumbers.setEditable(false);
+        lineNumbers.setFocusTraversable(false);
+        lineNumbers.setMouseTransparent(true);
+        lineNumbers.getStyleClass().addAll("code-area", "line-numbers");
+        lineNumbers.setAccessibleText("Line numbers");
+        // The numbers move with the code when it scrolls
+        lineNumbers.scrollTopProperty().bindBidirectional(
+                code.scrollTopProperty());
+        HBox.setHgrow(code, Priority.ALWAYS);
+        HBox codeRow = new HBox(lineNumbers, code);
+        VBox.setVgrow(codeRow, Priority.ALWAYS);
+        VBox panel = new VBox(header, codeRow);
         panel.getStyleClass().add("code-panel");
         return panel;
+    }
+
+    // Shows one number per line of the code, right-aligned, and sizes
+    // the column to the widest number.
+    private void showLineNumbers(String text) {
+        int lines = text.split("\n", -1).length;
+        int digits = String.valueOf(lines).length();
+        StringBuilder numbers = new StringBuilder();
+        for (int line = 1; line <= lines; line++) {
+            numbers.append(String.format("%" + digits + "d", line));
+            numbers.append('\n');
+        }
+        // One more line, so the numbers still reach the last line when
+        // the code has a horizontal scroll bar
+        numbers.append(' ');
+        lineNumbers.setText(numbers.toString());
+        double width = digits * DIGIT_WIDTH + GUTTER_PADDING;
+        lineNumbers.setMinWidth(width);
+        lineNumbers.setPrefWidth(width);
+        lineNumbers.setMaxWidth(width);
     }
 
     // Builds the output panel: a header with where the output came from,
@@ -397,6 +461,8 @@ public final class CodeSheet {
         }
         code.setText(text);
         code.positionCaret(0);
+        showLineNumbers(text);
+        code.setScrollTop(0);
 
         QuestionResult result = savedResult(questionId);
         String out = "No output was recorded for " + questionId + ". The "

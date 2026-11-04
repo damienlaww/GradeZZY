@@ -26,6 +26,7 @@ import javafx.scene.control.TreeItem;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.config.ModuleSections;
 import gradezzy.exec.ProcessRunner;
 import gradezzy.exec.SourceCompiler;
 import gradezzy.fix.FixRecord;
@@ -43,12 +44,14 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.SavedAssessment;
+import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.report.ExportException;
+import gradezzy.report.ScoreFormatter;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.ClassFileMatch;
@@ -153,6 +156,8 @@ public class LiveBackend implements DashboardBackend {
         return capability.isWired();
     }
 
+    
+
     /**
      * Returns the module codes listed in config.properties.
      */
@@ -166,7 +171,16 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public List<String> getSectionCodes(String moduleCode) {
-        return config.getList(ConfigKeys.SECTION_CODES);
+        String byModule = null;
+        if (config.hasKey(ConfigKeys.MODULE_SECTION_CODES)) {
+            byModule = config.getString(ConfigKeys.MODULE_SECTION_CODES);
+        }
+        String ownOnly = null;
+        if (config.hasKey(ConfigKeys.OWN_SECTIONS_ONLY_MODULES)) {
+            ownOnly = config.getString(ConfigKeys.OWN_SECTIONS_ONLY_MODULES);
+        }
+        return ModuleSections.forModule(config.getString(
+                ConfigKeys.SECTION_CODES), byModule, ownOnly, moduleCode);
     }
 
     /**
@@ -276,6 +290,24 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public Path getConfiguredPath(InputKind kind) {
+        return configuredPath(kind);
+    }
+
+    // The score sheet a run used, else its section's own score sheet,
+    // else the one for everyone.
+    private Path scoreSheetOf(GradingRun gradingRun) {
+        if (gradingRun.getScoreSheetFile() != null) {
+            return gradingRun.getScoreSheetFile();
+        }
+        try {
+            return Paths.get(getScoreSheet(gradingRun.getSection()));
+        } catch (java.nio.file.InvalidPathException exception) {
+            return configuredPath(InputKind.ROSTER);
+        }
+    }
+
+    // Reads a path setting.
+    private Path configuredPath(InputKind kind) {
         if (kind == InputKind.ROSTER) {
             return Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE));
         } else if (kind == InputKind.TESTERS) {
@@ -395,10 +427,7 @@ public class LiveBackend implements DashboardBackend {
         if (gradingRun == null) {
             return ClassFileMatch.fits();
         }
-        Path sheet = gradingRun.getScoreSheetFile();
-        if (sheet == null) {
-            sheet = getConfiguredPath(InputKind.ROSTER);
-        }
+        Path sheet = scoreSheetOf(gradingRun);
 
         List<String> usernames = new ArrayList<>();
         List<Path> uploads = new ArrayList<>();
@@ -473,10 +502,7 @@ public class LiveBackend implements DashboardBackend {
             return missing;
         }
 
-        Path scoreSheet = gradingRun.getScoreSheetFile();
-        if (scoreSheet == null) {
-            scoreSheet = getConfiguredPath(InputKind.ROSTER);
-        }
+        Path scoreSheet = scoreSheetOf(gradingRun);
 
         List<Student> roster = new ArrayList<>();
         try {
@@ -606,10 +632,16 @@ public class LiveBackend implements DashboardBackend {
             return ActionResult.failed("Choose a flag and a decision.");
         }
 
+        ReviewDecision before = getDecision(anomaly);
         if (decision == ReviewDecision.OPEN) {
             decisions.remove(decisionKey(anomaly));
         } else {
             decisions.put(decisionKey(anomaly), decision);
+        }
+        // Every decision is in the activity log, so it can be undone there
+        if (before != decision) {
+            services.getAuditService().record(decision.getAuditAction(),
+                    anomaly.getUsername() + ": " + anomaly.getMessage());
         }
         return ActionResult.done("Marked the flag for "
                 + anomaly.getUsername() + " as "
@@ -703,7 +735,18 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public ActionResult undoRepairDecision(RepairItem repair) {
-        return ActionResult.notConnected(Capability.REPAIR_DECISION_UNDO);
+        Anomaly anomaly = repair.getAnomaly();
+        // A rejected fix put the files back and graded again, so it
+        // cannot be taken back here; grade the student again instead
+        if (!services.getAnomalyService().reopenFix(anomaly)) {
+            return ActionResult.failed("Only a kept fix can be taken "
+                    + "back. The fix for " + anomaly.getUsername()
+                    + " is " + describeFixStatus(anomaly.getFixStatus())
+                    + ".");
+        }
+        forgetSavedRuns();
+        return ActionResult.done("The fix for " + anomaly.getUsername()
+                + " waits for review again.");
     }
 
     /**
@@ -822,28 +865,60 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet: no service stores manual marks.
+     * Calls ScoreAdjustmentService.adjust on the run shown on Review.
      */
     @Override
-    public ActionResult adjustScore(Submission submission,
+    public ActionResult adjustScore(GradingRun run, Submission submission,
             String questionId, double newScore, String reason) {
-        return ActionResult.notConnected(Capability.SCORE_ADJUSTMENT);
+        if (run == null || !run.getSubmissions().contains(submission)) {
+            return ActionResult.failed("Open the student's run on Review "
+                    + "first.");
+        }
+        try {
+            ScoreAdjustment change = services.getScoreAdjustmentService()
+                    .adjust(run, submission, questionId, newScore, reason);
+            return ActionResult.done("Saved. " + questionId + " for "
+                    + submission.getUsername() + " changed from "
+                    + ScoreFormatter.format(change.getPreviousScore())
+                    + " to " + ScoreFormatter.format(newScore) + ".");
+        } catch (IllegalArgumentException exception) {
+            return ActionResult.failed(exception.getMessage());
+        }
     }
 
     /**
-     * Returns Not connected yet: no service stores manual marks.
+     * Calls ScoreAdjustmentService.undo, which puts the earlier mark back
+     * in the run shown on Review.
      */
     @Override
-    public ActionResult undoAdjustment(ScoreAdjustment adjustment) {
-        return ActionResult.notConnected(Capability.SCORE_ADJUSTMENT);
+    public ActionResult undoAdjustment(GradingRun run,
+            ScoreAdjustment adjustment) {
+        if (run == null) {
+            return ActionResult.failed("Open the student's run on Review "
+                    + "first.");
+        }
+        try {
+            services.getScoreAdjustmentService().undo(run, adjustment);
+            return ActionResult.done("Undone. " + adjustment.getQuestionId()
+                    + " for " + adjustment.getUsername() + " is "
+                    + ScoreFormatter.format(adjustment.getPreviousScore())
+                    + " again.");
+        } catch (IllegalArgumentException exception) {
+            return ActionResult.failed(exception.getMessage());
+        }
     }
 
     /**
-     * Returns an empty list, because no service stores manual marks.
+     * Calls ScoreAdjustmentService.list for the run shown on Review.
      */
     @Override
-    public List<ScoreAdjustment> listAdjustments(Submission submission) {
-        return new ArrayList<>();
+    public List<ScoreAdjustment> listAdjustments(GradingRun run,
+            Submission submission) {
+        if (run == null) {
+            return new ArrayList<>();
+        }
+        return services.getScoreAdjustmentService().list(run,
+                submission.getUsername());
     }
 
     /**
@@ -857,8 +932,8 @@ public class LiveBackend implements DashboardBackend {
                     + "yet. Grade a batch first.");
         }
 
-        Path outputFolder = Paths.get(config.getString(
-                ConfigKeys.OUTPUT_DIR));
+        Path outputFolder = Paths.get(getExportFolder(
+                gradingRun.getSection()));
         try {
             Path written = services.getExportService().export(gradingRun,
                     scope, formatName, outputFolder);
@@ -933,7 +1008,7 @@ public class LiveBackend implements DashboardBackend {
             forgetSavedRuns();
             return ActionResult.failed("The restore of "
                     + backupFile.getFileName() + " did not finish ("
-                    + exception.getMessage() + "). Check the Runs tab "
+                    + exception.getMessage() + "). Check the History tab "
                     + "before grading again.");
         }
 
@@ -1141,9 +1216,18 @@ public class LiveBackend implements DashboardBackend {
                 || key.equals(ConfigKeys.ASSESSMENT_NAME)
                 || key.equals(ConfigKeys.TESTERS_DIR)
                 || key.equals(ConfigKeys.STARTER_DIR)
+                
                 || key.equals(ConfigKeys.PROVIDED_CLASS_FILES)
                 || key.equals(ConfigKeys.TESTER_DATA_FILES)
                 || key.equals(ConfigKeys.PLACEHOLDER_FOLDER_NAMES);
+    }
+
+    /**
+     * Calls AuditService.record.
+     */
+    @Override
+    public void recordActivity(String action, String detail) {
+        services.getAuditService().record(action, detail);
     }
 
     /**

@@ -32,6 +32,11 @@ public class SavedAssessment {
     // The folder of starter files given to students
     private String starterDirectory = "";
 
+    // The module the assessment belongs to, or "" for every module
+    private String moduleCode = "";
+
+    
+
     // Class files given to students without their source
     private final List<String> providedClassFiles = new ArrayList<>();
 
@@ -59,6 +64,8 @@ public class SavedAssessment {
         copy.getQuestions().addAll(questions);
         copy.setTestersDirectory(testersDirectory);
         copy.setStarterDirectory(starterDirectory);
+        
+        copy.setModuleCode(moduleCode);
         copy.getProvidedClassFiles().addAll(providedClassFiles);
         copy.getTesterDataFiles().addAll(testerDataFiles);
         copy.getPlaceholderFolderNames().addAll(placeholderFolderNames);
@@ -126,6 +133,40 @@ public class SavedAssessment {
      */
     public void setStarterDirectory(String starterDirectory) {
         this.starterDirectory = starterDirectory;
+    }
+
+    /**
+     * Returns the module this assessment belongs to.
+     *
+     * @return the module, such as CS102, or "" for every module
+     */
+    public String getModuleCode() {
+        return moduleCode;
+    }
+
+    /**
+     * Changes the module this assessment belongs to.
+     *
+     * @param moduleCode the module, or "" for every module
+     */
+    public void setModuleCode(String moduleCode) {
+        this.moduleCode = moduleCode == null ? "" : moduleCode.trim();
+    }
+
+    /**
+     * Says whether this assessment is listed for a module: one of that
+     * module, or one made before assessments had a module, which every
+     * module that has the shared sections can use.
+     *
+     * @param module the module
+     * @param ownOnly true for a module added with only its own sections
+     * @return true when it is listed for the module
+     */
+    public boolean belongsTo(String module, boolean ownOnly) {
+        if (moduleCode.isEmpty()) {
+            return !ownOnly;
+        }
+        return moduleCode.equalsIgnoreCase(module);
     }
 
     /**

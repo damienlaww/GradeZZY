@@ -10,6 +10,7 @@
 package gradezzy.service;
 
 import java.io.IOException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -236,6 +237,11 @@ public class ExportService {
 
             Files.move(tempFile, outputFile,
                     StandardCopyOption.REPLACE_EXISTING);
+        } catch (FileSystemException exception) {
+            // On Windows, a file open in Excel is locked
+            throw new ExportException("The earlier export " + outputFile
+                    + " could not be replaced. If it is open, such as in "
+                    + "Excel, close it and export again.", exception);
         } catch (IOException exception) {
             throw new ExportException("The earlier export " + outputFile
                     + " could not be replaced: " + exception.getMessage(),

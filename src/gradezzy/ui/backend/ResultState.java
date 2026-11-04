@@ -119,13 +119,47 @@ public enum ResultState {
      */
     public static ResultState of(Submission submission,
             DashboardBackend backend) {
+        SubmissionStatus status = submission.getStatus();
+        if (isNoSubmission(submission)) {
+            return NO_SUBMISSION;
+        }
+        if (status == SubmissionStatus.FAILED) {
+            return COULD_NOT_GRADE;
+        }
+        if (status != SubmissionStatus.GRADED
+                || submission.getQuestionResults().isEmpty()) {
+            return UNGRADED;
+        }
+        // A compile error or timeout shows only while its flag is open:
+        // once the instructor has checked it, the student is graded
         boolean waiting = false;
+        boolean compileOpen = false;
+        boolean timeoutOpen = false;
+        boolean timeoutFlagged = false;
         for (Anomaly anomaly : submission.getAnomalies()) {
-            if (backend.needsReview(anomaly)) {
-                waiting = true;
+            boolean open = backend.needsReview(anomaly);
+            waiting = waiting || open;
+            if (anomaly.getType() == AnomalyType.COMPILE_ERROR && open) {
+                compileOpen = true;
+            } else if (anomaly.getType() == AnomalyType.TIMEOUT) {
+                timeoutFlagged = true;
+                timeoutOpen = timeoutOpen || open;
             }
         }
-        return of(submission, waiting);
+        if (compileOpen) {
+            return COMPILE_ERROR;
+        }
+        // A timeout with no flag to check cannot be settled, so it shows
+        if (timeoutOpen || (!timeoutFlagged && anyTimedOut(submission))) {
+            return TIMED_OUT;
+        }
+        if (waiting) {
+            return NEEDS_REVIEW;
+        }
+        if (submission.getTotalScore() == 0.0) {
+            return ZERO;
+        }
+        return COMPLETED;
     }
 
     /**

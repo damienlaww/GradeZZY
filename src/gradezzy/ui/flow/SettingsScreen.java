@@ -12,28 +12,38 @@
  */
 package gradezzy.ui.flow;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
+import javafx.stage.DirectoryChooser;
+import javafx.stage.FileChooser;
 
 import atlantafx.base.controls.CustomTextField;
 
 import gradezzy.config.ConfigKeys;
+import gradezzy.config.ExportFolders;
+import gradezzy.config.ModuleSections;
 import gradezzy.model.Assessment;
-import gradezzy.model.Question;
+import gradezzy.model.SavedAssessment;
 import gradezzy.ui.ThemeManager;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
@@ -59,17 +69,6 @@ public class SettingsScreen extends FlowScreen {
 
     // The size of the search icon
     private static final double SEARCH_ICON_SIZE = 14.0;
-
-    // The width of the questions table
-    private static final double QUESTIONS_WIDTH = 420.0;
-
-    // The height of a row of the questions table
-    private static final double QUESTION_ROW_HEIGHT = 32.0;
-
-    // Column widths of the questions table
-    private static final double QUESTION_WIDTH = 84.0;
-    private static final double FOLDER_WIDTH = 110.0;
-    private static final double MAX_WIDTH = 64.0;
 
     // The gap between entries of the list of groups
     private static final double INDEX_ITEM_GAP = 4.0;
@@ -111,9 +110,9 @@ public class SettingsScreen extends FlowScreen {
 
     // The values each number setting offers in its list. A value set by
     // hand that is not here is kept as one more choice.
-    private static final String[] RUN_SECONDS = {"5", "10", "15", "20",
+    static final String[] RUN_SECONDS = {"5", "10", "15", "20",
         "30", "60"};
-    private static final String[] COMPILE_SECONDS = {"10", "20", "30",
+    static final String[] COMPILE_SECONDS = {"10", "20", "30",
         "60", "120"};
     private static final String[] OUTPUT_CHARACTERS = {"10000", "50000",
         "100000", "500000", "1000000"};
@@ -174,6 +173,49 @@ public class SettingsScreen extends FlowScreen {
 
     // The Discard button of the action bar
     private final Button discardButton;
+
+    // The words of the dropdown line that starts a new assessment
+    private static final String NEW_ASSESSMENT = "+ New assessment...";
+
+    // The width of the assessment dropdown
+    private static final double PICKER_WIDTH = 260.0;
+
+    // The section dropdown's line for a whole module
+    private static final String WHOLE_MODULE = "Whole module";
+
+    // Every section with its score sheet
+    private final VBox scoreSheetList = new VBox(Parts.GAP_SMALL);
+
+    // The modules and sections with their own export folder
+    private final VBox exportFolderList = new VBox(Parts.GAP_SMALL);
+
+    // The Course controls: the modules, the button that deletes one, and
+    // the chosen module's sections as chips
+    private final ComboBox<String> moduleList = new ComboBox<>();
+    private final Button deleteModule = Parts.small("Delete module",
+            () -> { });
+    private final FlowPane sectionChips = new FlowPane();
+
+    // Whether the course settings can be changed here
+    private boolean editableCourse = true;
+
+    // How wide the row of section chips gets before it wraps
+    private static final double SECTION_WRAP = 520.0;
+
+    // The size of a chip's delete icon and its gap
+    private static final double CHIP_ICON_SIZE = 10.0;
+    private static final double CHIP_GAP = 6.0;
+
+    // The dropdown of saved assessments, and the form under it
+    private final ComboBox<String> assessmentPicker = new ComboBox<>();
+    private final VBox assessmentHolder = new VBox(Parts.GAP);
+
+    // True while the dropdown is being filled, so no pick is handled
+    private boolean pickingAssessment = false;
+
+    // Scrolls to the first error, shown while an error blocks Save
+    private final Button showErrorButton = Parts.secondary("Show error",
+            () -> showFirstError());
 
     // The group being built
     private SettingsGroup building = null;
@@ -241,6 +283,8 @@ public class SettingsScreen extends FlowScreen {
             field.setEditable(editable);
             field.setOnChange(() -> refreshBar());
         }
+        showErrorButton.setVisible(false);
+        showErrorButton.setManaged(false);
     }
 
     /**
@@ -263,6 +307,19 @@ public class SettingsScreen extends FlowScreen {
                     + "config.properties instead.");
             return;
         }
+        // Course and export folders may have changed on Home or in
+        // History, such as a delete taken back there
+        fillCourse(moduleList.getValue());
+        fillExportFolders();
+        fillScoreSheets();
+        refreshAssessmentPicker();
+        // A setting saved elsewhere, such as from Set up, shows its new value
+        for (SettingField field : fields) {
+            if (!field.isChanged()) {
+                field.reload();
+            }
+        }
+        actions.addSecondary(showErrorButton);
         actions.addSecondary(discardButton);
         actions.setPrimary("Save", () -> save(), false);
         refreshBar();
@@ -341,37 +398,24 @@ public class SettingsScreen extends FlowScreen {
     // has a place.
     private void addGroups() {
         startGroup("Course");
-        text(ConfigKeys.MODULE_CODES, "Modules",
-                "Separated by commas. The first is the default.");
-        text(ConfigKeys.SECTION_CODES, "Sections", "Separated by commas. "
-                + "You can also add one on Home.");
+        addCourseRows();
 
         startGroup("Files and folders");
-        file(ConfigKeys.SCORE_SHEET_FILE, "Score sheet",
-                "The roster, and the template for the export.");
-        folder(ConfigKeys.TESTERS_DIR, "Tester files",
-                "Of the assessment in use: testers and their data files.");
-        folder(ConfigKeys.STARTER_DIR, "Starter files",
-                "Of the assessment in use: spots untouched answers and "
-                + "gives the provided class files.");
+        addScoreSheetRows();
+        
         folder(ConfigKeys.WORKING_DIR, "Working copies",
                 "Fixes and tests run here. Originals never change.");
         folder(ConfigKeys.OUTPUT_DIR, "Exports saved in",
-                "CSV, JSON and reports.");
+                "CSV, JSON and reports, for every module and section unless "
+                + "one below has its own folder.");
+        addExportFolderRows();
         folder(ConfigKeys.BACKUP_DIR, "Backups saved in",
-                "Copies made by Back up now on Runs.");
+                "Copies made by Back up now in History.");
         folder(ConfigKeys.ASSESSMENTS_DIR, "Assessments saved in",
                 "One file per saved assessment.");
 
         startGroup("Assessment");
-        text(ConfigKeys.ASSESSMENT_NAME, "Name", "");
-        addQuestions();
-        text(ConfigKeys.TESTER_DATA_FILES, "Tester data files",
-                "Copied next to each tester. Separated by commas.");
-        text(ConfigKeys.PROVIDED_CLASS_FILES, "Provided class files",
-                "Given without source; kept when .class files are cleared.");
-        text(ConfigKeys.PLACEHOLDER_FOLDER_NAMES, "Unrenamed folder names",
-                "Starter folder names a student forgot to rename.");
+        addAssessmentEditor();
 
         startGroup("Checks and fixes");
         toggle(ConfigKeys.AUTO_FIX_ENABLED, "Fix small mistakes",
@@ -419,7 +463,7 @@ public class SettingsScreen extends FlowScreen {
 
         startGroup("Saved data");
         toggle(ConfigKeys.DATABASE_ENABLED, "Save results",
-                "Needed for Runs, Resume and the activity log.");
+                "Needed for History, Resume and the activity log.");
         file(ConfigKeys.DATABASE_FILE, "Database file", "");
         listed(ConfigKeys.BACKUP_KEEP_COUNT, "Backups kept",
                 "The oldest is deleted after this many.", BACKUP_COUNTS, "");
@@ -592,53 +636,784 @@ public class SettingsScreen extends FlowScreen {
         building.addRow(field.getRow(), field);
     }
 
-    // Adds the read-only table of questions to the group being built.
-    // The questions are only shown: changing a question means changing
-    // several lines together, and the assessment is read at start-up.
-    private void addQuestions() {
-        Assessment assessment = getBackend().getAssessment();
-        PlainTable table = new PlainTable(QUESTION_ROW_HEIGHT);
-        table.getStyleClass().add("compact");
-        table.addColumn("Question", QUESTION_WIDTH, Pos.CENTER_LEFT);
-        table.addColumn("Folder", FOLDER_WIDTH, Pos.CENTER_LEFT);
-        table.addColumn("File", PlainTable.GROW, Pos.CENTER_LEFT);
-        table.addColumn("Max", MAX_WIDTH, Pos.CENTER_RIGHT);
-        for (Question question : assessment.getQuestions()) {
-            table.addRow(new Node[] {Parts.strong(question.getId()),
-                new Label(question.getFolderName()),
-                new Label(question.getFileName()),
-                new Label(Parts.mark(question.getMaxScore()))});
-        }
-        if (assessment.getQuestions().isEmpty()) {
-            table.showMessage(Parts.muted("No questions are listed."));
-        }
-        table.setPrefWidth(QUESTIONS_WIDTH);
-        table.setMaxWidth(QUESTIONS_WIDTH);
-
-        String description = "Folder, file and maximum mark of each "
-                + "question of " + assessment.getName() + ". Total "
-                + Parts.mark(assessment.getMaxTotal()) + ". Each maximum "
-                + "is the sum of the \"score += <number>\" lines in the "
-                + "question's tester.";
-        Label name = Parts.strong("Questions");
-        Label help = Parts.muted(description);
-        help.getStyleClass().add("small-text");
-        help.setWrapText(true);
-        Hyperlink manage = Parts.link("Edit in Assessments",
-                () -> getWindow().editAssessment(assessment.getName()));
-        manage.getStyleClass().add("small-text");
-        Parts.tip(manage, "Change questions and marks, or add another "
-                + "assessment, in the assessment editor.");
-        VBox names = new VBox(LINE_GAP, name, help, manage);
+    // Adds the row that lists each section with its score sheet.
+    private void addScoreSheetRows() {
+        Label name = Parts.strong("Score sheet of each section");
+        Label about = Parts.muted("The class list exported from eLearn. "
+                + "Each section has its own; one chosen on Set up is kept "
+                + "here too.");
+        about.getStyleClass().add("small-text");
+        about.setWrapText(true);
+        VBox names = new VBox(LINE_GAP, name, about);
         names.setMinWidth(SettingField.NAME_WIDTH);
         names.setPrefWidth(SettingField.NAME_WIDTH);
         names.setMaxWidth(SettingField.NAME_WIDTH);
-        HBox row = new HBox(SettingField.COLUMN_GAP, names, table);
+        HBox.setHgrow(scoreSheetList, Priority.ALWAYS);
+        HBox row = new HBox(SettingField.COLUMN_GAP, names, scoreSheetList);
         row.setAlignment(Pos.TOP_LEFT);
         row.getStyleClass().add("setting-row");
         building.addRow(row, null);
-        building.setQuestionsText(("questions " + description)
-                .toLowerCase());
+        fillScoreSheets();
+    }
+
+    // Lists every section of every module with its score sheet.
+    private void fillScoreSheets() {
+        scoreSheetList.getChildren().clear();
+        String sheets = getBackend().getSetting(
+                ConfigKeys.SCORE_SHEET_BY_SECTION);
+        String fallback = getBackend().getSetting(
+                ConfigKeys.SCORE_SHEET_FILE).trim();
+        boolean editable = getBackend().supports(Capability.SETTINGS)
+                && !getBackend().isDemo();
+        for (String module : getBackend().getModuleCodes()) {
+            for (String section : getBackend().getSectionCodes(module)) {
+                String who = ExportFolders.keyOf(module, section);
+                String own = ExportFolders.exact(sheets, who);
+                Label whoLabel = Parts.strong(module + " · " + section);
+                whoLabel.setMinWidth(Label.USE_PREF_SIZE);
+                Label file = Parts.muted(own.isEmpty()
+                        ? (fallback.isEmpty() ? "Not chosen yet"
+                        : "Not chosen; uses " + fileName(fallback))
+                        : fileName(own));
+                file.getStyleClass().add("small-text");
+                file.setMinWidth(0);
+                Parts.tip(file, own.isEmpty() ? fallback : own);
+                HBox line = Parts.row(Parts.GAP, new Node[] {whoLabel, file,
+                    Parts.grow()});
+                Hyperlink choose = Parts.link(own.isEmpty() ? "Choose"
+                        : "Change", () -> chooseScoreSheet(who));
+                choose.setDisable(!editable);
+                line.getChildren().add(choose);
+                if (!own.isEmpty()) {
+                    Hyperlink clear = Parts.link("Clear",
+                            () -> setScoreSheet(who, null));
+                    clear.setDisable(!editable);
+                    line.getChildren().add(clear);
+                }
+                line.getStyleClass().add("export-folder-line");
+                scoreSheetList.getChildren().add(line);
+            }
+        }
+        if (scoreSheetList.getChildren().isEmpty()) {
+            Label none = Parts.muted("Add a section under Course first.");
+            none.getStyleClass().add("small-text");
+            scoreSheetList.getChildren().add(none);
+        }
+    }
+
+    // Returns the last part of a path, for a short line.
+    private static String fileName(String path) {
+        int slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        return slash >= 0 ? path.substring(slash + 1) : path;
+    }
+
+    // Asks for a section's score sheet and keeps it.
+    private void chooseScoreSheet(String who) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Choose the score sheet of " + who.replace("/",
+                " · "));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+                "CSV files", "*.csv"));
+        File picked = chooser.showOpenDialog(getWindow().getWindow());
+        if (picked != null) {
+            setScoreSheet(who, picked.getPath());
+        }
+    }
+
+    // Keeps or clears a section's score sheet.
+    private void setScoreSheet(String who, String path) {
+        String before = getBackend().getSetting(
+                ConfigKeys.SCORE_SHEET_BY_SECTION);
+        Map<String, String> changes = new HashMap<>();
+        changes.put(ConfigKeys.SCORE_SHEET_BY_SECTION, path == null
+                ? ExportFolders.remove(before, who)
+                : ExportFolders.put(before, who, path));
+        ActionResult result = getBackend().saveSettings(changes);
+        if (!result.isDone()) {
+            getWindow().notify(result.getMessage());
+            return;
+        }
+        fillScoreSheets();
+        String section = who.replace("/", " · ");
+        getWindow().notify(path == null ? "Cleared the score sheet of "
+                + section + "." : "Kept " + fileName(path) + " for "
+                + section + ".", "Undo", () -> {
+            Map<String, String> back = new HashMap<>();
+            back.put(ConfigKeys.SCORE_SHEET_BY_SECTION, before);
+            getBackend().saveSettings(back);
+            fillScoreSheets();
+        });
+    }
+
+    // Adds the row that lists the modules and sections with their own
+    // export folder, with a button that adds one.
+    private void addExportFolderRows() {
+        Label name = Parts.strong("Exports for one module or section");
+        Label about = Parts.muted("These save their CSV, JSON and reports "
+                + "in their own folder. A section's folder wins over its "
+                + "module's.");
+        about.getStyleClass().add("small-text");
+        about.setWrapText(true);
+        VBox names = new VBox(LINE_GAP, name, about);
+        names.setMinWidth(SettingField.NAME_WIDTH);
+        names.setPrefWidth(SettingField.NAME_WIDTH);
+        names.setMaxWidth(SettingField.NAME_WIDTH);
+        Button add = Parts.small("Add a folder", () -> openExportFolder(
+                null, null));
+        add.setGraphic(Parts.icon(Parts.PLUS, SEARCH_ICON_SIZE));
+        add.setDisable(!getBackend().supports(Capability.SETTINGS));
+        VBox controls = new VBox(Parts.GAP_SMALL, exportFolderList, add);
+        HBox.setHgrow(controls, Priority.ALWAYS);
+        HBox row = new HBox(SettingField.COLUMN_GAP, names, controls);
+        row.setAlignment(Pos.TOP_LEFT);
+        row.getStyleClass().add("setting-row");
+        building.addRow(row, null);
+        fillExportFolders();
+    }
+
+    // Lists each module or section with its own export folder.
+    private void fillExportFolders() {
+        exportFolderList.getChildren().clear();
+        List<String[]> entries = ExportFolders.list(getBackend().getSetting(
+                ConfigKeys.OUTPUT_DIR_BY_SECTION));
+        if (entries.isEmpty()) {
+            Label none = Parts.muted("None yet. Every module and section "
+                    + "uses the folder above.");
+            none.getStyleClass().add("small-text");
+            exportFolderList.getChildren().add(none);
+            return;
+        }
+        for (String[] entry : entries) {
+            String who = entry[0];
+            Label whoLabel = Parts.strong(who.replace("/", " · "));
+            whoLabel.setMinWidth(Label.USE_PREF_SIZE);
+            Label folder = Parts.muted(entry[1]);
+            folder.getStyleClass().add("small-text");
+            folder.setMinWidth(0);
+            Parts.tip(folder, entry[1]);
+            String[] parts = who.split("/", 2);
+            String section = parts.length > 1 ? parts[1] : null;
+            HBox line = Parts.row(Parts.GAP, new Node[] {whoLabel, folder,
+                Parts.grow(), Parts.link("Change", () -> openExportFolder(
+                parts[0], section)), Parts.link("Remove",
+                () -> removeExportFolder(who))});
+            line.getStyleClass().add("export-folder-line");
+            exportFolderList.getChildren().add(line);
+        }
+    }
+
+    // Opens the sheet that gives a module or section its own export
+    // folder; with a module given, it changes that one's folder.
+    private void openExportFolder(String module, String section) {
+        ComboBox<String> modules = new ComboBox<>();
+        modules.getItems().setAll(getBackend().getModuleCodes());
+        modules.setValue(module != null ? module
+                : modules.getItems().isEmpty() ? null
+                : modules.getItems().get(0));
+        ComboBox<String> sections = new ComboBox<>();
+        Runnable fill = () -> {
+            sections.getItems().setAll(WHOLE_MODULE);
+            if (modules.getValue() != null) {
+                sections.getItems().addAll(getBackend().getSectionCodes(
+                        modules.getValue()));
+            }
+        };
+        fill.run();
+        sections.setValue(section != null ? section : WHOLE_MODULE);
+        modules.setOnAction(event -> {
+            fill.run();
+            sections.setValue(WHOLE_MODULE);
+        });
+        modules.setPrefWidth(PICKER_WIDTH);
+        sections.setPrefWidth(PICKER_WIDTH);
+
+        TextField folder = new TextField();
+        folder.setPromptText("Such as workspace/g1-exports");
+        if (module != null) {
+            folder.setText(ExportFolders.resolve("", getBackend().getSetting(
+                    ConfigKeys.OUTPUT_DIR_BY_SECTION), module, section));
+        }
+        HBox.setHgrow(folder, Priority.ALWAYS);
+        Button choose = Parts.small("Choose", () -> {
+            DirectoryChooser chooser = new DirectoryChooser();
+            chooser.setTitle("Choose where these exports are saved");
+            File picked = chooser.showDialog(getWindow().getWindow());
+            if (picked != null) {
+                folder.setText(picked.getPath());
+            }
+        });
+        choose.setDisable(getBackend().isDemo());
+        Label problem = Parts.muted("");
+        problem.getStyleClass().add("field-problem");
+        problem.setWrapText(true);
+        problem.setVisible(false);
+        problem.setManaged(false);
+
+        Button cancel = Parts.secondary("Cancel",
+                () -> getWindow().closeSheet());
+        Button save = Parts.primary("Save folder");
+        // A changed entry moved to another module or section replaces
+        // the original, so the old one does not stay behind
+        String original = module == null ? null : ExportFolders.keyOf(
+                module, WHOLE_MODULE.equals(section) ? null : section);
+        save.setOnAction(event -> saveExportFolder(original,
+                modules.getValue(), sections.getValue(),
+                folder.getText().trim(), problem));
+        VBox body = new VBox(Parts.GAP,
+                Parts.title(module == null ? "Add an export folder"
+                : "Change the export folder"),
+                Parts.subtitle("Exports of this module or section are saved "
+                + "here instead of the folder for everyone."),
+                sheetField("Module", modules),
+                sheetField("Section", sections),
+                sheetField("Folder", Parts.row(Parts.GAP_SMALL, new Node[] {
+                    folder, choose})),
+                problem, Parts.row(Parts.GAP, new Node[] {Parts.grow(),
+                cancel, save}));
+        body.setMaxWidth(Parts.TEXT_WIDTH);
+        getWindow().showSheet(body);
+    }
+
+    // Puts a small label above a control, for a sheet.
+    private VBox sheetField(String label, Node control) {
+        Label name = Parts.muted(label);
+        name.getStyleClass().add("field-label");
+        return new VBox(LINE_GAP, name, control);
+    }
+
+    // Checks and saves a module or section's export folder.
+    private void saveExportFolder(String original, String module,
+            String section, String folder, Label problem) {
+        String message = "";
+        if (module == null) {
+            message = "Choose a module first.";
+        } else if (folder.isEmpty()) {
+            message = "Choose or type a folder.";
+        } else {
+            message = getBackend().validateSetting(ConfigKeys.OUTPUT_DIR,
+                    folder);
+        }
+        if (message == null || message.isEmpty()) {
+            String who = ExportFolders.keyOf(module,
+                    WHOLE_MODULE.equals(section) ? null : section);
+            String folders = getBackend().getSetting(
+                    ConfigKeys.OUTPUT_DIR_BY_SECTION);
+            if (original != null && !original.equalsIgnoreCase(who)) {
+                folders = ExportFolders.remove(folders, original);
+            }
+            Map<String, String> changes = new HashMap<>();
+            changes.put(ConfigKeys.OUTPUT_DIR_BY_SECTION, ExportFolders.put(
+                    folders, who, folder));
+            ActionResult result = getBackend().saveSettings(changes);
+            if (result.isDone()) {
+                getWindow().closeSheet();
+                getWindow().notify("Exports of " + who.replace("/", " · ")
+                        + " are saved in " + folder + ".");
+                fillExportFolders();
+                return;
+            }
+            message = result.getMessage();
+        }
+        problem.setText(message.replace("'" + ConfigKeys.OUTPUT_DIR + "'",
+                "The folder"));
+        problem.setVisible(true);
+        problem.setManaged(true);
+    }
+
+    // Removes a module or section's own export folder, with Undo.
+    private void removeExportFolder(String who) {
+        String before = getBackend().getSetting(
+                ConfigKeys.OUTPUT_DIR_BY_SECTION);
+        Map<String, String> changes = new HashMap<>();
+        changes.put(ConfigKeys.OUTPUT_DIR_BY_SECTION,
+                ExportFolders.remove(before, who));
+        ActionResult result = getBackend().saveSettings(changes);
+        if (!result.isDone()) {
+            getWindow().notify(result.getMessage());
+            return;
+        }
+        fillExportFolders();
+        String folder = ExportFolders.resolve("", before, who.split("/")[0],
+                who.contains("/") ? who.split("/", 2)[1] : null);
+        Supplier<ActionResult> restore = ActivityUndo.record(getBackend(),
+                ActivityUndo.FOLDER_REMOVED, who.replace("/", " · ") + ": "
+                + folder, () -> {
+            Map<String, String> back = new HashMap<>();
+            back.put(ConfigKeys.OUTPUT_DIR_BY_SECTION, ExportFolders.put(
+                    getBackend().getSetting(ConfigKeys.OUTPUT_DIR_BY_SECTION),
+                    who, folder));
+            return getBackend().saveSettings(back);
+        });
+        getWindow().notify(who.replace("/", " · ") + " uses the folder for "
+                + "everyone again.", "Undo", () -> {
+            notifyIfFailed(restore.get());
+            fillExportFolders();
+        });
+    }
+
+    // Adds the Course rows: a dropdown of the modules and one of the
+    // chosen module's sections, each with a button that adds one.
+    private void addCourseRows() {
+        moduleList.setPrefWidth(PICKER_WIDTH);
+        moduleList.setAccessibleText("Modules");
+        moduleList.setOnAction(event -> fillSections());
+        boolean editable = getBackend().supports(Capability.SETTINGS);
+        Button addModule = Parts.small("Add module",
+                () -> CourseSheets.openAddModule(getWindow(), code -> {
+                    fillCourse(code);
+                    getWindow().notify("Added module " + code + ".");
+                }));
+        Button addSection = Parts.small("Add section",
+                () -> CourseSheets.openAddSection(getWindow(),
+                moduleList.getValue(), code -> {
+                    fillCourse(moduleList.getValue());
+                }));
+        addModule.setGraphic(Parts.icon(Parts.PLUS, SEARCH_ICON_SIZE));
+        addSection.setGraphic(Parts.icon(Parts.PLUS, SEARCH_ICON_SIZE));
+        addModule.setDisable(!editable);
+        addSection.setDisable(!editable);
+        deleteModule.setOnAction(event -> askDeleteModule(
+                moduleList.getValue()));
+        deleteModule.getStyleClass().add("danger-link");
+        editableCourse = editable;
+        HBox moduleControls = Parts.row(Parts.GAP_SMALL, new Node[] {
+            moduleList, addModule, deleteModule});
+        building.addRow(courseRow("Modules", "The courses you teach. The "
+                + "first is the default on Home and Set up.",
+                moduleControls), null);
+        sectionChips.setHgap(Parts.GAP_SMALL);
+        sectionChips.setVgap(Parts.GAP_SMALL);
+        sectionChips.setPrefWrapLength(SECTION_WRAP);
+        VBox sectionControls = new VBox(Parts.GAP_SMALL, sectionChips,
+                addSection);
+        building.addRow(courseRow("Sections", "The class groups of the "
+                + "module chosen above: those every module has, and any "
+                + "added for this module only.", sectionControls), null);
+        building.setQuestionsText("course modules module sections section "
+                + "add module add section class groups");
+        fillCourse(null);
+    }
+
+    // Builds one Course row: the name and help on the left, then the
+    // dropdown and its Add button.
+    private HBox courseRow(String title, String help, Node controls) {
+        Label name = Parts.strong(title);
+        Label about = Parts.muted(help);
+        about.getStyleClass().add("small-text");
+        about.setWrapText(true);
+        VBox names = new VBox(LINE_GAP, name, about);
+        names.setMinWidth(SettingField.NAME_WIDTH);
+        names.setPrefWidth(SettingField.NAME_WIDTH);
+        names.setMaxWidth(SettingField.NAME_WIDTH);
+        HBox row = new HBox(SettingField.COLUMN_GAP, names, controls);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("setting-row");
+        return row;
+    }
+
+    // Fills the module dropdown, choosing a module, then its sections.
+    private void fillCourse(String chosen) {
+        List<String> modules = getBackend().getModuleCodes();
+        moduleList.getItems().setAll(modules);
+        String module = chosen;
+        if (module == null || !modules.contains(module)) {
+            module = modules.isEmpty() ? null : modules.get(0);
+        }
+        moduleList.setValue(module);
+        fillScoreSheets();
+        // The last module cannot be deleted: every setting needs one
+        deleteModule.setDisable(!editableCourse || modules.size() <= 1);
+        Parts.tip(deleteModule, modules.size() <= 1 ? "Add another module "
+                + "first; GradeZZY needs at least one." : "Delete the module "
+                + "chosen. Results already graded are kept in History.");
+        fillSections();
+    }
+
+    // Shows the chosen module's sections as chips, each with a button
+    // that deletes it.
+    private void fillSections() {
+        sectionChips.getChildren().clear();
+        String module = moduleList.getValue();
+        List<String> sections = module == null ? new ArrayList<>()
+                : getBackend().getSectionCodes(module);
+        if (sections.isEmpty()) {
+            Label none = Parts.muted("No sections yet.");
+            none.getStyleClass().add("small-text");
+            sectionChips.getChildren().add(none);
+            return;
+        }
+        String byModule = getBackend().getSetting(
+                ConfigKeys.MODULE_SECTION_CODES);
+        for (String code : sections) {
+            boolean own = ModuleSections.isOwnSection(byModule, module, code);
+            Label name = new Label(code);
+            name.getStyleClass().add("section-chip-name");
+            Button delete = new Button();
+            delete.setGraphic(Parts.icon(Parts.CLOSE, CHIP_ICON_SIZE));
+            delete.getStyleClass().add("section-chip-delete");
+            delete.setAccessibleText("Delete section " + code);
+            delete.setDisable(!editableCourse);
+            Parts.tip(delete, "Delete " + code);
+            delete.setOnAction(event -> CourseSheets.askDeleteSection(
+                    getWindow(), module, code, () -> fillCourse(module)));
+            HBox chip = new HBox(CHIP_GAP, name, delete);
+            chip.setAlignment(Pos.CENTER_LEFT);
+            chip.getStyleClass().add("section-chip");
+            Parts.tipNode(name, own ? code + " belongs to " + module
+                    + " only." : code + " is shared by every module.");
+            if (own) {
+                Label tag = Parts.muted(module + " only");
+                tag.getStyleClass().addAll("small-text", "section-chip-tag");
+                chip.getChildren().add(1, tag);
+            }
+            sectionChips.getChildren().add(chip);
+        }
+    }
+
+    // Asks before deleting a module.
+    private void askDeleteModule(String module) {
+        if (module == null) {
+            return;
+        }
+        getWindow().confirm("Delete module " + module + "?", module
+                + " is removed from the modules you can pick, with its own "
+                + "sections and export folders. Sections every module has "
+                + "stay. Results already graded are kept in History.",
+                "Delete module", () -> deleteModule(module));
+    }
+
+    // Deletes a module with its own sections and folders, then offers
+    // Undo.
+    private void deleteModule(String module) {
+        Map<String, String> before = courseValues();
+        List<String> kept = new ArrayList<>();
+        for (String code : splitCodes(before.get(ConfigKeys.MODULE_CODES))) {
+            if (!code.equalsIgnoreCase(module)) {
+                kept.add(code);
+            }
+        }
+        Map<String, String> changes = new HashMap<>();
+        changes.put(ConfigKeys.MODULE_CODES, String.join(",", kept));
+        String scoreSheetsBefore = getBackend().getSetting(
+                ConfigKeys.SCORE_SHEET_BY_SECTION);
+        putIfKnown(changes, ConfigKeys.MODULE_SECTION_CODES,
+                ModuleSections.removeModule(before.get(
+                ConfigKeys.MODULE_SECTION_CODES), module));
+        putIfKnown(changes, ConfigKeys.OUTPUT_DIR_BY_SECTION,
+                ExportFolders.removeModule(before.get(
+                ConfigKeys.OUTPUT_DIR_BY_SECTION), module));
+        putIfKnown(changes, ConfigKeys.SCORE_SHEET_BY_SECTION,
+                ExportFolders.removeModule(scoreSheetsBefore, module));
+        boolean ownOnly = ModuleSections.hasOwnOnly(before.get(
+                ConfigKeys.OWN_SECTIONS_ONLY_MODULES), module);
+        if (ownOnly) {
+            List<String> others = new ArrayList<>();
+            for (String code : splitCodes(before.get(
+                    ConfigKeys.OWN_SECTIONS_ONLY_MODULES))) {
+                if (!code.equalsIgnoreCase(module)) {
+                    others.add(code);
+                }
+            }
+            putIfKnown(changes, ConfigKeys.OWN_SECTIONS_ONLY_MODULES,
+                    String.join(",", others));
+        }
+        if (module.equalsIgnoreCase(getState().getModuleCode())
+                && !kept.isEmpty()) {
+            getState().setModuleCode(kept.get(0));
+        }
+        ActionResult result = getBackend().saveSettings(changes);
+        if (!result.isDone()) {
+            getWindow().notify(result.getMessage());
+            return;
+        }
+        fillCourse(null);
+        fillExportFolders();
+        // What the module had, so it can be put back
+        List<String> ownSections = ModuleSections.forModule("", before.get(
+                ConfigKeys.MODULE_SECTION_CODES), module);
+        List<String[]> folders = entriesOf(before.get(
+                ConfigKeys.OUTPUT_DIR_BY_SECTION), module);
+        List<String[]> sheets = entriesOf(scoreSheetsBefore, module);
+        Supplier<ActionResult> restore = ActivityUndo.record(getBackend(),
+                ActivityUndo.MODULE_DELETED, module, () -> restoreModule(
+                module, ownSections, folders, sheets, ownOnly));
+        getWindow().notify("Deleted module " + module + ".", "Undo", () -> {
+            notifyIfFailed(restore.get());
+            fillCourse(module);
+            fillExportFolders();
+        });
+    }
+
+    // Adds a deleted module back with its own sections and folders,
+    // without undoing other changes made since.
+    private ActionResult restoreModule(String module,
+            List<String> ownSections, List<String[]> folders,
+            List<String[]> sheets, boolean ownOnly) {
+        Map<String, String> changes = new HashMap<>();
+        List<String> modules = splitCodes(getBackend().getSetting(
+                ConfigKeys.MODULE_CODES));
+        boolean listed = false;
+        for (String code : modules) {
+            listed = listed || code.equalsIgnoreCase(module);
+        }
+        if (!listed) {
+            modules.add(module);
+            changes.put(ConfigKeys.MODULE_CODES, String.join(",", modules));
+        }
+        String byModule = getBackend().getSetting(
+                ConfigKeys.MODULE_SECTION_CODES);
+        for (String code : ownSections) {
+            if (!ModuleSections.isOwnSection(byModule, module, code)) {
+                byModule = ModuleSections.add(byModule, module, code);
+            }
+        }
+        if (!ownSections.isEmpty()) {
+            putIfKnown(changes, ConfigKeys.MODULE_SECTION_CODES, byModule);
+        }
+        if (!folders.isEmpty()) {
+            String exportFolders = getBackend().getSetting(
+                    ConfigKeys.OUTPUT_DIR_BY_SECTION);
+            for (String[] entry : folders) {
+                exportFolders = ExportFolders.put(exportFolders, entry[0],
+                        entry[1]);
+            }
+            putIfKnown(changes, ConfigKeys.OUTPUT_DIR_BY_SECTION,
+                    exportFolders);
+        }
+        if (!sheets.isEmpty()) {
+            String scoreSheets = getBackend().getSetting(
+                    ConfigKeys.SCORE_SHEET_BY_SECTION);
+            for (String[] entry : sheets) {
+                scoreSheets = ExportFolders.put(scoreSheets, entry[0],
+                        entry[1]);
+            }
+            putIfKnown(changes, ConfigKeys.SCORE_SHEET_BY_SECTION,
+                    scoreSheets);
+        }
+        String ownOnlyValue = getBackend().getSetting(
+                ConfigKeys.OWN_SECTIONS_ONLY_MODULES).trim();
+        if (ownOnly && !ModuleSections.hasOwnOnly(ownOnlyValue, module)) {
+            putIfKnown(changes, ConfigKeys.OWN_SECTIONS_ONLY_MODULES,
+                    ownOnlyValue.isEmpty() ? module
+                    : ownOnlyValue + "," + module);
+        }
+        if (changes.isEmpty()) {
+            return ActionResult.done("Module " + module + " is listed.");
+        }
+        return getBackend().saveSettings(changes);
+    }
+
+    // The per-section entries of a list that belong to one module.
+    private static List<String[]> entriesOf(String value, String module) {
+        List<String[]> found = new ArrayList<>();
+        String lower = module.toLowerCase(Locale.ROOT);
+        for (String[] entry : ExportFolders.list(value)) {
+            String who = entry[0].toLowerCase(Locale.ROOT);
+            if (who.equals(lower) || who.startsWith(lower + "/")) {
+                found.add(entry);
+            }
+        }
+        return found;
+    }
+
+    // Adds a change only for a setting this config.properties has; an
+    // older file may not have the newer lists, and saving one it lacks
+    // is refused.
+    private void putIfKnown(Map<String, String> changes, String key,
+            String value) {
+        if (getBackend().validateSetting(key, "").isEmpty()) {
+            changes.put(key, value);
+        }
+    }
+
+    // Shows why an Undo did not work.
+    private void notifyIfFailed(ActionResult result) {
+        if (!result.isDone()) {
+            getWindow().notify(result.getMessage());
+        }
+    }
+
+    // Returns the course settings as they are now.
+    private Map<String, String> courseValues() {
+        Map<String, String> values = new HashMap<>();
+        String[] keys = {ConfigKeys.MODULE_CODES, ConfigKeys.SECTION_CODES,
+            ConfigKeys.MODULE_SECTION_CODES, ConfigKeys.OUTPUT_DIR_BY_SECTION,
+            ConfigKeys.OWN_SECTIONS_ONLY_MODULES};
+        for (String key : keys) {
+            values.put(key, getBackend().getSetting(key));
+        }
+        return values;
+    }
+
+    // Splits a list setting into its codes.
+    private List<String> splitCodes(String value) {
+        List<String> codes = new ArrayList<>();
+        if (value == null) {
+            return codes;
+        }
+        for (String part : value.split(",")) {
+            if (!part.trim().isEmpty()) {
+                codes.add(part.trim());
+            }
+        }
+        return codes;
+    }
+
+    /**
+     * Scrolls to the assessment part. Used by the developer checks.
+     */
+    public void showAssessmentGroup() {
+        for (SettingsGroup group : groups) {
+            if (assessmentHolder.getParent() != null
+                    && isInside(assessmentHolder, group.getCard())) {
+                view.applyCss();
+                view.layout();
+                jumpTo(group);
+            }
+        }
+    }
+
+    // Adds the assessment part: a dropdown of the saved assessments, then
+    // the chosen one's files, questions and the lists found in its files,
+    // laid out as in the assessment editor, with its own Save.
+    private void addAssessmentEditor() {
+        assessmentPicker.setPrefWidth(PICKER_WIDTH);
+        assessmentPicker.setAccessibleText("Assessment to edit");
+        assessmentPicker.setOnAction(event -> assessmentPicked());
+        HBox row = new HBox(assessmentHolder);
+        HBox.setHgrow(assessmentHolder, Priority.ALWAYS);
+        row.getStyleClass().add("setting-row");
+        building.addRow(row, null);
+        building.setQuestionsText("assessment name questions marks tester "
+                + "starter score sheet class files data files unrenamed "
+                + "folder names");
+        showAssessment(getState().getSettingsAssessment());
+    }
+
+    // Shows one saved assessment in the form, or a new one for null.
+    private void showAssessment(String name) {
+        String inUse = getBackend().getAssessment() == null ? ""
+                : getBackend().getAssessment().getName();
+        SavedAssessment start = null;
+        List<String> names = new ArrayList<>();
+        for (SavedAssessment saved : getBackend().listAssessments()) {
+            names.add(saved.getName());
+            String wanted = name == null ? inUse : name;
+            if (saved.getName().equalsIgnoreCase(wanted)) {
+                start = saved;
+            }
+        }
+        boolean creating = NEW_ASSESSMENT.equals(name) || start == null;
+        String originalName = creating ? null : start.getName();
+        getState().setSettingsAssessment(creating ? NEW_ASSESSMENT
+                : originalName);
+        if (creating) {
+            start = getWindow().newAssessment();
+        }
+
+        pickingAssessment = true;
+        assessmentPicker.getItems().setAll(names);
+        if (getBackend().supports(Capability.SETTINGS)) {
+            assessmentPicker.getItems().add(NEW_ASSESSMENT);
+        }
+        assessmentPicker.setValue(creating ? NEW_ASSESSMENT : originalName);
+        pickingAssessment = false;
+
+        Label pickLabel = Parts.strong("Assessment to edit");
+        Label pickHelp = Parts.muted("Each lab test or exam has its own "
+                + "files and questions. The one in use is graded on Set up.");
+        pickHelp.getStyleClass().add("small-text");
+        pickHelp.setWrapText(true);
+        VBox pickWords = new VBox(LINE_GAP, pickLabel, pickHelp);
+        pickWords.setMinWidth(SettingField.NAME_WIDTH);
+        pickWords.setPrefWidth(SettingField.NAME_WIDTH);
+        pickWords.setMaxWidth(SettingField.NAME_WIDTH);
+        HBox pickRow = new HBox(SettingField.COLUMN_GAP, pickWords,
+                assessmentPicker);
+        pickRow.setAlignment(Pos.CENTER_LEFT);
+        if (!creating && originalName.equalsIgnoreCase(inUse)) {
+            pickRow.getChildren().add(Parts.pill("In use", Tone.GOOD));
+        } else if (!creating) {
+            String chosen = originalName;
+            Button use = Parts.small("Use this one", () -> {
+                getWindow().useAssessment(chosen);
+            });
+            Parts.tip(use, "Grade with " + chosen + " from now on.");
+            pickRow.getChildren().add(use);
+        }
+        if (!creating) {
+            SavedAssessment saved = start;
+            Button delete = Parts.small("Delete", () -> askDeleteAssessment(
+                    saved));
+            delete.getStyleClass().add("danger-link");
+            boolean inUseNow = originalName.equalsIgnoreCase(inUse);
+            delete.setDisable(inUseNow
+                    || !getBackend().supports(Capability.SETTINGS));
+            Parts.tip(delete, inUseNow ? "This is the assessment in use. "
+                    + "Use another one first, then delete this one."
+                    : "Delete " + originalName + ". Results graded with it "
+                    + "are kept.");
+            pickRow.getChildren().add(delete);
+        }
+
+        Node editor = AssessmentEditor.createInline(getWindow(), start,
+                originalName, saved -> showAssessment(saved));
+        assessmentHolder.getChildren().setAll(pickRow, editor);
+    }
+
+    // Asks before deleting a saved assessment, then deletes it and
+    // offers Undo, which saves it again.
+    private void askDeleteAssessment(SavedAssessment saved) {
+        String name = saved.getName();
+        getWindow().confirm("Delete " + name + "?", "Its questions and "
+                + "folders are no longer listed. Results already graded "
+                + "with it are kept in History.", "Delete assessment", () -> {
+            SavedAssessment copy = saved.copy();
+            ActionResult result = getBackend().deleteAssessment(name);
+            if (!result.isDone()) {
+                getWindow().notify(result.getMessage());
+                return;
+            }
+            showAssessment(null);
+            Supplier<ActionResult> restore = ActivityUndo.record(
+                    getBackend(), ActivityUndo.ASSESSMENT_DELETED, name,
+                    () -> getBackend().saveAssessment(copy, null));
+            getWindow().notify("Deleted " + name + ".", "Undo", () -> {
+                notifyIfFailed(restore.get());
+                showAssessment(name);
+            });
+        });
+    }
+
+    // Lists the saved assessments again, such as after one was added on
+    // Home. The one open stays open with its edits; if it is gone, the
+    // one in use opens.
+    private void refreshAssessmentPicker() {
+        String open = assessmentPicker.getValue();
+        List<String> names = new ArrayList<>();
+        for (SavedAssessment saved : getBackend().listAssessments()) {
+            names.add(saved.getName());
+        }
+        if (open != null && !open.equals(NEW_ASSESSMENT)
+                && !names.contains(open)) {
+            showAssessment(null);
+            return;
+        }
+        pickingAssessment = true;
+        assessmentPicker.getItems().setAll(names);
+        if (getBackend().supports(Capability.SETTINGS)) {
+            assessmentPicker.getItems().add(NEW_ASSESSMENT);
+        }
+        assessmentPicker.setValue(open);
+        pickingAssessment = false;
+    }
+
+    // Opens the assessment picked in the dropdown.
+    private void assessmentPicked() {
+        if (pickingAssessment || assessmentPicker.getValue() == null) {
+            return;
+        }
+        showAssessment(assessmentPicker.getValue());
     }
 
     // ------------------------------------------------- search, scrolling
@@ -719,16 +1494,24 @@ public class SettingsScreen extends FlowScreen {
             return;
         }
         int changed = 0;
-        boolean valid = true;
+        int errors = 0;
         for (SettingField field : fields) {
             if (field.isChanged()) {
                 changed++;
                 if (!field.isValid()) {
-                    valid = false;
+                    errors++;
                 }
             }
         }
-        if (changed == 0) {
+        boolean valid = errors == 0;
+        showErrorButton.setVisible(errors > 0);
+        showErrorButton.setManaged(errors > 0);
+        if (errors > 0) {
+            // Says why Save is off, and offers to show the first error
+            getActions().setStatus("Fix " + Parts.plural(errors, "error")
+                    + " to save");
+            getActions().setStatusGraphic(changesMark);
+        } else if (changed == 0) {
             getActions().setStatus("No unsaved changes");
             getActions().setStatusGraphic(null);
         } else {
@@ -738,6 +1521,34 @@ public class SettingsScreen extends FlowScreen {
         }
         discardButton.setDisable(changed == 0);
         getActions().setPrimaryEnabled(changed > 0 && valid);
+    }
+
+    // Scrolls to the first changed setting with an error and focuses it.
+    private void showFirstError() {
+        for (SettingField field : fields) {
+            if (field.isChanged() && !field.isValid()) {
+                search.setText("");
+                for (SettingsGroup group : groups) {
+                    if (isInside(field.getRow(), group.getCard())) {
+                        jumpTo(group);
+                    }
+                }
+                field.focusControl();
+                return;
+            }
+        }
+    }
+
+    // Says whether a node is inside another.
+    private boolean isInside(Node node, Node container) {
+        Node at = node;
+        while (at != null) {
+            if (at == container) {
+                return true;
+            }
+            at = at.getParent();
+        }
+        return false;
     }
 
     // Saves every changed setting together, in the order they are shown.

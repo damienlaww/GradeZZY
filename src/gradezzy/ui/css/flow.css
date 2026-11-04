@@ -806,9 +806,17 @@
     -color-cell-bg-selected: -color-accent-subtle;
     -color-cell-bg-selected-focused: -color-accent-subtle;
     -fx-background-color: -color-bg-default;
-    -fx-background-radius: 12px;
-    -fx-border-color: -color-border-muted;
-    -fx-border-radius: 12px;
+    -fx-background-radius: 11px;
+    -fx-border-width: 0;
+}
+
+/* The frame around the Review table draws its rounded border, so the
+   border stays whole at the corners */
+.table-frame {
+    -fx-background-color: -color-border-default, -color-bg-default;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 12px, 11px;
+    -fx-padding: 1px;
 }
 
 /* The rows sit in a group the virtual flow names "sheet"; the dialog
@@ -973,7 +981,8 @@
 }
 
 /* A decision that keeps a fix or clears a flag: filled green. */
-.student-panel .button.small.good {
+.student-panel .button.small.good,
+.sheet-issue .button.small.good {
     -fx-background-color: -color-success-emphasis;
     -fx-background-insets: 0;
     -fx-background-radius: 6px;
@@ -981,18 +990,23 @@
 }
 
 .student-panel .button.small.good:hover,
-.student-panel .button.small.good:pressed {
+.student-panel .button.small.good:pressed,
+.sheet-issue .button.small.good:hover,
+.sheet-issue .button.small.good:pressed {
     -fx-background-color: -color-success-fg;
 }
 
 /* A decision that undoes a fix or keeps a flag: red outline. */
-.student-panel .button.small.bad {
+.student-panel .button.small.bad,
+.sheet-issue .button.small.bad {
     -fx-background-color: -color-danger-emphasis, -color-bg-default;
     -fx-text-fill: -color-danger-fg;
 }
 
 .student-panel .button.small.bad:hover,
-.student-panel .button.small.bad:pressed {
+.student-panel .button.small.bad:pressed,
+.sheet-issue .button.small.bad:hover,
+.sheet-issue .button.small.bad:pressed {
     -fx-background-color: -color-danger-emphasis, -color-danger-subtle;
 }
 
@@ -1663,6 +1677,11 @@
     -fx-stroke-width: 2;
 }
 
+.results-table .table-row-cell:filled:hover .open-cell .icon,
+.results-table .table-row-cell:selected .open-cell .icon {
+    -fx-stroke: -color-accent-fg;
+}
+
 .results-table .table-row-cell:filled:hover .open-cell .icon {
     -fx-stroke: -color-accent-fg;
 }
@@ -1757,4 +1776,522 @@
 .ring-part.late,
 .ring-part.broken {
     -fx-fill: transparent;
+}
+
+/* ---- home, redesigned ---- */
+
+/* The module and assessment in use, in one line above the cards */
+.home-context {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.home-context-row {
+    -fx-alignment: center-left;
+}
+
+.home-change,
+.card-more {
+    -fx-background-color: transparent;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-padding: 2px 8px;
+}
+
+.card-more > .arrow-button {
+    -fx-padding: 0;
+}
+
+.card-more > .arrow-button > .arrow {
+    -fx-padding: 0;
+    -fx-shape: null;
+}
+
+/* The small "Next up" word at the start of the bar */
+.next-up-tag {
+    -fx-text-fill: -color-accent-fg;
+    -fx-font-weight: bold;
+}
+
+/* The card the Next up bar is about has an accent edge */
+.section-card.next-up {
+    -fx-border-color: -color-accent-emphasis;
+    -fx-border-width: 1.5px;
+}
+
+/* A checklist step with a problem: amber, with a "!" */
+.step-dot.problem {
+    -fx-background-color: -color-warning-subtle;
+    -fx-border-color: -color-warning-emphasis;
+    -fx-border-radius: 12px;
+}
+
+.step-dot.problem .label {
+    -fx-text-fill: -color-warning-fg;
+}
+
+.problem-text {
+    -fx-text-fill: -color-warning-fg;
+}
+
+/* The four steps of a section card, as small dots */
+.mini-step {
+    -fx-min-width: 10px;
+    -fx-min-height: 10px;
+    -fx-max-width: 10px;
+    -fx-max-height: 10px;
+    -fx-background-radius: 5px;
+    -fx-background-color: -color-bg-subtle;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 5px;
+}
+
+.mini-step.done {
+    -fx-background-color: -color-success-emphasis;
+    -fx-border-color: -color-success-emphasis;
+}
+
+.mini-step.current {
+    -fx-background-color: -color-accent-emphasis;
+    -fx-border-color: -color-accent-emphasis;
+}
+
+.home-lower-card {
+    -fx-min-height: 120px;
+}
+
+/* ---- shared ---- */
+
+/* The keyboard shortcut beside the blue button */
+.shortcut-hint {
+    -fx-text-fill: -color-fg-subtle;
+}
+
+/* A path in Settings that is changed somewhere else */
+.text-field.linked-path {
+    -fx-background-color: -color-bg-subtle;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.picker-list {
+    -fx-background-color: transparent;
+    -fx-padding: 4px 0;
+}
+
+/* The "..." of a section card: no arrow, just the dots */
+.menu-button.card-more {
+    -fx-padding: 2px 4px;
+}
+
+.menu-button.card-more > .arrow-button {
+    -fx-padding: 0;
+}
+
+.menu-button.card-more > .arrow-button > .arrow {
+    -fx-padding: 0;
+}
+
+
+/* The line numbers beside the code: grey, behind a thin line, with no
+   scroll bars of their own. They scroll with the code. */
+.code-panel .code-area.line-numbers .content {
+    -fx-padding: 12px 8px 12px 10px;
+}
+
+.code-panel .code-area.line-numbers {
+    -fx-text-fill: -color-fg-subtle;
+    -fx-border-color: transparent -color-border-muted transparent
+        transparent;
+    -fx-border-width: 0 1px 0 0;
+    -fx-background-radius: 0 0 0 10px;
+}
+
+.code-panel .code-area.line-numbers .scroll-bar {
+    -fx-opacity: 0;
+    -fx-pref-width: 0;
+    -fx-pref-height: 0;
+    -fx-padding: 0;
+}
+
+.code-panel .code-area.line-numbers .corner {
+    -fx-background-color: transparent;
+}
+
+/* The Undo link in a notice, on the notice's dark band */
+.notice .notice-action {
+    -fx-text-fill: -color-accent-muted;
+    -fx-font-weight: bold;
+    -fx-padding: 0 0 0 12px;
+    -fx-border-width: 0;
+}
+
+/* Says which assessment fields were filled in from the chosen folders */
+.filled-note {
+    -fx-background-color: -color-accent-subtle;
+    -fx-background-radius: 8px;
+    -fx-padding: 6px 10px;
+    -fx-text-fill: -color-fg-default;
+}
+
+/* ---- grade progress ---- */
+
+.grade-percent {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+}
+
+.grade-now-line {
+    -fx-padding: 4px 0 0 0;
+}
+
+.grade-now-name {
+    -fx-font-weight: bold;
+}
+
+/* What is being done to the student now, as a small chip */
+.grade-now-stage {
+    -fx-background-color: -color-accent-subtle;
+    -fx-text-fill: -color-accent-fg;
+    -fx-background-radius: 10px;
+    -fx-padding: 2px 8px;
+}
+
+/* The five steps: done ones dim, the current one in blue */
+.grade-step {
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.grade-step.done {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.grade-step.current {
+    -fx-text-fill: -color-accent-fg;
+    -fx-font-weight: bold;
+}
+
+/* The issue at the top of the code sheet, with its buttons */
+.fix-card.sheet-issue {
+    -fx-padding: 10px 14px;
+}
+
+/* The assessment editor: numbered sections in light boxes */
+.editor-section {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 10px;
+    -fx-padding: 12px 14px;
+}
+
+.editor-section-title {
+    -fx-font-size: 14px;
+}
+
+.editor-step {
+    -fx-background-color: -color-accent-emphasis;
+    -fx-text-fill: -color-fg-emphasis;
+    -fx-background-radius: 10px;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-min-width: 20px;
+    -fx-min-height: 20px;
+    -fx-alignment: center;
+}
+
+/* ---- section cards, redesigned ---- */
+
+/* The four steps named in a line under the section name */
+.card-step {
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.card-step.done {
+    -fx-text-fill: -color-success-fg;
+}
+
+.card-step.current {
+    -fx-text-fill: -color-accent-fg;
+    -fx-font-weight: bold;
+}
+
+/* The average, large, so it is what the eye reads first */
+.card-average {
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+}
+
+.card-meta {
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.card-open {
+    -fx-text-fill: -color-accent-fg;
+}
+
+.card-open .icon {
+    -fx-stroke: -color-accent-fg;
+}
+
+/* A graded card can be clicked anywhere; it lifts under the pointer */
+.section-card.clickable {
+    -fx-cursor: hand;
+}
+
+.section-card.clickable:hover {
+    -fx-border-color: -color-accent-muted;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.10), 12, 0, 0, 3);
+    -fx-translate-y: -1;
+}
+
+/* A card not graded yet takes zip files dropped on it */
+.card-drop-hint {
+    -fx-border-color: -color-border-default;
+    -fx-border-style: segments(5, 4);
+    -fx-border-radius: 8px;
+    -fx-padding: 8px 10px;
+}
+
+.section-card.drag-over {
+    -fx-border-color: -color-accent-emphasis;
+    -fx-background-color: -color-accent-subtle;
+}
+
+.more-dot {
+    -fx-fill: -color-fg-muted;
+}
+
+/* The "..." of a section card: just the dots, no arrow */
+.menu-button.card-more {
+    -fx-padding: 6px 8px;
+    -fx-min-width: 34px;
+    -fx-pref-width: 34px;
+}
+
+.menu-button.card-more > .label {
+    -fx-padding: 0;
+}
+
+.menu-button.card-more > .arrow-button,
+.menu-button.card-more > .arrow-button > .arrow {
+    -fx-padding: 0;
+    -fx-shape: null;
+    -fx-pref-width: 0;
+    -fx-max-width: 0;
+}
+
+/* ---- section cards, decluttered ---- */
+.card-average {
+    -fx-font-size: 30px;
+}
+
+.card-average-max {
+    -fx-font-size: 15px;
+}
+
+.card-average-empty {
+    -fx-font-size: 15px;
+}
+
+.section-card .card-drop-hint {
+    -fx-padding: 10px;
+}
+
+.section-card .card-drop-hint .icon {
+    -fx-stroke: -color-fg-subtle;
+}
+
+/* ---- section cards: labelled figures, a footer, a quiet menu ---- */
+.card-stat-label {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-weight: 500;
+}
+
+.card-average {
+    -fx-font-size: 26px;
+}
+
+.card-average-max {
+    -fx-font-size: 13px;
+}
+
+/* The buttons sit in a footer under a hairline */
+.card-footer {
+    -fx-border-color: -color-border-muted transparent transparent
+        transparent;
+    -fx-padding: 10px 0 0 0;
+}
+
+/* The "..." is a quiet icon button: no box until the pointer is on it */
+.menu-button.card-more {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 6px;
+    -fx-border-radius: 6px;
+    -fx-padding: 6px 8px;
+}
+
+.menu-button.card-more:hover,
+.menu-button.card-more:showing {
+    -fx-background-color: -color-bg-subtle;
+}
+
+/* ---- section card progress ---- */
+
+/* The four steps as a slim bar in four parts */
+.card-progress-part {
+    -fx-min-height: 6px;
+    -fx-pref-height: 6px;
+    -fx-max-height: 6px;
+    -fx-background-radius: 3px;
+    -fx-background-color: -color-border-muted;
+}
+
+.card-progress-part.done {
+    -fx-background-color: -color-success-emphasis;
+}
+
+.card-progress-part.current {
+    -fx-background-color: -color-accent-emphasis;
+}
+
+.card-progress-words {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.card-meta {
+    -fx-graphic-text-gap: 6px;
+}
+
+.card-meta .icon {
+    -fx-stroke: -color-fg-subtle;
+}
+
+/* The next step, first in the card's menu */
+.menu-item.next-item .label {
+    -fx-font-weight: bold;
+}
+
+/* The run each section shows now, beside its name on Runs */
+.current-badge {
+    -fx-background-color: -color-accent-subtle;
+    -fx-text-fill: -color-accent-fg;
+    -fx-background-radius: 6px;
+    -fx-padding: 1px 6px;
+    -fx-font-weight: bold;
+}
+
+/* A module or section with its own export folder, in Settings */
+.export-folder-line {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 8px;
+    -fx-padding: 6px 10px;
+}
+
+/* ---- Settings: sections as chips you can delete ---- */
+.section-chip {
+    -fx-background-color: -color-bg-subtle;
+    -fx-border-color: -color-border-default;
+    -fx-background-radius: 999px;
+    -fx-border-radius: 999px;
+    -fx-padding: 3px 4px 3px 12px;
+}
+
+.section-chip-name {
+    -fx-font-weight: bold;
+}
+
+.section-chip-tag {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.button.section-chip-delete {
+    -fx-background-color: transparent;
+    -fx-background-radius: 999px;
+    -fx-border-width: 0;
+    -fx-padding: 4px;
+    -fx-cursor: hand;
+}
+
+.button.section-chip-delete .icon {
+    -fx-stroke: -color-fg-muted;
+    -fx-stroke-width: 2;
+}
+
+.button.section-chip-delete:hover {
+    -fx-background-color: -color-danger-subtle;
+}
+
+.button.section-chip-delete:hover .icon {
+    -fx-stroke: -color-danger-fg;
+}
+
+/* Delete module: a red outline, so it reads as a destructive action */
+.button.small.danger-link {
+    -fx-background-color: -color-danger-emphasis, -color-bg-default;
+    -fx-text-fill: -color-danger-fg;
+}
+
+/* A menu item that deletes: red words */
+.menu-item.danger-item .label {
+    -fx-text-fill: -color-danger-fg;
+}
+
+.menu-item.danger-item .icon {
+    -fx-stroke: -color-danger-fg;
+}
+
+/* ---- confirm sheets: two buttons of one shape; the one that goes
+   ahead is filled, red when it deletes ---- */
+.button.confirm-ok {
+    -fx-background-color: -color-accent-emphasis;
+    -fx-text-fill: -color-fg-emphasis;
+    -fx-font-weight: bold;
+}
+
+.button.confirm-ok:hover,
+.button.confirm-ok:focused {
+    -fx-background-color: -color-accent-fg;
+}
+
+.button.confirm-danger {
+    -fx-background-color: -color-danger-emphasis;
+    -fx-text-fill: -color-fg-emphasis;
+    -fx-font-weight: bold;
+}
+
+.button.confirm-danger:hover,
+.button.confirm-danger:focused {
+    -fx-background-color: -color-danger-fg;
+}
+
+/* Compare sections: one dashed line per average, in its section's colour,
+   or grey when sections share it */
+.compare-mean-line {
+    -fx-stroke: -color-fg-muted;
+    -fx-stroke-width: 1.5;
+    -fx-stroke-dash-array: 5 4;
+}
+
+.compare-mean-line.series-1 {
+    -fx-stroke: series-one;
+}
+
+.compare-mean-line.series-2 {
+    -fx-stroke: series-two;
+}
+
+.compare-mean-line.series-3 {
+    -fx-stroke: series-three;
+}
+
+.chart-label.series-1 {
+    -fx-fill: series-one;
+}
+
+.chart-label.series-2 {
+    -fx-fill: series-two;
+}
+
+.chart-label.series-3 {
+    -fx-fill: series-three;
 }

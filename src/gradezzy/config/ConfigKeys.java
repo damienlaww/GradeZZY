@@ -27,6 +27,20 @@ public final class ConfigKeys {
     public static final String SECTION_CODES = "app.section.codes";
 
     /**
+     * Modules that have only their own sections, not those of
+     * SECTION_CODES, such as a module added on Home. Comma separated.
+     */
+    public static final String OWN_SECTIONS_ONLY_MODULES =
+            "app.module.codes.own.sections.only";
+
+    /**
+     * Sections of one module only, such as "CS102:G5|G6;IS442:G1". They
+     * are added to SECTION_CODES for that module.
+     */
+    public static final String MODULE_SECTION_CODES =
+            "app.section.codes.by.module";
+
+    /**
      * Folder of submissions used by the console entry point.
      */
     public static final String SUBMISSIONS_DIR = "paths.submissions.dir";
@@ -42,6 +56,14 @@ public final class ConfigKeys {
     public static final String SCORE_SHEET_FILE = "paths.score.sheet.file";
 
     /**
+     * The score sheet of each section, such as
+     * "CS102/G1=Test Data/G1.csv;CS102/G2=Test Data/G2.csv". A section
+     * with none uses SCORE_SHEET_FILE.
+     */
+    public static final String SCORE_SHEET_BY_SECTION =
+            "paths.score.sheet.by.section";
+
+    /**
      * Folder holding the starter files given to students.
      */
     public static final String STARTER_DIR = "paths.starter.dir";
@@ -55,6 +77,13 @@ public final class ConfigKeys {
      * Folder where exports are written.
      */
     public static final String OUTPUT_DIR = "paths.output.dir";
+
+    /**
+     * Export folders of single modules or sections, such as
+     * "CS102/G1=workspace/g1-exports". Others use OUTPUT_DIR.
+     */
+    public static final String OUTPUT_DIR_BY_SECTION =
+            "paths.output.dir.by.section";
 
     /**
      * Folder where database backups are kept.

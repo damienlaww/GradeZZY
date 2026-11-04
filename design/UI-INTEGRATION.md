@@ -40,7 +40,7 @@ ServiceRegistry -> GradingService, AnomalyService, ExportService, ...
   to exactly one service method, or reads `AppConfig`.
 - Data crosses the interface as `gradezzy.model` classes. Where the model
   has no field for something a screen shows, a small view class lives in
-  `gradezzy.ui.backend` (`RepairItem`, `ScoreAdjustment`, `RunRecord`,
+  `gradezzy.ui.backend` (`RepairItem`, `RunRecord`,
   `SimilarityDetail`, `ImportItem`). The model is unchanged.
 - A placeholder that returns an empty list, `null` or `0` shows an empty
   state that names the service and owner. It never shows an error or a
@@ -101,7 +101,7 @@ today.
 | Typed test cases | Builds testers from test cases you type in the app. | Set up (type test cases) | `startGrading` (typed cases in the batch) | `TypedTestCaseSource, TesterGenerator` | Zach | Waiting | TypedTestCaseSource.prepareTesters and TesterGenerator. |
 | Retry one question | Runs one question's tester again without touching other marks. | Review (student panel) | `retryQuestion` | None yet | Jing Yuan, Zach | Proposed | Run the tester of one question again and replace only that question's result. |
 | Retry one submission | Grades one student's submission again from the start. | Review (student panel) | `retrySubmission` | None yet | Jing Yuan | Proposed | Grade one chosen submission again, even when it did not fail. |
-| Adjust a mark by hand | Lets you change a mark by hand with a reason, and undo it. | Review (student panel) | `adjustScore`, `undoAdjustment`, `listAdjustments` | None yet | Jing Yuan, Huxley | Proposed | Store a manual score with its reason and the earlier score, record it in the audit log, and allow undo. |
+| Adjust a mark by hand | Lets you change a mark by hand with a reason, and undo it. | Review (student panel), History › Activity | `adjustScore`, `undoAdjustment`, `listAdjustments` | `ScoreAdjustmentService.adjust`, `undo`, `list` | Jing Yuan, Huxley | Works now | Nothing; each change is saved with the run (table `score_adjustments`) and logged as Mark changed. |
 | More than one module | Lets you grade more than one module in the same app. | Set up, Statistics | `getModuleCodes` | `AppConfig` (`app.module.codes`), `AssessmentFactory.create` | Jing Yuan | Works now | None. Saved runs keep the module through `Section` once Huxley's repository saves runs. |
 | Time taken per question | Shows how long each question's tester took to run. | Review (student panel) | none | None yet | Zach | Proposed | Record how long each tester ran in QuestionResult. |
 | Export one student's report | Saves one student's marks and evidence as a report. | Review (student panel) | `export` (one student) | None yet | Jing Yuan, Huxley | Proposed | Register StudentReportExporter and add an export method for one submission. |
@@ -158,7 +158,7 @@ Most `LiveBackend` methods are one service call. Three are thin glue:
   Grade offers Cancel and Resume; Runs offers Resume and Restore;
   Settings saves `config.properties` end to end.
 - **Huxley.** Export (score sheet CSV and JSON), Statistics (bell curve,
-  per question, status, compare sections), Runs (runs with their
+  per question, status, compare sections), History (runs with their
   averages, Back up now, Restore) and Runs' Activity view (the audit
   log).
 
@@ -170,10 +170,10 @@ the AtlantaFX Cupertino theme.
 
 | Tab | Screen classes | What it does |
 |---|---|---|
-| Marking: 1 Set up | `SetUpScreen`, `TestCasesSheet` | Module and section, the zip files, the score sheet, testers and starter files, the grading settings in use. |
-| Marking: 2 Grade | `GradeScreen` | Progress, time left, a live bell curve, Cancel and Resume. |
-| Marking: 3 Review | `ReviewScreen`, `StudentPanel`, `AdjustMarkSheet`, `CodeSheet` | The results table, search (names or code), fixes and flags, mark changes, grading again. |
-| Marking: 4 Export | `ExportScreen`, `SimilaritySheet` | Results at a glance, the score sheet and JSON, similar code. |
+| Grading: 1 Set up | `SetUpScreen`, `TestCasesSheet` | Module and section, the zip files, the score sheet, testers and starter files, the grading settings in use. |
+| Grading: 2 Grade | `GradeScreen` | Progress, time left, a live bell curve, Cancel and Resume. |
+| Grading: 3 Review | `ReviewScreen`, `StudentPanel`, `AdjustMarkSheet`, `CodeSheet` | The results table, search (names or code), fixes and flags, mark changes, grading again. |
+| Grading: 4 Export | `ExportScreen`, `SimilaritySheet` | Results at a glance, the score sheet and JSON, similar code. |
 | Statistics | `StatisticsScreen`, `SectionView`, `CompareView` | Bell curve, each question, where students are, compare up to three sections. |
 | Runs | `RunsScreen` | Earlier runs, backups and the activity log. |
 | Settings | `SettingsScreen`, `SettingField` | Every setting in `config.properties`, grouped and searchable. |

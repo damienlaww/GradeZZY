@@ -33,6 +33,7 @@ import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
+import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Section;
 import gradezzy.model.Severity;
 import gradezzy.model.Student;
@@ -126,6 +127,14 @@ public class SqliteResultRepository implements ResultRepository {
                 + "PRIMARY KEY (run_id, username, position))",
         "CREATE INDEX IF NOT EXISTS anomalies_by_id "
                 + "ON anomalies (anomaly_id)",
+        "CREATE TABLE IF NOT EXISTS score_adjustments ("
+                + "run_id TEXT NOT NULL, "
+                + "username TEXT NOT NULL, "
+                + "question_id TEXT NOT NULL, "
+                + "previous_score REAL NOT NULL, "
+                + "new_score REAL NOT NULL, "
+                + "reason TEXT, "
+                + "saved_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS audit_entries ("
                 + "entry_id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + "logged_at TEXT, "
@@ -263,6 +272,18 @@ public class SqliteResultRepository implements ResultRepository {
     private static final String SELECT_DECISIONS = "SELECT anomaly_id, "
             + "decision FROM anomalies WHERE run_id = ? "
             + "AND decision IS NOT NULL";
+
+    // Saves, removes and lists the marks changed by hand
+    private static final String INSERT_ADJUSTMENT = "INSERT INTO "
+            + "score_adjustments (run_id, username, question_id, "
+            + "previous_score, new_score, reason, saved_at) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?)";
+    private static final String DELETE_ADJUSTMENT = "DELETE FROM "
+            + "score_adjustments WHERE run_id = ? AND username = ? "
+            + "AND question_id = ? AND saved_at = ?";
+    private static final String SELECT_ADJUSTMENTS = "SELECT username, "
+            + "question_id, previous_score, new_score, reason, saved_at "
+            + "FROM score_adjustments WHERE run_id = ? ORDER BY saved_at";
 
     private static final String SELECT_AUDIT = "SELECT logged_at, action, "
             + "detail FROM audit_entries ORDER BY entry_id";
@@ -602,6 +623,105 @@ public class SqliteResultRepository implements ResultRepository {
                     + " could not be read: " + exception.getMessage(),
                     exception);
         }
+    }
+
+    /**
+     * Saves a mark changed by hand.
+     *
+     * @param runId the run id
+     * @param adjustment the change
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized void saveAdjustment(String runId,
+            ScoreAdjustment adjustment) throws PersistenceException {
+        requireOpen();
+        PreparedStatement statement = null;
+        try {
+            try {
+                statement = connection.prepareStatement(INSERT_ADJUSTMENT);
+                statement.setString(1, runId);
+                statement.setString(2, adjustment.getUsername());
+                statement.setString(3, adjustment.getQuestionId());
+                statement.setDouble(4, adjustment.getPreviousScore());
+                statement.setDouble(5, adjustment.getNewScore());
+                statement.setString(6, adjustment.getReason());
+                statement.setString(7, textOf(adjustment.getSavedAt()));
+                statement.executeUpdate();
+            } finally {
+                closeStatement(statement);
+            }
+        } catch (SQLException exception) {
+            throw new PersistenceException("The changed mark could not be "
+                    + "saved: " + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Forgets a mark changed by hand.
+     *
+     * @param runId the run id
+     * @param adjustment the change
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized void deleteAdjustment(String runId,
+            ScoreAdjustment adjustment) throws PersistenceException {
+        requireOpen();
+        PreparedStatement statement = null;
+        try {
+            try {
+                statement = connection.prepareStatement(DELETE_ADJUSTMENT);
+                statement.setString(1, runId);
+                statement.setString(2, adjustment.getUsername());
+                statement.setString(3, adjustment.getQuestionId());
+                statement.setString(4, textOf(adjustment.getSavedAt()));
+                statement.executeUpdate();
+            } finally {
+                closeStatement(statement);
+            }
+        } catch (SQLException exception) {
+            throw new PersistenceException("The changed mark could not be "
+                    + "removed: " + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Lists the marks changed by hand in a run, oldest first.
+     *
+     * @param runId the run id
+     * @return the changes
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized List<ScoreAdjustment> listAdjustments(String runId)
+            throws PersistenceException {
+        requireOpen();
+        List<ScoreAdjustment> changes = new ArrayList<>();
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            try {
+                statement = connection.prepareStatement(SELECT_ADJUSTMENTS);
+                statement.setString(1, runId);
+                rows = statement.executeQuery();
+                while (rows.next()) {
+                    changes.add(new ScoreAdjustment(
+                            rows.getString("username"),
+                            rows.getString("question_id"),
+                            rows.getDouble("previous_score"),
+                            rows.getDouble("new_score"),
+                            rows.getString("reason"),
+                            parseTime(rows.getString("saved_at"))));
+                }
+            } finally {
+                closeQuery(rows, statement);
+            }
+        } catch (SQLException | DateTimeParseException exception) {
+            throw new PersistenceException("The changed marks could not be "
+                    + "read: " + exception.getMessage(), exception);
+        }
+        return changes;
     }
 
     /**

@@ -64,6 +64,13 @@ public class TesterRunner {
             "--limit-modules=java.base";
 
     // Student code may not load native libraries, which could do anything
+    private static final String UTF8_ERROR_OPTION =
+            "-Dstderr.encoding=UTF-8";
+
+    // The same for JDKs before 19
+    private static final String OLD_UTF8_ERROR_OPTION =
+            "-Dsun.stderr.encoding=UTF-8";
+
     private static final String NO_NATIVE_OPTION =
             "--illegal-native-access=deny";
 
@@ -225,6 +232,9 @@ public class TesterRunner {
         if (maxMemoryMb > 0) {
             command.add(MAX_HEAP_OPTION + maxMemoryMb + MEGABYTES_SUFFIX);
         }
+        // A stack trace on standard error is UTF-8 on Windows too
+        command.add(UTF8_ERROR_OPTION);
+        command.add(OLD_UTF8_ERROR_OPTION);
         command.add(STACK_SIZE_OPTION);
         command.add(ONE_PROCESSOR_OPTION);
         command.add(LIMIT_MODULES_OPTION);

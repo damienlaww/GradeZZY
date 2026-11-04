@@ -40,6 +40,9 @@ public class ActionBar extends HBox {
     // What the blue button does
     private Runnable primaryAction = null;
 
+    // The keyboard shortcut of the blue button, shown beside it
+    private final Label shortcut = Parts.muted(Parts.shortcut("Enter"));
+
     /**
      * Creates an empty action bar.
      */
@@ -49,8 +52,15 @@ public class ActionBar extends HBox {
         primaryButton.setOnAction(event -> firePrimary());
         secondary.setAlignment(Pos.CENTER_RIGHT);
         setAlignment(Pos.CENTER_LEFT);
+        shortcut.getStyleClass().addAll("small-text", "shortcut-hint");
+        shortcut.setMinWidth(Label.USE_PREF_SIZE);
+        Parts.tip(primaryButton, "Shortcut: " + Parts.shortcut("Enter"));
+        // The hint shows only while the blue button can be pressed
+        shortcut.visibleProperty().bind(primaryButton.visibleProperty()
+                .and(primaryButton.disabledProperty().not()));
+        shortcut.managedProperty().bind(primaryButton.managedProperty());
         getChildren().addAll(backButton, status, Parts.grow(), secondary,
-                primaryButton);
+                shortcut, primaryButton);
         reset();
     }
 

@@ -52,9 +52,16 @@ public final class Parts {
             + "M12 7v5l3 2";
 
     /** Gear, for Settings. */
-    public static final String GEAR = "M12 9a3 3 0 1 0 0.01 0Z"
-            + "M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1"
-            + "M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1";
+    public static final String GEAR = "M19.03 10.43L21.43 10.81"
+            + "L21.43 13.19L19.03 13.57L18.08 15.86L19.51 17.82"
+            + "L17.82 19.51L15.86 18.08L13.57 19.03L13.19 21.43"
+            + "L10.81 21.43L10.43 19.03L8.14 18.08L6.18 19.51"
+            + "L4.49 17.82L5.92 15.86L4.97 13.57L2.57 13.19"
+            + "L2.57 10.81L4.97 10.43L5.92 8.14L4.49 6.18"
+            + "L6.18 4.49L8.14 5.92L10.43 4.97L10.81 2.57"
+            + "L13.19 2.57L13.57 4.97L15.86 5.92L17.82 4.49"
+            + "L19.51 6.18L18.08 8.14Z"
+            + "M12 9a3 3 0 1 0 0.01 0Z";
 
     /** Question mark in a circle, for Help. */
     public static final String HELP = "M12 3a9 9 0 1 0 0.01 0Z"
@@ -79,7 +86,7 @@ public final class Parts {
     public static final String SEARCH = "M11 4.5a6.5 6.5 0 1 0 0.01 0Z"
             + "M20 20l-4.2-4.2";
 
-    /** A tick in a box, for the Marking tab. */
+    /** A tick in a box, for the Grading tab. */
     public static final String MARKING = "M9 11l3 3L21 4"
             + "M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11";
 
@@ -147,6 +154,10 @@ public final class Parts {
 
     // The style class the window's root has in the dark theme
     private static final String DARK_CLASS = "dark";
+
+    // The folders of an absolute path, such as "/Users/me/Test Data/"
+    private static final String ABSOLUTE_FOLDERS = "(?:[A-Za-z]:)?[\\\\/]"
+            + "(?:(?:(?!\\.[A-Za-z0-9]{1,5}\\s)[^\\\\/])+[\\\\/])+";
 
     // Not used: every method is static.
     private Parts() {
@@ -573,6 +584,35 @@ public final class Parts {
     }
 
     /**
+     * Shortens every absolute file path in a line to its file name, so
+     * "/Users/me/Test Data/IS442.csv" reads "IS442.csv". A folder part
+     * runs from a slash to the next slash, so names with spaces are cut
+     * too; it stops at a file name such as "x.csv " so two paths on one
+     * line stay apart. Short relative names such as Q3/Q3.java are kept.
+     *
+     * @param text the line
+     * @return the line with shorter paths
+     */
+    public static String shortenPaths(String text) {
+        return text.replaceAll(ABSOLUTE_FOLDERS, "");
+    }
+
+    /**
+     * Names a keyboard shortcut the way this computer writes it, such as
+     * "⌘ Enter" on a Mac and "Ctrl + Enter" elsewhere.
+     *
+     * @param key the key pressed with Cmd or Ctrl
+     * @return the shortcut in words
+     */
+    public static String shortcut(String key) {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (os.contains("mac")) {
+            return "\u2318 " + key;
+        }
+        return "Ctrl + " + key;
+    }
+
+    /**
      * Gives a control a tip that shows soon after the pointer rests on
      * it and wraps long text.
      *
@@ -688,5 +728,43 @@ public final class Parts {
     private static Label styled(Label label, String styleClass) {
         label.getStyleClass().add(styleClass);
         return label;
+    }
+
+    /**
+     * Cleans a typed or pasted path: spaces at both ends go, and so do
+     * the quotes Windows Explorer's "Copy as path" puts around it.
+     *
+     * @param text the text, or null
+     * @return the path text, or "" for null
+     */
+    public static String cleanPath(String text) {
+        if (text == null) {
+            return "";
+        }
+        String path = text.trim();
+        if (path.length() >= 2 && path.startsWith("\"")
+                && path.endsWith("\"")) {
+            path = path.substring(1, path.length() - 1).trim();
+        }
+        return path;
+    }
+
+    /**
+     * Turns path text into a path, or null when this computer does not
+     * allow it, such as a name with ? or * on Windows.
+     *
+     * @param text the path text
+     * @return the path, or null
+     */
+    public static java.nio.file.Path toPath(String text) {
+        String path = cleanPath(text);
+        if (path.isEmpty()) {
+            return null;
+        }
+        try {
+            return java.nio.file.Paths.get(path);
+        } catch (java.nio.file.InvalidPathException exception) {
+            return null;
+        }
     }
 }

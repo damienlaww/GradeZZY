@@ -52,6 +52,9 @@ public class AssessmentLibrary {
     // The first line written in every saved assessment file
     private static final String FILE_COMMENT = "GradeZZY saved assessment";
 
+    // The property that keeps an assessment's module in its file
+    private static final String MODULE_PROPERTY = "assessment.module";
+
     // The separator between the items of a list setting
     private static final String LIST_SEPARATOR = ",";
 
@@ -147,6 +150,7 @@ public class AssessmentLibrary {
         }
         current.setStarterDirectory(config.getString(
                 ConfigKeys.STARTER_DIR));
+        
         current.getProvidedClassFiles().addAll(config.getList(
                 ConfigKeys.PROVIDED_CLASS_FILES));
         current.getTesterDataFiles().addAll(config.getList(
@@ -310,6 +314,13 @@ public class AssessmentLibrary {
         if (originalName != null) {
             oldFile = findFile(originalName);
         }
+        // An edit that does not say the module keeps the one saved
+        if (clean.getModuleCode().isEmpty() && oldFile != null) {
+            SavedAssessment before = readOrNull(oldFile);
+            if (before != null) {
+                clean.setModuleCode(before.getModuleCode());
+            }
+        }
         boolean inUse = originalName != null
                 && originalName.equalsIgnoreCase(getActiveName());
         if (inUse) {
@@ -378,6 +389,12 @@ public class AssessmentLibrary {
         Path file = findFile(current.getName());
         if (file == null) {
             file = fileFor(current.getName());
+        } else {
+            // The settings do not hold the module, so the file's is kept
+            SavedAssessment before = readOrNull(file);
+            if (before != null) {
+                current.setModuleCode(before.getModuleCode());
+            }
         }
         write(current, file);
     }
@@ -450,6 +467,7 @@ public class AssessmentLibrary {
                 assessment.getTestersDirectory().trim());
         values.put(ConfigKeys.STARTER_DIR,
                 assessment.getStarterDirectory().trim());
+        
         values.put(ConfigKeys.PROVIDED_CLASS_FILES,
                 joinList(assessment.getProvidedClassFiles()));
         values.put(ConfigKeys.TESTER_DATA_FILES,
@@ -520,6 +538,8 @@ public class AssessmentLibrary {
         }
         assessment.setStarterDirectory(values.getProperty(
                 ConfigKeys.STARTER_DIR, ""));
+        
+        assessment.setModuleCode(values.getProperty(MODULE_PROPERTY, ""));
         assessment.getProvidedClassFiles().addAll(splitList(
                 values.getProperty(ConfigKeys.PROVIDED_CLASS_FILES, "")));
         assessment.getTesterDataFiles().addAll(splitList(
@@ -537,6 +557,10 @@ public class AssessmentLibrary {
         Map<String, String> settingsOf = toSettings(assessment);
         for (String key : settingsOf.keySet()) {
             values.setProperty(key, settingsOf.get(key));
+        }
+        // The module is kept in the file only; it is not a setting
+        if (!assessment.getModuleCode().isEmpty()) {
+            values.setProperty(MODULE_PROPERTY, assessment.getModuleCode());
         }
         Files.createDirectories(file.getParent());
         Writer writer = null;

@@ -93,8 +93,9 @@ public enum Capability {
     /** Returns an approved or undone repair to Applied. */
     REPAIR_DECISION_UNDO("Undo a fix decision",
             "Takes back an approve or undo decision on a fix.",
-            "Jing Yuan, Jun Sheng", null, CapabilityStatus.PROPOSED,
-            "A method that returns an approved or undone fix to Applied."),
+            "Jing Yuan, Jun Sheng", "AnomalyService.reopenFix",
+            CapabilityStatus.WORKS_NOW, "Nothing; a kept fix can be taken "
+            + "back. A rejected fix is graded again instead."),
 
     /** Records a review decision on a flag. */
     FLAG_REVIEW("Mark flags reviewed or rejected",
@@ -240,9 +241,9 @@ public enum Capability {
     /** Changes a mark by hand. */
     SCORE_ADJUSTMENT("Adjust a mark by hand",
             "Lets you change a mark by hand with a reason, and undo it.",
-            "Jing Yuan, Huxley", null, CapabilityStatus.PROPOSED,
-            "Store a manual score with its reason and the earlier score, "
-            + "record it in the audit log, and allow undo."),
+            "Jing Yuan, Huxley", "ScoreAdjustmentService.adjust",
+            CapabilityStatus.WORKS_NOW, "Nothing; each change is saved "
+            + "with the run and can be undone."),
 
     /** More than one module. */
     MULTIPLE_MODULES("More than one module",

@@ -20,6 +20,8 @@ import java.util.regex.PatternSyntaxException;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.config.ExportFolders;
+import gradezzy.config.ModuleSections;
 import gradezzy.util.TextUtils;
 
 /**
@@ -91,6 +93,15 @@ public class SettingsService {
     // The values export.csv.line.ending accepts
     private static final String[] LINE_ENDINGS = {"CRLF", "LF"};
 
+    // Newer list settings an older config.properties may not have yet;
+    // saving one adds its line at the end of the file.
+    private static final String[] ADDABLE_KEYS = {
+        ConfigKeys.MODULE_SECTION_CODES,
+        ConfigKeys.OWN_SECTIONS_ONLY_MODULES,
+        ConfigKeys.OUTPUT_DIR_BY_SECTION,
+        ConfigKeys.SCORE_SHEET_BY_SECTION
+    };
+
     // Settings that hold a whole number of at least 1
     private static final String[] POSITIVE_INTEGER_KEYS = {
         ConfigKeys.MAX_ZIP_SIZE_MB,
@@ -157,7 +168,8 @@ public class SettingsService {
         ConfigKeys.IGNORED_FILE_NAMES,
         ConfigKeys.PROVIDED_CLASS_FILES,
         ConfigKeys.TESTER_DATA_FILES,
-        ConfigKeys.PLACEHOLDER_FOLDER_NAMES
+        ConfigKeys.PLACEHOLDER_FOLDER_NAMES,
+        ConfigKeys.OWN_SECTIONS_ONLY_MODULES
     };
 
     // The audit log action this service records
@@ -210,8 +222,8 @@ public class SettingsService {
 
     /**
      * Checks a new value before it is accepted. Spaces at both ends of
-     * the value are ignored. Only settings already in config.properties
-     * can be changed.
+     * the value are ignored. Only settings already in config.properties,
+     * or one of the newer per-module lists, can be changed.
      *
      * @param key the key
      * @param value the value
@@ -222,7 +234,7 @@ public class SettingsService {
             return "Choose a setting first.";
         }
 
-        if (!config.hasKey(key)) {
+        if (!config.hasKey(key) && !contains(ADDABLE_KEYS, key)) {
             return "There is no setting called '" + key + "'.";
         }
 
@@ -291,6 +303,15 @@ public class SettingsService {
 
         if (contains(OPTIONAL_LIST_KEYS, key)) {
             return "";
+        }
+
+        if (key.equals(ConfigKeys.MODULE_SECTION_CODES)) {
+            return ModuleSections.validate(text);
+        }
+
+        if (key.equals(ConfigKeys.OUTPUT_DIR_BY_SECTION)
+                || key.equals(ConfigKeys.SCORE_SHEET_BY_SECTION)) {
+            return ExportFolders.validate(text);
         }
 
         if (text.isEmpty()) {

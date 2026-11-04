@@ -41,4 +41,27 @@ public enum ReviewDecision {
     public String getLabel() {
         return label;
     }
+
+    /**
+     * Returns the words the activity log uses for this decision.
+     *
+     * @return such as "Marked as checked"
+     */
+    public String getAuditAction() {
+        if (this == REVIEWED) {
+            return AUDIT_CHECKED;
+        } else if (this == REJECTED) {
+            return AUDIT_LOOKS_FINE;
+        }
+        return AUDIT_TAKEN_BACK;
+    }
+
+    /** The log's words for a flag or problem marked as checked. */
+    public static final String AUDIT_CHECKED = "Marked as checked";
+
+    /** The log's words for a flag marked as looking fine. */
+    public static final String AUDIT_LOOKS_FINE = "Marked as looks fine";
+
+    /** The log's words for a decision taken back. */
+    public static final String AUDIT_TAKEN_BACK = "Decision taken back";
 }

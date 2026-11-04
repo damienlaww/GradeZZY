@@ -28,6 +28,14 @@ public class SourceCompiler {
     // The question folder itself, so provided .class files are found
     private static final String CURRENT_FOLDER = ".";
 
+    // javac writes its messages as UTF-8, so a student's é or Chinese
+    // text in an echoed line reads the same on Windows, whose console
+    // code page is not UTF-8. The sun. names are for older JDKs.
+    private static final String[] UTF8_OUTPUT_OPTIONS = {
+        "-J-Dstdout.encoding=UTF-8", "-J-Dstderr.encoding=UTF-8",
+        "-J-Dsun.stdout.encoding=UTF-8", "-J-Dsun.stderr.encoding=UTF-8"
+    };
+
     // The application settings
     private final AppConfig config;
 
@@ -61,6 +69,7 @@ public class SourceCompiler {
 
         List<String> command = new ArrayList<>();
         command.add(config.getString(ConfigKeys.JAVAC_COMMAND));
+        command.addAll(java.util.Arrays.asList(UTF8_OUTPUT_OPTIONS));
         command.add(CLASSPATH_OPTION);
         command.add(CURRENT_FOLDER);
         command.addAll(sourceFileNames);

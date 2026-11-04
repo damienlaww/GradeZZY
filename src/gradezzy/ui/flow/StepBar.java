@@ -115,15 +115,17 @@ public class StepBar extends HBox {
         } else if (step == Step.REVIEW) {
             purpose = "check each student's marks, fixes and flags.";
             locked = "Grade a batch first, or open earlier results from "
-                    + "Home or Runs.";
+                    + "Home or History.";
         } else if (step == Step.EXPORT) {
             purpose = "save the score sheet and reports.";
             locked = "Open results on Review first.";
         }
+        String keys = " Shortcut: " + Parts.shortcut(String.valueOf(
+                step.ordinal() + 1)) + ".";
         if (isCurrent) {
-            return "You are here: " + purpose;
+            return "You are here: " + purpose + keys;
         } else if (canOpen) {
-            return "Open " + step.getLabel() + ": " + purpose;
+            return "Open " + step.getLabel() + ": " + purpose + keys;
         }
         return locked;
     }

@@ -14,6 +14,7 @@ import java.util.Map;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
+import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Submission;
 
 /**
@@ -101,6 +102,36 @@ public interface ResultRepository {
      * @throws PersistenceException if the operation fails
      */
     Map<String, String> loadDecisions(String runId)
+            throws PersistenceException;
+
+    /**
+     * Saves a mark changed by hand, with its reason and earlier mark.
+     *
+     * @param runId the run id
+     * @param adjustment the change
+     * @throws PersistenceException if the operation fails
+     */
+    void saveAdjustment(String runId, ScoreAdjustment adjustment)
+            throws PersistenceException;
+
+    /**
+     * Forgets a mark changed by hand, after it was undone.
+     *
+     * @param runId the run id
+     * @param adjustment the change
+     * @throws PersistenceException if the operation fails
+     */
+    void deleteAdjustment(String runId, ScoreAdjustment adjustment)
+            throws PersistenceException;
+
+    /**
+     * Lists the marks changed by hand in a run, oldest first.
+     *
+     * @param runId the run id
+     * @return the changes
+     * @throws PersistenceException if the operation fails
+     */
+    List<ScoreAdjustment> listAdjustments(String runId)
             throws PersistenceException;
 
     /**

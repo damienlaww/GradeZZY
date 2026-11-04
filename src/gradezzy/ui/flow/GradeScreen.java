@@ -56,6 +56,15 @@ public class GradeScreen extends FlowScreen
         implements ProgressListener, RunCallback {
 
     // What each step of grading means, in the order of PipelineStages
+    // The five steps shown under the bar, and which of them each stage
+    // of grading belongs to
+    private static final String[] STEP_NAMES = {"Unzip", "Check",
+        "Compile", "Test", "Save"};
+    private static final int[] STAGE_STEP = {0, 1, 1, 1, 2, 2, 3, 4, 4};
+
+    // Turns a share into a percentage
+    private static final double PERCENT = 100.0;
+
     private static final String[] STAGE_WORDS = {"unzipping",
         "checking the folders and files", "fixing small mistakes",
         "looking for answers to flag", "copying the testers",
@@ -83,12 +92,7 @@ public class GradeScreen extends FlowScreen
     private static final DateTimeFormatter WHEN =
             DateTimeFormatter.ofPattern("d MMM, HH:mm");
 
-    // The width of the "Now:" line, so it does not move as names change
-    private static final double NOW_WIDTH = 420.0;
 
-    // The width of the name in the "Now:" line, so the step after it
-    // stays in one place
-    private static final double NAME_WIDTH = 180.0;
 
     // The rows of the "So far" card, top to bottom
     private static final int GRADED = 0;
@@ -113,6 +117,13 @@ public class GradeScreen extends FlowScreen
 
     // "About 1 minute left"
     private final Label timeLeft = Parts.muted("");
+
+    // The share of students done, such as "60%"
+    private final Label percent = new Label("0%");
+
+    // The five steps each student goes through, with the current one lit
+    private final HBox stageSteps = new HBox(Parts.GAP_SMALL / 2);
+    private final List<Label> stepLabels = new ArrayList<>();
 
     // "Now:", or a message when no student is being graded
     private final Label now = Parts.muted("");
@@ -331,10 +342,14 @@ public class GradeScreen extends FlowScreen
         timeLeft.setMinWidth(Label.USE_PREF_SIZE);
         HBox count = new HBox(Parts.GAP_SMALL / 2, done, ofTotal);
         count.setAlignment(Pos.BASELINE_LEFT);
-        VBox left = new VBox(count, timeLeft);
-        HBox nowLine = createNowLine();
-        HBox top = new HBox(Parts.GAP, left, Parts.grow(), nowLine);
-        top.setAlignment(Pos.BOTTOM_LEFT);
+        // The share done and the time left, on the right of the count
+        percent.getStyleClass().add("grade-percent");
+        percent.setMinWidth(Label.USE_PREF_SIZE);
+        timeLeft.getStyleClass().add("small-text");
+        VBox right = new VBox(2, percent, timeLeft);
+        right.setAlignment(Pos.CENTER_RIGHT);
+        HBox top = new HBox(Parts.GAP, count, Parts.grow(), right);
+        top.setAlignment(Pos.CENTER_LEFT);
         reason.setWrapText(true);
         reason.setVisible(false);
         reason.setManaged(false);
@@ -347,42 +362,71 @@ public class GradeScreen extends FlowScreen
         fill.maxWidthProperty().bind(bar.widthProperty().multiply(
                 shownProgress));
         fill.minWidthProperty().bind(fill.maxWidthProperty());
-        return Parts.card(null, new Node[] {top, reason, bar});
+        return Parts.card(null, new Node[] {top, bar, createNowLine(),
+            reason});
     }
 
-    // Builds the "Now:" line. It has a fixed width and the name has a
-    // fixed width, so "Now:" and the step stay put as names change.
+    // Builds the line under the bar: "Now grading", the student, what
+    // is being done to them as a chip, and on the right the five steps
+    // each student goes through, with the current one lit.
     private HBox createNowLine() {
-        Label[] parts = {now, nowName, nowStage};
-        String[] styles = {"grade-now", "grade-now-name", "grade-now-stage"};
-        for (int index = 0; index < parts.length; index++) {
-            parts[index].getStyleClass().add("small-text");
-            parts[index].getStyleClass().add(styles[index]);
-            // Cut instead of pushing the count aside
-            parts[index].setMinWidth(0);
+        now.getStyleClass().addAll("small-text", "grade-now");
+        nowName.getStyleClass().addAll("grade-now-name");
+        nowStage.getStyleClass().addAll("small-text", "grade-now-stage");
+        now.setMinWidth(Label.USE_PREF_SIZE);
+        nowStage.setMinWidth(Label.USE_PREF_SIZE);
+        // A long name is cut, never the stage
+        nowName.setMinWidth(0);
+        for (String step : STEP_NAMES) {
+            Label label = new Label(step);
+            label.getStyleClass().addAll("small-text", "grade-step");
+            label.setMinWidth(Label.USE_PREF_SIZE);
+            stepLabels.add(label);
+            if (!stageSteps.getChildren().isEmpty()) {
+                Label arrow = Parts.muted("\u203A");
+                arrow.getStyleClass().add("small-text");
+                stageSteps.getChildren().add(arrow);
+            }
+            stageSteps.getChildren().add(label);
         }
-        nowName.setPrefWidth(NAME_WIDTH);
-        nowName.setMaxWidth(NAME_WIDTH);
-        HBox line = new HBox(Parts.FIGURE_UNIT_GAP,
-                new Node[] {now, nowName, nowStage});
-        line.setAlignment(Pos.BASELINE_LEFT);
-        line.setPrefWidth(NOW_WIDTH);
+        stageSteps.setAlignment(Pos.CENTER_RIGHT);
+        stageSteps.setMinWidth(HBox.USE_PREF_SIZE);
+        HBox line = new HBox(Parts.GAP_SMALL, new Node[] {now, nowName,
+            nowStage, Parts.grow(), stageSteps});
+        line.setAlignment(Pos.CENTER_LEFT);
+        line.getStyleClass().add("grade-now-line");
         line.setMinWidth(0);
         return line;
     }
 
-    // Shows a message in the "Now:" line in place of a student.
+    // Shows a message in the line under the bar in place of a student.
     private void showMessage(String message) {
         now.setText(message);
         showNowParts(false);
     }
 
-    // Shows a student and what is being done to them in the "Now:" line.
-    private void showNow(Submission submission, String words) {
-        now.setText("Now:");
+    // Shows a student and what is being done to them. The stage is the
+    // index of the step of grading, or -1 before the first one.
+    private void showNow(Submission submission, String words, int stage) {
+        now.setText("Now grading");
         nowName.setText(Students.name(submission));
         nowStage.setText(words);
         showNowParts(true);
+        nowStage.setVisible(!words.isEmpty());
+        nowStage.setManaged(!words.isEmpty());
+        int step = -1;
+        if (stage >= 0 && stage < STAGE_STEP.length) {
+            step = STAGE_STEP[stage];
+        }
+        for (int index = 0; index < stepLabels.size(); index++) {
+            Label label = stepLabels.get(index);
+            label.getStyleClass().removeAll("done", "current");
+            if (index < step) {
+                label.getStyleClass().add("done");
+            } else if (index == step) {
+                label.getStyleClass().add("current");
+            }
+        }
     }
 
     // Shows or hides the name and the step of the "Now:" line.
@@ -390,6 +434,8 @@ public class GradeScreen extends FlowScreen
         nowName.setVisible(shown);
         nowName.setManaged(shown);
         nowStage.setVisible(shown);
+        stageSteps.setVisible(shown);
+        stageSteps.setManaged(shown);
         nowStage.setManaged(shown);
     }
 
@@ -486,7 +532,7 @@ public class GradeScreen extends FlowScreen
      * @param submission the student
      */
     private void showStudent(Submission submission) {
-        showNow(submission, "");
+        showNow(submission, "", -1);
     }
 
     /**
@@ -498,11 +544,13 @@ public class GradeScreen extends FlowScreen
      */
     private void showStage(Submission submission, String stageName) {
         int index = PipelineStages.indexOf(stageName);
-        String words = "working";
+        String words = "Working";
         if (index >= 0 && index < STAGE_WORDS.length) {
             words = STAGE_WORDS[index];
+            words = Character.toUpperCase(words.charAt(0))
+                    + words.substring(1);
         }
-        showNow(submission, DOT.trim() + " " + words);
+        showNow(submission, words, index);
     }
 
     /**
@@ -635,6 +683,7 @@ public class GradeScreen extends FlowScreen
         if (total > 0) {
             share = (double) finished / total;
         }
+        percent.setText(Math.round(share * PERCENT) + "%");
         progress.set(share);
         glideTo(share);
         updateTimeLeft();
@@ -730,7 +779,8 @@ public class GradeScreen extends FlowScreen
         boolean onlyCompile = true;
         for (Submission submission : resultsInOrder()) {
             ResultState state = Students.state(submission, getBackend());
-            if (state == ResultState.NEEDS_REVIEW) {
+            if (state == ResultState.NEEDS_REVIEW
+                    || state == ResultState.ZERO) {
                 tally[REVIEW]++;
             } else if (Students.isFailed(state)) {
                 tally[FAILED]++;
@@ -800,7 +850,9 @@ public class GradeScreen extends FlowScreen
         actions.reset();
         GradingRun run = getState().getRun();
         if (getState().isGrading()) {
-            actions.setBack("Cancel", () -> askCancel());
+            // Cancel sits beside the main button, where the eye already is
+            actions.addSecondary(Parts.secondary("Cancel",
+                    () -> askCancel()));
             if (cancelling) {
                 actions.setStatus("Stopping after the current student.");
             } else {

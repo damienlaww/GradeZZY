@@ -50,6 +50,9 @@ public class ServiceRegistry {
     // The saved assessments, built from the settings service
     private final AssessmentLibrary assessmentLibrary;
 
+    // Changes marks by hand; set after construction
+    private ScoreAdjustmentService scoreAdjustmentService = null;
+
     /**
      * Creates a new service registry.
      *
@@ -82,6 +85,30 @@ public class ServiceRegistry {
         this.plagiarismService = plagiarismService;
         this.assessmentLibrary = new AssessmentLibrary(config,
                 settingsService);
+    }
+
+    /**
+     * Gives the registry the service that changes marks by hand. It is
+     * set after construction because it needs the result store.
+     *
+     * @param service the service
+     */
+    public void setScoreAdjustmentService(ScoreAdjustmentService service) {
+        scoreAdjustmentService = service;
+    }
+
+    /**
+     * Returns the service that changes marks by hand.
+     *
+     * @return the service; one that keeps changes for this session only
+     *         when none was set
+     */
+    public ScoreAdjustmentService getScoreAdjustmentService() {
+        if (scoreAdjustmentService == null) {
+            scoreAdjustmentService = new ScoreAdjustmentService(null,
+                    config);
+        }
+        return scoreAdjustmentService;
     }
 
     /**
