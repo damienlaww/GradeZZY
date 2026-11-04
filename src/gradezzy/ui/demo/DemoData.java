@@ -346,31 +346,6 @@ public final class DemoData {
     }
 
     /**
-     * Returns the synthetic files of one sample student's working copy.
-     *
-     * @param username the student
-     * @return paths relative to the working copy, such as Q1/Q1a.java
-     */
-    public static List<String> sourceFiles(String username) {
-        List<String> files = new ArrayList<>();
-        int index = indexOf(username);
-        files.add("Q1/Q1a.java");
-        if (index != ECHO) {
-            files.add("Q1/Q1b.java");
-        }
-        if (index != DELTA) {
-            files.add("Q2/Q2a.java");
-            if (index == CHARLIE) {
-                files.add("Q2/q2b.java");
-            } else {
-                files.add("Q2/Q2b.java");
-            }
-        }
-        files.add("Q3/Q3.java");
-        return files;
-    }
-
-    /**
      * Returns the synthetic text of one source file.
      *
      * @param username the student

@@ -1,9 +1,11 @@
 /*
  * File: StepBar.java
  *
- * Purpose: The four numbered steps across the top of the window. Done
- * steps show a tick and can be clicked to go back; the current step is
- * blue; later steps are grey.
+ * Purpose: The four numbered steps across the top of the window. Steps
+ * before the current one show a tick and can be clicked to go back; the
+ * current step is blue; later steps are grey, and can be clicked when
+ * they were reached before. Each says in a tip what it is for, or what
+ * opens it.
  *
  * Where it fits: FlowWindow puts it in the middle of the top bar and
  * updates it whenever the step changes.
@@ -71,7 +73,9 @@ public class StepBar extends HBox {
         name.getStyleClass().add("step-name");
 
         boolean isCurrent = step == current && !away;
-        boolean done = step.ordinal() < furthest.ordinal();
+        // Only the steps before the one on screen are done: after a new
+        // section is chosen, Grade and Review are not done for it yet
+        boolean done = step.ordinal() < current.ordinal();
         if (isCurrent) {
             dot.getStyleClass().add("current");
             name.getStyleClass().add("current");
@@ -96,6 +100,31 @@ public class StepBar extends HBox {
             item.getStyleClass().add("clickable");
             item.setOnMouseClicked(event -> onPick.accept(step));
         }
+        Parts.tipNode(item, tipFor(step, isCurrent, canOpen));
         return item;
+    }
+
+    // Says what a step is for, or what opens it while it is locked.
+    private String tipFor(Step step, boolean isCurrent, boolean canOpen) {
+        String purpose = "choose the section, the assessment and the "
+                + "students' zip files.";
+        String locked = "";
+        if (step == Step.GRADE) {
+            purpose = "watch the batch being graded.";
+            locked = "Start grading on Set up first.";
+        } else if (step == Step.REVIEW) {
+            purpose = "check each student's marks, fixes and flags.";
+            locked = "Grade a batch first, or open earlier results from "
+                    + "Home or Runs.";
+        } else if (step == Step.EXPORT) {
+            purpose = "save the score sheet and reports.";
+            locked = "Open results on Review first.";
+        }
+        if (isCurrent) {
+            return "You are here: " + purpose;
+        } else if (canOpen) {
+            return "Open " + step.getLabel() + ": " + purpose;
+        }
+        return locked;
     }
 }

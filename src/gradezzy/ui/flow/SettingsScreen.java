@@ -21,6 +21,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.HBox;
@@ -293,23 +294,25 @@ public class SettingsScreen extends FlowScreen {
         startGroup("Course");
         text(ConfigKeys.MODULE_CODES, "Modules",
                 "Separated by commas. The first is the default.");
-        text(ConfigKeys.SECTION_CODES, "Sections", "Separated by commas.");
+        text(ConfigKeys.SECTION_CODES, "Sections", "Separated by commas. "
+                + "You can also add one on Home.");
 
         startGroup("Files and folders");
         file(ConfigKeys.SCORE_SHEET_FILE, "Score sheet",
                 "The roster, and the template for the export.");
         folder(ConfigKeys.TESTERS_DIR, "Tester files",
-                "Testers and the data files they read.");
+                "Of the assessment in use: testers and their data files.");
         folder(ConfigKeys.STARTER_DIR, "Starter files",
-                "Used to spot answers left untouched.");
-        folder(ConfigKeys.SUBMISSIONS_DIR, "Submissions for the console",
-                "Graded by run.sh console.");
+                "Of the assessment in use: spots untouched answers and "
+                + "gives the provided class files.");
         folder(ConfigKeys.WORKING_DIR, "Working copies",
                 "Fixes and tests run here. Originals never change.");
         folder(ConfigKeys.OUTPUT_DIR, "Exports saved in",
                 "CSV, JSON and reports.");
         folder(ConfigKeys.BACKUP_DIR, "Backups saved in",
                 "Copies made by Back up now on Runs.");
+        folder(ConfigKeys.ASSESSMENTS_DIR, "Assessments saved in",
+                "One file per saved assessment.");
 
         startGroup("Assessment");
         text(ConfigKeys.ASSESSMENT_NAME, "Name", "");
@@ -376,6 +379,8 @@ public class SettingsScreen extends FlowScreen {
                 "Starting size, in pixels.");
 
         startGroup("Advanced");
+        folder(ConfigKeys.SUBMISSIONS_DIR, "Submissions for the console",
+                "Only for run.sh console. The window never uses it.");
         text(ConfigKeys.ZIP_NAME_PREFIX_PATTERN, "Zip name prefix",
                 "Pattern of the text before the username in a zip name.");
         text(ConfigKeys.IGNORED_FILE_NAMES, "Ignored file names",
@@ -487,15 +492,20 @@ public class SettingsScreen extends FlowScreen {
         table.setMaxWidth(QUESTIONS_WIDTH);
 
         String description = "Folder, file and maximum mark of each "
-                + "question. Total " + Parts.mark(assessment.getMaxTotal())
-                + ". The folder and file are in config.properties; each "
-                + "maximum is the sum of the \"score += <number>\" lines "
-                + "in the question's tester.";
+                + "question of " + assessment.getName() + ". Total "
+                + Parts.mark(assessment.getMaxTotal()) + ". Each maximum "
+                + "is the sum of the \"score += <number>\" lines in the "
+                + "question's tester.";
         Label name = Parts.strong("Questions");
         Label help = Parts.muted(description);
         help.getStyleClass().add("small-text");
         help.setWrapText(true);
-        VBox names = new VBox(LINE_GAP, name, help);
+        Hyperlink manage = Parts.link("Edit in Assessments",
+                () -> getWindow().editAssessment(assessment.getName()));
+        manage.getStyleClass().add("small-text");
+        Parts.tip(manage, "Change questions and marks, or add another "
+                + "assessment, in the assessment editor.");
+        VBox names = new VBox(LINE_GAP, name, help, manage);
         names.setMinWidth(SettingField.NAME_WIDTH);
         names.setPrefWidth(SettingField.NAME_WIDTH);
         names.setMaxWidth(SettingField.NAME_WIDTH);

@@ -74,6 +74,9 @@ public class ExportScreen extends FlowScreen {
     // The separator between parts of a line
     private static final String DOT = " · ";
 
+    // How many ticked students the export question names
+    private static final int NAMES_IN_CONFIRM = 3;
+
     // The scrolling page
     private final ScrollPane view;
 
@@ -274,6 +277,8 @@ public class ExportScreen extends FlowScreen {
         tickedReason.setManaged(!canScope);
         if (canScope) {
             tickedOnly.setText("Only ticked students (" + ticked + ")");
+            // Ticking on Review says which students to export
+            tickedOnly.setSelected(true);
         } else {
             tickedOnly.setText("Only ticked students");
             everyone.setSelected(true);
@@ -617,14 +622,87 @@ public class ExportScreen extends FlowScreen {
         getWindow().show(Step.SET_UP);
     }
 
-    // Writes the CSV and, if chosen, the JSON file. Live mode writes on a
-    // background thread; the demo writes no file.
+    // Says how many students will be exported, and where, then exports
+    // once the instructor confirms.
     private void export() {
         GradingRun run = getState().getRun();
         if (run == null || exporting) {
             return;
         }
         List<Submission> scope = chooseScope(run);
+        int count = scope.size();
+        int total = run.getSubmissions().size();
+        String who = "every student";
+        if (count < total) {
+            who = "the " + count + " ticked students ("
+                    + listNames(scope) + "). The other " + (total - count)
+                    + " rows of the score sheet are left as they are";
+        }
+        String detail = "The marks of " + who + " are filled into a copy "
+                + "of the score sheet for " + run.getSection().getLabel()
+                + ", saved in " + getBackend().getSetting(
+                ConfigKeys.OUTPUT_DIR) + ".";
+        if (json.isSelected()) {
+            detail += " A JSON file with every question and test is saved "
+                    + "beside it.";
+        }
+        int open = countNeedingReview(scope);
+        if (open > 0) {
+            detail += " " + Parts.plural(open, "student") + " still "
+                    + isOrAre(open) + " marked Needs review; you can export "
+                    + "again after checking them.";
+        }
+        String students = Parts.plural(count, "student");
+        getWindow().confirm("Export " + students + "?", detail,
+                "Export " + students, () -> exportNow(scope));
+    }
+
+    // Names up to three students, then says how many more.
+    private String listNames(List<Submission> scope) {
+        String text = "";
+        int shown = 0;
+        for (Submission submission : scope) {
+            if (shown < NAMES_IN_CONFIRM) {
+                if (!text.isEmpty()) {
+                    text += ", ";
+                }
+                text += Students.name(submission);
+                shown++;
+            }
+        }
+        if (scope.size() > shown) {
+            text += " and " + (scope.size() - shown) + " more";
+        }
+        return text;
+    }
+
+    // Counts the students of a scope who still need review.
+    private int countNeedingReview(List<Submission> scope) {
+        int count = 0;
+        for (Submission submission : scope) {
+            if (Students.state(submission, getBackend())
+                    == ResultState.NEEDS_REVIEW) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Returns "is" for one and "are" for more.
+    private String isOrAre(int count) {
+        if (count == 1) {
+            return "is";
+        }
+        return "are";
+    }
+
+    // Writes the CSV and, if chosen, the JSON file. Live mode writes on a
+    // background thread; the demo writes no file.
+    private void exportNow(List<Submission> scope) {
+        GradingRun run = getState().getRun();
+        if (run == null || exporting) {
+            return;
+        }
         ExportJob job = new ExportJob(getBackend(), run, scope,
                 json.isSelected());
         if (getBackend().isDemo()) {

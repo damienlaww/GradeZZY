@@ -47,6 +47,9 @@ public class ServiceRegistry {
     // The plagiarism service
     private final PlagiarismService plagiarismService;
 
+    // The saved assessments, built from the settings service
+    private final AssessmentLibrary assessmentLibrary;
+
     /**
      * Creates a new service registry.
      *
@@ -77,6 +80,8 @@ public class ServiceRegistry {
         this.settingsService = settingsService;
         this.historyService = historyService;
         this.plagiarismService = plagiarismService;
+        this.assessmentLibrary = new AssessmentLibrary(config,
+                settingsService);
     }
 
     /**
@@ -167,5 +172,14 @@ public class ServiceRegistry {
      */
     public PlagiarismService getPlagiarismService() {
         return plagiarismService;
+    }
+
+    /**
+     * Returns the saved assessments.
+     *
+     * @return the assessment library
+     */
+    public AssessmentLibrary getAssessmentLibrary() {
+        return assessmentLibrary;
     }
 }

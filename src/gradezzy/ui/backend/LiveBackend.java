@@ -10,10 +10,13 @@
 package gradezzy.ui.backend;
 
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,9 +29,10 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.exec.ProcessRunner;
 import gradezzy.exec.SourceCompiler;
 import gradezzy.fix.FixRecord;
-import gradezzy.grading.CompileStage;
 import gradezzy.grading.GradingException;
 import gradezzy.grading.ProgressListener;
+import gradezzy.grading.QuestionRerunner;
+import gradezzy.grading.CompileStage;
 import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.model.Anomaly;
@@ -37,6 +41,8 @@ import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
+import gradezzy.model.QuestionResult;
+import gradezzy.model.SavedAssessment;
 import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
@@ -44,6 +50,7 @@ import gradezzy.model.SubmissionStatus;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.report.ExportException;
 import gradezzy.service.AssessmentFactory;
+import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.stats.StatisticsFilter;
 import gradezzy.stats.StatisticsSummary;
@@ -72,14 +79,19 @@ public class LiveBackend implements DashboardBackend {
     // The separator between a question's folder and file, as in Q1/Q1a.java
     private static final String FOLDER_SEPARATOR = "/";
 
+    // How many folders deep an answer file is looked for: the student's
+    // folder, and one wrapper folder around it
+    private static final int SOURCE_SEARCH_DEPTH = 3;
+
     // Every service of the application
     private final ServiceRegistry services;
 
     // The application settings
     private final AppConfig config;
 
-    // The assessment, built once from the configuration
-    private final Assessment assessment;
+    // The assessment in use, built from the configuration again whenever
+    // another one is chosen; read by the file-checking thread too
+    private volatile Assessment assessment;
 
     // Says what grading will do with a chosen zip file or folder
     private final SubmissionPreview preview;
@@ -620,17 +632,28 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls SearchService.searchCode.
+     * Calls QuestionRerunner.run, which saves nothing, with the run's
+     * assessment and tester folder, else the ones in the settings.
      */
     @Override
-    public List<Submission> searchCode(GradingRun gradingRun,
-            String codeFragment) {
-        return services.getSearchService().searchCode(gradingRun,
-                codeFragment);
+    public QuestionResult rerunQuestion(Submission submission,
+            GradingRun gradingRun, Question question)
+            throws GradingException {
+        Assessment graded = assessment;
+        Path testers = Paths.get(config.getString(ConfigKeys.TESTERS_DIR));
+        if (gradingRun != null && gradingRun.getAssessment() != null) {
+            graded = gradingRun.getAssessment();
+        }
+        if (gradingRun != null && gradingRun.getTestersDirectory() != null) {
+            testers = gradingRun.getTestersDirectory();
+        }
+        return new QuestionRerunner(config).run(submission, graded,
+                question, testers);
     }
 
     /**
-     * Reads the file with FileUtils.readText.
+     * Reads the file with FileUtils.readText, looking inside the
+     * student's folders as grading does.
      */
     @Override
     public String readSourceFile(Submission submission,
@@ -641,10 +664,86 @@ public class LiveBackend implements DashboardBackend {
         }
 
         try {
-            return FileUtils.readText(workingCopy.resolve(relativePath));
+            Path file = findSourceFile(workingCopy, relativePath, false,
+                    SOURCE_SEARCH_DEPTH);
+            if (file == null) {
+                file = findSourceFile(workingCopy, relativePath, true,
+                        SOURCE_SEARCH_DEPTH);
+            }
+            if (file == null) {
+                return "";
+            }
+            return FileUtils.readText(file);
         } catch (IOException exception) {
             return "";
         }
+    }
+
+    // Finds a file such as Q1/Q1a.java in a working copy: at its top, or
+    // inside the folders around it, such as the folder named after the
+    // student, as grading finds it. Links are never followed.
+    private Path findSourceFile(Path folder, String relativePath,
+            boolean ignoreCase, int depth) throws IOException {
+        Path match = matchPath(folder, relativePath.split(FOLDER_SEPARATOR),
+                ignoreCase);
+        if (match != null || depth == 0) {
+            return match;
+        }
+        for (Path child : listChildren(folder)) {
+            if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
+                Path found = findSourceFile(child, relativePath, ignoreCase,
+                        depth - 1);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    // Follows the parts of a path down from a folder, matching each name
+    // exactly or ignoring case. Returns the ordinary file, or null.
+    private Path matchPath(Path folder, String[] parts, boolean ignoreCase)
+            throws IOException {
+        Path current = folder;
+        for (String part : parts) {
+            Path next = null;
+            for (Path child : listChildren(current)) {
+                String name = child.getFileName().toString();
+                boolean same = name.equals(part)
+                        || (ignoreCase && name.equalsIgnoreCase(part));
+                if (same && next == null) {
+                    next = child;
+                }
+            }
+            if (next == null) {
+                return null;
+            }
+            current = next;
+        }
+        if (Files.isRegularFile(current, LinkOption.NOFOLLOW_LINKS)) {
+            return current;
+        }
+        return null;
+    }
+
+    // Lists a folder's children, in name order; none for a file.
+    private List<Path> listChildren(Path folder) throws IOException {
+        List<Path> children = new ArrayList<>();
+        if (!Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS)) {
+            return children;
+        }
+        DirectoryStream<Path> entries = null;
+        try {
+            entries = Files.newDirectoryStream(folder);
+            for (Path child : entries) {
+                children.add(child);
+            }
+        } finally {
+            FileUtils.closeIfOpen(entries);
+        }
+        Collections.sort(children);
+        return children;
     }
 
     /**
@@ -841,12 +940,134 @@ public class LiveBackend implements DashboardBackend {
 
         try {
             services.getSettingsService().save();
+            if (changesAssessment(keys)) {
+                library().saveCurrentFromSettings();
+                assessment = new AssessmentFactory(config).create();
+            }
         } catch (IOException exception) {
             return ActionResult.failed("The settings could not be saved: "
                     + exception.getMessage());
         }
         return ActionResult.done("Saved " + changes.size() + " setting"
                 + plural(changes.size()) + " to config.properties.");
+    }
+
+    // ----------------------------------------------------- assessments
+
+    /**
+     * Calls AssessmentLibrary.list. If the folder cannot be read, only the
+     * assessment in use is listed.
+     */
+    @Override
+    public List<SavedAssessment> listAssessments() {
+        try {
+            return library().list();
+        } catch (IOException exception) {
+            List<SavedAssessment> current = new ArrayList<>();
+            current.add(library().readCurrent());
+            return current;
+        }
+    }
+
+    /**
+     * Calls AssessmentLibrary.validate, then checks that the folders
+     * exist.
+     */
+    @Override
+    public String validateAssessment(SavedAssessment draft,
+            String originalName) {
+        List<String> names = new ArrayList<>();
+        for (SavedAssessment saved : listAssessments()) {
+            names.add(saved.getName());
+        }
+        String problem = library().validate(draft, originalName, names);
+        if (!problem.isEmpty()) {
+            return problem;
+        }
+        return library().checkFolders(draft);
+    }
+
+    /**
+     * Calls AssessmentLibrary.save and records it in the activity log.
+     */
+    @Override
+    public ActionResult saveAssessment(SavedAssessment draft,
+            String originalName) {
+        try {
+            library().save(draft, originalName);
+        } catch (IOException exception) {
+            return ActionResult.failed("The assessment could not be saved: "
+                    + exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            return ActionResult.failed(exception.getMessage());
+        }
+        assessment = new AssessmentFactory(config).create();
+        recordAudit("Assessment saved", draft.getName().trim());
+        return ActionResult.done("Saved " + draft.getName().trim() + ".");
+    }
+
+    /**
+     * Calls AssessmentLibrary.use and records it in the activity log.
+     */
+    @Override
+    public ActionResult useAssessment(String name) {
+        try {
+            library().use(name);
+        } catch (IOException exception) {
+            return ActionResult.failed("GradeZZY could not switch to "
+                    + name + ": " + exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            return ActionResult.failed("GradeZZY could not switch to "
+                    + name + ": " + exception.getMessage());
+        }
+        assessment = new AssessmentFactory(config).create();
+        recordAudit("Assessment chosen", name);
+        return ActionResult.done("Now grading " + name + ".");
+    }
+
+    /**
+     * Calls AssessmentLibrary.delete and records it in the activity log.
+     */
+    @Override
+    public ActionResult deleteAssessment(String name) {
+        try {
+            library().delete(name);
+        } catch (IOException exception) {
+            return ActionResult.failed(name + " could not be deleted: "
+                    + exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            return ActionResult.failed(exception.getMessage());
+        }
+        recordAudit("Assessment deleted", name);
+        return ActionResult.done("Deleted " + name + ". Results graded "
+                + "with it are kept.");
+    }
+
+    // Says whether any of the changed settings belongs to the assessment.
+    private boolean changesAssessment(List<String> keys) {
+        for (String key : keys) {
+            if (isAssessmentSetting(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Returns the saved assessments.
+    private AssessmentLibrary library() {
+        return services.getAssessmentLibrary();
+    }
+
+    // Says whether a setting belongs to the assessment, so a change on
+    // the Settings page is saved into the assessment in use too.
+    private boolean isAssessmentSetting(String key) {
+        return key.startsWith(ConfigKeys.QUESTION_PREFIX)
+                || key.equals(ConfigKeys.ASSESSMENT_NAME)
+                || key.equals(ConfigKeys.TESTERS_DIR)
+                || key.equals(ConfigKeys.STARTER_DIR)
+                || key.equals(ConfigKeys.PROVIDED_CLASS_FILES)
+                || key.equals(ConfigKeys.TESTER_DATA_FILES)
+                || key.equals(ConfigKeys.PLACEHOLDER_FOLDER_NAMES);
     }
 
     /**
@@ -959,14 +1180,19 @@ public class LiveBackend implements DashboardBackend {
         return starters.get(0).getPath();
     }
 
-    // Returns the item for a path InputValidator could not read.
+    // Returns the item for a path InputValidator could not read. A path
+    // that is not there is named in full, because the usual cause is a
+    // setting that points at a folder this computer does not have.
     private ImportItem unreadable(InputKind kind, Path path) {
         String message = "GradeZZY could not read this. Check that it "
-                + "exists and is not open in another program.";
+                + "is not open in another program.";
+        if (!Files.exists(path)) {
+            message = "Not found at " + path.toAbsolutePath().normalize()
+                    + ".";
+        }
         if (kind == InputKind.STARTER) {
             message = "GradeZZY could not read this, "
-                    + describeStarterFallback(path) + " Check that it "
-                    + "exists and is not open in another program.";
+                    + describeStarterFallback(path) + " " + message;
         }
         CapabilityStatus checks = Capability.INPUT_CHECKS.getStatus();
         if (checks != CapabilityStatus.WORKS_NOW) {
