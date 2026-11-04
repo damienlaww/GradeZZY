@@ -60,7 +60,7 @@ uploads that are not on it. `marking notes.txt` is skipped. Then
 Marks are Q1a/3, Q1b/3, Q2a/5, Q2b/5, Q3/4, total /20. "Correct" is what
 a careful human marker gives. "GradeZZY should show" is what GradeZZY
 showed on 2026-11-04 (branch `jingyuan/nov4-tasks`, 8774c72), checked
-twice with the same result.
+twice with the same result, and again on `main` at 52eaa5b.
 
 | # | Student | What they did | Q1a | Q1b | Q2a | Q2b | Q3 | Correct | GradeZZY should show |
 |---|---|---|---|---|---|---|---|---|---|
