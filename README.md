@@ -161,7 +161,7 @@ The base package is `gradezzy`. Each package has one job.
 | `report` | One class per export format. | `Exporter` (interface), `CsvScoreSheetExporter`, `JsonExporter`, `StudentReportExporter`, `AnomalyReportExporter`, `AuditLogExporter`, `JsonWriter`, `JsonFields` |
 | `stats` | Statistics for the dashboard. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
-| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AssessmentLibrary`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ServiceRegistry` |
+| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AssessmentLibrary`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ClassFileMatcher`, `ServiceRegistry` |
 | `ui` | JavaFX only: starting the window and small shared helpers. | `MainApp`, `ThemeManager`, `GradingTask`, `DragDropHandler` |
 | `ui.flow` | The window: tabs Home (a card per section), Marking (Set up, Grade, Review, Export), Statistics, Runs and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `HomeScreen`, `AssessmentsSheet`, `AssessmentEditor`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts`, the review table cells `Review...Cell`, and comparators such as `StudentNameComparator` |
 | `ui.backend` | The one interface the screens call, and its live version that calls the services. | `DashboardBackend`, `LiveBackend`, `Capability`, small view classes such as `RepairItem` and `RunRecord` |
@@ -1081,6 +1081,7 @@ by this section.
 | `CharsetDecoder`, `CodingErrorAction`, `ByteBuffer` | `fix.EncodingFixer`, `report.CsvScoreSheetExporter` | Tells whether a Java file is valid UTF-8, which javac needs, and whether a score sheet is UTF-8 or Windows-1252, so the export is written the same way. | A decoder turns bytes into characters; set to `REPORT`, it throws instead of guessing when the bytes are not UTF-8. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. | Reads a file of `key=value` lines into a lookup table. |
 | JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs to SQLite so Runs can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
+| `Thread.sleep`, `InterruptedException` | `util.FileUtils` | Waits briefly before retrying a move that Windows blocked, such as when antivirus holds a new file open. | Pauses for half a second, then tries the move again, up to five times. |
 | `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |
 | Shutdown hook (`Runtime.addShutdownHook`), a daemon `Thread` | `exec.ProcessRunner`, `exec.RunningProcesses`, `exec.TesterHarness`, `exec.HarnessWatchdog` | No tester keeps running after GradeZZY closes or crashes. | A shutdown hook is a thread Java starts as the program ends; ours stops every tester still running. The watchdog is a second thread inside each tester run that sleeps until the time limit plus 2 seconds, then ends the run, in case GradeZZY is gone. |
 | `PrintStream` subclass, `System.setOut`, `StackWalker` | `exec.TesterHarness`, `exec.TrustedPrintStream`, `exec.TrustedFrameCheck` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. | All printing goes through our `PrintStream`, which checks who called it and marks a line only when no student method is on the call stack. |
@@ -1210,6 +1211,12 @@ implemented. `[x]` means it works now.
   Resume skip them too
 - [x] Flag untouched starter files, empty answers and hard-coded answers
   (`detection` package)
+- [x] Set up checks that the score sheet, tester folder and starter
+  folder belong with the uploads, and offers a better one nearby with
+  "Use this file instead" (`service.ClassFileMatcher`,
+  `ui.flow.ClassFileMatchCheck`). A score sheet fits when at least half
+  the uploads are on it; testers and starter files fit when they use the
+  methods the students' files declare. It only warns: grading can start
 - [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
   `TesterGenerator`, `ui.flow.TestCasesSheet`)
 - [x] Progress bar and estimated time of completion

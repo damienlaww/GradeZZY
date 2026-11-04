@@ -73,7 +73,7 @@ public class SettingField {
     private static final double PATH_WIDTH = 300.0;
 
     // The width of a list of fixed values
-    private static final double CHOICE_WIDTH = 160.0;
+    private static final double CHOICE_WIDTH = 240.0;
 
     // The radius of the blue changed dot
     private static final double DOT_RADIUS = 3.0;
@@ -147,6 +147,12 @@ public class SettingField {
         this.kind = kind;
         this.original = savedValue();
         choice.getItems().addAll(choices);
+        // A value set by hand that is not one of the choices is kept as
+        // one more choice, so opening Settings never changes it
+        if (kind == SettingKind.CHOICE && !original.isEmpty()
+                && !choice.getItems().contains(original)) {
+            choice.getItems().add(original);
+        }
         buildRow();
         setControlValue(original);
         listen();
