@@ -71,6 +71,14 @@ public class GradingService {
     private static final String RESUME_WARNING_ACTION = "Check the marks "
             + "of this student, or grade the batch again with Set up.";
 
+    // Start of the id of the warning on a student who is not on the
+    // score sheet, as ExtractStage gives it
+    private static final String UNKNOWN_STUDENT_ID_PREFIX = "UNKNOWN-";
+
+    // What the instructor can do about a student not on the score sheet
+    private static final String UNKNOWN_STUDENT_ACTION = "Check the upload "
+            + "filename and the selected roster.";
+
     // The audit log actions this service records
     private static final String GRADING_STARTED = "Grading started";
     private static final String GRADING_NOT_STARTED =
@@ -79,6 +87,7 @@ public class GradingService {
     private static final String GRADING_CANCELLED = "Grading cancelled";
     private static final String GRADING_RETRIED = "Grading retried";
     private static final String GRADING_RESUMED = "Grading resumed";
+    private static final String SCORE_SHEET_CHANGED = "Score sheet changed";
     private static final String STUDENTS_ADDED = "Students added";
     private static final String RESULT_REPLACED = "Result replaced";
     private static final String LATE_UPLOAD_REFUSED = "Late upload refused";
@@ -674,6 +683,91 @@ public class GradingService {
     }
 
     /**
+     * Gives a graded run another score sheet, so its marks go to the
+     * right sheet without grading again. Each student is matched to the
+     * new sheet by username, as grading does, the warnings about
+     * students not on the sheet are made again, and the run is saved.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param gradingRun the run
+     * @param scoreSheetFile the score sheet to use from now on
+     * @return how many students of the run are on the new sheet
+     * @throws GradingException if grading is still running or the sheet
+     *         cannot be read
+     */
+    public int changeScoreSheet(GradingRun gradingRun, Path scoreSheetFile)
+            throws GradingException {
+        beginOnlyGrading();
+        try {
+            return changeScoreSheetAlone(gradingRun, scoreSheetFile);
+        } finally {
+            endGrading();
+        }
+    }
+
+    // Matches the students of a run to another score sheet while nothing
+    // is graded; see changeScoreSheet.
+    private int changeScoreSheetAlone(GradingRun gradingRun,
+            Path scoreSheetFile) throws GradingException {
+        if (gradingRun == null || scoreSheetFile == null) {
+            throw new GradingException("Choose a run and a score sheet.");
+        }
+        List<Student> roster = readStudents(scoreSheetFile);
+
+        RosterReader rosterReader = new RosterReader(config);
+        int onSheet = 0;
+        for (Submission submission : gradingRun.getSubmissions()) {
+            // Grading never matches an upload that could not be used
+            if (submission.getIngestFailure() == null) {
+                Student student = rosterReader.findByUsername(roster,
+                        submission.getUsername());
+                submission.setStudent(student);
+                removeUnknownStudent(submission);
+                if (student == null) {
+                    addUnknownStudent(submission);
+                } else {
+                    onSheet++;
+                }
+            }
+        }
+
+        gradingRun.setScoreSheetFile(scoreSheetFile);
+        // Grading a student again in this session reads this roster
+        if (gradingRun == lastRun && lastContext != null) {
+            lastContext.getRoster().clear();
+            lastContext.getRoster().addAll(roster);
+        }
+        auditService.record(SCORE_SHEET_CHANGED, "Run " + gradingRun.getId()
+                + " now uses " + scoreSheetFile + ": " + onSheet + " of "
+                + gradingRun.getSubmissions().size() + " submission(s) are "
+                + "on it.");
+        saveRun(gradingRun, true);
+        return onSheet;
+    }
+
+    // Removes the warnings that a student is not on the score sheet.
+    private void removeUnknownStudent(Submission submission) {
+        List<Anomaly> unknown = new ArrayList<>();
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            if (anomaly.getType() == AnomalyType.UNKNOWN_STUDENT) {
+                unknown.add(anomaly);
+            }
+        }
+        submission.getAnomalies().removeAll(unknown);
+    }
+
+    // Warns that a student is not on the score sheet, as ExtractStage
+    // does while grading.
+    private void addUnknownStudent(Submission submission) {
+        submission.addAnomaly(new Anomaly(UNKNOWN_STUDENT_ID_PREFIX
+                + UUID.randomUUID(), AnomalyType.UNKNOWN_STUDENT,
+                Severity.WARNING, submission.getUsername(),
+                submission.getUsername() + " is not on the roster.",
+                UNKNOWN_STUDENT_ACTION));
+    }
+
+    /**
      * Says whether a batch, a retry, a resume, an undo or a late batch is
      * being graded now. Undo and a late batch are refused while it is.
      *
@@ -1128,10 +1222,15 @@ public class GradingService {
     // Reads a score sheet into the roster of a run.
     private void readRoster(GradingContext context, Path scoreSheetFile)
             throws GradingException {
+        context.getRoster().addAll(readStudents(scoreSheetFile));
+    }
+
+    // Reads the students of a score sheet.
+    private List<Student> readStudents(Path scoreSheetFile)
+            throws GradingException {
         try {
             RosterReader rosterReader = new RosterReader(config);
-            context.getRoster().addAll(rosterReader.readRoster(
-                    scoreSheetFile));
+            return rosterReader.readRoster(scoreSheetFile);
         } catch (IngestException exception) {
             throw new GradingException("The score sheet could not be "
                     + "read: " + exception.getMessage(), exception);

@@ -33,6 +33,8 @@ import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextFlow;
 
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.GradingRun;
@@ -40,6 +42,7 @@ import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.plagiarism.SimilarityPair;
+import gradezzy.service.ClassFileMatch;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.ImportItem;
@@ -119,11 +122,32 @@ public class ExportScreen extends FlowScreen {
     // Where the files are saved
     private final Label savedTo = Parts.muted("");
 
-    // Says when graded students are not on the score sheet, with a way
-    // back to Set up
+    // Says when graded students are not on the score sheet, with a
+    // better sheet found nearby or a way back to Set up
     private final HBox sheetWarning = Parts.row(Parts.GAP);
     private final Label warningTitle = new Label();
     private final Label warningText = new Label();
+
+    // The better sheet, in bold, and how many students it lists
+    private final Text suggestionName = new Text();
+    private final Text suggestionDetail = new Text();
+    private final TextFlow suggestionLine = new TextFlow(suggestionName,
+            suggestionDetail);
+
+    // Shown when no better sheet is found
+    private final Button backToSetUp = Parts.secondary("Back to Set up",
+            () -> showSetUp());
+
+    // Shown when a better sheet is found
+    private final Button useSheet = Parts.secondary("Use this file instead",
+            () -> useBetterSheet());
+
+    // The last search for a better score sheet, and what it found
+    private ScoreSheetSearch sheetSearch = null;
+    private ClassFileMatch betterSheet = null;
+
+    // True while the run's score sheet is being changed
+    private boolean changingSheet = false;
 
     // What the score sheet will get, under its title
     private final VBox outcome = new VBox(Parts.GAP_SMALL);
@@ -284,14 +308,16 @@ public class ExportScreen extends FlowScreen {
         warningTitle.getStyleClass().add("warning-title");
         warningTitle.setWrapText(true);
         warningText.setWrapText(true);
+        suggestionName.getStyleClass().addAll("sheet-suggestion-text",
+                "sheet-suggestion-name");
+        suggestionDetail.getStyleClass().add("sheet-suggestion-text");
         VBox words = new VBox(Parts.GAP_SMALL / 2, warningTitle,
-                warningText);
+                warningText, suggestionLine);
         words.setMinWidth(0);
         HBox.setHgrow(words, Priority.ALWAYS);
-        Button back = Parts.secondary("Back to Set up",
-                () -> getWindow().show(Step.SET_UP));
-        back.setMinWidth(Button.USE_PREF_SIZE);
-        sheetWarning.getChildren().addAll(words, back);
+        backToSetUp.setMinWidth(Button.USE_PREF_SIZE);
+        useSheet.setMinWidth(Button.USE_PREF_SIZE);
+        sheetWarning.getChildren().addAll(words, backToSetUp, useSheet);
         sheetWarning.getStyleClass().addAll("banner", "warn",
                 "sheet-warning");
         sheetWarning.setVisible(false);
@@ -491,7 +517,8 @@ public class ExportScreen extends FlowScreen {
     }
 
     // Warns when graded students are not on the score sheet: their marks
-    // would not be saved, and grading again with the right sheet fixes it.
+    // would not be saved. A better sheet nearby is offered in its place;
+    // without one, grading again with the right sheet fixes it.
     private void refreshWarning(GradingRun run, int filled, int offSheet,
             int otherRows) {
         boolean shown = offSheet > 0;
@@ -519,8 +546,109 @@ public class ExportScreen extends FlowScreen {
             text = "No mark would be saved to " + sheet + ", which lists "
                     + Parts.plural(otherRows, "other student") + ".";
         }
+        boolean better = lookForBetterSheet(run);
+        suggestionLine.setVisible(better);
+        suggestionLine.setManaged(better);
+        useSheet.setVisible(better);
+        useSheet.setManaged(better);
+        backToSetUp.setVisible(!better);
+        backToSetUp.setManaged(!better);
+        if (better) {
+            suggestionName.setText(betterSheet.getSuggestionName());
+            suggestionDetail.setText(betterSheet.getSuggestionDetail());
+            warningText.setText(text);
+            return;
+        }
         warningText.setText(text + " Choose the right score sheet on Set "
                 + "up and grade again.");
+    }
+
+    // Says whether a better score sheet was found for the run's sheet.
+    // The first time, it starts looking and returns false; the warning
+    // is shown again once the search ends.
+    private boolean lookForBetterSheet(GradingRun run) {
+        if (sheetSearch != null && sheetSearch.isFor(run)) {
+            return betterSheet != null && betterSheet.hasSuggestion();
+        }
+        betterSheet = null;
+        ScoreSheetSearch search = new ScoreSheetSearch(getBackend(), run);
+        sheetSearch = search;
+        if (getBackend().isDemo()) {
+            betterSheet = search.search();
+            return betterSheet.hasSuggestion();
+        }
+        search.setOnSucceeded(event -> sheetSearched(search));
+        search.setOnFailed(event -> sheetNotSearched(search));
+        Thread worker = new Thread(search, "gradezzy-score-sheet");
+        worker.setDaemon(true);
+        worker.start();
+        return false;
+    }
+
+    // Keeps what a finished search found and shows it.
+    private void sheetSearched(ScoreSheetSearch search) {
+        if (search != sheetSearch) {
+            return;
+        }
+        betterSheet = search.getValue();
+        if (isOnScreen()) {
+            refreshBlanks();
+        }
+    }
+
+    // Treats a failed search as no better sheet, so it is not retried.
+    private void sheetNotSearched(ScoreSheetSearch search) {
+        if (search == sheetSearch) {
+            betterSheet = ClassFileMatch.fits();
+        }
+    }
+
+    // Opens Set up, to choose the right score sheet and grade again.
+    private void showSetUp() {
+        getWindow().show(Step.SET_UP);
+    }
+
+    // Gives the run the better score sheet, so the marks go to it
+    // without grading again. The change runs on a background thread.
+    private void useBetterSheet() {
+        GradingRun run = getState().getRun();
+        if (run == null || changingSheet || exporting
+                || betterSheet == null || !betterSheet.hasSuggestion()) {
+            return;
+        }
+        ScoreSheetChange change = new ScoreSheetChange(getBackend(), run,
+                betterSheet.getSuggestion());
+        if (getBackend().isDemo()) {
+            sheetChanged(change.changeNow());
+            return;
+        }
+        change.setOnSucceeded(event -> sheetChanged(change.getValue()));
+        change.setOnFailed(event -> sheetNotChanged(change));
+        changingSheet = true;
+        useSheet.setDisable(true);
+        Thread worker = new Thread(change, "gradezzy-score-sheet");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Shows why a change of score sheet stopped before it finished.
+    private void sheetNotChanged(ScoreSheetChange change) {
+        sheetChanged(ActionResult.failed(change.getException()
+                .getMessage()));
+    }
+
+    // Reads the new sheet's students again and says what happened.
+    private void sheetChanged(ActionResult outcome) {
+        changingSheet = false;
+        useSheet.setDisable(false);
+        getState().forgetMissingStudents();
+        refreshBlanks();
+        if (outcome.isDone()) {
+            showNote("Score sheet changed", Tone.GOOD,
+                    outcome.getMessage());
+        } else {
+            showNote("Not changed", Tone.BAD, outcome.getMessage());
+        }
     }
 
     // Counts the students with no submission whose file grading skipped.
@@ -1018,18 +1146,21 @@ public class ExportScreen extends FlowScreen {
 
     // Shows the outcome under the export choices.
     private void showResult(boolean done, String message) {
+        if (done) {
+            showNote("Saved", Tone.GOOD, message);
+        } else {
+            showNote("Not saved", Tone.BAD, message);
+        }
+    }
+
+    // Shows a pill and a message under the export choices.
+    private void showNote(String pill, Tone tone, String message) {
         result.getChildren().clear();
         result.setVisible(true);
         result.setManaged(true);
         Label text = Parts.muted(message);
         text.setWrapText(true);
         HBox.setHgrow(text, Priority.ALWAYS);
-        if (done) {
-            result.getChildren().addAll(Parts.pill("Saved", Tone.GOOD),
-                    text);
-        } else {
-            result.getChildren().addAll(Parts.pill("Not saved", Tone.BAD),
-                    text);
-        }
+        result.getChildren().addAll(Parts.pill(pill, tone), text);
     }
 }

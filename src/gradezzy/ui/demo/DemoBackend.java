@@ -548,6 +548,24 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
+     * Returns ClassFileMatch.fits(): every demo student is on the sheet.
+     */
+    @Override
+    public ClassFileMatch findBetterScoreSheet(GradingRun gradingRun) {
+        return ClassFileMatch.fits();
+    }
+
+    /**
+     * Returns failed: the demo has no score sheet file to change.
+     */
+    @Override
+    public ActionResult changeScoreSheet(GradingRun gradingRun,
+            Path scoreSheet) {
+        return ActionResult.failed("The demo has no score sheet to "
+                + "change.");
+    }
+
+    /**
      * Returns no students: every demo student has a submission.
      */
     @Override

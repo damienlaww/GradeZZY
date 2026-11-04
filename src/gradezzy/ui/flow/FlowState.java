@@ -270,6 +270,15 @@ public class FlowState {
     }
 
     /**
+     * Forgets the students with no submission, so they are looked up
+     * again, as after the run's score sheet changes.
+     */
+    public void forgetMissingStudents() {
+        missingRun = null;
+        missingStudents = null;
+    }
+
+    /**
      * Says whether a batch is being graded.
      *
      * @return true while grading

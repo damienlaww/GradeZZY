@@ -1217,6 +1217,12 @@ implemented. `[x]` means it works now.
   `ui.flow.ClassFileMatchCheck`). A score sheet fits when at least half
   the uploads are on it; testers and starter files fit when they use the
   methods the students' files declare. It only warns: grading can start
+- [x] Export warns when graded students are not on the score sheet.
+  When most of them are not, it offers a sheet nearby that lists them
+  with "Use this file instead", which matches the students to that sheet
+  and saves the run without grading again
+  (`GradingService.changeScoreSheet`, `ui.flow.ScoreSheetSearch`,
+  `ui.flow.ScoreSheetChange`); otherwise it points back to Set up
 - [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
   `TesterGenerator`, `ui.flow.TestCasesSheet`)
 - [x] Progress bar and estimated time of completion

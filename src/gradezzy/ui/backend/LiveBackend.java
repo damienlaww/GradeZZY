@@ -400,6 +400,55 @@ public class LiveBackend implements DashboardBackend {
         return ClassFileMatch.fits();
     }
 
+    /**
+     * Calls ClassFileMatcher with the run's score sheet, the usernames of
+     * its graded students and their uploads.
+     */
+    @Override
+    public ClassFileMatch findBetterScoreSheet(GradingRun gradingRun) {
+        if (gradingRun == null) {
+            return ClassFileMatch.fits();
+        }
+        Path sheet = gradingRun.getScoreSheetFile();
+        if (sheet == null) {
+            sheet = getConfiguredPath(InputKind.ROSTER);
+        }
+
+        List<String> usernames = new ArrayList<>();
+        List<Path> uploads = new ArrayList<>();
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (ResultState.hasTotal(submission)) {
+                usernames.add(submission.getUsername());
+            }
+            Path upload = submission.getOriginalPath();
+            if (upload != null && !uploads.contains(upload)) {
+                uploads.add(upload);
+            }
+        }
+        ClassFileMatcher matcher = new ClassFileMatcher(config,
+                gradingRun.getAssessment());
+        return matcher.checkScoreSheet(sheet, usernames, uploads,
+                "graded student");
+    }
+
+    /**
+     * Calls GradingService.changeScoreSheet.
+     */
+    @Override
+    public ActionResult changeScoreSheet(GradingRun gradingRun,
+            Path scoreSheet) {
+        try {
+            int onSheet = services.getGradingService().changeScoreSheet(
+                    gradingRun, scoreSheet);
+            return ActionResult.done("The marks now go to "
+                    + scoreSheet.getFileName() + ", which lists " + onSheet
+                    + " of the " + gradingRun.getSubmissions().size()
+                    + " students.");
+        } catch (GradingException exception) {
+            return ActionResult.failed(exception.getMessage());
+        }
+    }
+
     // Says whether a folder holds at least one tester file.
     private boolean holdsTester(Path folder) {
         String ending = config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
