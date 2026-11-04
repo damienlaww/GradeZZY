@@ -263,11 +263,10 @@ public class FixManager {
         }
     }
 
-    // The keys of the fixes the instructor undid for a student. This is
-    // the one place to return submission.getRejectedFixes() once
-    // Submission has it.
+    // The keys of the fixes the instructor undid for a student. A copy,
+    // so a key added while this student is fixed waits for the next pass.
     private List<String> findRejectedFixes(Submission submission) {
-        return new ArrayList<>();
+        return new ArrayList<>(submission.getRejectedFixes());
     }
 
     // Says whether an anomaly still waits for a fix in this pass: not

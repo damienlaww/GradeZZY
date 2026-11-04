@@ -10,8 +10,8 @@ package gradezzy.model;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * One batch of submissions graded together.
@@ -32,8 +32,11 @@ public class GradingRun {
     // The time the run started
     private final LocalDateTime startedAt;
 
-    // The submissions in this run
-    private final List<Submission> submissions = new ArrayList<>();
+    // The submissions in this run. Copy-on-write, because a late batch
+    // adds and replaces students while the window may be looping over
+    // the list.
+    private final List<Submission> submissions =
+            new CopyOnWriteArrayList<>();
 
     // The score sheet the batch was graded against, or null if unknown
     private Path scoreSheetFile = null;
@@ -112,6 +115,18 @@ public class GradingRun {
      */
     public void addSubmission(Submission submission) {
         submissions.add(submission);
+    }
+
+    /**
+     * Removes a submission from this run, for example the older result
+     * of a student whose late upload replaces it.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param submission the submission
+     */
+    public void removeSubmission(Submission submission) {
+        submissions.remove(submission);
     }
 
     /**

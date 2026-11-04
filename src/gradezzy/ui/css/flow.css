@@ -888,9 +888,51 @@
     -fx-background-color: -color-border-default, -color-border-muted;
 }
 
-.change-text {
+/* A decision that keeps a fix or clears a flag: filled green. */
+.student-panel .button.small.good {
+    -fx-background-color: -color-success-emphasis;
+    -fx-background-insets: 0;
+    -fx-background-radius: 6px;
+    -fx-text-fill: -color-fg-emphasis;
+}
+
+.student-panel .button.small.good:hover,
+.student-panel .button.small.good:pressed {
+    -fx-background-color: -color-success-fg;
+}
+
+/* A decision that undoes a fix or keeps a flag: red outline. */
+.student-panel .button.small.bad {
+    -fx-background-color: -color-danger-emphasis, -color-bg-default;
+    -fx-text-fill: -color-danger-fg;
+}
+
+.student-panel .button.small.bad:hover,
+.student-panel .button.small.bad:pressed {
+    -fx-background-color: -color-danger-emphasis, -color-danger-subtle;
+}
+
+/* What a fix changed, as removed and added lines. */
+.change-diff {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 6px;
+    -fx-padding: 0;
+}
+
+.diff-line {
     -fx-font-family: "IBM Plex Mono";
     -fx-font-size: 12px;
+    -fx-padding: 2px 8px;
+}
+
+.diff-line.removed {
+    -fx-background-color: -color-danger-subtle;
+    -fx-text-fill: -color-danger-fg;
+}
+
+.diff-line.added {
+    -fx-background-color: -color-success-subtle;
+    -fx-text-fill: -color-success-fg;
 }
 
 .panel-links {

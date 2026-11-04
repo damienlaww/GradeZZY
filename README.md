@@ -956,8 +956,12 @@ folder unzipped by hand or a `GradingRun` filled in by hand.
 
 Every setting is in `config.properties` and is read through
 `AppConfig`, using the names in `ConfigKeys`. A missing setting stops the
-application at start-up with a message naming the setting. To use another
-file: `java -Dgradezzy.config=other.properties ...`.
+application at start-up with a message naming the setting. So does a value
+that is not valid (for example `database.enabled=yes`): every setting is
+checked once with `SettingsService.validate`, and the message names all
+the bad ones. The folders and the score sheet that must already exist are
+left out of that check, because Set up chooses them again for each batch.
+To use another file: `java -Dgradezzy.config=other.properties ...`.
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -1195,7 +1199,10 @@ implemented. `[x]` means it works now.
 - [x] Anomaly log with action buttons; approve and undo, singly and in
   bulk (`service.AnomalyService`, `ui.flow.ReviewScreen`; undo needs
   the run graded in this session, because fix records are kept in
-  memory)
+  memory). Undo grades the student again without that fix, so the marks
+  match the files as submitted (kenneth.yeo.2024 in the e2e cohort goes
+  from 20 to 16); the undone fix keys stay on `Submission`, so Retry and
+  Resume skip them too
 - [x] Flag untouched starter files, empty answers and hard-coded answers
   (`detection` package)
 - [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
@@ -1212,9 +1219,15 @@ implemented. `[x]` means it works now.
 - [x] Cancel, retry and resume grading (`service.GradingService`,
   `grading.CancellationToken`; Cancel stops each student being graded
   at its next step; a run from an earlier session is resumed with its
-  own score sheet and tester folder once the database saves the tester
-  folder, and until then with the testers in the settings, with a
+  own score sheet, tester and starter folders; a run saved before the
+  database kept the folders uses the ones in the settings, with a
   warning on every student graded that way)
+- [x] A late batch joins the section's run (`GradingService.findNewestRun`
+  and `addToRun`): a new student is added, a student graded before is
+  graded again and the new result replaces the old one, with the old
+  total kept in the audit log. It is refused when the tester folder or
+  score sheet is not the run's. The question on Set up is still to come
+  (`ui.flow.SetUpScreen`)
 - [x] Light and dark theme switch (`ui.ThemeManager`, `ui.theme`)
 - [x] Settings page backed by `config.properties`
   (`service.SettingsService`, `ui.flow.SettingsScreen`)

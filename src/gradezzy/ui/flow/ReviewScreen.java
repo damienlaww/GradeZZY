@@ -1086,7 +1086,7 @@ public class ReviewScreen extends FlowScreen {
         if (!open.isEmpty()) {
             actions.addSecondary(Parts.secondary("Approve all "
                     + Parts.plural(open.size(), "fix", "fixes"),
-                    () -> approveAll(open)));
+                    () -> askApproveAll(open)));
         }
         actions.setPrimary("Continue to export", () -> continueToExport(),
                 true);
@@ -1179,6 +1179,18 @@ public class ReviewScreen extends FlowScreen {
             }
         }
         return false;
+    }
+
+    // Asks before approving every waiting fix at once.
+    private void askApproveAll(List<RepairItem> open) {
+        String whose = "every student";
+        if (!getState().getSelected().isEmpty()) {
+            whose = "the ticked students";
+        }
+        getWindow().confirm("Approve all " + Parts.plural(open.size(),
+                "fix", "fixes") + "?", "The fixed files of " + whose
+                + " are kept and their marks stay as they are now.",
+                "Approve all", () -> approveAll(open));
     }
 
     // Approves every waiting fix.

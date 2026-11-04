@@ -1,7 +1,8 @@
 /*
  * File: ExportService.java
  *
- * Purpose: Keeps the available exporters and runs the chosen one.
+ * Purpose: Keeps the available exporters and runs the chosen one, and
+ * says which score sheet rows the CSV export leaves blank.
  *
  * Where it fits: Lets the export screen list formats without knowing the
  * classes.
@@ -11,11 +12,22 @@ package gradezzy.service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
+import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
+import gradezzy.ingest.IngestException;
+import gradezzy.ingest.RosterReader;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Student;
+import gradezzy.model.Submission;
+import gradezzy.model.SubmissionStatus;
 import gradezzy.report.ExportException;
 import gradezzy.report.Exporter;
 
@@ -39,11 +51,25 @@ public class ExportService {
     // The registered exporters
     private final List<Exporter> exporters = new ArrayList<>();
 
+    // The application settings, or null if the score sheet cannot be
+    // summarised
+    private final AppConfig config;
+
     /**
-     * Creates a new export service.
+     * Creates a new export service that cannot summarise a score sheet.
      */
     public ExportService() {
-        // nothing to set up yet
+        this(null);
+    }
+
+    /**
+     * Creates a new export service.
+     *
+     * @param config the application settings, used to read a run's
+     *        score sheet
+     */
+    public ExportService(AppConfig config) {
+        this.config = config;
     }
 
     /**
@@ -162,6 +188,93 @@ public class ExportService {
         }
 
         return outputFile;
+    }
+
+    /**
+     * Says which rows of a run's score sheet the CSV export fills, and
+     * why the others stay blank: the student's submission has no mark,
+     * or there is none. It also lists submissions that match no row.
+     * Rows are matched to submissions by username, ignoring case, as the
+     * CSV export does, so the counts agree with the file it writes. Only
+     * a GRADED submission fills its row. Nothing is written. The sheet
+     * is read with RosterReader, as it was when the run started, so a
+     * sheet edited since then to hold a row RosterReader refuses (a
+     * blank id or a repeated username) gives an ExportException here,
+     * though the CSV export would still write it.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param gradingRun the grading run
+     * @return the summary
+     * @throws ExportException if there is no run, or its score sheet
+     *         cannot be read
+     */
+    public ScoreSheetSummary summarizeScoreSheet(GradingRun gradingRun)
+            throws ExportException {
+        if (gradingRun == null) {
+            throw new ExportException("There is no run to export.");
+        }
+        if (config == null) {
+            throw new ExportException("The score sheet cannot be checked "
+                    + "without the settings.");
+        }
+
+        Path scoreSheetFile = gradingRun.getScoreSheetFile();
+        if (scoreSheetFile == null) {
+            scoreSheetFile = Paths.get(config.getString(
+                    ConfigKeys.SCORE_SHEET_FILE));
+        }
+
+        List<Student> roster = null;
+        try {
+            roster = new RosterReader(config).readRoster(scoreSheetFile);
+        } catch (IngestException exception) {
+            throw new ExportException(exception.getMessage(), exception);
+        }
+
+        Map<String, Submission> submissionsByUsername =
+                indexByUsername(gradingRun.getSubmissions());
+        ScoreSheetSummary summary = new ScoreSheetSummary();
+        List<String> sheetUsernames = new ArrayList<>();
+        for (Student student : roster) {
+            String key = student.getUsername().toLowerCase(Locale.ROOT);
+            sheetUsernames.add(key);
+            Submission submission = submissionsByUsername.get(key);
+            if (submission == null) {
+                summary.getNoSubmission().add(student.getUsername());
+            } else if (submission.getStatus() == SubmissionStatus.GRADED) {
+                summary.getFilled().add(student.getUsername());
+            } else {
+                summary.getNotGraded().add(student.getUsername());
+            }
+        }
+
+        // In upload order, each student once
+        List<String> listed = new ArrayList<>();
+        for (Submission submission : gradingRun.getSubmissions()) {
+            String key = submission.getUsername().toLowerCase(Locale.ROOT);
+            if (!sheetUsernames.contains(key) && !listed.contains(key)) {
+                listed.add(key);
+                summary.getNotOnSheet().add(submission.getUsername());
+            }
+        }
+        return summary;
+    }
+
+    // Maps each username, in lower case, to its submission, as the CSV
+    // export does: a copy whose upload was refused never replaces one
+    // that was loaded.
+    private Map<String, Submission> indexByUsername(
+            List<Submission> submissions) {
+        Map<String, Submission> submissionsByUsername = new HashMap<>();
+        for (Submission submission : submissions) {
+            String key = submission.getUsername().toLowerCase(Locale.ROOT);
+            Submission earlier = submissionsByUsername.get(key);
+            if (earlier == null || earlier.getIngestFailure() != null) {
+                submissionsByUsername.put(key, submission);
+            }
+        }
+        return submissionsByUsername;
     }
 
     // Deletes a file if it is there. A file that cannot be deleted is

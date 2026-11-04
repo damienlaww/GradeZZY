@@ -19,7 +19,53 @@ Most of your list is done on `jingyuan/taught-java`:
   - true or false settings are strict;
   - the console prints one block per student.
 
-What is left, in order:
+## Done on 4 November: the method names for the team
+
+- **Undo** (Jun Sheng, Seth, Huxley):
+  - `Submission.getRejectedFixes()` and `rejectFix(key)`.
+    `FixManager.findRejectedFixes` now returns a copy of that list.
+  - `AnomalyService.undoFix(anomaly)` puts the files back, adds the
+    fix key, grades that one student again and returns an
+    `UndoResult`: `getTotalBefore()`, `getTotalAfter()`,
+    `isRegraded()` and `getMessage()` ("Fix undone. Marks 20 to
+    16."). It runs the testers, so Seth calls it in a `Task`.
+    `undoAll` grades each student once and returns one result per
+    student.
+  - `GradingService.regradeSubmission(run, submission, listener)`
+    grades one student again; a null listener tells nobody.
+  - Checked on the cohort: kenneth.yeo.2024 goes from 20 to 16 with Q3
+    at 0, and stays at 16 when he is graded again.
+  - Still open: Huxley's `rejected_fixes` column, so the keys survive
+    a restart.
+- **Late batch** (Seth, Huxley):
+  - `GradingService.findNewestRun(module, section)` returns the run
+    for the Set up question, or null.
+  - `GradingService.addToRun(run, zips, testerSource, listener,
+    scoreSheet)` adds the batch to that run.
+  - It refuses another tester folder or score sheet with a
+    `GradingException` that says which, and leaves the run as it was.
+  - The audit log gets "Students added", and "Result replaced" with
+    "Replaced alicia.tan.2024: 20 to 18."
+  - A late zip that cannot be opened, or a refused duplicate, never
+    replaces a result: the student keeps it and the audit log says
+    "Late upload refused".
+- **While grading runs** (Seth): Undo and `addToRun` are refused, because
+  they share the stop flag and the run with the grading thread.
+  `GradingService.isGrading()` says when; `undoFix` then returns null
+  and changes nothing.
+- **Export blank rows** (Seth): `ExportService.summarizeScoreSheet(run)`
+  returns a `ScoreSheetSummary` with `getFilled()`, `getNotGraded()`,
+  `getNoSubmission()`, `getNotOnSheet()` and `getMessage()` ("16 marks
+  filled, 2 left blank: 1 could not be graded, 1 no submission."). It
+  matches rows the way the CSV export does.
+- **Smaller items:**
+  - `PlagiarismService.check` saves the run.
+  - `cancel` names the run being graded, safely across threads.
+  - Every setting is checked at start-up
+    (`SettingsService.findProblems`).
+
+The 3 November list below is kept for reference; everything in it is
+done (see above).
 
 ## Decided on 3 November
 
@@ -72,14 +118,24 @@ What is left, in order:
 
 ## Team and repo
 
-- Merge the pull request from `jingyuan/taught-java` early, so everyone
-  branches from the same `main`.
-- Tell Zach that `UploadedTesterSource` gained `getTestersDirectory()`.
-- About 38 untracked files from the old window are in your local folder:
-  `src/gradezzy/ui/*Controller.java`, `ui/view/`, `ui/fxml/`,
-  `ui/component/`, `ui/css/app*.css`, the old `ui/check` classes and
-  `service/ProgressEstimator.java`. `compile.sh` compiles every file in
-  `ui/`, so an in-place build may pick them up. They are not in git;
-  delete them when you are sure you do not need them.
-- Share `samples/e2e-cohort` and `samples/e2e-weird` with the team.
-  Everyone's "done when" checks use them.
+- Done: the pull request from `jingyuan/taught-java` is merged (#18).
+- Done: the old window's untracked files are deleted from the local
+  folder (4 November). OneDrive had put them back, which broke
+  `sh compile.sh`; if a build fails with "package gradezzy.ui.component
+  does not exist", check `git status` for them first.
+- Done: `samples/e2e-cohort` and `samples/e2e-weird` are in git
+  (`19a22cc`).
+- Done: Huxley's `testers_dir` column, so Resume after a restart uses the
+  run's own testers.
+- Still to do: tell Zach that `UploadedTesterSource` gained
+  `getTestersDirectory()`.
+- Waiting on Huxley: the `rejected_fixes` column, so undone fixes stay
+  undone after a restart.
+
+Checked on 4 November after merging `main` (with the revert of #24): all
+16 graded cohort totals match the README table, priya.nair.2024 fails,
+only huimin.lee.2024 and ivan.goh.2024 are similar, kenneth.yeo.2024 goes
+from 20 to 16 on Undo and stays there, a second bryan.ng.2024 zip
+replaces the first in the G3 run, another tester folder is refused, and
+the summary reads "16 marks filled, 2 left blank: 1 could not be graded,
+1 no submission."

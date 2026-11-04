@@ -298,6 +298,22 @@ public final class Parts {
     }
 
     /**
+     * Returns a small button coloured by what it decides: green for
+     * keeping a fix or clearing a flag, red for undoing a fix or keeping
+     * a flag.
+     *
+     * @param text the button text
+     * @param action what it does
+     * @param tone GOOD or BAD
+     * @return the button
+     */
+    public static Button small(String text, Runnable action, Tone tone) {
+        Button button = small(text, action);
+        button.getStyleClass().add(tone.getStyleClass());
+        return button;
+    }
+
+    /**
      * Returns a blue text link.
      *
      * @param text the link text

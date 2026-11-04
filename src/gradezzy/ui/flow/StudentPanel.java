@@ -368,7 +368,7 @@ public class StudentPanel extends ScrollPane {
         }
         if (backend.supports(Capability.RETRY_QUESTION)) {
             Hyperlink retry = Parts.link("Grade " + question.getId()
-                    + " again", () -> retryQuestion(backend, question));
+                    + " again", () -> askRetryQuestion(backend, question));
             retry.getStyleClass().add("small-text");
             details.getChildren().add(retry);
         }
@@ -512,10 +512,10 @@ public class StudentPanel extends ScrollPane {
         String before = repair.getOriginalValue();
         if (backend.supports(Capability.REPAIR_VALUES) && before != null
                 && !before.isEmpty()) {
-            Label change = Parts.muted("Before: " + before
-                    + "\nAfter:  " + repair.getProposedValue());
-            change.setWrapText(true);
-            change.getStyleClass().add("change-text");
+            VBox change = new VBox();
+            change.getStyleClass().add("change-diff");
+            addDiffLines(change, before, false);
+            addDiffLines(change, repair.getProposedValue(), true);
             card.getChildren().add(change);
         }
 
@@ -532,9 +532,9 @@ public class StudentPanel extends ScrollPane {
         } else if (status == FixStatus.APPLIED) {
             buttons.getChildren().addAll(
                     Parts.small("Approve",
-                    () -> approveRepair(backend, repair)),
+                    () -> approveRepair(backend, repair), Tone.GOOD),
                     Parts.small("Undo",
-                    () -> rejectRepair(backend, repair)));
+                    () -> rejectRepair(backend, repair), Tone.BAD));
         } else if (ReviewRules.isRepairSettled(anomaly)
                 && backend.supports(Capability.REPAIR_DECISION_UNDO)) {
             buttons.getChildren().add(Parts.small("Change decision",
@@ -542,6 +542,28 @@ public class StudentPanel extends ScrollPane {
         }
         addButtons(card, buttons);
         return card;
+    }
+
+    // Adds one row per line of a fix's value: red with a minus for what
+    // the student had, green with a plus for what the working copy holds.
+    private void addDiffLines(VBox change, String value, boolean added) {
+        if (value == null) {
+            return;
+        }
+        String sign = "- ";
+        String style = "removed";
+        if (added) {
+            sign = "+ ";
+            style = "added";
+        }
+        String[] lines = value.split("\n");
+        for (String text : lines) {
+            Label line = new Label(sign + text);
+            line.setWrapText(true);
+            line.setMaxWidth(Double.MAX_VALUE);
+            line.getStyleClass().addAll("diff-line", style);
+            change.getChildren().add(line);
+        }
     }
 
     // Adds Mark as checked to a fix that could not be made, or Reopen
@@ -554,7 +576,7 @@ public class StudentPanel extends ScrollPane {
         if (backend.needsReview(anomaly)) {
             buttons.getChildren().add(Parts.small("Mark as checked",
                     () -> decide(backend, anomaly,
-                    ReviewDecision.REVIEWED)));
+                    ReviewDecision.REVIEWED), Tone.GOOD));
         } else {
             buttons.getChildren().add(Parts.small("Reopen",
                     () -> decide(backend, anomaly, ReviewDecision.OPEN)));
@@ -633,13 +655,13 @@ public class StudentPanel extends ScrollPane {
         if (open && flag) {
             buttons.getChildren().addAll(
                     Parts.small("Looks fine", () -> decide(backend,
-                    anomaly, ReviewDecision.REJECTED)),
+                    anomaly, ReviewDecision.REJECTED), Tone.GOOD),
                     Parts.small("Keep flagged", () -> decide(backend,
-                    anomaly, ReviewDecision.REVIEWED)));
+                    anomaly, ReviewDecision.REVIEWED), Tone.BAD));
         } else if (open) {
             buttons.getChildren().add(Parts.small("Mark as checked",
                     () -> decide(backend, anomaly,
-                    ReviewDecision.REVIEWED)));
+                    ReviewDecision.REVIEWED), Tone.GOOD));
         } else if (decision != ReviewDecision.OPEN) {
             buttons.getChildren().add(Parts.small("Reopen",
                     () -> decide(backend, anomaly, ReviewDecision.OPEN)));
@@ -707,7 +729,7 @@ public class StudentPanel extends ScrollPane {
         }
         if (backend.supports(Capability.RETRY_SUBMISSION)) {
             links.getChildren().add(Parts.link("Grade this student again",
-                    () -> retrySubmission(backend)));
+                    () -> askRetrySubmission(backend)));
         }
         return links;
     }
@@ -719,6 +741,22 @@ public class StudentPanel extends ScrollPane {
      */
     private void openCode() {
         window.showSheet(CodeSheet.create(window, submission));
+    }
+
+    // Asks before grading the shown student again.
+    private void askRetrySubmission(DashboardBackend backend) {
+        window.confirm("Grade " + Students.name(submission) + " again?",
+                "Their marks are replaced by the new result.",
+                "Grade again", () -> retrySubmission(backend));
+    }
+
+    // Asks before grading one question of the shown student again.
+    private void askRetryQuestion(DashboardBackend backend,
+            Question question) {
+        window.confirm("Grade " + question.getId() + " again?", "The mark "
+                + "for " + question.getId() + " is replaced by the new "
+                + "result.", "Grade again",
+                () -> retryQuestion(backend, question));
     }
 
     /**
