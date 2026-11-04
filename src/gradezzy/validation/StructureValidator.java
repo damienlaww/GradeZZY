@@ -152,8 +152,7 @@ public class StructureValidator extends AbstractValidator {
         return inner;
     }
 
-    // Lists the question folders that are absent here but sit inside the
-    // extra folder, in question order.
+    // Lists the absent question folders that sit in the extra folder.
     private List<String> listNestedNames(List<Path> folders,
             Path extraFolder, Assessment assessment) throws IOException {
         List<String> names = new ArrayList<>();

@@ -63,6 +63,15 @@ public class FileInspection extends Task<List<ImportItem>> {
     }
 
     /**
+     * Returns what the files are.
+     *
+     * @return the kind, such as the score sheet or student zips
+     */
+    public InputKind getKind() {
+        return kind;
+    }
+
+    /**
      * Returns how many files and folders are checked.
      *
      * @return the number of paths
