@@ -157,8 +157,6 @@ public final class Students {
             return "Timed out";
         } else if (state == ResultState.COULD_NOT_GRADE) {
             return "Could not grade";
-        } else if (state == ResultState.NO_SUBMISSION) {
-            return "No submission";
         }
         return "Waiting";
     }

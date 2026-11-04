@@ -42,8 +42,6 @@ import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.InputKind;
-import gradezzy.ui.backend.ResultState;
-import gradezzy.util.TextUtils;
 
 /**
  * The Export step.
@@ -110,9 +108,6 @@ public class ExportScreen extends FlowScreen {
 
     // Where the files are saved
     private final Label savedTo = Parts.muted("");
-
-    // How many marks are filled in and why the others are left blank
-    private final Label blanks = Parts.muted("");
 
     // Where the result of the last export is shown
     private final HBox result = Parts.row(Parts.GAP_SMALL);
@@ -237,8 +232,6 @@ public class ExportScreen extends FlowScreen {
         everyone.setToggleGroup(scope);
         tickedOnly.setToggleGroup(scope);
         everyone.setSelected(true);
-        scope.selectedToggleProperty().addListener((observable, before,
-                after) -> refreshBlanks());
         json.setSelected(true);
         tickedReason.getStyleClass().addAll("small-text", "choice-reason");
         tickedRow.getChildren().addAll(tickedOnly, tickedReason);
@@ -248,11 +241,10 @@ public class ExportScreen extends FlowScreen {
         Label about = Parts.muted("The provided score sheet with the marks "
                 + "filled in, in the same format, ready to upload.");
         about.setWrapText(true);
-        blanks.setWrapText(true);
         result.setVisible(false);
         result.setManaged(false);
         return Parts.card("Score sheet",
-                new Node[] {about, choices, blanks, savedTo, result});
+                new Node[] {about, choices, savedTo, result});
     }
 
     // ---------------------------------------------------------- refresh
@@ -277,76 +269,6 @@ public class ExportScreen extends FlowScreen {
         }
         savedTo.setText("Saved to " + getBackend().getSetting(
                 ConfigKeys.OUTPUT_DIR));
-        refreshBlanks();
-    }
-
-    // Shows how many marks the export fills in and why others are blank.
-    private void refreshBlanks() {
-        GradingRun run = getState().getRun();
-        String text = "";
-        if (run != null) {
-            text = describeBlanks(run, chooseScope(run));
-        }
-        blanks.setText(text);
-        blanks.setVisible(!text.isEmpty());
-        blanks.setManaged(!text.isEmpty());
-    }
-
-    /**
-     * Counts the score sheet rows the export fills in and the rows left
-     * blank, such as "16 marks filled, 2 left blank: 1 could not be
-     * graded, 1 no submission". Students not on the score sheet are not
-     * counted, as they have no row.
-     *
-     * @param run the run
-     * @param scope the students being exported
-     * @return the sentence, or empty text when no row is on the sheet
-     */
-    private String describeBlanks(GradingRun run, List<Submission> scope) {
-        int filled = 0;
-        int couldNot = 0;
-        int notTicked = 0;
-        for (Submission submission : run.getSubmissions()) {
-            boolean onSheet = submission.getStudent() != null;
-            boolean graded = ResultState.hasTotal(submission);
-            if (onSheet && graded && scope.contains(submission)) {
-                filled++;
-            } else if (onSheet && graded) {
-                notTicked++;
-            } else if (onSheet) {
-                couldNot++;
-            }
-        }
-        int missing = getBackend().listMissingStudents(run).size();
-        int blank = couldNot + notTicked + missing;
-        if (filled + blank == 0) {
-            return "";
-        }
-
-        String text = Parts.plural(filled, "mark") + " filled";
-        if (blank == 0) {
-            return text + ", none left blank.";
-        }
-        List<String> reasons = new ArrayList<>();
-        if (couldNot > 0) {
-            reasons.add(couldNot + " could not be graded");
-        }
-        if (notTicked > 0) {
-            reasons.add(notTicked + " not ticked");
-        }
-        if (missing > 0) {
-            reasons.add(missing + " no submission");
-        }
-        return text + ", " + blank + " left blank: "
-                + TextUtils.join(", ", reasons) + ".";
-    }
-
-    // Returns the students the chosen export choice covers.
-    private List<Submission> chooseScope(GradingRun run) {
-        if (tickedOnly.isSelected()) {
-            return new ArrayList<>(getState().getSelected());
-        }
-        return new ArrayList<>(run.getSubmissions());
     }
 
     // Fills the small bell curve and the four figures.
@@ -584,7 +506,10 @@ public class ExportScreen extends FlowScreen {
         if (run == null || exporting) {
             return;
         }
-        List<Submission> scope = chooseScope(run);
+        List<Submission> scope = new ArrayList<>(run.getSubmissions());
+        if (tickedOnly.isSelected()) {
+            scope = new ArrayList<>(getState().getSelected());
+        }
         ExportJob job = new ExportJob(getBackend(), run, scope,
                 json.isSelected());
         if (getBackend().isDemo()) {
@@ -615,11 +540,7 @@ public class ExportScreen extends FlowScreen {
         }
         getBackend().recordAudit("Exported", outcome.getMessage());
         exported = true;
-        String message = outcome.getMessage();
-        if (!blanks.getText().isEmpty()) {
-            message = message + " " + blanks.getText();
-        }
-        showResult(true, message);
+        showResult(true, outcome.getMessage());
         getState().reach(Step.EXPORT);
         refreshActions();
     }

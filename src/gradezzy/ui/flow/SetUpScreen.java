@@ -150,15 +150,6 @@ public class SetUpScreen extends FlowScreen {
     // How many chosen files are still being checked in the background
     private int filesBeingChecked = 0;
 
-    // The tester folder check still running, or null
-    private TesterCheck testerCheck = null;
-
-    // The tester folder the problems below were found in, or null
-    private Path checkedTesters = null;
-
-    // The problems found in that tester folder
-    private final List<String> testerProblems = new ArrayList<>();
-
     /**
      * Creates the Set up step.
      *
@@ -746,7 +737,6 @@ public class SetUpScreen extends FlowScreen {
 
     // Redraws the score sheet, tester and starter rows.
     private void refreshClassFiles() {
-        checkTestersIfChanged();
         HBox[] rows = {
             createClassFileRow(InputKind.ROSTER, "Score sheet", null),
             createTesterRow(),
@@ -868,89 +858,6 @@ public class SetUpScreen extends FlowScreen {
         return block;
     }
 
-    // Starts the tester folder check when the folder is new to it.
-    private void checkTestersIfChanged() {
-        Path testers = findUsableTesters();
-        if (testers == null || testers.equals(checkedTesters)) {
-            return;
-        }
-        if (testerCheck != null
-                && testers.equals(testerCheck.getTestersDirectory())) {
-            return;
-        }
-        if (getBackend().isDemo()) {
-            showTesterProblems(testers, getBackend().checkTesters(testers));
-            return;
-        }
-        TesterCheck check = new TesterCheck(getBackend(), testers);
-        check.setOnSucceeded(event -> testerCheckDone(check));
-        check.setOnFailed(event -> testerCheckFailed(check));
-        testerCheck = check;
-        Thread worker = new Thread(check, "gradezzy-testers");
-        worker.setDaemon(true);
-        worker.start();
-    }
-
-    // Shows what a finished check found, unless a newer one started.
-    private void testerCheckDone(TesterCheck check) {
-        if (check != testerCheck) {
-            return;
-        }
-        testerCheck = null;
-        showTesterProblems(check.getTestersDirectory(), check.getValue());
-        refreshClassFiles();
-    }
-
-    // Shows that a check stopped before it finished.
-    private void testerCheckFailed(TesterCheck check) {
-        if (check != testerCheck) {
-            return;
-        }
-        testerCheck = null;
-        List<String> problems = new ArrayList<>();
-        problems.add("The testers could not be checked: "
-                + check.getException().getMessage());
-        showTesterProblems(check.getTestersDirectory(), problems);
-        refreshClassFiles();
-    }
-
-    // Keeps the problems found in a tester folder.
-    private void showTesterProblems(Path testers, List<String> problems) {
-        checkedTesters = testers;
-        testerProblems.clear();
-        testerProblems.addAll(problems);
-    }
-
-    // Adds the tester check's progress or problems to the tester row's
-    // detail, and returns the pill to show instead, or null.
-    private Label addTesterNotes(VBox notes) {
-        Path testers = findUsableTesters();
-        if (testers == null) {
-            return null;
-        }
-        if (!testers.equals(checkedTesters)) {
-            notes.getChildren().add(smallNote("Checking the testers..."));
-            return null;
-        }
-        if (testerProblems.isEmpty()) {
-            return null;
-        }
-        for (String problem : testerProblems) {
-            notes.getChildren().add(smallNote(problem));
-        }
-        return Parts.pill(Parts.plural(testerProblems.size(),
-                "tester problem"), Tone.WARN);
-    }
-
-    // Returns a small grey note that wraps.
-    private Label smallNote(String text) {
-        Label label = Parts.muted(text);
-        label.getStyleClass().add("small-text");
-        label.setMinWidth(0);
-        label.setWrapText(true);
-        return label;
-    }
-
     // Builds one class file row, with an optional link after the detail.
     private HBox createClassFileRow(InputKind kind, String title,
             Hyperlink extra) {
@@ -978,14 +885,7 @@ public class SetUpScreen extends FlowScreen {
         if (extra != null) {
             line.getChildren().add(extra);
         }
-        VBox details = new VBox(line);
-        if (kind == InputKind.TESTERS) {
-            Label warning = addTesterNotes(details);
-            if (warning != null) {
-                status = warning;
-            }
-        }
-        return classFileRow(iconPath, title, details, status,
+        return classFileRow(iconPath, title, line, status,
                 rowLink("Change", () -> changeClassFile(kind)));
     }
 
@@ -1029,7 +929,7 @@ public class SetUpScreen extends FlowScreen {
     }
 
     // Lays out a class file row: icon, name and detail, status, link.
-    private HBox classFileRow(String iconPath, String title, Node detail,
+    private HBox classFileRow(String iconPath, String title, HBox detail,
             Label status, Hyperlink change) {
         VBox text = new VBox(Parts.strong(title), detail);
         text.setMinWidth(0);

@@ -19,7 +19,6 @@ import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
-import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.stats.StatisticsSummary;
@@ -161,16 +160,6 @@ public interface DashboardBackend {
      */
     ImportItem inspect(InputKind kind, Path path);
 
-    /**
-     * Lists what is wrong with a tester folder before grading: questions
-     * with no tester, data files that are missing and testers that do not
-     * compile with the starter code. It compiles, so it takes seconds.
-     *
-     * @param testersDirectory the tester folder
-     * @return one sentence per problem, empty when the folder is fine
-     */
-    List<String> checkTesters(Path testersDirectory);
-
     // --------------------------------------------------------- grading
 
     /**
@@ -216,16 +205,6 @@ public interface DashboardBackend {
      * @return true when its failed submissions can be graded again
      */
     boolean canRetryFailed(GradingRun gradingRun);
-
-    /**
-     * Lists the students on the run's score sheet who have no submission
-     * in the run.
-     *
-     * @param gradingRun the run
-     * @return the students, in score sheet order; empty when the score
-     *         sheet cannot be read
-     */
-    List<Student> listMissingStudents(GradingRun gradingRun);
 
     /**
      * Runs one question's tester again and replaces only that result.
