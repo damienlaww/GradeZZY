@@ -1,8 +1,9 @@
 /*
  * File: HelpSheet.java
  *
- * Purpose: A short sheet that explains the four tabs (with the four
- * steps of Marking), the keyboard shortcuts and where files are saved.
+ * Purpose: A short sheet that explains the five tabs (with the four
+ * steps of Marking), the keyboard shortcuts and where files are saved,
+ * and tells a first-time user where to start.
  *
  * Where it fits: Opened from Help in the top bar, over any screen.
  * Replaces the old Help screen. The folders are read from the settings.
@@ -48,8 +49,11 @@ public final class HelpSheet {
 
     // The tabs and what each one is for; a leading space marks a step
     private static final String[][] TABS = {
+        {"Home", "Every section at a glance, and what to do next in "
+            + "each. Choose or add assessments here."},
         {"Marking", "The four steps for one section."},
-        {" 1  Set up", "Choose the class and add the zip files."},
+        {" 1  Set up", "Choose the section and assessment, and add the "
+            + "zip files."},
         {" 2  Grade", "Each submission is checked, compiled and "
             + "tested."},
         {" 3  Review", "Approve or undo fixes, check flags and change "
@@ -86,9 +90,16 @@ public final class HelpSheet {
             {"Working copies", backend.getSetting(ConfigKeys.WORKING_DIR)},
             {"Exports", backend.getSetting(ConfigKeys.OUTPUT_DIR)},
             {"Backups", backend.getSetting(ConfigKeys.BACKUP_DIR)},
+            {"Assessments", backend.getSetting(
+                    ConfigKeys.ASSESSMENTS_DIR)},
         };
+        Label start = Parts.muted("New here? Start on Home: it lists the "
+                + "first three steps. Rest the pointer on any \"?\" to see "
+                + "what a word means.");
+        start.setWrapText(true);
+        start.setMaxWidth(TAB_NAME_WIDTH + TAB_TEXT_WIDTH + COLUMN_GAP);
         VBox tabs = new VBox(Parts.GAP, Parts.title("How GradeZZY works"),
-                table(TABS, TAB_NAME_WIDTH, TAB_TEXT_WIDTH));
+                start, table(TABS, TAB_NAME_WIDTH, TAB_TEXT_WIDTH));
         VBox other = new VBox(Parts.GAP, Parts.title("Keyboard"),
                 table(KEYS, KEY_NAME_WIDTH, KEY_TEXT_WIDTH),
                 Parts.title("Where files are saved"),

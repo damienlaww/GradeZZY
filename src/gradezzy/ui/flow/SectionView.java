@@ -3,8 +3,9 @@
  *
  * Purpose: The "One section" view of the Statistics tab: four figure
  * tiles (average, spread, passed, range), then a grid of cards: how the
- * marks spread (bell curve), where students are (status ring), the most
- * failed test, each question's average, and the common compile errors.
+ * marks spread (bell curve), each student's status (ring), the tests
+ * most often failed, each question's average, and the common compile
+ * errors.
  *
  * Where it fits: StatisticsScreen creates one and calls show with the
  * run, its figures and the backend's summary. The grid has two columns
@@ -15,6 +16,7 @@ package gradezzy.ui.flow;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -31,6 +33,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.RowConstraints;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.Text;
@@ -39,7 +42,9 @@ import javafx.scene.text.TextFlow;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
+import gradezzy.model.QuestionResult;
 import gradezzy.model.Submission;
+import gradezzy.model.TestCaseResult;
 import gradezzy.stats.StatisticsSummary;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.ResultState;
@@ -107,6 +112,39 @@ public class SectionView {
     private static final int MOST_ERRORS = 5;
 
     // Statuses in the order the ring and legend show them
+    // The style class that colours each status in STATE_ORDER, so no
+    // two problems share a colour
+    private static final String[] STATE_COLOURS = {"good", "zero", "warn",
+        "bad", "late", "broken", "neutral"};
+
+    // What each status in STATE_ORDER means, for its legend tip
+    private static final String[] STATE_HELP = {
+        "Every question was tested and nothing waits for you.",
+        "Graded, but no test passed; often the starter files were handed "
+            + "in unchanged.",
+        "Graded, with a fix to approve or a flag to look at.",
+        "At least one question's code did not compile, so its tests could "
+            + "not run.",
+        "A test ran past the time limit, often an endless loop. Tests "
+            + "passed before it keep their marks.",
+        "Grading stopped for this student, for example because the zip is "
+            + "damaged.",
+        "Not graded yet, for example because grading was cancelled."};
+
+    // How many tests the "Tests most often failed" card lists
+    private static final int MOST_FAILED_SHOWN = 3;
+
+    // Joins a question and a test number in a key, such as Q2b#2
+    private static final String TEST_JOIN = "#";
+
+    // Where a test's counts are kept: students who ran it, who failed it
+    private static final int RAN = 0;
+    private static final int FAILED = 1;
+
+    // The width of a test's name, and the narrowest its bar may get
+    private static final double FAILED_NAME_WIDTH = 96.0;
+    private static final double FAILED_BAR_MIN = 60.0;
+
     private static final ResultState[] STATE_ORDER = {
         ResultState.COMPLETED, ResultState.ZERO, ResultState.NEEDS_REVIEW,
         ResultState.COMPILE_ERROR, ResultState.TIMED_OUT,
@@ -191,7 +229,7 @@ public class SectionView {
         fillFigures(stats);
         spreadCard = createSpreadCard(stats);
         ringCard = createRingCard(run);
-        failedCard = createFailedCard(summary);
+        failedCard = createFailedCard(run);
         questionCard = createQuestionCard(run, summary, assessment, stats);
         errorCard = createErrorCard(summary);
         arrange();
@@ -308,7 +346,9 @@ public class SectionView {
 
     // ------------------------------------------------------ ring card
 
-    // Builds the "Where students are" card: the ring and its legend.
+    // Builds the "Student status" card: a sentence that says how many
+    // students are done and how many need a look, then the ring and its
+    // legend. Each status has its own colour and a tip that explains it.
     private VBox createRingCard(GradingRun run) {
         int[] counts = new int[STATE_ORDER.length];
         int total = 0;
@@ -343,26 +383,80 @@ public class SectionView {
             if (counts[index] > 0) {
                 ResultState state = STATE_ORDER[index];
                 String words = Students.words(state);
-                Tone tone = Students.tone(state);
-                ring.addPart(words, counts[index], tone);
-                addLegendRow(legend, row, words, tone, counts[index],
-                        total);
+                ring.addPart(words, counts[index], STATE_COLOURS[index]);
+                addLegendRow(legend, row, words, STATE_COLOURS[index],
+                        STATE_HELP[index], counts[index], total);
                 row++;
             }
         }
         legend.setMaxHeight(Region.USE_PREF_SIZE);
         HBox.setHgrow(legend, Priority.ALWAYS);
         HBox body = Parts.row(RING_GAP, new Node[] {ring, legend});
-        return card(Parts.title("Where students are"), body);
+        Label summary = smallMuted(statusSentence(counts, total));
+        summary.setWrapText(true);
+        VBox content = new VBox(Parts.GAP, summary, body);
+        return card(Parts.title("Student status"), content);
     }
 
-    // Adds one status to the ring legend: dot, words, count, percent.
+    // Says how many students are done and how many need a look, such as
+    // "1 of 6 students is fully graded. 5 need a look on Review."
+    private static String statusSentence(int[] counts, int total) {
+        int done = 0;
+        int attention = 0;
+        int waiting = 0;
+        for (int index = 0; index < STATE_ORDER.length; index++) {
+            ResultState state = STATE_ORDER[index];
+            if (state == ResultState.COMPLETED
+                    || state == ResultState.ZERO) {
+                done += counts[index];
+            } else if (state == ResultState.UNGRADED) {
+                waiting += counts[index];
+            } else {
+                attention += counts[index];
+            }
+        }
+        if (attention == 0 && waiting == 0) {
+            return "All " + Parts.plural(total, "student") + " are graded "
+                    + "and nothing waits for you.";
+        }
+        String text = done + " of " + Parts.plural(total, "student") + " "
+                + isOrAre(done) + " fully graded.";
+        if (attention > 0) {
+            text += " " + attention + " " + needOrNeeds(attention)
+                    + " a look on Review.";
+        }
+        if (waiting > 0) {
+            text += " " + waiting + " " + isOrAre(waiting) + " not graded "
+                    + "yet.";
+        }
+        return text;
+    }
+
+    // Returns "is" for one and "are" for more.
+    private static String isOrAre(int count) {
+        if (count == 1) {
+            return "is";
+        }
+        return "are";
+    }
+
+    // Returns "needs" for one and "need" for more.
+    private static String needOrNeeds(int count) {
+        if (count == 1) {
+            return "needs";
+        }
+        return "need";
+    }
+
+    // Adds one status to the ring legend: dot, words, count, percent. The
+    // whole row explains the status when the pointer rests on it.
     private static void addLegendRow(GridPane legend, int row, String words,
-            Tone tone, int count, int total) {
+            String colour, String help, int count, int total) {
         Circle dot = new Circle(DOT_RADIUS);
-        dot.getStyleClass().addAll("ring-dot", tone.getStyleClass());
+        dot.getStyleClass().addAll("ring-dot", colour);
         Label name = new Label(words);
         name.setMinWidth(0);
+        Parts.tip(name, help);
         Label number = Parts.strong(String.valueOf(count));
         number.setMinWidth(Region.USE_PREF_SIZE);
         Label share = Parts.muted(percent((double) count / total));
@@ -372,33 +466,90 @@ public class SectionView {
         GridPane.setValignment(dot, VPos.CENTER);
     }
 
-    // ---------------------------------------------- most failed test
+    // ------------------------------------------- tests most often failed
 
-    // Builds the card of the test case failed by the most students.
-    private VBox createFailedCard(StatisticsSummary summary) {
-        if (summary == null) {
-            return card(Parts.title("Most failed test"), latestOnly());
-        }
-        String text = summary.getMostFailedTest();
-        if (text == null || text.isBlank()) {
-            return card(Parts.title("Most failed test"),
-                    smallMuted("No test case failed."));
+    // Builds the card of the tests the most students failed, worked out
+    // from the run, so it works for earlier runs too. Each row shows the
+    // test, a bar and "5 of 6 students"; its tip shows a tester line.
+    private VBox createFailedCard(GradingRun run) {
+        List<String> keys = new ArrayList<>();
+        Map<String, int[]> tally = new HashMap<>();
+        Map<String, String> example = new HashMap<>();
+        for (Submission submission : run.getSubmissions()) {
+            for (QuestionResult result : submission.getQuestionResults()) {
+                for (TestCaseResult test : result.getTestCaseResults()) {
+                    String key = result.getQuestion().getId() + TEST_JOIN
+                            + test.getTestNumber();
+                    if (!tally.containsKey(key)) {
+                        keys.add(key);
+                        tally.put(key, new int[2]);
+                    }
+                    int[] counts = tally.get(key);
+                    counts[RAN]++;
+                    if (!test.isPassed()) {
+                        counts[FAILED]++;
+                        if (!example.containsKey(key)
+                                && test.getDetail() != null) {
+                            example.put(key, test.getDetail().trim());
+                        }
+                    }
+                }
+            }
         }
 
-        // The summary reads like "Q2b case 4 (failed by 3 students)"
-        String name = text;
-        String detail = "";
-        int open = text.lastIndexOf(" (");
-        if (open > 0 && text.endsWith(")")) {
-            name = text.substring(0, open);
-            detail = text.substring(open + 2, text.length() - 1);
+        VBox rows = new VBox(Parts.GAP_SMALL);
+        List<String> shown = new ArrayList<>();
+        for (int place = 0; place < MOST_FAILED_SHOWN; place++) {
+            String worst = null;
+            for (String key : keys) {
+                int failed = tally.get(key)[FAILED];
+                boolean better = worst == null
+                        || failed > tally.get(worst)[FAILED];
+                if (failed > 0 && !shown.contains(key) && better) {
+                    worst = key;
+                }
+            }
+            if (worst != null) {
+                shown.add(worst);
+                rows.getChildren().add(failedRow(worst, tally.get(worst),
+                        example.get(worst)));
+            }
         }
+
+        if (shown.isEmpty()) {
+            return card(Parts.title("Tests most often failed"),
+                    smallMuted("No student failed a test."));
+        }
+        Label note = smallMuted("A test most students fail may point to a "
+                + "problem in the tester or the question. Check it before "
+                + "you export.");
+        note.setWrapText(true);
+        return card(Parts.title("Tests most often failed"),
+                new VBox(Parts.GAP, rows, note));
+    }
+
+    // Builds one row: "Q2b, test 2", a red bar and "5 of 6 students".
+    private static HBox failedRow(String key, int[] counts, String detail) {
+        int join = key.indexOf(TEST_JOIN);
+        String name = key.substring(0, join) + ", test "
+                + key.substring(join + TEST_JOIN.length());
         Label nameLabel = Parts.strong(name);
-        nameLabel.setMinWidth(Region.USE_PREF_SIZE);
-        Label detailLabel = smallMuted(detail);
-        detailLabel.setMinWidth(0);
-        HBox row = Parts.row(Parts.GAP, new Node[] {nameLabel, detailLabel});
-        return card(Parts.title("Most failed test"), row);
+        nameLabel.setMinWidth(FAILED_NAME_WIDTH);
+        nameLabel.setPrefWidth(FAILED_NAME_WIDTH);
+        StackPane bar = Parts.track((double) counts[FAILED] / counts[RAN],
+                Tone.BAD);
+        bar.setMinWidth(FAILED_BAR_MIN);
+        Label share = smallMuted(counts[FAILED] + " of "
+                + Parts.plural(counts[RAN], "student"));
+        share.setMinWidth(Region.USE_PREF_SIZE);
+        HBox row = Parts.row(Parts.GAP, new Node[] {nameLabel, bar, share});
+        String tip = counts[FAILED] + " of the " + counts[RAN] + " students "
+                + "who ran " + name + " failed it.";
+        if (detail != null && !detail.isEmpty()) {
+            tip += "\nA failing tester line: " + detail;
+        }
+        Parts.tipNode(row, tip);
+        return row;
     }
 
     // ----------------------------------------------------- questions

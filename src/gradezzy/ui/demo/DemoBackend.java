@@ -28,10 +28,12 @@ import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
+import gradezzy.model.SavedAssessment;
 import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
+import gradezzy.model.TestCaseResult;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.ServiceRegistry;
@@ -69,6 +71,13 @@ public final class DemoBackend implements DashboardBackend {
     // The first number given to a run started in demo mode
     private static final int FIRST_NEW_RUN = 25;
 
+    // The name of the second sample assessment
+    private static final String SECOND_ASSESSMENT = "Lab Test 2";
+
+    // How many questions of the configured assessment the second sample
+    // keeps
+    private static final int SECOND_QUESTION_COUNT = 3;
+
     // Seconds between two seeded audit entries
     private static final long SEED_STEP_SECONDS = 47L;
 
@@ -94,8 +103,12 @@ public final class DemoBackend implements DashboardBackend {
     // The application settings, read but never written
     private final AppConfig config;
 
-    // The assessment, built from the configuration
-    private final Assessment assessment;
+    // The assessment in use, built from the configuration and changed
+    // when another sample assessment is chosen
+    private Assessment assessment;
+
+    // The sample saved assessments, kept for this session only
+    private final List<SavedAssessment> savedAssessments = new ArrayList<>();
 
     // Hands out anomaly ids
     private final DemoIdCounter ids = new DemoIdCounter();
@@ -156,6 +169,7 @@ public final class DemoBackend implements DashboardBackend {
         GradingRun earlierRun = DemoData.buildEarlierRun(assessment,
                 section, getRunTimeoutSeconds(), ids);
         settleSampleDecisions(sampleRun);
+        seedAssessments();
 
         runsBySection.put(section.getLabel(), sampleRun);
         history.add(new DemoHistoryItem(sampleRun, snapshotText(sampleRun,
@@ -256,16 +270,23 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Returns the configured sections, or one for the empty module.
+     * Returns the sections, with any added in this session, or one for
+     * the empty module.
      */
     @Override
     public List<String> getSectionCodes(String moduleCode) {
+        List<String> codes = new ArrayList<>();
         if (DemoData.EMPTY_MODULE_CODE.equals(moduleCode)) {
-            List<String> codes = new ArrayList<>();
             codes.add(DemoData.EMPTY_MODULE_SECTION);
             return codes;
         }
-        return config.getList(ConfigKeys.SECTION_CODES);
+        for (String code : getSetting(ConfigKeys.SECTION_CODES)
+                .split(",")) {
+            if (!code.trim().isEmpty()) {
+                codes.add(code.trim());
+            }
+        }
+        return codes;
     }
 
     /**
@@ -501,6 +522,23 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
+     * Returns no problems: the demo testers are always fine.
+     */
+    @Override
+    public List<String> checkTesters(Path testersDirectory,
+            Path starterDirectory) {
+        return new ArrayList<>();
+    }
+
+    /**
+     * Returns no students: every demo student has a submission.
+     */
+    @Override
+    public List<Student> listMissingStudents(GradingRun gradingRun) {
+        return new ArrayList<>();
+    }
+
+    /**
      * Runs one question again. The timed-out sample question passes;
      * any other question keeps its result.
      */
@@ -659,25 +697,34 @@ public final class DemoBackend implements DashboardBackend {
                 + "again.");
     }
 
-    // --------------------------------------------------- search, source
+    // ----------------------------------------------------------- source
 
     /**
-     * Searches the synthetic source files.
+     * Returns the saved result again, because the demo runs no code. Its
+     * output says so.
      */
     @Override
-    public List<Submission> searchCode(GradingRun gradingRun,
-            String codeFragment) {
-        List<Submission> matches = new ArrayList<>();
-        if (gradingRun == null || codeFragment == null
-                || codeFragment.isEmpty()) {
-            return matches;
-        }
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (sourceContains(submission, codeFragment)) {
-                matches.add(submission);
+    public QuestionResult rerunQuestion(Submission submission,
+            GradingRun gradingRun, Question question) {
+        QuestionResult again = new QuestionResult(question);
+        for (QuestionResult saved : submission.getQuestionResults()) {
+            if (saved.getQuestion().getId().equals(question.getId())) {
+                again.setCompiled(saved.isCompiled());
+                again.setTimedOut(saved.isTimedOut());
+                again.setScore(saved.getScore());
+                again.setOutput(saved.getOutput());
+                for (TestCaseResult test : saved.getTestCaseResults()) {
+                    again.addTestCaseResult(test);
+                }
             }
         }
-        return matches;
+        String output = again.getOutput();
+        if (output == null) {
+            output = "";
+        }
+        again.setOutput(output + "\n[Demo mode runs no code: this is the "
+                + "saved output.]");
+        return again;
     }
 
     /**
@@ -928,6 +975,135 @@ public final class DemoBackend implements DashboardBackend {
                 + "config.properties was not changed.");
     }
 
+    // ----------------------------------------------------- assessments
+
+    /**
+     * Returns copies of the sample assessments, sorted by name.
+     */
+    @Override
+    public List<SavedAssessment> listAssessments() {
+        List<SavedAssessment> copies = new ArrayList<>();
+        for (SavedAssessment saved : savedAssessments) {
+            copies.add(saved.copy());
+        }
+        return copies;
+    }
+
+    /**
+     * Calls AssessmentLibrary.validate, which reads no file. Folders are
+     * not checked, because the demo's folders are only names.
+     */
+    @Override
+    public String validateAssessment(SavedAssessment draft,
+            String originalName) {
+        List<String> names = new ArrayList<>();
+        for (SavedAssessment saved : savedAssessments) {
+            names.add(saved.getName());
+        }
+        return services.getAssessmentLibrary().validate(draft,
+                originalName, names);
+    }
+
+    /**
+     * Keeps the assessment for this session only.
+     */
+    @Override
+    public ActionResult saveAssessment(SavedAssessment draft,
+            String originalName) {
+        String problem = validateAssessment(draft, originalName);
+        if (!problem.isEmpty()) {
+            return ActionResult.failed(problem);
+        }
+        SavedAssessment clean = draft.copy();
+        clean.setName(draft.getName().trim());
+        SavedAssessment old = findAssessment(originalName);
+        boolean inUse = old != null
+                && old.getName().equals(assessment.getName());
+        if (old != null) {
+            savedAssessments.remove(old);
+        }
+        addSorted(clean);
+        if (inUse) {
+            assessment = clean.toAssessment(DemoData.MODULE_CODE);
+        }
+        recordAudit("Assessment saved", clean.getName());
+        return ActionResult.done("Saved " + clean.getName()
+                + " for this demo session.");
+    }
+
+    /**
+     * Grades with a sample assessment for this session.
+     */
+    @Override
+    public ActionResult useAssessment(String name) {
+        SavedAssessment chosen = findAssessment(name);
+        if (chosen == null) {
+            return ActionResult.failed("There is no saved assessment named "
+                    + name + ".");
+        }
+        assessment = chosen.toAssessment(DemoData.MODULE_CODE);
+        recordAudit("Assessment chosen", chosen.getName());
+        return ActionResult.done("Now grading " + chosen.getName() + ".");
+    }
+
+    /**
+     * Forgets a sample assessment that is not in use.
+     */
+    @Override
+    public ActionResult deleteAssessment(String name) {
+        SavedAssessment chosen = findAssessment(name);
+        if (chosen == null) {
+            return ActionResult.failed("There is no saved assessment named "
+                    + name + ".");
+        }
+        if (chosen.getName().equals(assessment.getName())) {
+            return ActionResult.failed(name + " is in use. Choose another "
+                    + "assessment first, then delete this one.");
+        }
+        savedAssessments.remove(chosen);
+        recordAudit("Assessment deleted", chosen.getName());
+        return ActionResult.done("Deleted " + chosen.getName()
+                + ". Results graded with it are kept.");
+    }
+
+    // Saves the configured assessment and a shorter second one, so the
+    // demo can switch between two.
+    private void seedAssessments() {
+        SavedAssessment current = services.getAssessmentLibrary()
+                .readCurrent();
+        addSorted(current);
+        SavedAssessment second = current.copy();
+        second.setName(SECOND_ASSESSMENT);
+        while (second.getQuestions().size() > SECOND_QUESTION_COUNT) {
+            second.getQuestions().remove(second.getQuestions().size() - 1);
+        }
+        addSorted(second);
+    }
+
+    // Returns the sample assessment with a name, in any case, or null.
+    private SavedAssessment findAssessment(String name) {
+        if (name == null) {
+            return null;
+        }
+        for (SavedAssessment saved : savedAssessments) {
+            if (saved.getName().equalsIgnoreCase(name)) {
+                return saved;
+            }
+        }
+        return null;
+    }
+
+    // Adds an assessment in name order.
+    private void addSorted(SavedAssessment added) {
+        int position = 0;
+        while (position < savedAssessments.size()
+                && savedAssessments.get(position).getName()
+                        .compareToIgnoreCase(added.getName()) < 0) {
+            position++;
+        }
+        savedAssessments.add(position, added);
+    }
+
     // ------------------------------------------------------ similarity
 
     /**
@@ -1094,20 +1270,6 @@ public final class DemoBackend implements DashboardBackend {
         }
         return new RepairItem(anomaly, "Question folder not found",
                 noRepair);
-    }
-
-    // Says whether any synthetic source file of a student holds text.
-    private boolean sourceContains(Submission submission, String text) {
-        if (submission.getWorkingCopyPath() == null) {
-            return false;
-        }
-        for (String file : DemoData.sourceFiles(submission.getUsername())) {
-            if (DemoData.sourceText(submission.getUsername(), file)
-                    .contains(text)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // Describes how far a run got.

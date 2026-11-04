@@ -71,6 +71,7 @@ public class RunsScreen extends FlowScreen {
     // Column widths of the runs table
     private static final double MODULE_WIDTH = 84.0;
     private static final double SECTION_WIDTH = 76.0;
+    private static final double ASSESSMENT_WIDTH = 150.0;
     private static final double STUDENTS_WIDTH = 84.0;
     private static final double AVERAGE_WIDTH = 190.0;
     private static final double STATUS_WIDTH = 200.0;
@@ -236,6 +237,8 @@ public class RunsScreen extends FlowScreen {
     private void createRunsTable() {
         runsTable.addColumn("Module", MODULE_WIDTH, Pos.CENTER_LEFT);
         runsTable.addColumn("Section", SECTION_WIDTH, Pos.CENTER_LEFT);
+        runsTable.addColumn("Assessment", ASSESSMENT_WIDTH,
+                Pos.CENTER_LEFT);
         runsTable.addColumn("Graded", PlainTable.GROW, Pos.CENTER_LEFT);
         runsTable.addColumn("Students", STUDENTS_WIDTH, Pos.CENTER_RIGHT);
         runsTable.addColumn("Average", AVERAGE_WIDTH, Pos.CENTER_LEFT);
@@ -327,8 +330,16 @@ public class RunsScreen extends FlowScreen {
         }
         Label students = new Label(String.valueOf(
                 run.getSubmissions().size()));
+        String assessmentName = "-";
+        if (run.getAssessment() != null) {
+            assessmentName = run.getAssessment().getName();
+        }
+        Label assessment = new Label(assessmentName);
+        assessment.setMinWidth(0);
+        Parts.tip(assessment, "The assessment this run was graded with. "
+                + "Opening or resuming the run switches to it.");
         runsTable.addRow(new Node[] {Parts.strong(module),
-            Parts.strong(sectionCode),
+            Parts.strong(sectionCode), assessment,
             Parts.muted(run.getStartedAt().format(WHEN)), students,
             average(run), status(run, shown, hasNewer),
             actions(record, shown)});
@@ -355,19 +366,30 @@ public class RunsScreen extends FlowScreen {
 
     // Returns the pill that says how far a run got.
     private Label status(GradingRun run, boolean shown, boolean hasNewer) {
-        if (!shown && hasNewer) {
-            return Parts.pill("Replaced by a later run", Tone.NEUTRAL);
-        }
-        if (!shown) {
-            return Parts.pill("Replaced by a restored run", Tone.NEUTRAL);
-        }
+        Label pill;
+        String tip;
         int waiting = countWaiting(run);
-        if (waiting > 0) {
+        if (!shown && hasNewer) {
+            pill = Parts.pill("Replaced by a later run", Tone.NEUTRAL);
+            tip = "A newer run of this section is the one shown on Home "
+                    + "and Review. Restore shows this one again instead.";
+        } else if (!shown) {
+            pill = Parts.pill("Replaced by a restored run", Tone.NEUTRAL);
+            tip = "An older run of this section was restored and is shown "
+                    + "instead.";
+        } else if (waiting > 0) {
             int total = run.getSubmissions().size();
-            return Parts.pill("Stopped at " + (total - waiting) + " of "
+            pill = Parts.pill("Stopped at " + (total - waiting) + " of "
                     + total, Tone.WARN);
+            tip = "Grading was cancelled, or GradeZZY closed, before every "
+                    + "student was graded. Resume grades the rest; marks "
+                    + "already given are kept.";
+        } else {
+            pill = Parts.pill("Finished", Tone.GOOD);
+            tip = "Every student in this run was graded.";
         }
-        return Parts.pill("Finished", Tone.GOOD);
+        Parts.tip(pill, tip);
+        return pill;
     }
 
     // Returns the buttons that fit a run.
@@ -385,15 +407,22 @@ public class RunsScreen extends FlowScreen {
 
         if (countWaiting(run) > 0
                 && getBackend().supports(Capability.RESUME_RUN)) {
-            buttons.getChildren().add(Parts.small("Resume",
-                    () -> getWindow().resumeRun(run)));
+            Button resume = Parts.small("Resume",
+                    () -> getWindow().resumeRun(run));
+            Parts.tip(resume, "Grade the students not graded yet. Marks "
+                    + "already given are kept.");
+            buttons.getChildren().add(resume);
         } else if (getBackend().supports(Capability.STATISTICS)
                 && run.getSection() != null) {
-            buttons.getChildren().add(Parts.small("Statistics",
-                    () -> openStatistics(run)));
+            Button statistics = Parts.small("Statistics",
+                    () -> openStatistics(run));
+            Parts.tip(statistics, "Charts and figures for this section.");
+            buttons.getChildren().add(statistics);
         }
-        buttons.getChildren().add(Parts.small("Open",
-                () -> getWindow().openRun(run)));
+        Button open = Parts.small("Open", () -> getWindow().openRun(run));
+        Parts.tip(open, "Show this run's students and marks on Review, "
+                + "where you can also export them.");
+        buttons.getChildren().add(open);
         return buttons;
     }
 
@@ -432,6 +461,9 @@ public class RunsScreen extends FlowScreen {
     private Button restoreButton(RunRecord record) {
         Button button = Parts.small("Restore", () -> restore(record));
         button.setDisable(getState().isGrading());
+        Parts.tip(button, "Show this run for its section again, in place of "
+                + "the one shown now. A copy of the run shown now is "
+                + "kept.");
         return button;
     }
 

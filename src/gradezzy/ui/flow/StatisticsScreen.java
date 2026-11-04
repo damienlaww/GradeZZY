@@ -445,10 +445,15 @@ public class StatisticsScreen extends FlowScreen {
         sectionField.setVisible(true);
         sectionField.setManaged(true);
         fillRuns();
-        Assessment assessment = getBackend().getAssessment();
         GradingRun run = null;
         if (!runChoices.isEmpty()) {
             run = runChoices.get(runIndex);
+        }
+        // A run keeps the questions it was graded with, which may not be
+        // those of the assessment in use now
+        Assessment assessment = getBackend().getAssessment();
+        if (run != null && run.getAssessment() != null) {
+            assessment = run.getAssessment();
         }
 
         String text = moduleCode + DOT + sectionCode + DOT
@@ -508,8 +513,12 @@ public class StatisticsScreen extends FlowScreen {
             GradingRun run = runOf(code);
             if (isGraded(run)) {
                 runs.add(run);
-                stats.add(MarkStats.of(run.getSubmissions(),
-                        assessment.getMaxTotal(), passPercent()));
+                double max = assessment.getMaxTotal();
+                if (run.getAssessment() != null) {
+                    max = run.getAssessment().getMaxTotal();
+                }
+                stats.add(MarkStats.of(run.getSubmissions(), max,
+                        passPercent()));
                 graded.add(code);
             } else {
                 runs.add(null);

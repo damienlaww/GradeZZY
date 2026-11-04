@@ -62,6 +62,11 @@ public final class ConfigKeys {
     public static final String BACKUP_DIR = "paths.backup.dir";
 
     /**
+     * Folder where saved assessments are kept, one file each.
+     */
+    public static final String ASSESSMENTS_DIR = "paths.assessments.dir";
+
+    /**
      * Pattern of the text in front of the username in a zip file name.
      */
     public static final String ZIP_NAME_PREFIX_PATTERN =

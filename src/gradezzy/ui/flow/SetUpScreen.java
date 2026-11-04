@@ -1,9 +1,11 @@
 /*
  * File: SetUpScreen.java
  *
- * Purpose: Step 1. The instructor chooses the module and section, adds
- * the students' zip files, checks the score sheet and tester files, sees
- * the grading settings this run will use, then starts grading.
+ * Purpose: Step 1. The instructor chooses the module, section and
+ * assessment, adds the students' zip files, checks the score sheet and
+ * tester files, sees the grading settings this run will use, then starts
+ * grading. A "?" beside each word a first-time user may not know
+ * explains it.
  *
  * Where it fits: Replaces the old Modules, Assessments, Submissions and
  * Validation screens. Calls DashboardBackend.inspect for every file and
@@ -20,6 +22,7 @@ import java.util.List;
 import javafx.geometry.HPos;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
@@ -36,6 +39,7 @@ import javafx.stage.FileChooser;
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
+import gradezzy.model.SavedAssessment;
 import gradezzy.model.Question;
 import gradezzy.ui.DragDropHandler;
 import gradezzy.ui.backend.Capability;
@@ -81,6 +85,23 @@ public class SetUpScreen extends FlowScreen {
             + "case, else the first chosen. The others are not graded and "
             + "are noted on that student.";
 
+    // What the score sheet is, for a first-time user
+    private static final String ROSTER_HELP = "The class list exported "
+            + "from eLearn as a CSV file. It matches each zip file to a "
+            + "student, and Export fills the marks into a copy of it.";
+
+    // What the tester files are
+    private static final String TESTERS_HELP = "The tester programs, such "
+            + "as Q1aTester.java, that run each student's answer and award "
+            + "the marks, with the data files they read. They come with "
+            + "the assessment.";
+
+    // What the starter files are
+    private static final String STARTER_HELP = "The folder students were "
+            + "given before the test, such as RenameToYourUsername. It is "
+            + "used to spot untouched answers and to supply provided class "
+            + "files such as DataException.class.";
+
     // The size of the icon in the drop area
     private static final double DROP_ICON_SIZE = 20.0;
 
@@ -111,8 +132,11 @@ public class SetUpScreen extends FlowScreen {
     // The section choice
     private final ComboBox<String> sectionBox = new ComboBox<>();
 
-    // The assessment, which cannot be changed here
-    private final Label assessmentText = new Label();
+    // The assessment choice, which switches the assessment in use
+    private final ComboBox<String> assessmentBox = new ComboBox<>();
+
+    // The questions and marks of the assessment in use
+    private final Label assessmentText = Parts.muted("");
 
     // A note when the chosen section was graded before
     private final HBox earlierRun = Parts.row(Parts.GAP_SMALL);
@@ -144,11 +168,25 @@ public class SetUpScreen extends FlowScreen {
     // True once the class files were filled from the settings
     private boolean filledDefaults = false;
 
+    // True when the assessment changed since the tester and starter rows
+    // were filled, so they are filled again from its folders
+    private boolean assessmentChanged = false;
+
     // True while the choices are being filled, so no change is handled
     private boolean filling = false;
 
     // How many chosen files are still being checked in the background
     private int filesBeingChecked = 0;
+
+    // The tester folder check still running, or null
+    private TesterCheck testerCheck = null;
+
+    // The tester and starter folders the problems below were found with,
+    // or null when they must be checked again
+    private String checkedFolders = null;
+
+    // The problems found in that tester folder
+    private final List<String> testerProblems = new ArrayList<>();
 
     /**
      * Creates the Set up step.
@@ -184,7 +222,21 @@ public class SetUpScreen extends FlowScreen {
             fillClassFiles();
             filledDefaults = true;
         }
+        if (assessmentChanged) {
+            refillAssessmentFolders();
+            assessmentChanged = false;
+        }
         refresh();
+    }
+
+    /**
+     * Notes that another assessment is in use, so its tester and starter
+     * folders replace the ones chosen for the last one when this step is
+     * next shown. Typed test cases are for the last one's questions, so
+     * they are dropped.
+     */
+    public void assessmentChanged() {
+        assessmentChanged = true;
     }
 
     /**
@@ -205,18 +257,30 @@ public class SetUpScreen extends FlowScreen {
     private VBox createClassCard() {
         moduleBox.setMaxWidth(Double.MAX_VALUE);
         sectionBox.setMaxWidth(Double.MAX_VALUE);
+        assessmentBox.setMaxWidth(Double.MAX_VALUE);
         moduleBox.setOnAction(event -> chooseModule());
         sectionBox.setOnAction(event -> chooseSection());
-        assessmentText.getStyleClass().add("read-only-field");
-        assessmentText.setMaxWidth(Double.MAX_VALUE);
+        assessmentBox.setOnAction(event -> chooseAssessment());
+        assessmentText.getStyleClass().add("small-text");
 
         GridPane fields = new GridPane();
         fields.setHgap(Parts.GAP);
         fields.getColumnConstraints().addAll(column(CHOICE_PERCENT),
                 column(CHOICE_PERCENT), column(ASSESSMENT_PERCENT));
-        fields.add(field("Module", moduleBox), 0, 0);
-        fields.add(field("Section", sectionBox), 1, 0);
-        fields.add(field("Assessment", assessmentText), 2, 0);
+        fields.add(field("Module", moduleBox, "The course code, such as "
+                + "CS102. Add modules in Settings, under Course."), 0, 0);
+        fields.add(field("Section", sectionBox, "The class group these zip "
+                + "files belong to, such as G1. Results are kept per "
+                + "section. Add sections on Home."), 1, 0);
+        HBox manage = Parts.row(Parts.GAP_SMALL, new Node[] {assessmentText,
+            Parts.grow(), smallLink("Manage assessments",
+                    () -> getWindow().openAssessments())});
+        VBox assessmentField = field("Assessment", assessmentBox, "The lab "
+                + "test or exam being graded: its questions, marks, tester "
+                + "files and starter files. Choose another, or add one with "
+                + "Manage assessments.");
+        assessmentField.getChildren().add(manage);
+        fields.add(assessmentField, 2, 0);
         return Parts.card("Class", new Node[] {fields, earlierRun});
     }
 
@@ -239,6 +303,10 @@ public class SetUpScreen extends FlowScreen {
         dropArea.setFillHeight(false);
         dropHandler.install(dropArea);
         dropHandler.setOnDropped(() -> addDroppedFiles());
+        Parts.tipNode(dropArea, "Students' zip files, such as "
+                + "2024-2025-alice.tan.2024.zip, a folder that holds them, "
+                + "or the bulk download with every student's zip inside. "
+                + "Nothing is unpacked until you start grading.");
 
         fileList.getStyleClass().add("file-list");
         duplicateNote.getStyleClass().add("small-text");
@@ -259,6 +327,8 @@ public class SetUpScreen extends FlowScreen {
         checksLine.getStyleClass().addAll("muted", "small-text");
         checksLine.setWrapText(true);
         Label title = Parts.title("Grading settings");
+        Parts.tip(title, "How this run will grade. They are the same for "
+                + "every student and are changed in Settings.");
         Node grow = Parts.grow();
         Hyperlink change = smallLink("Change in Settings",
                 () -> getWindow().showPage(Page.SETTINGS));
@@ -277,11 +347,12 @@ public class SetUpScreen extends FlowScreen {
         return constraints;
     }
 
-    // Puts a small label above a control.
-    private VBox field(String label, Node control) {
+    // Puts a small label and its "?" above a control.
+    private VBox field(String label, Node control, String help) {
         Label name = Parts.muted(label);
         name.getStyleClass().add("field-label");
-        VBox box = new VBox(Parts.GAP_SMALL / 2, name, control);
+        VBox box = new VBox(Parts.GAP_SMALL / 2,
+                Parts.labelWithInfo(name, help), control);
         box.setMaxWidth(Double.MAX_VALUE);
         return box;
     }
@@ -327,6 +398,7 @@ public class SetUpScreen extends FlowScreen {
         moduleBox.setValue(module);
         getState().setModuleCode(module);
         fillSections();
+        fillAssessments();
         filling = false;
     }
 
@@ -358,6 +430,35 @@ public class SetUpScreen extends FlowScreen {
                         run.getSection().getSectionCode());
                 return;
             }
+        }
+    }
+
+    // Fills the assessment choice with the saved assessments.
+    private void fillAssessments() {
+        List<String> names = new ArrayList<>();
+        for (SavedAssessment saved : getBackend().listAssessments()) {
+            names.add(saved.getName());
+        }
+        assessmentBox.getItems().setAll(names);
+        Assessment assessment = getBackend().getAssessment();
+        if (assessment != null) {
+            assessmentBox.setValue(assessment.getName());
+        }
+        assessmentBox.setDisable(getState().isGrading());
+    }
+
+    // Switches the assessment in use.
+    private void chooseAssessment() {
+        String chosen = assessmentBox.getValue();
+        Assessment inUse = getBackend().getAssessment();
+        if (filling || chosen == null
+                || (inUse != null && chosen.equals(inUse.getName()))) {
+            return;
+        }
+        if (!getWindow().useAssessment(chosen)) {
+            filling = true;
+            fillAssessments();
+            filling = false;
         }
     }
 
@@ -474,6 +575,47 @@ public class SetUpScreen extends FlowScreen {
         refresh();
     }
 
+    // Removes the zip files that cannot be used, so the rest can be
+    // graded. Each one is named in the notice.
+    private void removeUnusable() {
+        ImportBatch batch = getState().getBatch();
+        List<String> names = new ArrayList<>();
+        for (ImportItem item : batch.getItems(InputKind.SUBMISSION)) {
+            if (batch.getEffectiveState(item) == ImportState.INVALID) {
+                batch.remove(item);
+                names.add(item.getName());
+            }
+        }
+        refresh();
+        if (!names.isEmpty()) {
+            getWindow().notify("Removed " + join(names) + ".");
+        }
+    }
+
+    // Counts the zip files that cannot be used.
+    private int countUnusable() {
+        ImportBatch batch = getState().getBatch();
+        int count = 0;
+        for (ImportItem item : batch.getItems(InputKind.SUBMISSION)) {
+            if (batch.getEffectiveState(item) == ImportState.INVALID) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Fills the tester and starter rows from the assessment in use, after
+    // it changed. Typed test cases are for the last one's questions.
+    private void refillAssessmentFolders() {
+        ImportBatch batch = getState().getBatch();
+        batch.clear(InputKind.TESTERS);
+        batch.clear(InputKind.STARTER);
+        batch.getTypedTestCases().clear();
+        batch.setUsingTypedTestCases(false);
+        addDefault(InputKind.TESTERS);
+        addDefault(InputKind.STARTER);
+    }
+
     // Removes every zip file from the batch.
     private void clearSubmissions() {
         getState().getBatch().clear(InputKind.SUBMISSION);
@@ -503,7 +645,7 @@ public class SetUpScreen extends FlowScreen {
             }
         }
         if (path != null) {
-            getState().getBatch().add(getBackend().inspect(kind, path));
+            inspectClassFile(kind, path);
         }
     }
 
@@ -513,13 +655,52 @@ public class SetUpScreen extends FlowScreen {
         if (path == null) {
             return;
         }
-        ImportBatch batch = getState().getBatch();
-        batch.clear(kind);
-        batch.add(getBackend().inspect(kind, path));
         if (kind == InputKind.TESTERS) {
-            batch.setUsingTypedTestCases(false);
+            getState().getBatch().setUsingTypedTestCases(false);
+        }
+        inspectClassFile(kind, path);
+        refresh();
+    }
+
+    // Checks a score sheet, tester or starter folder and puts it in the
+    // batch. Live mode reads it on a background thread; the demo reads no
+    // files.
+    private void inspectClassFile(InputKind kind, Path path) {
+        if (getBackend().isDemo()) {
+            useClassFile(getBackend().inspect(kind, path));
+            return;
+        }
+        List<Path> paths = new ArrayList<>();
+        paths.add(path);
+        FileInspection inspection = new FileInspection(getBackend(), kind,
+                paths);
+        inspection.setOnSucceeded(event -> classFileInspected(inspection));
+        inspection.setOnFailed(event -> inspectionFailed(inspection));
+        filesBeingChecked += inspection.getPathCount();
+        Thread worker = new Thread(inspection, "gradezzy-inspect");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Uses the class file a background check has finished.
+    private void classFileInspected(FileInspection inspection) {
+        filesBeingChecked -= inspection.getPathCount();
+        for (ImportItem item : inspection.getValue()) {
+            useClassFile(item);
         }
         refresh();
+    }
+
+    // Replaces the batch's file of the item's kind with the item. A new
+    // tester or starter folder is checked again for tester problems.
+    private void useClassFile(ImportItem item) {
+        ImportBatch batch = getState().getBatch();
+        batch.clear(item.getKind());
+        batch.add(item);
+        if (item.getKind() == InputKind.TESTERS
+                || item.getKind() == InputKind.STARTER) {
+            forgetTesterCheck();
+        }
     }
 
     // Asks for a file or folder of a kind, or returns the demo sample.
@@ -576,18 +757,18 @@ public class SetUpScreen extends FlowScreen {
         refreshActions();
     }
 
-    // Shows the assessment's name, questions and marks. The marks come
-    // from the chosen tester folder, so a new folder updates them.
+    // Shows the questions and marks of the assessment in use under its
+    // choice. The marks come from the chosen tester folder, so a new
+    // folder updates them.
     private void refreshAssessment() {
         Assessment assessment = getBackend().getAssessment(
                 findUsableTesters());
         if (assessment == null) {
-            assessmentText.setText("Not set in the settings");
+            assessmentText.setText("None is set yet.");
             return;
         }
-        assessmentText.setText(assessment.getName() + DOT
-                + Parts.plural(assessment.getQuestions().size(),
-                "question") + DOT
+        assessmentText.setText(Parts.plural(assessment.getQuestions()
+                .size(), "question") + DOT
                 + Parts.mark(assessment.getMaxTotal()) + " marks");
     }
 
@@ -605,12 +786,17 @@ public class SetUpScreen extends FlowScreen {
         if (run.getStartedAt() != null) {
             when = " on " + run.getStartedAt().format(WHEN);
         }
-        earlierRun.getChildren().addAll(
-                Parts.muted(getState().getSection().getLabel()
-                + " was graded" + when + " ("
+        String with = "";
+        if (run.getAssessment() != null) {
+            with = " with " + run.getAssessment().getName();
+        }
+        Label note = Parts.muted(getState().getSection().getLabel()
+                + " was graded" + with + when + " ("
                 + Parts.plural(run.getSubmissions().size(), "student")
-                + ")."),
-                Parts.link("Open its results",
+                + ").");
+        Parts.tip(note, "Grading again keeps these results on Runs, where "
+                + "you can open or restore them.");
+        earlierRun.getChildren().addAll(note, Parts.link("Open its results",
                 () -> getWindow().openRun(run)));
     }
 
@@ -636,8 +822,16 @@ public class SetUpScreen extends FlowScreen {
                 + DOT + Parts.plural(batch.countStudents(), "student")
                 + " ready");
         count.getStyleClass().add("small-text");
-        fileSummary.getChildren().addAll(count,
-                smallLink("Clear all", () -> clearSubmissions()));
+        fileSummary.getChildren().add(count);
+        int unusable = countUnusable();
+        if (unusable > 0) {
+            Hyperlink drop = smallLink("Remove " + Parts.plural(unusable,
+                    "file") + " that cannot be used",
+                    () -> removeUnusable());
+            fileSummary.getChildren().add(drop);
+        }
+        fileSummary.getChildren().add(smallLink("Clear all",
+                () -> clearSubmissions()));
     }
 
     // Lists the zip files with the ones that cannot be used first, then
@@ -737,6 +931,7 @@ public class SetUpScreen extends FlowScreen {
 
     // Redraws the score sheet, tester and starter rows.
     private void refreshClassFiles() {
+        checkTestersIfChanged();
         HBox[] rows = {
             createClassFileRow(InputKind.ROSTER, "Score sheet", null),
             createTesterRow(),
@@ -772,6 +967,21 @@ public class SetUpScreen extends FlowScreen {
         }
         ImportItem item = items.get(0);
         if (batch.getEffectiveState(item) == ImportState.INVALID) {
+            return null;
+        }
+        return item.getPath();
+    }
+
+    // Returns the chosen starter folder when it can be used, or null for
+    // the one in Settings.
+    private Path findUsableStarter() {
+        ImportBatch batch = getState().getBatch();
+        List<ImportItem> items = batch.getItems(InputKind.STARTER);
+        if (items.isEmpty()) {
+            return null;
+        }
+        ImportItem item = items.get(0);
+        if (!batch.getEffectiveState(item).isUsable()) {
             return null;
         }
         return item.getPath();
@@ -858,6 +1068,111 @@ public class SetUpScreen extends FlowScreen {
         return block;
     }
 
+    // Names the tester and starter folders a check uses, so a change to
+    // either starts a new check.
+    private String describeFolders(Path testers, Path starter) {
+        return testers + "|" + starter;
+    }
+
+    // Makes the next refresh check the testers again, even when the same
+    // folders are chosen, as their files may have changed.
+    private void forgetTesterCheck() {
+        checkedFolders = null;
+        testerCheck = null;
+        testerProblems.clear();
+    }
+
+    // Starts the tester folder check when the folders are new to it.
+    private void checkTestersIfChanged() {
+        Path testers = findUsableTesters();
+        if (testers == null) {
+            return;
+        }
+        Path starter = findUsableStarter();
+        String folders = describeFolders(testers, starter);
+        if (folders.equals(checkedFolders)) {
+            return;
+        }
+        if (testerCheck != null
+                && folders.equals(testerCheck.getFolders())) {
+            return;
+        }
+        if (getBackend().isDemo()) {
+            showTesterProblems(folders, getBackend().checkTesters(testers,
+                    starter));
+            return;
+        }
+        TesterCheck check = new TesterCheck(getBackend(), testers, starter,
+                folders);
+        check.setOnSucceeded(event -> testerCheckDone(check));
+        check.setOnFailed(event -> testerCheckFailed(check));
+        testerCheck = check;
+        Thread worker = new Thread(check, "gradezzy-testers");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Shows what a finished check found, unless a newer one started.
+    private void testerCheckDone(TesterCheck check) {
+        if (check != testerCheck) {
+            return;
+        }
+        testerCheck = null;
+        showTesterProblems(check.getFolders(), check.getValue());
+        refreshClassFiles();
+    }
+
+    // Shows that a check stopped before it finished.
+    private void testerCheckFailed(TesterCheck check) {
+        if (check != testerCheck) {
+            return;
+        }
+        testerCheck = null;
+        List<String> problems = new ArrayList<>();
+        problems.add("The testers could not be checked: "
+                + check.getException().getMessage());
+        showTesterProblems(check.getFolders(), problems);
+        refreshClassFiles();
+    }
+
+    // Keeps the problems found with a tester and starter folder.
+    private void showTesterProblems(String folders, List<String> problems) {
+        checkedFolders = folders;
+        testerProblems.clear();
+        testerProblems.addAll(problems);
+    }
+
+    // Adds the tester check's progress or problems to the tester row's
+    // detail, and returns the pill to show instead, or null.
+    private Label addTesterNotes(VBox notes) {
+        Path testers = findUsableTesters();
+        if (testers == null) {
+            return null;
+        }
+        String folders = describeFolders(testers, findUsableStarter());
+        if (!folders.equals(checkedFolders)) {
+            notes.getChildren().add(smallNote("Checking the testers..."));
+            return null;
+        }
+        if (testerProblems.isEmpty()) {
+            return null;
+        }
+        for (String problem : testerProblems) {
+            notes.getChildren().add(smallNote(problem));
+        }
+        return Parts.pill(Parts.plural(testerProblems.size(),
+                "tester problem"), Tone.WARN);
+    }
+
+    // Returns a small grey note that wraps.
+    private Label smallNote(String text) {
+        Label label = Parts.muted(text);
+        label.getStyleClass().add("small-text");
+        label.setMinWidth(0);
+        label.setWrapText(true);
+        return label;
+    }
+
     // Builds one class file row, with an optional link after the detail.
     private HBox createClassFileRow(InputKind kind, String title,
             Hyperlink extra) {
@@ -885,7 +1200,14 @@ public class SetUpScreen extends FlowScreen {
         if (extra != null) {
             line.getChildren().add(extra);
         }
-        return classFileRow(iconPath, title, line, status,
+        VBox details = new VBox(line);
+        if (kind == InputKind.TESTERS) {
+            Label warning = addTesterNotes(details);
+            if (warning != null) {
+                status = warning;
+            }
+        }
+        return classFileRow(iconPath, title, details, status,
                 rowLink("Change", () -> changeClassFile(kind)));
     }
 
@@ -929,9 +1251,16 @@ public class SetUpScreen extends FlowScreen {
     }
 
     // Lays out a class file row: icon, name and detail, status, link.
-    private HBox classFileRow(String iconPath, String title, HBox detail,
+    private HBox classFileRow(String iconPath, String title, Node detail,
             Label status, Hyperlink change) {
-        VBox text = new VBox(Parts.strong(title), detail);
+        String help = STARTER_HELP;
+        if (title.equals("Score sheet")) {
+            help = ROSTER_HELP;
+        } else if (title.equals("Tester files")) {
+            help = TESTERS_HELP;
+        }
+        VBox text = new VBox(Parts.labelWithInfo(Parts.strong(title), help),
+                detail);
         text.setMinWidth(0);
         HBox.setHgrow(text, Priority.ALWAYS);
         return Parts.row(Parts.GAP,
@@ -950,22 +1279,33 @@ public class SetUpScreen extends FlowScreen {
             similar = "On";
         }
         facts.add(fact("Time limit per test",
-                getBackend().getRunTimeoutSeconds() + " s", true), 0, 0);
+                getBackend().getRunTimeoutSeconds() + " s", true, "A "
+                + "tester that runs longer is stopped, so an endless loop "
+                + "cannot hold up the batch. Cases passed before that keep "
+                + "their marks."), 0, 0);
         facts.add(fact("Compile time limit",
-                getBackend().getCompileTimeoutSeconds() + " s", false),
+                getBackend().getCompileTimeoutSeconds() + " s", false,
+                "The longest javac may take for one question folder."),
                 1, 0);
-        facts.add(fact("Fix common mistakes", fixes, false), 2, 0);
-        facts.add(fact("Similar code check", similar, false), 3, 0);
+        facts.add(fact("Fix common mistakes", fixes, false, "Small "
+                + "mistakes, such as a wrong folder name or a missing "
+                + "wrapper folder, are fixed in a copy, never in the "
+                + "original. On Review you approve or undo each fix."),
+                2, 0);
+        facts.add(fact("Similar code check", similar, false, "After "
+                + "grading, compares answers and flags pairs that look "
+                + "alike. It only flags; marks never change."), 3, 0);
         checksLine.setText(describeChecks());
     }
 
-    // Builds one cell of the facts row.
-    private VBox fact(String name, String value, boolean first) {
+    // Builds one cell of the facts row, with its "?".
+    private VBox fact(String name, String value, boolean first,
+            String help) {
         Label key = Parts.muted(name);
         key.getStyleClass().add("small-text");
         Label text = Parts.strong(value);
         text.getStyleClass().add("fact-value");
-        VBox cell = new VBox(key, text);
+        VBox cell = new VBox(Parts.labelWithInfo(key, help), text);
         cell.getStyleClass().add("fact");
         if (first) {
             cell.getStyleClass().add("first");
@@ -1059,9 +1399,13 @@ public class SetUpScreen extends FlowScreen {
                 actions.setStatus(reasons.get(0));
             }
         } else {
+            String skipped = batch.describeSkipped();
+            if (!skipped.isEmpty()) {
+                skipped = " " + skipped;
+            }
             actions.setStatus(Parts.plural(batch.countStudents(),
                     "student") + " ready to grade in "
-                    + getState().getSection().getLabel() + ".");
+                    + getState().getSection().getLabel() + "." + skipped);
         }
     }
 

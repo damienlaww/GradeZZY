@@ -78,6 +78,10 @@ compile.bat core
 clean.bat
 ```
 
+In PowerShell, which is the default terminal in VS Code, put `.\` in
+front of each script, for example `.\run.bat console G2`. Without it
+PowerShell says the script "is not recognized".
+
 The `.sh` scripts are also written to work in Git Bash on Windows.
 
 Two more developer options exist for checking the screens:
@@ -145,7 +149,7 @@ The base package is `gradezzy`. Each package has one job.
 |---|---|---|
 | `app` | Entry points and wiring. | `ConsoleMain`, `ApplicationContext`, `ConsoleProgressListener` |
 | `config` | Loads `config.properties`. | `AppConfig`, `ConfigKeys`, `ConfigException` |
-| `model` | Plain data classes with no logic. | `Submission`, `Student`, `Section`, `Assessment`, `Question`, `QuestionResult`, `TestCaseResult`, `Anomaly`, `GradingRun`, `AuditEntry`, and the enums `AnomalyType`, `Severity`, `FixStatus`, `SubmissionStatus` |
+| `model` | Plain data classes with no logic. | `Submission`, `Student`, `Section`, `Assessment`, `SavedAssessment`, `Question`, `QuestionResult`, `TestCaseResult`, `Anomaly`, `GradingRun`, `AuditEntry`, and the enums `AnomalyType`, `Severity`, `FixStatus`, `SubmissionStatus` |
 | `ingest` | Accepts uploads, unzips them into a working copy, reads the roster. | `SubmissionLoader`, `ZipExtractor`, `WorkingCopyManager`, `RosterReader` |
 | `validation` | One class per structural check. | `Validator` (interface), `AbstractValidator`, `StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`, `HeaderNameValidator`, `ValidationRunner` |
 | `fix` | One class per automatic correction, each with apply and undo. | `Fixer` (interface), `AbstractFixer`, `EncodingFixer`, `FolderNameFixer`, `FolderHierarchyFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
@@ -157,9 +161,9 @@ The base package is `gradezzy`. Each package has one job.
 | `report` | One class per export format. | `Exporter` (interface), `CsvScoreSheetExporter`, `JsonExporter`, `StudentReportExporter`, `AnomalyReportExporter`, `AuditLogExporter`, `JsonWriter`, `JsonFields` |
 | `stats` | Statistics for the dashboard. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
-| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ServiceRegistry` |
+| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AssessmentLibrary`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ServiceRegistry` |
 | `ui` | JavaFX only: starting the window and small shared helpers. | `MainApp`, `ThemeManager`, `GradingTask`, `DragDropHandler` |
-| `ui.flow` | The window: tabs Marking (Set up, Grade, Review, Export), Statistics, Runs and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts`, the review table cells `Review...Cell`, and comparators such as `StudentNameComparator` |
+| `ui.flow` | The window: tabs Home (a card per section), Marking (Set up, Grade, Review, Export), Statistics, Runs and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `HomeScreen`, `AssessmentsSheet`, `AssessmentEditor`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts`, the review table cells `Review...Cell`, and comparators such as `StudentNameComparator` |
 | `ui.backend` | The one interface the screens call, and its live version that calls the services. | `DashboardBackend`, `LiveBackend`, `Capability`, small view classes such as `RepairItem` and `RunRecord` |
 | `ui.demo` | Synthetic data for `--demo`. Never reads, grades or saves real files. | `DemoBackend`, `DemoData`, `DemoGrader` |
 | `ui.check` | Developer checks behind the `--check`, `--selftest`, `--snapshot` and `--windowtest` options. Not used when grading. | `FlowCheck`, `FlowSelfTest`, `FlowWindowTest`, `RobotDriver` |
@@ -203,8 +207,8 @@ ui (JavaFX)        app.ConsoleMain
 | 3 | `FixStage` | Applies automatic corrections. | Jun Sheng |
 | 4 | `DetectStage` | Runs every `Detector`. | Jun Sheng |
 | 5 | `InstallTestersStage` | Copies testers and data files into the working copy. | Zach |
-| 6 | `CompileStage` | Compiles each question in its own copy of its folder, `<working copy>/.questions/<id>/`, so Q1a's code cannot change Q1b's tester. | Zach |
-| 7 | `ExecuteStage` | Runs each tester in that copy with a time limit and parses its output. | Zach |
+| 6 | `CompileStage` | Compiles each question in its own copy of its folder, `<working copy>/.questions/<id>/`, so Q1a's code cannot change Q1b's tester, and keeps the compiled files in memory. | Zach |
+| 7 | `ExecuteStage` | Puts back and flags any compiled file changed since compiling, then runs each tester in that copy with a time limit and parses its output. | Zach |
 | 8 | `ScoreStage` | Sets per-question and per-student scores. | Jing Yuan |
 | 9 | `PersistStage` | Saves the result so a run can be resumed. | Huxley |
 
@@ -970,11 +974,12 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `paths.working.dir` | `workspace/working` | Where working copies are created. |
 | `paths.output.dir` | `workspace/output` | Where exports are written. |
 | `paths.backup.dir` | `workspace/backup` | Where database backups are kept. |
+| `paths.assessments.dir` | `workspace/assessments` | Where saved assessments are kept, one `.properties` file each. Choosing one on Home or Set up copies its `assessment.*`, `paths.testers.dir` and `paths.starter.dir` settings into `config.properties`. |
 | `ingest.zip.name.prefix.pattern` | `^[0-9]{4}-[0-9]{4}-` | Text in front of the username in a zip file name. |
 | `ingest.ignored.file.names` | `.DS_Store,__MACOSX,Thumbs.db` | Names skipped inside a submission. |
 | `ingest.max.zip.size.mb` | `50` | Largest unzipped size accepted. |
 | `ingest.max.zip.entries` | `2000` | Largest number of entries accepted in a zip. |
-| `assessment.name` | `Lab Test` | Name of the assessment. |
+| `assessment.name` | `Lab Test` | Name of the assessment in use. Create, edit and switch assessments in the window (Home, Manage assessments) rather than here. |
 | `assessment.question.ids` | `Q1a,Q1b,Q2a,Q2b,Q3` | The questions, in order. |
 | `assessment.question.<id>.folder` | for example `Q1` | Folder the question's file must be in. |
 | `assessment.question.<id>.file` | for example `Q1a.java` | The required source file. |
@@ -1065,7 +1070,7 @@ by this section.
 | One-line lambdas `event -> exportResults()` | 26 files in `ui` | Button handlers, table cells and callbacks. | Short for a small class that implements the handler interface (like `AgeComparator implements Comparator`) and whose one method calls `exportResults()`. Every lambda is one line that calls one method. |
 | `Runnable`, `Consumer` | `ui.flow` (`ActionBar`, `Parts`, `StepBar`, `TabBar`, ...), `exec.TrustedFrameCheck` | The type of a lambda parameter, for example "what to do when this button is pressed". | Interfaces with one method, so a screen can pass "run this later" to another class. |
 | `java.nio.file` (`Path`, `Paths`, `Files`, `DirectoryStream`, `StandardCopyOption`, `LinkOption`) | About 60 files | Every file and folder the system reads, copies, moves or writes. | `Path` is a file or folder location (like `File`); `Files` has static methods to read, copy, move and list them, and can refuse to follow links. |
-| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.CodeSearch`, `ui.flow.ExportJob`, `ui.flow.UndoFixJob` | Grading, checking chosen files, searching code, exports, backups and undoing a fix (which grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
+| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.CodeSearch`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.SetUpScreen`, `ui.flow.ReviewScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.UndoFixJob` | Grading, checking chosen files, the class files and the tester folder, reading the score sheet for students with no submission, searching code, exports, backups and undoing a fix (which grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
 | Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |

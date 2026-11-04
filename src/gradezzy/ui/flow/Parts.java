@@ -9,6 +9,8 @@
  */
 package gradezzy.ui.flow;
 
+import java.net.URL;
+
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -17,7 +19,9 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
+import javafx.scene.control.Control;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -25,6 +29,8 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.SVGPath;
+import javafx.stage.Popup;
+import javafx.util.Duration;
 
 /**
  * Factory methods for the shared pieces of the guided window.
@@ -99,6 +105,16 @@ public final class Parts {
     /** The gap between a figure's value and its unit. */
     public static final double FIGURE_UNIT_GAP = 4.0;
 
+    /** A house: the Home tab. */
+    public static final String HOME = "M4 11l8-7 8 7M6 9.5V20h4.5v-5.5h3V20"
+            + "H18V9.5";
+
+    /** A chevron pointing right: this row opens. */
+    public static final String CHEVRON = "M9 6l6 6-6 6";
+
+    /** A plus sign: add something. */
+    public static final String PLUS = "M12 5v14M5 12h14";
+
     /** The widest a paragraph in a sheet may be. */
     public static final double TEXT_WIDTH = 420.0;
 
@@ -107,6 +123,30 @@ public final class Parts {
 
     // The radius of the dot inside a status pill
     private static final double DOT_RADIUS = 3.5;
+
+    // How long the pointer rests on something before its tip shows
+    private static final Duration TIP_DELAY = Duration.millis(300);
+
+    // How long a tip stays while the pointer rests
+    private static final Duration TIP_DURATION = Duration.seconds(20);
+
+    // The widest a tip may be before its text wraps
+    private static final double TIP_WIDTH = 320.0;
+
+    // The text of the small help mark
+    private static final String INFO_MARK = "?";
+
+    // The widest the explanation of a "?" may be before it wraps
+    private static final double EXPLAIN_WIDTH = 300.0;
+
+    // The padding around an explanation, on both sides together
+    private static final double EXPLAIN_PADDING = 28.0;
+
+    // The gap between a "?" and its explanation
+    private static final double EXPLAIN_OFFSET = 6.0;
+
+    // The style class the window's root has in the dark theme
+    private static final String DARK_CLASS = "dark";
 
     // Not used: every method is static.
     private Parts() {
@@ -530,6 +570,118 @@ public final class Parts {
         pane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         pane.getStyleClass().add("page-scroll");
         return pane;
+    }
+
+    /**
+     * Gives a control a tip that shows soon after the pointer rests on
+     * it and wraps long text.
+     *
+     * @param control the control, such as a button or field
+     * @param text what it is for, in one or two sentences
+     */
+    public static void tip(Control control, String text) {
+        control.setTooltip(tooltip(text));
+    }
+
+    /**
+     * Gives any node, such as a row or a pill, a tip like tip(Control).
+     *
+     * @param node the node
+     * @param text what it is for, in one or two sentences
+     */
+    public static void tipNode(Node node, String text) {
+        Tooltip.install(node, tooltip(text));
+    }
+
+    /**
+     * Returns a small round "?" button for a word a first-time user may
+     * not know. Clicking it, or pressing Space on it, opens a popup that
+     * explains the word; a click anywhere else or Esc closes it.
+     *
+     * @param title the word explained, shown as the popup's title
+     * @param text the explanation
+     * @return the button
+     */
+    public static Button info(String title, String text) {
+        Button mark = new Button(INFO_MARK);
+        mark.getStyleClass().setAll("info-mark");
+        mark.setMinWidth(Region.USE_PREF_SIZE);
+        mark.setTooltip(tooltip("What is " + title + "? Click to read."));
+        mark.setAccessibleText("What is " + title + "?");
+        mark.setOnAction(event -> explain(mark, title, text));
+        return mark;
+    }
+
+    /**
+     * Returns a label followed by its "?" button, for a field name.
+     *
+     * @param text the field name, also the title of the explanation
+     * @param help the explanation
+     * @return the row
+     */
+    public static HBox labelWithInfo(Label text, String help) {
+        HBox box = row(GAP_SMALL / 2, new Node[] {text,
+            info(text.getText(), help)});
+        box.setMaxWidth(Region.USE_PREF_SIZE);
+        return box;
+    }
+
+    /**
+     * Returns the box a "?" opens: the word in bold and its explanation.
+     * Public so the developer checks can take a picture of it.
+     *
+     * @param title the word explained
+     * @param text the explanation
+     * @return the box
+     */
+    public static VBox explanation(String title, String text) {
+        Label heading = new Label(title);
+        heading.getStyleClass().add("info-popup-title");
+        Label body = new Label(text);
+        body.getStyleClass().add("info-popup-text");
+        body.setWrapText(true);
+        body.setMaxWidth(EXPLAIN_WIDTH);
+        body.setMinHeight(Region.USE_PREF_SIZE);
+        VBox box = new VBox(GAP_SMALL, heading, body);
+        box.getStyleClass().add("info-popup");
+        box.setMaxWidth(EXPLAIN_WIDTH + EXPLAIN_PADDING);
+        return box;
+    }
+
+    // Opens the explanation of a "?" just under it. A "?" that is not
+    // in a window yet has nowhere to open it.
+    private static void explain(Button mark, String title, String text) {
+        if (mark.getScene() == null || mark.getScene().getWindow() == null) {
+            return;
+        }
+        VBox box = explanation(title, text);
+        if (mark.getScene().getRoot().getStyleClass().contains(DARK_CLASS)) {
+            box.getStyleClass().add(DARK_CLASS);
+        }
+        Popup popup = new Popup();
+        popup.setAutoHide(true);
+        popup.setHideOnEscape(true);
+        popup.getContent().add(box);
+        URL css = Parts.class.getResource(FlowWindow.STYLESHEET);
+        if (css != null) {
+            popup.getScene().getStylesheets().add(css.toExternalForm());
+        }
+        Bounds bounds = mark.localToScreen(mark.getBoundsInLocal());
+        if (bounds != null) {
+            popup.show(mark, bounds.getMinX(), bounds.getMaxY()
+                    + EXPLAIN_OFFSET);
+        }
+    }
+
+    // Builds a tip that shows quickly and wraps.
+    private static Tooltip tooltip(String text) {
+        Tooltip tip = new Tooltip(text);
+        tip.setShowDelay(TIP_DELAY);
+        tip.setShowDuration(TIP_DURATION);
+        tip.setWrapText(true);
+        tip.setMaxWidth(TIP_WIDTH);
+        tip.getStyleClass().add("flow-tip");
+        return tip;
     }
 
     // Adds a style class to a label and returns it.
