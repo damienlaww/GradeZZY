@@ -36,11 +36,14 @@ import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
+import gradezzy.model.SavedAssessment;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.ui.ThemeManager;
+import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.ImportBatch;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.ImportState;
@@ -106,6 +109,15 @@ public class FlowSelfTest {
 
     // The students ticked for export in flow 6
     private static final int TICKED_COUNT = 2;
+
+    // The second sample assessment, which DemoBackend saves
+    private static final String SECOND_ASSESSMENT = "Lab Test 2";
+
+    // The questions the second sample assessment keeps
+    private static final int SECOND_QUESTION_COUNT = 3;
+
+    // The assessment flow 8 creates
+    private static final String NEW_ASSESSMENT = "Final Exam";
 
     // Turns a fraction into a percentage
     private static final double PERCENT = 100.0;
@@ -182,12 +194,14 @@ public class FlowSelfTest {
                 + "the score sheet", () -> flowExport());
         failed += runFlow(7, "Switch themes without losing state",
                 () -> flowTheme());
+        failed += runFlow(8, "Home shows each section; save, use and "
+                + "switch assessments", () -> flowHome());
 
         if (failed == 0) {
-            System.out.println("All 7 flows passed.");
+            System.out.println("All 8 flows passed.");
             return 0;
         }
-        System.out.println(failed + " of 7 flows failed.");
+        System.out.println(failed + " of 8 flows failed.");
         return 1;
     }
 
@@ -218,8 +232,12 @@ public class FlowSelfTest {
 
     // ------------------------------------------------------------ flow 1
 
-    // Set up: add the samples, remove the unusable one, start enabled.
+    // Home first, then Set up: add the samples, remove the unusable one,
+    // start enabled.
     private void flowImport() {
+        check(window.getCurrentPage() == Page.HOME, "the window opens on "
+                + "Home");
+        press(tab("Marking"), "the Marking tab");
         check(window.getCurrentStep() == Step.SET_UP, "Set up is shown");
         Button start = window.getActionBar().getPrimaryButton();
         check("Start grading".equals(start.getText()) && start.isDisabled(),
@@ -237,6 +255,9 @@ public class FlowSelfTest {
         check(statusText().contains("cannot be used"),
                 "the action bar says a ZIP file cannot be used (it says \""
                 + statusText() + "\")");
+        check(SceneFinder.button(window.getActionBar(),
+                "Remove 1 unusable file") != null, "the action bar offers "
+                + "to remove the unusable file");
 
         ImportItem invalid = null;
         for (ImportItem item : files) {
@@ -427,12 +448,12 @@ public class FlowSelfTest {
             problems.add("expected: the panel lists Q1a");
             return;
         }
+        check(SceneFinder.shows(row, "timed out"), "Q1a says, without a "
+                + "click, that a test timed out");
         SceneFinder.click(((Parent) row)
                 .getChildrenUnmodifiable().get(0));
         settle();
         row = questionRow(DemoData.TIMEOUT_QUESTION);
-        check(row != null && SceneFinder.shows(row, "ran too long"),
-                "clicking Q1a says a test ran too long");
         press(row == null ? null : SceneFinder.link(row, "Grade "
                 + DemoData.TIMEOUT_QUESTION + " again"), "Grade Q1a again");
         check(q1a != null && !q1a.isTimedOut()
@@ -518,6 +539,10 @@ public class FlowSelfTest {
                 "two students are ticked");
         check(statusText().contains(TICKED_COUNT + " students ticked for "
                 + "export"), "the action bar says two students are ticked");
+        check(SceneFinder.shows(root(), TICKED_COUNT + " students ticked "
+                + "for export") && SceneFinder.link(root(), "Clear ticks")
+                != null, "the band over the table says two are ticked and "
+                + "offers Clear ticks");
 
         press(window.getActionBar().getPrimaryButton(), "Continue to export");
         Node sheet = sheet();
@@ -560,6 +585,13 @@ public class FlowSelfTest {
 
         int filesBefore = outputFileCount();
         press(window.getActionBar().getPrimaryButton(), "Export score sheet");
+        Node confirm = sheet();
+        String question = "Export " + TICKED_COUNT + " students";
+        check(confirm != null && SceneFinder.shows(confirm, question + "?"),
+                "Export asks \"" + question + "?\" first");
+        if (confirm != null) {
+            press(SceneFinder.button(confirm, question), question);
+        }
         String message = "";
         Label saved = SceneFinder.label(root(), "Saved");
         if (saved != null) {
@@ -654,6 +686,80 @@ public class FlowSelfTest {
         check(reopenedFlag != null && backend.getDecision(reopenedFlag)
                 == ReviewDecision.OPEN, "the flag reopened in flow 3 is "
                 + "still open");
+    }
+
+    // ------------------------------------------------------------ flow 8
+
+    // Home: a card per section; switching assessment changes the cards;
+    // a new assessment is checked and saved; opening a run switches back
+    // to the assessment it was graded with; Set up shows no ticks for a
+    // new batch.
+    private void flowHome() {
+        press(tab("Home"), "the Home tab");
+        check(window.getCurrentPage() == Page.HOME, "Home is shown");
+        check(SceneFinder.texts(root(), "section-name").contains(
+                DemoData.SAMPLE_SECTION), "Home has a card for "
+                + DemoData.SAMPLE_SECTION);
+        check(SceneFinder.shows(root(), "Add a section"), "Home offers to "
+                + "add a section");
+
+        window.openAssessments();
+        settle();
+        check(sheet() != null && SceneFinder.shows(sheet(),
+                SECOND_ASSESSMENT), "the assessments sheet lists "
+                + SECOND_ASSESSMENT);
+        window.closeSheet();
+        check(window.useAssessment(SECOND_ASSESSMENT), "switching to "
+                + SECOND_ASSESSMENT + " works");
+        settle();
+        check(backend.getAssessment().getName().equals(SECOND_ASSESSMENT)
+                && backend.getAssessment().getQuestions().size()
+                == SECOND_QUESTION_COUNT, SECOND_ASSESSMENT + " is in use "
+                + "with its own questions");
+        check(SceneFinder.texts(root(), "pill").contains("Not graded"),
+                "Home shows the sections as not graded for "
+                + SECOND_ASSESSMENT);
+
+        SavedAssessment draft = new SavedAssessment();
+        draft.setName(SECOND_ASSESSMENT.toUpperCase(Locale.ROOT));
+        draft.getQuestions().add(new Question("Q1", "Q1", "Q1.java", 10));
+        draft.setTestersDirectory("testers");
+        draft.setStarterDirectory("starter");
+        check(!backend.validateAssessment(draft, null).isEmpty(),
+                "a second assessment with the same name is refused");
+        draft.setName(NEW_ASSESSMENT);
+        ActionResult saved = backend.saveAssessment(draft, null);
+        check(saved.isDone(), "a new assessment is saved ("
+                + saved.getMessage() + ")");
+        window.editAssessment(NEW_ASSESSMENT);
+        settle();
+        check(sheet() != null && SceneFinder.shows(sheet(), "Edit "
+                + NEW_ASSESSMENT), "the editor opens on " + NEW_ASSESSMENT);
+        window.closeSheet();
+
+        GradingRun sample = backend.getRun(window.getState().getSection());
+        if (sample == null) {
+            problems.add("expected: the sample section has a run");
+            return;
+        }
+        window.openRun(sample);
+        settle();
+        check(backend.getAssessment().getName().equals(
+                sample.getAssessment().getName()), "opening a run switches "
+                + "back to the assessment it was graded with");
+        window.show(Step.GRADE);
+        settle();
+        String count = "of " + sample.getSubmissions().size() + " students";
+        check(SceneFinder.shows(root(), count) && (SceneFinder.shows(root(),
+                "Grading stopped") || SceneFinder.shows(root(),
+                "Grading finished")), "Grade shows the opened run as it "
+                + "ended (" + count + "), not an empty screen; it shows "
+                + SceneFinder.texts(root(), "heading") + ", step "
+                + window.getCurrentStep());
+        window.show(Step.SET_UP);
+        settle();
+        check(scene.getRoot().lookupAll(".step-dot.done").isEmpty(),
+                "Set up shows no ticks on the later steps");
     }
 
     // ----------------------------------------------------------- helpers

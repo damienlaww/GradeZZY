@@ -111,19 +111,19 @@ public enum Capability {
             "Jing Yuan", "SearchService.search", CapabilityStatus.WORKS_NOW,
             "Nothing; searching already works."),
 
-    /** Finds students whose source code holds some text. */
-    CODE_SEARCH("Search inside source code",
-            "Finds the students whose code contains some text.",
-            "Jing Yuan", "SearchService.searchCode",
-            CapabilityStatus.WORKS_NOW,
-            "Working copies on disk, which need Damien's extraction."),
-
     /** The folder tree and source files of a working copy. */
     SOURCE_VIEW("Show working-copy files",
             "Shows a student's files, so you can read the code behind a "
             + "mark.", "Damien", "FileUtils.readText",
             CapabilityStatus.WORKS_NOW,
             "Nothing; files are read from the working copy."),
+
+    /** Runs one question's tester again, only to show its output. */
+    RERUN_QUESTION("Run a question's tests again",
+            "Compiles and runs one question's tester again for one student "
+            + "and shows the output, without changing any mark.", "Damien",
+            "QuestionRerunner.run", CapabilityStatus.WORKS_NOW,
+            "Nothing; it uses the working copy and the installed tester."),
 
     /** Writes the score sheet CSV or JSON. */
     EXPORT_RESULTS("Export CSV and JSON",

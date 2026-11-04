@@ -136,7 +136,8 @@ public class SettingsService {
     private static final String[] WRITTEN_FOLDER_KEYS = {
         ConfigKeys.WORKING_DIR,
         ConfigKeys.OUTPUT_DIR,
-        ConfigKeys.BACKUP_DIR
+        ConfigKeys.BACKUP_DIR,
+        ConfigKeys.ASSESSMENTS_DIR
     };
 
     // Settings naming the uploads, which a written folder must not touch

@@ -9,6 +9,7 @@
 package gradezzy.ingest;
 
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -100,6 +101,13 @@ public class RosterReader {
                         fields.get(header.indexOf(EMAIL_COLUMN))));
             }
             return students;
+        } catch (NoSuchFileException exception) {
+            throw new IngestException("The score sheet "
+                    + scoreSheetFile.toAbsolutePath().normalize()
+                    + " does not exist. Choose the CSV file exported from "
+                    + "eLearn: on Home, under Check the score sheet, or in "
+                    + "config.properties (" + ConfigKeys.SCORE_SHEET_FILE
+                    + ") for the console.", exception);
         } catch (IOException exception) {
             throw rosterFailure(scoreSheetFile, exception);
         } catch (IllegalArgumentException exception) {
@@ -130,8 +138,12 @@ public class RosterReader {
     // Builds the error shown when the roster cannot be read or is malformed.
     private IngestException rosterFailure(Path scoreSheetFile,
             Exception exception) {
+        String reason = String.valueOf(exception.getMessage()).trim();
+        if (!reason.endsWith(".")) {
+            reason += ".";
+        }
         return new IngestException("Could not read roster "
-                + scoreSheetFile + ": " + exception.getMessage()
+                + scoreSheetFile + ": " + reason
                 + " Choose the score sheet CSV with student columns.",
                 exception);
     }

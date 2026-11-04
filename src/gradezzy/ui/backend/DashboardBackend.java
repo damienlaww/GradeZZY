@@ -13,11 +13,15 @@ import java.util.List;
 import java.util.Map;
 
 
+import gradezzy.grading.GradingException;
 import gradezzy.grading.ProgressListener;
 import gradezzy.model.Anomaly;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Question;
+import gradezzy.model.QuestionResult;
+import gradezzy.model.SavedAssessment;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.plagiarism.SimilarityPair;
@@ -258,16 +262,25 @@ public interface DashboardBackend {
      */
     ActionResult undoRepairDecision(RepairItem repair);
 
-    // --------------------------------------------------- search, source
+    // ----------------------------------------------------------- source
 
     /**
-     * Returns the submissions whose source code holds some text.
+     * Compiles and runs one question's tester again for one student and
+     * returns what it printed. Nothing is saved: the marks stay as they
+     * are.
      *
-     * @param gradingRun the run, or null
-     * @param codeFragment the text to look for
-     * @return the matching submissions
+     * @param submission the student
+     * @param gradingRun the run the student was graded in, whose
+     *        assessment and tester folder are used, or null for the ones
+     *        in the settings
+     * @param question the question to run again
+     * @return the fresh result, with its tests and output
+     * @throws GradingException if there is nothing to run; the message
+     *         says why in plain words
      */
-    List<Submission> searchCode(GradingRun gradingRun, String codeFragment);
+    QuestionResult rerunQuestion(Submission submission,
+            GradingRun gradingRun, Question question)
+            throws GradingException;
 
     /**
      * Returns the text of one file of a working copy.
@@ -409,6 +422,53 @@ public interface DashboardBackend {
      */
     ActionResult saveSettings(List<String> keys,
             Map<String, String> changes);
+
+    // ----------------------------------------------------- assessments
+
+    /**
+     * Lists the saved assessments, sorted by name. The one in use, whose
+     * name getAssessment gives, is always listed.
+     *
+     * @return the assessments
+     */
+    List<SavedAssessment> listAssessments();
+
+    /**
+     * Checks an assessment before it is saved.
+     *
+     * @param draft the assessment
+     * @param originalName the name it had before, or null for a new one
+     * @return an empty string when it can be saved, or what is wrong
+     */
+    String validateAssessment(SavedAssessment draft, String originalName);
+
+    /**
+     * Saves an assessment, replacing the one it was edited from. When that
+     * one is in use, grading uses the saved version from now on.
+     *
+     * @param draft the assessment
+     * @param originalName the name it had before, or null for a new one
+     * @return what happened
+     */
+    ActionResult saveAssessment(SavedAssessment draft, String originalName);
+
+    /**
+     * Grades with a saved assessment from now on: its questions, tester
+     * folder and starter folder replace the ones in use.
+     *
+     * @param name the assessment's name
+     * @return what happened
+     */
+    ActionResult useAssessment(String name);
+
+    /**
+     * Deletes a saved assessment that is not in use. Results graded with
+     * it are kept.
+     *
+     * @param name the assessment's name
+     * @return what happened
+     */
+    ActionResult deleteAssessment(String name);
 
     // ------------------------------------------------------ similarity
 

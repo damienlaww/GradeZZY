@@ -17,7 +17,10 @@ import java.nio.file.Path;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.geometry.Insets;
 import javafx.scene.image.WritableImage;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 
 import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
@@ -28,10 +31,13 @@ import gradezzy.ui.backend.ImportBatch;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.LiveBackend;
+import gradezzy.ui.backend.RunRecord;
 import gradezzy.ui.demo.DemoBackend;
 import gradezzy.ui.demo.DemoData;
+import gradezzy.ui.flow.CodeSheet;
 import gradezzy.ui.flow.FlowWindow;
 import gradezzy.ui.flow.Page;
+import gradezzy.ui.flow.Parts;
 import gradezzy.ui.flow.ReviewScreen;
 import gradezzy.ui.flow.Step;
 
@@ -45,6 +51,9 @@ public class FlowCheck {
 
     // Layout passes before a picture, so scroll panes settle
     private static final int LAYOUT_PASSES = 3;
+
+    // The space around the picture of a "?" explanation
+    private static final double EXPLANATION_MARGIN = 16.0;
 
     // Every service
     private final ServiceRegistry services;
@@ -94,7 +103,17 @@ public class FlowCheck {
         try {
             FlowWindow window = new FlowWindow(backend, dark);
             Scene scene = window.build(size[0], size[1]);
+            shoot(scene, tag, "0-home");
+            window.openAssessments();
+            shoot(scene, tag, "0b-assessments");
+            window.editAssessment(backend.getAssessment().getName());
+            shoot(scene, tag, "0c-assessment-editor");
+            window.editAssessment(null);
+            shoot(scene, tag, "0d-assessment-new");
+            window.closeSheet();
+            window.show(Step.SET_UP);
             shoot(scene, tag, "1-set-up-empty");
+            shootExplanation(scene, tag);
 
             for (Path path : backend.getSampleFiles(
                     InputKind.SUBMISSION)) {
@@ -106,6 +125,9 @@ public class FlowCheck {
 
             GradingRun run = backend.getRun(new Section(
                     DemoData.MODULE_CODE, DemoData.SAMPLE_SECTION));
+            if (run == null) {
+                run = firstGradedRun(backend);
+            }
             if (run != null) {
                 window.openRun(run);
                 shoot(scene, tag, "4-review");
@@ -115,6 +137,9 @@ public class FlowCheck {
                 if (open != null) {
                     review.selectStudent(open);
                     shoot(scene, tag, "5-review-student");
+                    window.showSheet(CodeSheet.create(window, open));
+                    shoot(scene, tag, "5c-code");
+                    window.closeSheet();
                 }
                 window.advanceTo(Step.EXPORT);
                 shoot(scene, tag, "6-export");
@@ -376,6 +401,34 @@ public class FlowCheck {
             }
         }
         return found;
+    }
+
+    // Saves a picture of what a "?" opens, in its own small scene with
+    // the window's stylesheet, as the popup has.
+    private void shootExplanation(Scene scene, String tag)
+            throws IOException {
+        VBox box = Parts.explanation("Starter files", "The folder students "
+                + "were given before the test, such as RenameToYourUsername."
+                + " It is used to spot untouched answers.");
+        if (scene.getRoot().getStyleClass().contains("dark")) {
+            box.getStyleClass().add("dark");
+        }
+        StackPane holder = new StackPane(box);
+        holder.setPadding(new Insets(EXPLANATION_MARGIN));
+        Scene small = new Scene(holder);
+        small.getStylesheets().addAll(scene.getStylesheets());
+        shoot(small, tag, "1b-explanation");
+    }
+
+    // Returns the newest run that has students, from any section, or
+    // null. Live mode may have no run for the sample section.
+    private GradingRun firstGradedRun(DashboardBackend backend) {
+        for (RunRecord record : backend.listRuns()) {
+            if (!record.getRun().getSubmissions().isEmpty()) {
+                return record.getRun();
+            }
+        }
+        return null;
     }
 
     // Lays out the scene and saves a picture of it when asked to.
