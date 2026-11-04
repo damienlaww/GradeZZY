@@ -100,6 +100,48 @@ public class SettingsScreen extends FlowScreen {
     // The values export.csv.line.ending accepts
     private static final String[] LINE_ENDINGS = {"CRLF", "LF"};
 
+    // Their names in the list
+    private static final String[] LINE_ENDING_NAMES = {
+        "CRLF (as eLearn gives it)", "LF (macOS and Linux)"};
+
+    // The export formats that can be offered, and their names
+    private static final String[] FORMATS = {"csv,json", "csv", "json"};
+    private static final String[] FORMAT_NAMES = {"CSV and JSON",
+        "CSV only", "JSON only"};
+
+    // The values each number setting offers in its list. A value set by
+    // hand that is not here is kept as one more choice.
+    private static final String[] RUN_SECONDS = {"5", "10", "15", "20",
+        "30", "60"};
+    private static final String[] COMPILE_SECONDS = {"10", "20", "30",
+        "60", "120"};
+    private static final String[] OUTPUT_CHARACTERS = {"10000", "50000",
+        "100000", "500000", "1000000"};
+    private static final String[] SIMILARITIES = {"0.50", "0.60", "0.70",
+        "0.75", "0.80", "0.85", "0.90", "0.95"};
+    private static final String[] PASS_PERCENTS = {"40", "45", "50", "55",
+        "60", "65", "70", "75"};
+    private static final String[] BAND_PERCENTS = {"5", "10", "20", "25"};
+    private static final String[] BACKUP_COUNTS = {"1", "3", "5", "10",
+        "20"};
+    private static final String[] WINDOW_WIDTHS = {"960", "1024", "1200",
+        "1280", "1440", "1600", "1920"};
+    private static final String[] WINDOW_HEIGHTS = {"640", "720", "800",
+        "900", "1080"};
+    private static final String[] ZIP_MEGABYTES = {"10", "25", "50", "100",
+        "200", "500"};
+    private static final String[] ZIP_ENTRIES = {"500", "1000", "2000",
+        "5000", "10000"};
+    private static final String[] HEADER_LINES = {"5", "10", "15", "20",
+        "30"};
+
+    // The most students graded at once the list offers, before the
+    // number of processors decides
+    private static final int[] THREAD_STEPS = {1, 2, 4, 8, 16};
+
+    // Turns a share such as 0.80 into a percentage such as 80
+    private static final double PERCENT = 100.0;
+
     // The page
     private final VBox view = new VBox(HEADER_GAP);
 
@@ -343,36 +385,44 @@ public class SettingsScreen extends FlowScreen {
                 "Answers that may print the output directly.");
 
         startGroup("Running code");
-        number(ConfigKeys.RUN_TIMEOUT_SECONDS, "Time limit per test run",
-                "Seconds. A tester that runs longer is stopped.");
-        number(ConfigKeys.COMPILE_TIMEOUT_SECONDS, "Time limit to compile",
-                "Seconds, for one question folder.");
-        number(ConfigKeys.THREAD_COUNT, "Students graded at once", "");
+        listed(ConfigKeys.RUN_TIMEOUT_SECONDS, "Time limit per test run",
+                "A tester that runs longer is stopped.", RUN_SECONDS,
+                " seconds");
+        listed(ConfigKeys.COMPILE_TIMEOUT_SECONDS, "Time limit to compile",
+                "For one question folder.", COMPILE_SECONDS, " seconds");
+        String[] threads = threadChoices();
+        choice(ConfigKeys.THREAD_COUNT, "Students graded at once",
+                "More is faster on a computer with more processors.",
+                threads).showChoicesAs(threadNames(threads));
         text(ConfigKeys.JAVAC_COMMAND, "Compile command",
                 "Must be on the PATH.");
         text(ConfigKeys.JAVA_COMMAND, "Run command",
                 "Must be on the PATH.");
-        number(ConfigKeys.MAX_OUTPUT_CHARACTERS, "Longest output kept",
-                "Characters per run, to protect memory.");
+        choice(ConfigKeys.MAX_OUTPUT_CHARACTERS, "Longest output kept",
+                "Per run, to protect memory.", OUTPUT_CHARACTERS)
+                .showChoicesAs(groupedNames(OUTPUT_CHARACTERS,
+                " characters"));
 
         startGroup("Similar code");
         toggle(ConfigKeys.PLAGIARISM_ENABLED, "Look for similar code",
                 "Runs after grading; pairs are flagged.");
-        number(ConfigKeys.PLAGIARISM_THRESHOLD, "Similarity that counts",
-                "From 0 to 1.");
+        choice(ConfigKeys.PLAGIARISM_THRESHOLD, "Similarity that counts",
+                "How alike two answers must be to be flagged.",
+                SIMILARITIES).showChoicesAs(similarityNames());
 
         startGroup("Statistics");
-        number(ConfigKeys.PASS_MARK_PERCENT, "Pass mark",
-                "Percentage of the maximum mark.");
-        number(ConfigKeys.MARK_BAND_WIDTH_PERCENT, "Mark band width",
-                "Percentage of the maximum mark.");
+        listed(ConfigKeys.PASS_MARK_PERCENT, "Pass mark",
+                "Of the maximum mark.", PASS_PERCENTS, "%");
+        listed(ConfigKeys.MARK_BAND_WIDTH_PERCENT, "Mark band width",
+                "Of the maximum mark, for each bar of the charts.",
+                BAND_PERCENTS, "%");
 
         startGroup("Saved data");
         toggle(ConfigKeys.DATABASE_ENABLED, "Save results",
                 "Needed for Runs, Resume and the activity log.");
         file(ConfigKeys.DATABASE_FILE, "Database file", "");
-        number(ConfigKeys.BACKUP_KEEP_COUNT, "Backups kept",
-                "The oldest is deleted after this many.");
+        listed(ConfigKeys.BACKUP_KEEP_COUNT, "Backups kept",
+                "The oldest is deleted after this many.", BACKUP_COUNTS, "");
         toggle(ConfigKeys.AUDIT_ENABLED, "Keep an activity log",
                 "Approvals, undos and exports, with the time.");
 
@@ -380,10 +430,10 @@ public class SettingsScreen extends FlowScreen {
         choice(ConfigKeys.UI_THEME, "Theme", "", THEMES).showChoicesAs(
                 THEME_NAMES);
         toggle(ConfigKeys.ANIMATIONS_ENABLED, "Subtle animations", "");
-        number(ConfigKeys.WINDOW_WIDTH, "Window width",
-                "Starting size, in pixels.");
-        number(ConfigKeys.WINDOW_HEIGHT, "Window height",
-                "Starting size, in pixels.");
+        listed(ConfigKeys.WINDOW_WIDTH, "Window width",
+                "Starting size.", WINDOW_WIDTHS, " pixels");
+        listed(ConfigKeys.WINDOW_HEIGHT, "Window height",
+                "Starting size.", WINDOW_HEIGHTS, " pixels");
 
         startGroup("Advanced");
         folder(ConfigKeys.SUBMISSIONS_DIR, "Submissions for the console",
@@ -392,15 +442,17 @@ public class SettingsScreen extends FlowScreen {
                 "Pattern of the text before the username in a zip name.");
         text(ConfigKeys.IGNORED_FILE_NAMES, "Ignored file names",
                 "Inside a submission. Separated by commas.");
-        number(ConfigKeys.MAX_ZIP_SIZE_MB, "Largest unzipped size",
-                "Megabytes, for one submission.");
-        number(ConfigKeys.MAX_ZIP_ENTRIES, "Most files in one zip", "");
+        listed(ConfigKeys.MAX_ZIP_SIZE_MB, "Largest unzipped size",
+                "For one submission.", ZIP_MEGABYTES, " MB");
+        choice(ConfigKeys.MAX_ZIP_ENTRIES, "Most files in one zip", "",
+                ZIP_ENTRIES).showChoicesAs(groupedNames(ZIP_ENTRIES,
+                " files"));
         text(ConfigKeys.HEADER_NAME_LABEL, "Header name label",
                 "In front of the student's name in a file's header.");
         text(ConfigKeys.HEADER_EMAIL_LABEL, "Header email label",
                 "In front of the student's email in a file's header.");
-        number(ConfigKeys.HEADER_SCAN_LINES, "Header lines searched",
-                "At the top of each file.");
+        listed(ConfigKeys.HEADER_SCAN_LINES, "Header lines searched",
+                "At the top of each file.", HEADER_LINES, " lines");
         text(ConfigKeys.TESTER_CLASS_SUFFIX, "Tester name ending",
                 "Added to a question, so Q1a becomes Q1aTester.");
         text(ConfigKeys.PASS_MARKER, "Passed line",
@@ -409,10 +461,11 @@ public class SettingsScreen extends FlowScreen {
                 "Start of what a tester prints when a test case fails.");
         text(ConfigKeys.TEST_HEADER_MARKER, "Test case line",
                 "Start of what a tester prints before each test case.");
-        text(ConfigKeys.EXPORT_FORMATS, "Export formats",
-                "Offered by default. Separated by commas.");
+        choice(ConfigKeys.EXPORT_FORMATS, "Export formats",
+                "Offered by default.", FORMATS).showChoicesAs(FORMAT_NAMES);
         choice(ConfigKeys.CSV_LINE_ENDING, "CSV line ending",
-                "CRLF as provided, or LF.", LINE_ENDINGS);
+                "Keep CRLF unless your tools need LF.", LINE_ENDINGS)
+                .showChoicesAs(LINE_ENDING_NAMES);
         text(ConfigKeys.CSV_ID_PREFIX, "CSV ID prefix",
                 "In front of the OrgDefinedId and Username values.");
         text(ConfigKeys.CSV_END_OF_LINE_MARKER, "CSV end-of-line value",
@@ -433,12 +486,6 @@ public class SettingsScreen extends FlowScreen {
     private void text(String key, String name, String description) {
         add(new SettingField(getWindow(), key, name, description,
                 SettingKind.TEXT));
-    }
-
-    // Adds a short number setting to the group being built.
-    private void number(String key, String name, String description) {
-        add(new SettingField(getWindow(), key, name, description,
-                SettingKind.NUMBER));
     }
 
     // Adds a file setting to the group being built.
@@ -467,6 +514,76 @@ public class SettingsScreen extends FlowScreen {
                 description, SettingKind.CHOICE, values);
         add(field);
         return field;
+    }
+
+    // Adds a number setting as a list of values, each shown with a word
+    // after it, such as "10 seconds" or "50%".
+    private SettingField listed(String key, String name, String description,
+            String[] values, String after) {
+        String[] names = new String[values.length];
+        for (int index = 0; index < values.length; index++) {
+            names[index] = values[index] + after;
+        }
+        SettingField setting = choice(key, name, description, values);
+        setting.showChoicesAs(names);
+        return setting;
+    }
+
+    // Names large numbers with thousands separators, such as
+    // "100,000 characters".
+    private static String[] groupedNames(String[] values, String after) {
+        String[] names = new String[values.length];
+        for (int index = 0; index < values.length; index++) {
+            names[index] = String.format("%,d", Long.parseLong(
+                    values[index])) + after;
+        }
+        return names;
+    }
+
+    // Names each similarity as a percentage, such as "80% alike".
+    private static String[] similarityNames() {
+        String[] names = new String[SIMILARITIES.length];
+        for (int index = 0; index < SIMILARITIES.length; index++) {
+            long percent = Math.round(Double.parseDouble(
+                    SIMILARITIES[index]) * PERCENT);
+            names[index] = percent + "% alike";
+        }
+        return names;
+    }
+
+    // Lists how many students may be graded at once: 1, 2, 4 and so on,
+    // up to the number of processors, which is always offered.
+    private static String[] threadChoices() {
+        int processors = Runtime.getRuntime().availableProcessors();
+        List<String> choices = new ArrayList<>();
+        for (int step : THREAD_STEPS) {
+            if (step <= processors) {
+                choices.add(String.valueOf(step));
+            }
+        }
+        if (!choices.contains(String.valueOf(processors))) {
+            choices.add(String.valueOf(processors));
+        }
+        String[] counts = new String[choices.size()];
+        for (int index = 0; index < counts.length; index++) {
+            counts[index] = choices.get(index);
+        }
+        return counts;
+    }
+
+    // Names each count of students, marking one and the processor count.
+    private static String[] threadNames(String[] counts) {
+        int processors = Runtime.getRuntime().availableProcessors();
+        String[] names = new String[counts.length];
+        for (int index = 0; index < counts.length; index++) {
+            names[index] = counts[index];
+            if ("1".equals(counts[index])) {
+                names[index] = "1 (one at a time)";
+            } else if (String.valueOf(processors).equals(counts[index])) {
+                names[index] = counts[index] + " (one per processor)";
+            }
+        }
+        return names;
     }
 
     // Puts a setting in the group being built.
