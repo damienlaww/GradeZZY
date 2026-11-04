@@ -12,6 +12,8 @@
 package gradezzy.ui.flow;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,8 +29,10 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.Question;
 import gradezzy.model.SavedAssessment;
+import gradezzy.testcase.TesterMarks;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.ImportState;
@@ -53,6 +57,9 @@ public final class AssessmentEditor {
 
     // The separator between list items
     private static final String LIST_SEPARATOR = ",";
+
+    // The ending of a tester's source file
+    private static final String JAVA_EXTENSION = ".java";
 
     // The window that shows the sheet
     private final FlowWindow window;
@@ -214,12 +221,13 @@ public final class AssessmentEditor {
             columnName("Id", QuestionFields.SHORT_WIDTH),
             columnName("Folder", QuestionFields.FOLDER_WIDTH),
             growingColumnName("File"),
-            columnName("Max mark", QuestionFields.SHORT_WIDTH),
+            columnName("Max (tester)", QuestionFields.SHORT_WIDTH),
             columnName("", QuestionFields.LINK_WIDTH)});
         Button add = Parts.small("Add question", () -> addEmptyQuestion());
         add.setGraphic(Parts.icon(Parts.PLUS, CLOSE_SIZE * 3 / 4));
         Parts.tip(add, "Add a row. Type its id first; the folder and file "
-                + "are filled in for you.");
+                + "are filled in for you, and its maximum mark is read from "
+                + "its tester.");
         total.getStyleClass().add("small-text");
         HBox under = Parts.row(Parts.GAP, new Node[] {add, Parts.grow(),
             total});
@@ -282,7 +290,7 @@ public final class AssessmentEditor {
     // Adds a question row filled from a question.
     private void addQuestion(Question question) {
         QuestionFields fields = new QuestionFields(question,
-                () -> updateTotal());
+                () -> readAllMarks());
         fields.setOnRemove(() -> removeQuestion(fields));
         questions.add(fields);
         questionRows.getChildren().add(fields.getRow());
@@ -302,21 +310,59 @@ public final class AssessmentEditor {
         updateTotal();
     }
 
-    // Shows the total of the maximum marks typed so far.
+    // Reads one question's maximum mark from its tester in the chosen
+    // folder, when that folder exists, then updates the total.
+    private void readMark(QuestionFields fields) {
+        String folder = testers.getText().trim();
+        if (!folder.isEmpty() && Files.isDirectory(Path.of(folder))) {
+            fields.setMaxScore(markFromTester(folder, fields.getId()));
+        }
+        updateTotal();
+    }
+
+    // Reads every question's maximum mark again, after the tester folder
+    // changed. A folder that does not exist leaves the marks as they were.
+    private void readAllMarks() {
+        for (QuestionFields fields : questions) {
+            readMark(fields);
+        }
+        updateTotal();
+    }
+
+    // Returns the sum of the "score += <number>" lines of a question's
+    // tester, or TesterMarks.UNKNOWN.
+    private double markFromTester(String folder, String questionId) {
+        if (questionId.isEmpty()) {
+            return TesterMarks.UNKNOWN;
+        }
+        Path tester = Path.of(folder).resolve(questionId
+                + window.getBackend().getSetting(
+                ConfigKeys.TESTER_CLASS_SUFFIX) + JAVA_EXTENSION);
+        if (!Files.isRegularFile(tester)) {
+            return TesterMarks.UNKNOWN;
+        }
+        try {
+            return TesterMarks.readMaxScore(tester);
+        } catch (IOException exception) {
+            return TesterMarks.UNKNOWN;
+        }
+    }
+
+    // Shows the total of the maximum marks read from the testers.
     private void updateTotal() {
         double sum = 0;
-        boolean allNumbers = true;
+        boolean allKnown = true;
         for (QuestionFields fields : questions) {
-            try {
-                sum += Double.parseDouble(fields.getMarkText());
-            } catch (NumberFormatException exception) {
-                allNumbers = false;
+            if (fields.getMaxScore() > TesterMarks.UNKNOWN) {
+                sum += fields.getMaxScore();
+            } else {
+                allKnown = false;
             }
         }
         String text = Parts.plural(questions.size(), "question") + ", "
                 + Parts.mark(sum) + " marks in total";
-        if (!allNumbers) {
-            text += " so far";
+        if (!allKnown) {
+            text += " so far (\"?\" means no tester marks yet)";
         }
         total.setText(text);
     }
@@ -346,6 +392,9 @@ public final class AssessmentEditor {
 
     // Shows whether a folder can be used, with the check Set up uses.
     private void checkFolder(TextField field, HBox status, InputKind kind) {
+        if (kind == InputKind.TESTERS) {
+            readAllMarks();
+        }
         status.getChildren().clear();
         String text = field.getText().trim();
         if (text.isEmpty()) {
@@ -381,20 +430,9 @@ public final class AssessmentEditor {
         SavedAssessment draft = new SavedAssessment();
         draft.setName(name.getText().trim());
         for (QuestionFields fields : questions) {
-            double mark;
-            try {
-                mark = Double.parseDouble(fields.getMarkText());
-            } catch (NumberFormatException exception) {
-                String id = fields.getId();
-                if (id.isEmpty()) {
-                    id = "each question";
-                }
-                showProblem("Type the maximum mark of " + id + " as a "
-                        + "number, such as 3.");
-                return;
-            }
             draft.getQuestions().add(new Question(fields.getId(),
-                    fields.getFolder(), fields.getFile(), mark));
+                    fields.getFolder(), fields.getFile(),
+                    fields.getMaxScore()));
         }
         draft.setTestersDirectory(testers.getText().trim());
         draft.setStarterDirectory(starter.getText().trim());

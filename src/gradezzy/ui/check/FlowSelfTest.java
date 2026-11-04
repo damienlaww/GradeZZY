@@ -251,13 +251,11 @@ public class FlowSelfTest {
                 "the notice says six files were added");
         check(count(SceneFinder.texts(root(), "pill"), "Cannot be used")
                 == 1, "exactly one file row says Cannot be used");
-        check(start.isDisabled(), "Start grading stays disabled");
-        check(statusText().contains("cannot be used"),
-                "the action bar says a ZIP file cannot be used (it says \""
-                + statusText() + "\")");
-        check(SceneFinder.button(window.getActionBar(),
-                "Remove 1 unusable file") != null, "the action bar offers "
-                + "to remove the unusable file");
+        check(!start.isDisabled(), "Start grading is enabled, as the "
+                + "unusable file is skipped");
+        check(statusText().contains("cannot be used and is skipped"),
+                "the action bar says a ZIP file cannot be used and is "
+                + "skipped (it says \"" + statusText() + "\")");
 
         ImportItem invalid = null;
         for (ImportItem item : files) {
@@ -295,6 +293,14 @@ public class FlowSelfTest {
     // Grade: watch progress, cancel with the sheet, resume, reach Review.
     private void flowGrade() {
         press(window.getActionBar().getPrimaryButton(), "Start grading");
+        Node marksSheet = sheet();
+        check(marksSheet != null && SceneFinder.shows(marksSheet,
+                "Total"), "Start grading asks to confirm the questions and "
+                + "their marks");
+        if (marksSheet != null) {
+            press(SceneFinder.button(marksSheet, "Start grading"),
+                    "Start grading");
+        }
         check(window.getCurrentStep() == Step.GRADE, "the Grade step opened");
         check(window.getState().isGrading(), "grading started");
 

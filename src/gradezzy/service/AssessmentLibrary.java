@@ -7,7 +7,9 @@
  * Where it fits: The window lists, creates, edits and chooses assessments
  * through it. Choosing one copies its settings into config.properties
  * with SettingsService, because every part of grading reads the questions,
- * tester folder and starter folder from there.
+ * tester folder and starter folder from there. A question's maximum mark
+ * is not saved: as in AssessmentFactory, it is the sum of the
+ * "score += <number>" lines of its tester.
  */
 package gradezzy.service;
 
@@ -30,6 +32,7 @@ import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Question;
 import gradezzy.model.SavedAssessment;
+import gradezzy.testcase.TesterMarks;
 import gradezzy.util.FileUtils;
 import gradezzy.util.TextUtils;
 
@@ -64,9 +67,6 @@ public class AssessmentLibrary {
 
     // The longest assessment name, so it fits on a card
     private static final int MAX_NAME_LENGTH = 60;
-
-    // The highest mark a single question may carry
-    private static final double MAX_QUESTION_MARK = 1000.0;
 
     // Matches each run of characters that cannot be in a file name
     private static final String NOT_FILE_NAME = "[^a-z0-9]+";
@@ -134,6 +134,8 @@ public class AssessmentLibrary {
     public SavedAssessment readCurrent() {
         SavedAssessment current = new SavedAssessment();
         current.setName(getActiveName());
+        current.setTestersDirectory(config.getString(
+                ConfigKeys.TESTERS_DIR));
         for (String id : config.getList(ConfigKeys.QUESTION_IDS)) {
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
             current.getQuestions().add(new Question(id,
@@ -141,11 +143,8 @@ public class AssessmentLibrary {
                             + ConfigKeys.QUESTION_FOLDER_SUFFIX),
                     config.getString(prefix
                             + ConfigKeys.QUESTION_FILE_SUFFIX),
-                    config.getDouble(prefix
-                            + ConfigKeys.QUESTION_MAX_SCORE_SUFFIX)));
+                    readMaxScore(current.getTestersDirectory(), id)));
         }
-        current.setTestersDirectory(config.getString(
-                ConfigKeys.TESTERS_DIR));
         current.setStarterDirectory(config.getString(
                 ConfigKeys.STARTER_DIR));
         current.getProvidedClassFiles().addAll(config.getList(
@@ -205,7 +204,9 @@ public class AssessmentLibrary {
     }
 
     /**
-     * Checks that the tester and starter folders of an assessment exist.
+     * Checks that the tester and starter folders of an assessment exist,
+     * and that the tester folder has a tester with marks for every
+     * question, as grading needs.
      *
      * @param draft the assessment
      * @return what is wrong, in one sentence, or an empty string
@@ -219,7 +220,52 @@ public class AssessmentLibrary {
             return "The starter folder " + draft.getStarterDirectory()
                     + " does not exist.";
         }
+        for (Question question : draft.getQuestions()) {
+            String id = question.getId().trim();
+            Path tester = testerFile(draft.getTestersDirectory(), id);
+            if (!Files.isRegularFile(tester)) {
+                return "The tester folder has no " + tester.getFileName()
+                        + ", so " + id + " cannot be marked.";
+            }
+            if (readMaxScore(draft.getTestersDirectory(), id)
+                    <= TesterMarks.UNKNOWN) {
+                return tester.getFileName() + " has no \"score += "
+                        + "<number>\" line, so " + id + " has no maximum "
+                        + "mark. Add one per test case.";
+            }
+        }
         return "";
+    }
+
+    /**
+     * Reads a question's maximum mark from its tester: the sum of its
+     * "score += <number>" lines.
+     *
+     * @param testersDirectory the tester folder
+     * @param questionId the question, such as Q1a
+     * @return the maximum mark, or TesterMarks.UNKNOWN when the tester is
+     *         missing, cannot be read or has no such line
+     */
+    public double readMaxScore(String testersDirectory, String questionId) {
+        if (TextUtils.isBlank(testersDirectory)) {
+            return TesterMarks.UNKNOWN;
+        }
+        Path tester = testerFile(testersDirectory, questionId);
+        if (!Files.isRegularFile(tester)) {
+            return TesterMarks.UNKNOWN;
+        }
+        try {
+            return TesterMarks.readMaxScore(tester);
+        } catch (IOException exception) {
+            return TesterMarks.UNKNOWN;
+        }
+    }
+
+    // Returns where a question's tester is, such as Q1aTester.java.
+    private Path testerFile(String testersDirectory, String questionId) {
+        return Paths.get(testersDirectory).resolve(questionId
+                + config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
+                + JAVA_EXTENSION);
     }
 
     /**
@@ -344,11 +390,6 @@ public class AssessmentLibrary {
             return "Give " + id + " a Java file name, such as " + id
                     + JAVA_EXTENSION + ".";
         }
-        double mark = question.getMaxScore();
-        if (!(mark > 0) || mark > MAX_QUESTION_MARK) {
-            return "Give " + id + " a maximum mark above 0 and at most "
-                    + (int) MAX_QUESTION_MARK + ".";
-        }
         return "";
     }
 
@@ -386,8 +427,6 @@ public class AssessmentLibrary {
                     question.getFolderName().trim());
             values.put(prefix + ConfigKeys.QUESTION_FILE_SUFFIX,
                     question.getFileName().trim());
-            values.put(prefix + ConfigKeys.QUESTION_MAX_SCORE_SUFFIX,
-                    formatMark(question.getMaxScore()));
             ids.add(id);
         }
         values.put(ConfigKeys.QUESTION_IDS, joinList(ids));
@@ -452,6 +491,8 @@ public class AssessmentLibrary {
 
         SavedAssessment assessment = new SavedAssessment();
         assessment.setName(required(values, ConfigKeys.ASSESSMENT_NAME));
+        assessment.setTestersDirectory(values.getProperty(
+                ConfigKeys.TESTERS_DIR, ""));
         for (String id : splitList(required(values,
                 ConfigKeys.QUESTION_IDS))) {
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
@@ -460,11 +501,8 @@ public class AssessmentLibrary {
                             + ConfigKeys.QUESTION_FOLDER_SUFFIX),
                     required(values, prefix
                             + ConfigKeys.QUESTION_FILE_SUFFIX),
-                    Double.parseDouble(required(values, prefix
-                            + ConfigKeys.QUESTION_MAX_SCORE_SUFFIX))));
+                    readMaxScore(assessment.getTestersDirectory(), id)));
         }
-        assessment.setTestersDirectory(values.getProperty(
-                ConfigKeys.TESTERS_DIR, ""));
         assessment.setStarterDirectory(values.getProperty(
                 ConfigKeys.STARTER_DIR, ""));
         assessment.getProvidedClassFiles().addAll(splitList(
@@ -629,13 +667,5 @@ public class AssessmentLibrary {
             }
         }
         return TextUtils.join(LIST_SEPARATOR, trimmed);
-    }
-
-    // Writes a mark without a needless ".0", as config.properties does.
-    private String formatMark(double mark) {
-        if (mark == Math.rint(mark)) {
-            return String.valueOf((long) mark);
-        }
-        return String.valueOf(mark);
     }
 }

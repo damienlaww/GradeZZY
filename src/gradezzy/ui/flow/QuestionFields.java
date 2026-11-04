@@ -2,20 +2,24 @@
  * File: QuestionFields.java
  *
  * Purpose: The four fields of one question in the assessment editor: its
- * id, folder, file and maximum mark, laid out as one row.
+ * id, folder and file, and its maximum mark as read from its tester,
+ * laid out as one row.
  *
  * Where it fits: AssessmentEditor keeps one per question and reads them
  * back when the instructor saves.
  */
 package gradezzy.ui.flow;
 
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Hyperlink;
+import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 
 import gradezzy.model.Question;
+import gradezzy.testcase.TesterMarks;
 
 /**
  * One question's row in the assessment editor.
@@ -43,8 +47,11 @@ public class QuestionFields {
     // The answer file, such as Q1a.java
     private final TextField file = new TextField();
 
-    // The maximum mark, such as 3
-    private final TextField mark = new TextField();
+    // The maximum mark read from the question's tester, such as 3
+    private final Label mark = new Label();
+
+    // The maximum mark shown, or TesterMarks.UNKNOWN
+    private double maxScore = TesterMarks.UNKNOWN;
 
     // The row that holds the fields and the Remove link
     private final HBox row;
@@ -56,19 +63,19 @@ public class QuestionFields {
      * Creates the fields of a question, filled from it when one is given.
      *
      * @param question the question, or null for an empty row
-     * @param onChange called when the mark changes, to update the total
+     * @param onChange called when the id changes, so the editor can read
+     *        the question's maximum mark from its tester again
      */
     public QuestionFields(Question question, Runnable onChange) {
         if (question != null) {
             id.setText(question.getId());
             folder.setText(question.getFolderName());
             file.setText(question.getFileName());
-            mark.setText(Parts.mark(question.getMaxScore()));
+            setMaxScore(question.getMaxScore());
         }
         id.setPromptText("Q1a");
         folder.setPromptText("Q1");
         file.setPromptText("Q1a.java");
-        mark.setPromptText("3");
         id.setPrefWidth(SHORT_WIDTH);
         folder.setPrefWidth(FOLDER_WIDTH);
         mark.setPrefWidth(SHORT_WIDTH);
@@ -80,12 +87,13 @@ public class QuestionFields {
                 + "student's zip, such as Q1.");
         Parts.tip(file, "The Java file the student writes, such as "
                 + "Q1a.java.");
-        Parts.tip(mark, "The most marks this question can earn.");
+        mark.getStyleClass().add("question-max");
+        mark.setAlignment(Pos.CENTER_RIGHT);
 
         // A new id fills in the folder and file the usual way, once
         id.focusedProperty().addListener((seen, before, now) ->
                 suggestNames(now));
-        mark.textProperty().addListener((seen, before, now) ->
+        id.textProperty().addListener((seen, before, now) ->
                 onChange.run());
 
         Hyperlink remove = Parts.link("Remove", () -> removeClicked());
@@ -141,12 +149,36 @@ public class QuestionFields {
     }
 
     /**
-     * Returns the typed maximum mark.
+     * Returns the maximum mark read from the question's tester.
      *
-     * @return the text, trimmed
+     * @return the mark, or TesterMarks.UNKNOWN when it is not known
      */
-    public String getMarkText() {
-        return mark.getText().trim();
+    public double getMaxScore() {
+        return maxScore;
+    }
+
+    /**
+     * Shows the maximum mark read from the question's tester, or "?" with
+     * a tip saying why when it is not known.
+     *
+     * @param score the mark, or TesterMarks.UNKNOWN
+     */
+    public void setMaxScore(double score) {
+        maxScore = score;
+        if (score > TesterMarks.UNKNOWN) {
+            mark.setText(Parts.mark(score));
+            Parts.tip(mark, "Read from the question's tester: the sum of "
+                    + "its \"score += <number>\" lines.");
+        } else {
+            String example = getId();
+            if (example.isEmpty()) {
+                example = "Q1a";
+            }
+            mark.setText("?");
+            Parts.tip(mark, "The tester folder has no tester with marks "
+                    + "for this question yet, such as " + example
+                    + "Tester.java with \"score += 1;\" lines.");
+        }
     }
 
     /**

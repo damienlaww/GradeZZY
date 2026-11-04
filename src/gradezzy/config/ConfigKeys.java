@@ -313,11 +313,6 @@ public final class ConfigKeys {
     public static final String QUESTION_FILE_SUFFIX = ".file";
 
     /**
-     * End of the key holding the maximum score of a question.
-     */
-    public static final String QUESTION_MAX_SCORE_SUFFIX = ".max.score";
-
-    /**
      * Not used: every method here is static.
      */
     private ConfigKeys() {

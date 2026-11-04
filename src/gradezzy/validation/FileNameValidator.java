@@ -97,12 +97,11 @@ public class FileNameValidator extends AbstractValidator {
         return findIgnoringCase(files, question.getFileName());
     }
 
-    // Names the wrong and the right file, and where the wrong one is.
+    // Names the wrong and the right file, from the student's folder.
     private String describe(Question question, Path misnamed) {
         String folderName = question.getFolderName();
 
         return folderName + "/" + misnamed.getFileName() + " should be named "
-                + folderName + "/" + question.getFileName()
-                + ". Working copy file: " + misnamed;
+                + folderName + "/" + question.getFileName() + ".";
     }
 }

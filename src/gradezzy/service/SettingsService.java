@@ -79,9 +79,6 @@ public class SettingsService {
     private static final double MIN_SIMILARITY = 0.0;
     private static final double MAX_SIMILARITY = 1.0;
 
-    // A question's maximum score must be above this value
-    private static final double MIN_MAX_SCORE = 0.0;
-
     // Used to tell an even count of backslashes from an odd one
     private static final int EVEN_DIVISOR = 2;
 
@@ -256,10 +253,6 @@ public class SettingsService {
             return checkSimilarity(key, text);
         }
 
-        if (isMaxScoreKey(key)) {
-            return checkMaxScore(key, text);
-        }
-
         if (contains(BOOLEAN_KEYS, key)) {
             return checkChoice(key, text, BOOLEAN_WORDS);
         }
@@ -427,12 +420,6 @@ public class SettingsService {
         return false;
     }
 
-    // Says whether a key is the maximum score of a question.
-    private boolean isMaxScoreKey(String key) {
-        return key.startsWith(ConfigKeys.QUESTION_PREFIX)
-                && key.endsWith(ConfigKeys.QUESTION_MAX_SCORE_SUFFIX);
-    }
-
     // Checks a whole number between two limits, both included.
     private String checkWholeNumber(String key, String text, int min,
             int max) {
@@ -469,24 +456,6 @@ public class SettingsService {
         double number = Double.parseDouble(text);
 
         if (number < MIN_SIMILARITY || number > MAX_SIMILARITY) {
-            return message;
-        }
-
-        return "";
-    }
-
-    // Checks a question's maximum score: a number above 0.
-    private String checkMaxScore(String key, String text) {
-        String message = "'" + key + "' must be a number above "
-                + MIN_MAX_SCORE + ".";
-
-        if (!isPlainNumber(text)) {
-            return message;
-        }
-
-        double number = Double.parseDouble(text);
-
-        if (number <= MIN_MAX_SCORE || Double.isInfinite(number)) {
             return message;
         }
 
@@ -658,14 +627,11 @@ public class SettingsService {
                     + ConfigKeys.QUESTION_FOLDER_SUFFIX);
             boolean hasFile = config.hasKey(prefix
                     + ConfigKeys.QUESTION_FILE_SUFFIX);
-            boolean hasMaxScore = config.hasKey(prefix
-                    + ConfigKeys.QUESTION_MAX_SCORE_SUFFIX);
 
-            if (!hasFolder || !hasFile || !hasMaxScore) {
+            if (!hasFolder || !hasFile) {
                 return "Question '" + id + "' needs the settings " + prefix
-                        + ConfigKeys.QUESTION_FOLDER_SUFFIX + ", "
-                        + ConfigKeys.QUESTION_FILE_SUFFIX + " and "
-                        + ConfigKeys.QUESTION_MAX_SCORE_SUFFIX + " first.";
+                        + ConfigKeys.QUESTION_FOLDER_SUFFIX + " and "
+                        + ConfigKeys.QUESTION_FILE_SUFFIX + " first.";
             }
         }
 

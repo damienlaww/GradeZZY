@@ -2,8 +2,9 @@
  * File: ReviewScreen.java
  *
  * Purpose: Step 3. One table of every student with a mark per question,
- * the total and a status, filtered by All, Needs review or Failed and
- * searchable by name or, where the backend can, inside the code.
+ * the total and a status, filtered by All, Needs review, Failed or No
+ * submission and searchable by name or, where the backend can, inside
+ * the code.
  * Clicking a student opens the student panel beside it.
  *
  * Where it fits: Replaces the old Results and Review Anomalies screens.
@@ -43,15 +44,20 @@ import javafx.scene.shape.Rectangle;
 import atlantafx.base.controls.CustomTextField;
 
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
+import gradezzy.model.Student;
 import gradezzy.model.Submission;
+import gradezzy.model.SubmissionStatus;
 import gradezzy.ui.backend.Capability;
+import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.RepairItem;
 import gradezzy.ui.backend.ResultState;
+import gradezzy.ui.backend.ReviewDecision;
 
 /**
  * The Review step.
@@ -113,6 +119,10 @@ public class ReviewScreen extends FlowScreen {
     // The corner of the table box (twice the 12 pixel radius)
     private static final double CORNER_ARC = 24.0;
 
+    // A class file problem is shown once only when at least this many
+    // graded students share it
+    private static final int MIN_SHARED_STUDENTS = 2;
+
     // Where the first question column goes, after tick and student
     private static final int FIRST_QUESTION_COLUMN = 2;
 
@@ -144,6 +154,8 @@ public class ReviewScreen extends FlowScreen {
     private final ToggleButton reviewButton =
             new ToggleButton("Needs review");
     private final ToggleButton failedButton = new ToggleButton("Failed");
+    private final ToggleButton missingButton =
+            new ToggleButton("No submission");
 
     // The arrow column, hidden while the student panel is open
     private final TableColumn<Submission, Submission> openColumn =
@@ -157,6 +169,19 @@ public class ReviewScreen extends FlowScreen {
     private final Label allCount = new Label();
     private final Label reviewCount = new Label();
     private final Label failedCount = new Label();
+    private final Label missingCount = new Label();
+
+    // The rows made for students on the score sheet with no submission
+    private final List<Submission> missingRows = new ArrayList<>();
+
+    // The run the missing rows were made for, or null
+    private GradingRun missingRowsRun = null;
+
+    // The rows made for chosen files grading skipped
+    private final List<Submission> skippedRows = new ArrayList<>();
+
+    // The run the skipped rows were made for, or null
+    private GradingRun skippedRowsRun = null;
 
     // The search field
     private final CustomTextField search = new CustomTextField();
@@ -164,12 +189,14 @@ public class ReviewScreen extends FlowScreen {
     // The line under the heading
     private final Label subtitle = Parts.subtitle("");
 
-    // A note when some students could not be graded
+    // A note when some students could not be graded, in the filter row
     private final HBox banner = Parts.row(Parts.GAP);
 
     // Says how to open a student and what ticking does, or, once any are
     // ticked, how many are ticked for export
     private final HBox guide = Parts.row(Parts.GAP_SMALL);
+    // One note per problem every student shares, above the table
+    private final VBox sharedBanner = new VBox(Parts.GAP_SMALL);
 
     // The details of the clicked student
     private final StudentPanel panel;
@@ -200,16 +227,19 @@ public class ReviewScreen extends FlowScreen {
         createSearch();
         createTable();
         banner.getStyleClass().add("banner");
+        banner.setMinWidth(0);
+        HBox.setHgrow(banner, Priority.SOMETIMES);
+        sharedBanner.getStyleClass().addAll("banner", "warn");
 
         HBox tools = Parts.row(Parts.GAP,
-                new Node[] {createFilterBar(), Parts.grow()});
+                new Node[] {createFilterBar(), banner, Parts.grow()});
         tools.getChildren().add(search);
         VBox.setMargin(tools, new Insets(Parts.GAP_SMALL / 2, 0, 0, 0));
 
         VBox header = new VBox(HEADING_GAP, Parts.heading(
                 "Review the results"), subtitle);
         guide.getStyleClass().add("review-guide");
-        main.getChildren().addAll(header, tools, guide, banner, table);
+        main.getChildren().addAll(header, tools, guide, sharedBanner, table);
         main.getStyleClass().add("review-main");
         VBox.setVgrow(table, Priority.ALWAYS);
         HBox.setHgrow(main, Priority.ALWAYS);
@@ -266,6 +296,8 @@ public class ReviewScreen extends FlowScreen {
                 "Out of " + Parts.mark(graded.getMaxTotal()) + ", the sum "
                 + "of the question marks.");
         rows.setAll(run.getSubmissions());
+        rows.addAll(findSkippedRows(run));
+        rows.addAll(findMissingRows(run));
         if (panel.getSubmission() != null
                 && !rows.contains(panel.getSubmission())) {
             closePanel();
@@ -315,11 +347,84 @@ public class ReviewScreen extends FlowScreen {
 
     // ------------------------------------------------------------ build
 
-    // Builds the All, Needs review and Failed buttons with their counts.
+    // Returns a "Could not open" row for each chosen file grading skipped,
+    // made once per run so a row stays the same object.
+    private List<Submission> findSkippedRows(GradingRun run) {
+        if (run == skippedRowsRun) {
+            return skippedRows;
+        }
+        skippedRows.clear();
+        skippedRowsRun = run;
+        for (ImportItem item : getState().getSkippedFiles(run)) {
+            String username = item.getUsername();
+            if (username.isEmpty()) {
+                username = item.getName();
+            }
+            Submission row = new Submission(username, run.getSection(),
+                    item.getPath());
+            row.setStatus(SubmissionStatus.FAILED);
+            row.setIngestFailure(ResultState.COULD_NOT_OPEN_PREFIX
+                    + item.getName() + ". " + item.getMessage());
+            skippedRows.add(row);
+        }
+        return skippedRows;
+    }
+
+    // Returns a "No submission" row for each student on the score sheet
+    // with no submission and no skipped file, made once per run. While
+    // the score sheet is read in the background there are none yet.
+    private List<Submission> findMissingRows(GradingRun run) {
+        if (run == missingRowsRun) {
+            return missingRows;
+        }
+        List<Student> missing = getState().getMissingStudents(run);
+        if (missing == null) {
+            getWindow().findMissingStudents(run, () -> missingFound());
+            return new ArrayList<>();
+        }
+        missingRows.clear();
+        missingRowsRun = run;
+        for (Student student : missing) {
+            if (!hasSkippedRow(student.getUsername())) {
+                missingRows.add(createMissingRow(run, student));
+            }
+        }
+        return missingRows;
+    }
+
+    // Makes the row of a student with no submission.
+    private Submission createMissingRow(GradingRun run, Student student) {
+        Submission row = new Submission(student.getUsername(),
+                run.getSection(), null);
+        row.setStudent(student);
+        row.setIngestFailure(ResultState.NO_SUBMISSION_REASON);
+        return row;
+    }
+
+    // Says whether a skipped file has a username.
+    private boolean hasSkippedRow(String username) {
+        for (Submission row : skippedRows) {
+            if (row.getUsername().equalsIgnoreCase(username)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Shows the students with no submission once the score sheet is read.
+    private void missingFound() {
+        if (isOnScreen()) {
+            onShow();
+        }
+    }
+
+    // Builds the All, Needs review, Failed and No submission buttons with
+    // their counts.
     private void createFilters() {
         ToggleGroup group = new ToggleGroup();
-        ToggleButton[] buttons = {allButton, reviewButton, failedButton};
-        Label[] counts = {allCount, reviewCount, failedCount};
+        ToggleButton[] buttons = {allButton, reviewButton, failedButton,
+            missingButton};
+        Label[] counts = {allCount, reviewCount, failedCount, missingCount};
         for (int index = 0; index < buttons.length; index++) {
             buttons[index].setToggleGroup(group);
             counts[index].getStyleClass().add("count");
@@ -334,7 +439,8 @@ public class ReviewScreen extends FlowScreen {
                 + "timed out or could not be graded.");
         allButton.getStyleClass().add("left-pill");
         reviewButton.getStyleClass().add("center-pill");
-        failedButton.getStyleClass().add("right-pill");
+        failedButton.getStyleClass().add("center-pill");
+        missingButton.getStyleClass().add("right-pill");
         group.selectedToggleProperty().addListener((observable, before,
                 after) -> filterClicked(before, after));
     }
@@ -356,7 +462,8 @@ public class ReviewScreen extends FlowScreen {
 
     // Puts the filter buttons side by side.
     private HBox createFilterBar() {
-        HBox bar = new HBox(allButton, reviewButton, failedButton);
+        HBox bar = new HBox(allButton, reviewButton, failedButton,
+                missingButton);
         bar.getStyleClass().add("segmented");
         bar.setMinWidth(HBox.USE_PREF_SIZE);
         return bar;
@@ -602,15 +709,19 @@ public class ReviewScreen extends FlowScreen {
         }
         int needReview = countNeedingReview();
         int failed = 0;
+        int missing = 0;
         for (Submission submission : rows) {
             if (Students.isFailed(Students.state(submission,
                     getBackend()))) {
                 failed++;
+            } else if (ResultState.isNoSubmission(submission)) {
+                missing++;
             }
         }
         allCount.setText(String.valueOf(rows.size()));
         reviewCount.setText(String.valueOf(needReview));
         failedCount.setText(String.valueOf(failed));
+        missingCount.setText(String.valueOf(missing));
 
         // The same figures as Export and Statistics: graded students only
         String average = "";
@@ -628,6 +739,7 @@ public class ReviewScreen extends FlowScreen {
                 + run.getAssessment().getName() + average);
 
         refreshBanner(run);
+        refreshSharedBanner(run);
         applyFilter();
         table.refresh();
         refreshActions();
@@ -669,6 +781,117 @@ public class ReviewScreen extends FlowScreen {
         }
     }
 
+    // Shows one note per problem in the class files that every graded
+    // student shares, such as a missing tester, and leaves out its card
+    // on each student.
+    private void refreshSharedBanner(GradingRun run) {
+        sharedBanner.getChildren().clear();
+        List<Anomaly> shared = findSharedProblems(run);
+        panel.setSharedProblems(shared);
+        for (Anomaly anomaly : shared) {
+            Label text = Parts.strong(anomaly.getMessage());
+            text.setWrapText(true);
+            text.setMinWidth(0);
+            HBox.setHgrow(text, Priority.ALWAYS);
+            HBox note = Parts.row(Parts.GAP, new Node[] {Parts.pill(
+                    "Every graded student", Tone.WARN), text});
+            if (isSharedOpen(anomaly)
+                    && getBackend().supports(Capability.FLAG_REVIEW)) {
+                note.getChildren().add(Parts.link("Mark as checked",
+                        () -> markSharedChecked(anomaly)));
+            }
+            sharedBanner.getChildren().add(note);
+        }
+        boolean show = !shared.isEmpty();
+        sharedBanner.setVisible(show);
+        sharedBanner.setManaged(show);
+    }
+
+    // Finds, once each, the class file problems with the same words on
+    // every graded student. Only a problem that is not the student's
+    // error counts, so students who made the same mistake do not.
+    private List<Anomaly> findSharedProblems(GradingRun run) {
+        List<Anomaly> shared = new ArrayList<>();
+        List<Submission> graded = new ArrayList<>();
+        for (Submission submission : run.getSubmissions()) {
+            if (ResultState.hasTotal(submission)) {
+                graded.add(submission);
+            }
+        }
+        if (graded.size() < MIN_SHARED_STUDENTS) {
+            return shared;
+        }
+
+        for (Anomaly anomaly : graded.get(0).getAnomalies()) {
+            if (anomaly.getType() == AnomalyType.INTERNAL_ERROR
+                    && isOnEvery(anomaly, graded)) {
+                shared.add(anomaly);
+            }
+        }
+        return shared;
+    }
+
+    // Says whether any student's copy of a shared problem is still open.
+    private boolean isSharedOpen(Anomaly shared) {
+        for (Anomaly anomaly : findSharedCopies(shared)) {
+            if (getBackend().needsReview(anomaly)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Marks every student's copy of a shared problem as checked.
+    private void markSharedChecked(Anomaly shared) {
+        int marked = 0;
+        for (Anomaly anomaly : findSharedCopies(shared)) {
+            if (getBackend().setDecision(anomaly,
+                    ReviewDecision.REVIEWED).isDone()) {
+                marked++;
+            }
+        }
+        getWindow().notify("Marked the problem as checked for "
+                + Parts.plural(marked, "student") + ". No mark changed.");
+        panel.refresh();
+        refreshStatuses();
+    }
+
+    // Lists each student's copy of a shared problem.
+    private List<Anomaly> findSharedCopies(Anomaly shared) {
+        List<Anomaly> copies = new ArrayList<>();
+        for (Submission submission : rows) {
+            for (Anomaly anomaly : submission.getAnomalies()) {
+                if (anomaly.getType() == shared.getType()
+                        && anomaly.getMessage().equals(
+                                shared.getMessage())) {
+                    copies.add(anomaly);
+                }
+            }
+        }
+        return copies;
+    }
+
+    // Says whether every student has a problem of the same type and words.
+    private boolean isOnEvery(Anomaly anomaly, List<Submission> students) {
+        for (Submission submission : students) {
+            if (!hasSameProblem(submission, anomaly)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Says whether a student has a problem of the same type and words.
+    private boolean hasSameProblem(Submission submission, Anomaly anomaly) {
+        for (Anomaly other : submission.getAnomalies()) {
+            if (other.getType() == anomaly.getType()
+                    && other.getMessage().equals(anomaly.getMessage())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Returns the Retry link, or why this run cannot be retried.
     private Node retryAction(GradingRun run, int couldNot) {
         String them = "them";
@@ -694,9 +917,11 @@ public class ReviewScreen extends FlowScreen {
         String text = search.getText().trim().toLowerCase();
         boolean onlyReview = reviewButton.isSelected();
         boolean onlyFailed = failedButton.isSelected();
+        boolean onlyMissing = missingButton.isSelected();
         filtered.setPredicate(submission -> passesFilter(submission, text,
-                onlyReview, onlyFailed));
-        placeholder.setText(emptyNote(text, onlyReview, onlyFailed));
+                onlyReview, onlyFailed, onlyMissing));
+        placeholder.setText(emptyNote(text, onlyReview, onlyFailed,
+                onlyMissing));
     }
 
     /**
@@ -706,10 +931,15 @@ public class ReviewScreen extends FlowScreen {
      * @param text the search text in lower case, or an empty string
      * @param onlyReview true when only students to review are shown
      * @param onlyFailed true when only students who failed are shown
+     * @param onlyMissing true when only students with no submission are
+     *        shown
      * @return true when the student is shown
      */
     private boolean passesFilter(Submission submission, String text,
-            boolean onlyReview, boolean onlyFailed) {
+            boolean onlyReview, boolean onlyFailed, boolean onlyMissing) {
+        if (onlyMissing && !ResultState.isNoSubmission(submission)) {
+            return false;
+        }
         if (onlyReview
                 && Students.openCount(submission, getBackend()) == 0) {
             return false;
@@ -727,7 +957,7 @@ public class ReviewScreen extends FlowScreen {
 
     // Returns the note shown when no student passes the filter.
     private String emptyNote(String text, boolean onlyReview,
-            boolean onlyFailed) {
+            boolean onlyFailed, boolean onlyMissing) {
         if (!text.isEmpty()) {
             return "No student matches \"" + search.getText().trim()
                     + "\".";
@@ -735,20 +965,39 @@ public class ReviewScreen extends FlowScreen {
             return "Every student is checked.";
         } else if (onlyFailed) {
             return "No student failed to grade.";
+        } else if (onlyMissing) {
+            return "Every student on the score sheet has a submission.";
         }
         return "No students in this run.";
     }
 
     // ------------------------------------------------------------ panel
 
-    // Shows a student in the panel.
+    // Shows a student in the panel. A row made on Review has no work to
+    // show, so the panel closes and a notice says why instead.
     private void showStudent(Submission submission) {
         if (submission == null) {
+            return;
+        }
+        if (ResultState.isMadeOnReview(submission)) {
+            panel.show(null);
+            panel.setVisible(false);
+            panel.setManaged(false);
+            getWindow().notify(describeMadeRow(submission));
             return;
         }
         panel.show(submission);
         panel.setVisible(true);
         panel.setManaged(true);
+    }
+
+    // Says why a row made on Review has no marks.
+    private String describeMadeRow(Submission submission) {
+        if (ResultState.isSkippedFile(submission)) {
+            return submission.getIngestFailure();
+        }
+        return submission.getUsername() + " is on the score sheet but has "
+                + "no submission in this run.";
     }
 
     /**
@@ -806,8 +1055,16 @@ public class ReviewScreen extends FlowScreen {
     private void tickAll(boolean ticked) {
         List<Submission> selected = getState().getSelected();
         selected.clear();
-        if (ticked) {
-            selected.addAll(filtered);
+        if (!ticked) {
+            table.refresh();
+            refreshActions();
+            return;
+        }
+        // A row made on Review has no marks to export
+        for (Submission submission : filtered) {
+            if (!ResultState.isMadeOnReview(submission)) {
+                selected.add(submission);
+            }
         }
         table.refresh();
         refreshActions();

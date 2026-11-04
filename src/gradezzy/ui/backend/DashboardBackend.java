@@ -23,6 +23,7 @@ import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.SavedAssessment;
 import gradezzy.model.Section;
+import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.stats.StatisticsSummary;
@@ -73,6 +74,38 @@ public interface DashboardBackend {
      * @return the assessment
      */
     Assessment getAssessment();
+
+    /**
+     * Returns the assessment with each question's maximum mark read from
+     * the testers in a folder, as a batch graded with them would use.
+     *
+     * @param testersDirectory the batch's tester folder, or null for the
+     *        one in Settings
+     * @return the assessment
+     */
+    Assessment getAssessment(Path testersDirectory);
+
+    /**
+     * Lists the testers in a folder that have no "score += <number>"
+     * line, so their question has no maximum mark. Grading cannot start
+     * while this list is not empty.
+     *
+     * @param testersDirectory the tester folder, or null for the one in
+     *        Settings
+     * @return one sentence per problem, empty when every tester is fine
+     */
+    List<String> checkMaxScores(Path testersDirectory);
+
+    /**
+     * Reads the score sheet's Calculated Final Grade Denominator, which
+     * the question maximums should add up to.
+     *
+     * @param scoreSheetFile the score sheet, or null for the one in
+     *        Settings
+     * @return the denominator, or a negative number when the sheet gives
+     *         no single one
+     */
+    double getScoreSheetDenominator(Path scoreSheetFile);
 
     /**
      * Returns the time limit for one tester run.
@@ -132,6 +165,18 @@ public interface DashboardBackend {
      */
     ImportItem inspect(InputKind kind, Path path);
 
+    /**
+     * Lists what is wrong with a tester folder before grading: questions
+     * with no tester, data files that are missing and testers that do not
+     * compile with the starter code. It compiles, so it takes seconds.
+     *
+     * @param testersDirectory the tester folder
+     * @param starterDirectory the starter folder chosen on Set up, or null
+     *        for the one in Settings
+     * @return one sentence per problem, empty when the folder is fine
+     */
+    List<String> checkTesters(Path testersDirectory, Path starterDirectory);
+
     // --------------------------------------------------------- grading
 
     /**
@@ -177,6 +222,16 @@ public interface DashboardBackend {
      * @return true when its failed submissions can be graded again
      */
     boolean canRetryFailed(GradingRun gradingRun);
+
+    /**
+     * Lists the students on the run's score sheet who have no submission
+     * in the run.
+     *
+     * @param gradingRun the run
+     * @return the students, in score sheet order; empty when the score
+     *         sheet cannot be read
+     */
+    List<Student> listMissingStudents(GradingRun gradingRun);
 
     /**
      * Runs one question's tester again and replaces only that result.

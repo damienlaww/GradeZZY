@@ -93,7 +93,9 @@ public final class Students {
     public static Label pill(Submission submission,
             DashboardBackend backend) {
         ResultState state = state(submission, backend);
-        if (state == ResultState.NEEDS_REVIEW) {
+        if (ResultState.isSkippedFile(submission)) {
+            return Parts.pill("Could not open", Tone.BAD);
+        } else if (state == ResultState.NEEDS_REVIEW) {
             int open = openCount(submission, backend);
             return Parts.pill(Parts.plural(open, "thing") + " to check",
                     Tone.WARN);
@@ -157,6 +159,8 @@ public final class Students {
             return "Timed out";
         } else if (state == ResultState.COULD_NOT_GRADE) {
             return "Could not grade";
+        } else if (state == ResultState.NO_SUBMISSION) {
+            return "No submission";
         }
         return "Waiting";
     }

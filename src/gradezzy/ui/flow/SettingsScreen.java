@@ -493,7 +493,9 @@ public class SettingsScreen extends FlowScreen {
 
         String description = "Folder, file and maximum mark of each "
                 + "question of " + assessment.getName() + ". Total "
-                + Parts.mark(assessment.getMaxTotal()) + ".";
+                + Parts.mark(assessment.getMaxTotal()) + ". Each maximum "
+                + "is the sum of the \"score += <number>\" lines in the "
+                + "question's tester.";
         Label name = Parts.strong("Questions");
         Label help = Parts.muted(description);
         help.getStyleClass().add("small-text");
