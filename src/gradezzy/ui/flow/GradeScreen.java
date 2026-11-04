@@ -19,6 +19,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
@@ -33,6 +37,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 
 import gradezzy.config.ConfigKeys;
 import gradezzy.grading.ProgressListener;
@@ -56,6 +61,11 @@ public class GradeScreen extends FlowScreen
         "looking for answers to flag", "copying the testers",
         "compiling", "running the tests", "adding up the marks",
         "saving"};
+
+    // The shortest and longest glide of the bar to a new share, in
+    // milliseconds. In between it takes as long as one student takes.
+    private static final double MIN_GLIDE_MILLIS = 250.0;
+    private static final double MAX_GLIDE_MILLIS = 1500.0;
 
     // Milliseconds in a second
     private static final double MILLIS_PER_SECOND = 1000.0;
@@ -118,6 +128,13 @@ public class GradeScreen extends FlowScreen
 
     // The share of students done, from 0 to 1
     private final DoubleProperty progress = new SimpleDoubleProperty(0);
+
+    // The share the bar shows: it glides after progress, so it keeps
+    // moving between students instead of jumping when one finishes
+    private final DoubleProperty shownProgress = new SimpleDoubleProperty(0);
+
+    // The bar's glide to the newest share, or null when it is still
+    private Timeline progressGlide = null;
 
     // The bell curve of the marks so far
     private final BellCurveChart chart = new BellCurveChart(true);
@@ -327,7 +344,8 @@ public class GradeScreen extends FlowScreen
         StackPane bar = new StackPane(fill);
         bar.getStyleClass().add("score-track");
         bar.setAlignment(Pos.CENTER_LEFT);
-        fill.maxWidthProperty().bind(bar.widthProperty().multiply(progress));
+        fill.maxWidthProperty().bind(bar.widthProperty().multiply(
+                shownProgress));
         fill.minWidthProperty().bind(fill.maxWidthProperty());
         return Parts.card(null, new Node[] {top, reason, bar});
     }
@@ -618,9 +636,47 @@ public class GradeScreen extends FlowScreen
             share = (double) finished / total;
         }
         progress.set(share);
+        glideTo(share);
         updateTimeLeft();
         updateChart();
         updateRows();
+    }
+
+    // Moves the bar to a new share. With Subtle animations on, it glides
+    // there at a steady speed from where it is, taking about as long as
+    // one student takes, so it is still moving when the next one ends.
+    // Going back, as when a new run starts, it jumps.
+    private void glideTo(double target) {
+        if (progressGlide != null) {
+            progressGlide.stop();
+            progressGlide = null;
+        }
+        if (!isAnimated() || target <= shownProgress.get()) {
+            shownProgress.set(target);
+            return;
+        }
+        KeyValue end = new KeyValue(shownProgress, target,
+                Interpolator.LINEAR);
+        progressGlide = new Timeline(new KeyFrame[] {new KeyFrame(
+                Duration.millis(findGlideMillis()), new KeyValue[] {end})});
+        progressGlide.play();
+    }
+
+    // Returns how long the bar glides: the time one student has taken so
+    // far, kept between MIN_GLIDE_MILLIS and MAX_GLIDE_MILLIS.
+    private double findGlideMillis() {
+        if (finished <= 0) {
+            return MIN_GLIDE_MILLIS;
+        }
+        double each = (System.currentTimeMillis() - startedAt)
+                / (double) finished;
+        return Math.max(MIN_GLIDE_MILLIS, Math.min(MAX_GLIDE_MILLIS, each));
+    }
+
+    // Says whether Subtle animations is on in Settings.
+    private boolean isAnimated() {
+        return Boolean.parseBoolean(getBackend().getSetting(
+                ConfigKeys.ANIMATIONS_ENABLED));
     }
 
     // Works out about how long is left from the time taken so far.
