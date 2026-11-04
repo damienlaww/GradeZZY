@@ -435,6 +435,11 @@ public class FlowSelfTest {
                 "clicking Q1a says a test ran too long");
         press(row == null ? null : SceneFinder.link(row, "Grade "
                 + DemoData.TIMEOUT_QUESTION + " again"), "Grade Q1a again");
+        Node sheet = sheet();
+        check(sheet != null, "Grade Q1a again asks first");
+        if (sheet != null) {
+            press(SceneFinder.button(sheet, "Grade again"), "Grade again");
+        }
         check(q1a != null && !q1a.isTimedOut()
                 && q1a.getScore() == q1a.getQuestion().getMaxScore(),
                 "Q1a passed every test");

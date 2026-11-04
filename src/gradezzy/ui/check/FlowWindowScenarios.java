@@ -266,6 +266,9 @@ public class FlowWindowScenarios {
                 + "Discard");
         test.endScenario("10-settings-changed");
         test.clickText("Discard");
+        test.check(test.waitFor(() -> window.isSheetOpen()),
+                "Discard asks first");
+        test.clickText("Discard changes");
         test.check(test.waitFor(() -> isOn(toggle) == before
                 && discardDisabled()), "Discard puts the switch back");
         test.endScenario("10-settings");
