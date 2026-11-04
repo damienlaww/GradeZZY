@@ -8,7 +8,9 @@
  */
 package gradezzy.grading;
 
+import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 
 import gradezzy.config.ConfigKeys;
@@ -22,8 +24,10 @@ import gradezzy.model.QuestionResult;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 import gradezzy.model.TestCaseResult;
+import gradezzy.testcase.FolderSnapshot;
 import gradezzy.testcase.QuestionWorkspace;
 import gradezzy.testcase.TesterFile;
+import gradezzy.util.TextUtils;
 
 /**
  * Runs each tester with a time limit and parses its output.
@@ -50,6 +54,13 @@ public class ExecuteStage implements GradingStage {
     // What the instructor can do about a total its cases do not support
     private static final String TOTAL_TOO_HIGH_ACTION =
             "Read the code on Review: it may change the tester's score.";
+
+    // What the instructor can do about files changed before a tester ran
+    private static final String FILES_CHANGED_ACTION = "Read the code on "
+            + "Review. The mark comes from the original files.";
+
+    // Separates the file names in a message
+    private static final String NAME_SEPARATOR = ", ";
 
     // Allowed rounding gap when a printed total is compared with the cap
     private static final double SCORE_TOLERANCE = 0.000001;
@@ -112,9 +123,14 @@ public class ExecuteStage implements GradingStage {
         Question question = result.getQuestion();
         TesterFile tester = TesterFile.findFor(context.getTesters(),
                 question.getId());
+        if (tester == null) {
+            return;
+        }
+
+        restoreFiles(submission, question, tester);
         // The copy the compile stage made for this question only
         Path folder = QuestionWorkspace.find(submission, question);
-        if (tester == null || folder == null) {
+        if (folder == null) {
             return;
         }
 
@@ -168,6 +184,46 @@ public class ExecuteStage implements GradingStage {
                     + "code " + run.getExitCode() + "). " + passCount(parsed)
                     + " case(s) passed and were scored.",
                     RUNTIME_ERROR_ACTION);
+        }
+    }
+
+    /**
+     * Puts back the compiled files of a question as they were after
+     * compiling, and flags any that were changed. Code run for an earlier
+     * question may have swapped them, and off macOS nothing stops it. Only
+     * a flag: the real tester then runs and sets the mark.
+     *
+     * @param submission the submission
+     * @param question the question
+     * @param tester the tester of the question
+     * @throws GradingException if the files cannot be put back
+     */
+    private void restoreFiles(Submission submission, Question question,
+            TesterFile tester) throws GradingException {
+        FolderSnapshot snapshot = tester.takeSnapshot(
+                submission.getUsername());
+        if (snapshot == null) {
+            return;
+        }
+
+        try {
+            List<String> changed = snapshot.restore();
+            if (!changed.isEmpty()) {
+                submission.addAnomaly(new Anomaly(
+                        ID_PREFIX + UUID.randomUUID(),
+                        AnomalyType.HARD_CODED_ANSWER, Severity.WARNING,
+                        submission.getUsername(), "Files in the "
+                        + question.getId() + " folder changed after "
+                        + "compiling, before its tester ran: "
+                        + TextUtils.join(NAME_SEPARATOR, changed)
+                        + ". Code run for another question may have changed "
+                        + "them. The originals were put back.",
+                        FILES_CHANGED_ACTION));
+            }
+        } catch (IOException exception) {
+            throw new GradingException("The files of " + question.getId()
+                    + " could not be put back: " + exception.getMessage(),
+                    exception);
         }
     }
 
