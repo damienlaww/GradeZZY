@@ -1,8 +1,8 @@
 /*
  * File: FlowWindow.java
  *
- * Purpose: The window: a top bar with the tabs Home, Marking, Statistics,
- * Runs and Settings; under it, on Marking only, the row of four steps; one
+ * Purpose: The window: a top bar with the tabs Home, Grading, Statistics,
+ * Runs and Settings; under it, on Grading only, the row of four steps; one
  * screen at a time in the middle; and the action bar at the bottom on the
  * screens that use it. Opens Help and small sheets over the screen, and
  * switches the assessment in use.
@@ -25,6 +25,8 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContentDisplay;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -111,7 +113,7 @@ public class FlowWindow {
     // The four steps
     private final StepBar stepBar = new StepBar(step -> show(step));
 
-    // The row that holds the steps, shown on Marking only
+    // The row that holds the steps, shown on Grading only
     private final HBox stepRow = new HBox(stepBar);
 
     // The bottom bar
@@ -127,7 +129,7 @@ public class FlowWindow {
     // The notice that fades in at the bottom
     private final Label notice = new Label();
 
-    // The step Marking shows
+    // The step Grading shows
     private Step currentStep = Step.SET_UP;
 
     // The tab on screen
@@ -192,7 +194,7 @@ public class FlowWindow {
     }
 
     /**
-     * Shows a step on the Marking tab, if the instructor may open it.
+     * Shows a step on the Grading tab, if the instructor may open it.
      *
      * @param step the step
      */
@@ -206,7 +208,7 @@ public class FlowWindow {
     }
 
     /**
-     * Shows a tab. Marking shows the step the instructor was on.
+     * Shows a tab. Grading shows the step the instructor was on.
      *
      * @param page the tab
      */
@@ -407,7 +409,7 @@ public class FlowWindow {
     }
 
     /**
-     * Forgets the run shown on Review and Export, so Marking starts again
+     * Forgets the run shown on Review and Export, so Grading starts again
      * on Set up. Called after a restore replaced the saved results.
      */
     public void forgetRun() {
@@ -429,7 +431,7 @@ public class FlowWindow {
     }
 
     /**
-     * Returns the step the Marking tab shows.
+     * Returns the step the Grading tab shows.
      *
      * @return the step
      */
@@ -514,8 +516,11 @@ public class FlowWindow {
     public void confirm(String title, Node content, String okText,
             Runnable onOk) {
         Button cancel = Parts.secondary("Cancel", () -> closeSheet());
-        Button ok = Parts.primary(okText);
-        ok.setOnAction(event -> confirmed(onOk));
+        // The two buttons have the same shape; the one that goes ahead
+        // is filled, in red when it deletes something
+        Button ok = Parts.secondary(okText, () -> confirmed(onOk));
+        ok.getStyleClass().add(isDestructive(okText) ? "confirm-danger"
+                : "confirm-ok");
         HBox buttons = Parts.row(Parts.GAP,
                 new Node[] {Parts.grow(), cancel, ok});
         VBox body = new VBox(Parts.GAP, Parts.title(title), content,
@@ -578,6 +583,13 @@ public class FlowWindow {
     // Closes the window without asking again.
     private void closeWindow() {
         frame.getScene().getWindow().hide();
+    }
+
+    // Says whether a confirm button's words delete or remove something.
+    private static boolean isDestructive(String okText) {
+        String words = okText.toLowerCase(java.util.Locale.ROOT);
+        return words.startsWith("delete") || words.startsWith("remove")
+                || words.startsWith("discard");
     }
 
     /**
@@ -689,12 +701,47 @@ public class FlowWindow {
      * @param message the notice
      */
     public void notify(String message) {
+        showNotice(message, null, null);
+    }
+
+    /**
+     * Shows a short notice with a link that takes the change back, such
+     * as "Marked as checked. Undo". It stays a little longer, so there is
+     * time to press the link.
+     *
+     * @param message the notice
+     * @param actionText the link's words, such as "Undo"
+     * @param action what the link does
+     */
+    public void notify(String message, String actionText, Runnable action) {
+        showNotice(message, actionText, action);
+    }
+
+    // Shows the notice, with a link when an action is given.
+    private void showNotice(String message, String actionText,
+            Runnable action) {
         notice.setText(message);
         notice.setVisible(true);
+        Duration time = NOTICE_TIME;
+        if (action == null) {
+            notice.setGraphic(null);
+            notice.setMouseTransparent(true);
+        } else {
+            Hyperlink link = new Hyperlink(actionText);
+            link.getStyleClass().add("notice-action");
+            link.setOnAction(event -> {
+                notice.setVisible(false);
+                action.run();
+            });
+            notice.setGraphic(link);
+            notice.setContentDisplay(ContentDisplay.RIGHT);
+            notice.setMouseTransparent(false);
+            time = NOTICE_TIME.multiply(2);
+        }
         if (noticeTimer != null) {
             noticeTimer.stop();
         }
-        noticeTimer = new PauseTransition(NOTICE_TIME);
+        noticeTimer = new PauseTransition(time);
         noticeTimer.setOnFinished(event -> notice.setVisible(false));
         noticeTimer.play();
     }
@@ -818,7 +865,7 @@ public class FlowWindow {
     }
 
     /**
-     * Returns the screen of a tab other than Marking, creating it if
+     * Returns the screen of a tab other than Grading, creating it if
      * needed. Used by the developer checks.
      *
      * @param page Home, Statistics, Runs or Settings
@@ -861,16 +908,13 @@ public class FlowWindow {
                 + inUse.getName() + ".");
     }
 
-    // Returns the start of a new assessment: no name and one empty
-    // question, with only the unrenamed folder names of the one in use,
-    // which rarely change from one test to the next.
-    private SavedAssessment newAssessment() {
+    // Returns the start of a new assessment: every field empty, for the
+    // module chosen now.
+    SavedAssessment newAssessment() {
+        // Every field starts empty: the instructor fills it in, or the
+        // chosen folders do. It belongs to the module chosen now.
         SavedAssessment fresh = new SavedAssessment();
-        Assessment inUse = backend.getAssessment();
-        if (inUse != null) {
-            fresh.getPlaceholderFolderNames().addAll(
-                    inUse.getPlaceholderFolderNames());
-        }
+        fresh.setModuleCode(state.getModuleCode());
         return fresh;
     }
 
@@ -917,7 +961,7 @@ public class FlowWindow {
         return new SetUpScreen(this);
     }
 
-    // Creates the screen of a tab other than Marking.
+    // Creates the screen of a tab other than Grading.
     private FlowScreen createPage(Page page) {
         if (page == Page.HOME) {
             return new HomeScreen(this);

@@ -49,6 +49,7 @@ import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.ImportState;
 import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.RepairItem;
+import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.demo.DemoBackend;
 import gradezzy.ui.demo.DemoData;
@@ -238,7 +239,7 @@ public class FlowSelfTest {
     private void flowImport() {
         check(window.getCurrentPage() == Page.HOME, "the window opens on "
                 + "Home");
-        press(tab("Marking"), "the Marking tab");
+        press(tab("Grading"), "the Grading tab");
         check(window.getCurrentStep() == Step.SET_UP, "Set up is shown");
         Button start = window.getActionBar().getPrimaryButton();
         check("Start grading".equals(start.getText()) && start.isDisabled(),
@@ -309,7 +310,8 @@ public class FlowSelfTest {
                 + STEPS_BEFORE_STAGE_CHECK);
         settle();
         String now = nowText();
-        check(now.startsWith("Now: ") && now.contains(" · "),
+        check(now.startsWith("Now grading ")
+                && !SceneFinder.text(root(), "grade-now-stage").isEmpty(),
                 "the screen says who is being graded and what is happening "
                 + "(it says \"" + now + "\")");
         backend.stepGrading(STEPS_PER_SUBMISSION - STEPS_BEFORE_STAGE_CHECK);
@@ -395,12 +397,12 @@ public class FlowSelfTest {
             check(card != null && SceneFinder.shows(card, "Fixed for you"),
                     "the panel shows the fix as Fixed for you");
             press(card == null ? null : SceneFinder.button(card,
-                    "Approve"), "Approve");
+                    "Keep fix"), "Keep fix");
             check(fix.getFixStatus() == FixStatus.APPROVED,
                     "the fix was approved");
             card = cardOf(fix);
-            check(card != null && SceneFinder.shows(card, "Fix approved"),
-                    "the panel shows Fix approved");
+            check(card != null && SceneFinder.shows(card, "Fix kept"),
+                    "the panel shows Fix kept");
             approvedFix = fix;
         }
 
@@ -429,18 +431,177 @@ public class FlowSelfTest {
                 "Looks fine");
         check(backend.getDecision(flag) == ReviewDecision.REJECTED,
                 "the flag was rejected");
+        ButtonBase noticeUndo = noticeAction();
+        check(noticeUndo != null, "the notice offers Undo");
+        press(noticeUndo, "Undo in the notice");
+        check(backend.getDecision(flag) == ReviewDecision.OPEN,
+                "Undo in the notice put the flag back to open");
+        card = cardOf(flag);
+        press(card == null ? null : SceneFinder.button(card, "Looks fine"),
+                "Looks fine again");
+        check(backend.getDecision(flag) == ReviewDecision.REJECTED,
+                "the flag was rejected again");
         check(panel != null && panel.getVvalue() > panel.getVmin(),
                 "the panel kept its place after Looks fine (it is at "
                 + (panel == null ? "no panel" : panel.getVvalue()) + ")");
         card = cardOf(flag);
-        press(card == null ? null : SceneFinder.button(card, "Reopen"),
-                "Reopen");
+        press(card == null ? null : SceneFinder.button(card, "Undo"),
+                "Undo");
         check(backend.getDecision(flag) == ReviewDecision.OPEN,
                 "Reopen put the flag back to open");
         card = cardOf(flag);
         check(card != null && SceneFinder.button(card, "Looks fine")
                 != null, "the flag can be decided again");
         reopenedFlag = flag;
+        checkSettledIsGraded(run);
+    }
+
+    // A student whose code did not compile shows Graded once every issue
+    // is settled, and Open code on the issue opens their code.
+    private void checkSettledIsGraded(GradingRun run) {
+        Submission compiled = null;
+        Anomaly compileError = null;
+        for (Submission submission : run.getSubmissions()) {
+            for (Anomaly anomaly : submission.getAnomalies()) {
+                if (compileError == null
+                        && anomaly.getType() == AnomalyType.COMPILE_ERROR) {
+                    compiled = submission;
+                    compileError = anomaly;
+                }
+            }
+        }
+        check(compileError != null, "a compile error is flagged");
+        if (compileError == null) {
+            return;
+        }
+        openStudent(compiled.getUsername());
+        Node card = cardOf(compileError);
+        press(card == null ? null : SceneFinder.button(card, "Open code"),
+                "Open code");
+        check(window.isSheetOpen(), "Open code opened the code sheet");
+        Node codeSheet = sheet();
+        Button inSheet = codeSheet == null ? null
+                : SceneFinder.button(codeSheet, "Mark as checked");
+        check(inSheet != null, "the code sheet offers Mark as checked");
+        press(inSheet, "Mark as checked in the code sheet");
+        check(!window.isSheetOpen() && backend.getDecision(compileError)
+                == ReviewDecision.REVIEWED, "deciding in the code sheet "
+                + "closes it and keeps the decision");
+        press(noticeAction(), "Undo in the notice");
+        check(backend.getDecision(compileError) == ReviewDecision.OPEN,
+                "Undo took back the decision made in the code sheet");
+        window.closeSheet();
+        settle();
+
+        List<Anomaly> settled = new ArrayList<>();
+        for (Anomaly anomaly : compiled.getAnomalies()) {
+            if (backend.needsReview(anomaly)) {
+                backend.setDecision(anomaly, ReviewDecision.REVIEWED);
+                settled.add(anomaly);
+            }
+        }
+        check(Students.state(compiled, backend) == ResultState.COMPLETED,
+                "a settled compile error shows Graded (it shows "
+                + Students.state(compiled, backend) + ")");
+        check(!Students.needsLook(compiled, backend),
+                "a settled student no longer needs a look");
+        for (Anomaly anomaly : settled) {
+            backend.setDecision(anomaly, ReviewDecision.OPEN);
+        }
+        window.refreshScreen();
+        settle();
+        checkMarkAll(run);
+    }
+
+    // Mark all as checked settles every open flag, and Undo puts them
+    // back.
+    private void checkMarkAll(GradingRun run) {
+        Button markAll = null;
+        for (Button button : SceneFinder.ofType(window.getActionBar(),
+                Button.class)) {
+            if (button.getText().startsWith("Mark all ")) {
+                markAll = button;
+            }
+        }
+        check(markAll != null, "Review offers Mark all as checked");
+        if (markAll == null) {
+            return;
+        }
+        int before = countOpenFlags(run);
+        press(markAll, "Mark all as checked");
+        Node sheet = sheet();
+        press(sheet == null ? null : SceneFinder.button(sheet,
+                "Mark all as checked"), "Mark all as checked in the sheet");
+        check(countOpenFlags(run) == 0, "every flag is checked (still "
+                + countOpenFlags(run) + " open)");
+        check(actionBarButton("Mark all ") == null, "Mark all is gone once "
+                + "nothing is left to check");
+        press(noticeAction(), "Undo in the notice");
+        check(countOpenFlags(run) == before, "Undo put the " + before
+                + " flags back (now " + countOpenFlags(run) + ")");
+        checkActivityUndo(run);
+    }
+
+    // A flag marked as checked is in the activity log, and Undo there
+    // puts it back to check.
+    private void checkActivityUndo(GradingRun run) {
+        Anomaly flag = null;
+        for (Submission submission : run.getSubmissions()) {
+            for (Anomaly anomaly : submission.getAnomalies()) {
+                if (flag == null && anomaly.getFixStatus()
+                        != FixStatus.APPLIED && backend.needsReview(anomaly)) {
+                    flag = anomaly;
+                }
+            }
+        }
+        if (flag == null) {
+            return;
+        }
+        backend.setDecision(flag, ReviewDecision.REVIEWED);
+        boolean logged = false;
+        for (gradezzy.model.AuditEntry entry : backend.listAuditEntries()) {
+            logged = logged || ReviewDecision.AUDIT_CHECKED.equals(
+                    entry.getAction());
+        }
+        check(logged, "Marked as checked is in the activity log");
+        window.showPage(Page.RUNS);
+        settle();
+        ((gradezzy.ui.flow.RunsScreen) window.getPageScreen(Page.RUNS))
+                .showActivity();
+        settle();
+        Button undo = SceneFinder.button(root(), "Undo");
+        check(undo != null, "the activity log offers Undo");
+        press(undo, "Undo in the activity log");
+        check(backend.getDecision(flag) == ReviewDecision.OPEN,
+                "Undo in the activity log put the flag back to check");
+        window.show(Step.REVIEW);
+        settle();
+    }
+
+    // Returns the action bar button whose words start with a text, or
+    // null.
+    private Button actionBarButton(String start) {
+        for (Button button : SceneFinder.ofType(window.getActionBar(),
+                Button.class)) {
+            if (button.isVisible() && button.getText().startsWith(start)) {
+                return button;
+            }
+        }
+        return null;
+    }
+
+    // Counts the open flags and problems that are not fixes.
+    private int countOpenFlags(GradingRun run) {
+        int open = 0;
+        for (Submission submission : run.getSubmissions()) {
+            for (Anomaly anomaly : submission.getAnomalies()) {
+                if (anomaly.getFixStatus() != FixStatus.APPLIED
+                        && backend.needsReview(anomaly)) {
+                    open++;
+                }
+            }
+        }
+        return open;
     }
 
     // ------------------------------------------------------------ flow 4
@@ -505,7 +666,9 @@ public class FlowSelfTest {
         }
 
         String problem = trySave(sheet, Parts.mark(ADJUSTED_TO), "");
-        check(problem.contains("reason"), "a blank reason is refused");
+        Button save = SceneFinder.button(sheet, "Save");
+        check(save != null && save.isDisabled() && window.isSheetOpen(),
+                "Save is off while the reason is blank");
         problem = trySave(sheet, TOO_HIGH, REASON);
         check(problem.contains("from 0 to"), "a mark above the maximum is "
                 + "refused");
@@ -516,7 +679,7 @@ public class FlowSelfTest {
         QuestionResult q1b = result(bravo, ADJUSTED_QUESTION);
         check(q1b != null && q1b.getScore() == ADJUSTED_TO,
                 "Q1b has the new mark");
-        check(backend.listAdjustments(bravo).size() == 1,
+        check(backend.listAdjustments(window.getState().getRun(), bravo).size() == 1,
                 "the change and its reason are kept");
         String change = ADJUSTED_QUESTION + " changed from "
                 + Parts.mark(ADJUSTED_FROM) + " to " + Parts.mark(ADJUSTED_TO);
@@ -534,7 +697,7 @@ public class FlowSelfTest {
         press(SceneFinder.button(line, "Undo"), "Undo");
         check(q1b != null && q1b.getScore() == ADJUSTED_FROM,
                 "Undo restored the earlier mark");
-        check(backend.listAdjustments(bravo).isEmpty(),
+        check(backend.listAdjustments(window.getState().getRun(), bravo).isEmpty(),
                 "Undo removed the change");
         check(SceneFinder.label(root(), change) == null,
                 "the change is no longer listed");
@@ -556,14 +719,16 @@ public class FlowSelfTest {
         tick(DemoData.TIMEOUT_USERNAME);
         check(window.getState().getSelected().size() == TICKED_COUNT,
                 "two students are ticked");
-        check(statusText().contains(TICKED_COUNT + " students ticked for "
-                + "export"), "the action bar says two students are ticked");
-        check(SceneFinder.shows(root(), TICKED_COUNT + " students ticked "
-                + "for export") && SceneFinder.link(root(), "Clear ticks")
-                != null, "the band over the table says two are ticked and "
-                + "offers Clear ticks");
+        check(statusText().contains(TICKED_COUNT + " students ticked."),
+                "the action bar says two students are ticked");
+        check(SceneFinder.shows(root(), TICKED_COUNT + " students ticked")
+                && SceneFinder.link(root(), "Clear ticks") != null
+                && SceneFinder.link(root(), "Export only these") != null,
+                "the band over the table says two are ticked and offers "
+                + "Export only these and Clear ticks");
 
-        press(window.getActionBar().getPrimaryButton(), "Continue to export");
+        press(SceneFinder.link(root(), "Export only these"),
+                "Export only these");
         Node sheet = sheet();
         if (sheet != null) {
             press(SceneFinder.button(sheet, "Continue anyway"),
@@ -587,20 +752,19 @@ public class FlowSelfTest {
         choose(EMPTY_SECTION, DemoData.SAMPLE_SECTION);
         checkFigures(run);
 
-        press(tab("Marking"), "the Marking tab");
+        press(tab("Grading"), "the Grading tab");
         check(window.getCurrentStep() == Step.EXPORT,
-                "Marking went back to Export");
+                "Grading went back to Export");
         RadioButton ticked = null;
         for (RadioButton radio : SceneFinder.ofType(root(),
                 RadioButton.class)) {
-            if (radio.getText().startsWith("Only the students ticked")) {
+            if (radio.getText().startsWith("Only the students I choose")) {
                 ticked = radio;
             }
         }
-        check(ticked != null && !ticked.isDisabled()
+        check(ticked != null && ticked.isSelected()
                 && ticked.getText().endsWith("(" + TICKED_COUNT + ")"),
-                "Only the students ticked on Review (2) can be chosen");
-        press(ticked, "Only the students ticked on Review");
+                "Only the students I choose (2) is chosen");
 
         int filesBefore = outputFileCount();
         press(window.getActionBar().getPrimaryButton(), "Export score sheet");
@@ -654,7 +818,7 @@ public class FlowSelfTest {
 
     // ------------------------------------------------------------ flow 7
 
-    // Settings: dark and back; Marking keeps its step, run and choices.
+    // Settings: dark and back; Grading keeps its step, run and choices.
     private void flowTheme() {
         press(SceneFinder.button(window.getActionBar(), "Back"), "Back");
         check(window.getCurrentStep() == Step.REVIEW, "Back opened Review");
@@ -678,7 +842,7 @@ public class FlowSelfTest {
                     .contains("dark"), "the light theme is back");
         }
 
-        press(tab("Marking"), "the Marking tab");
+        press(tab("Grading"), "the Grading tab");
         Node sheet = sheet();
         check(sheet == null, "leaving Settings asked nothing");
         if (sheet != null) {
@@ -686,7 +850,7 @@ public class FlowSelfTest {
         }
         check(window.getCurrentPage() == Page.MARKING
                 && window.getCurrentStep() == Step.REVIEW,
-                "Marking is still on Review");
+                "Grading is still on Review");
         check(window.getScreen(Step.REVIEW).getView() == reviewView,
                 "the Review screen was not rebuilt");
         check(window.getState().getRun() == run, "the same run is shown");
@@ -719,8 +883,8 @@ public class FlowSelfTest {
         check(SceneFinder.texts(root(), "section-name").contains(
                 DemoData.SAMPLE_SECTION), "Home has a card for "
                 + DemoData.SAMPLE_SECTION);
-        check(SceneFinder.shows(root(), "Add a section"), "Home offers to "
-                + "add a section");
+        check(offersNewSection(), "Home's section dropdown offers to add a "
+                + "section");
 
         window.openAssessments();
         settle();
@@ -779,6 +943,84 @@ public class FlowSelfTest {
         settle();
         check(scene.getRoot().lookupAll(".step-dot.done").isEmpty(),
                 "Set up shows no ticks on the later steps");
+        checkExportFolders();
+    }
+
+    // A section's own export folder wins over its module's, and the
+    // others use the folder for everyone.
+    private void checkExportFolders() {
+        String key = ConfigKeys.OUTPUT_DIR_BY_SECTION;
+        String before = backend.getSetting(key);
+        java.util.Map<String, String> changes = new java.util.HashMap<>();
+        changes.put(key, DemoData.MODULE_CODE + "/G1=workspace/g1;"
+                + DemoData.MODULE_CODE + "=workspace/module");
+        check(backend.saveSettings(changes).isDone(),
+                "export folders for a module and a section can be saved");
+        String everyone = backend.getSetting(ConfigKeys.OUTPUT_DIR);
+        check(backend.getExportFolder(new gradezzy.model.Section(
+                DemoData.MODULE_CODE, "G1")).equals("workspace/g1"),
+                "G1 exports to its own folder");
+        check(backend.getExportFolder(new gradezzy.model.Section(
+                DemoData.MODULE_CODE, "G2")).equals("workspace/module"),
+                "G2 exports to its module's folder");
+        check(backend.getExportFolder(null).equals(everyone),
+                "with no section, exports go to the folder for everyone");
+
+        String sheetKey = ConfigKeys.SCORE_SHEET_BY_SECTION;
+        String sheetsBefore = backend.getSetting(sheetKey);
+        java.util.Map<String, String> sheets = new java.util.HashMap<>();
+        sheets.put(sheetKey, DemoData.MODULE_CODE + "/G1=sheets/g1.csv");
+        backend.saveSettings(sheets);
+        check(backend.getScoreSheet(new gradezzy.model.Section(
+                DemoData.MODULE_CODE, "G1")).equals("sheets/g1.csv"),
+                "G1 uses its own score sheet");
+        check(backend.getScoreSheet(new gradezzy.model.Section(
+                DemoData.MODULE_CODE, "G2")).equals(backend.getSetting(
+                ConfigKeys.SCORE_SHEET_FILE)), "G2, with none, uses the "
+                + "score sheet for all");
+        sheets.put(sheetKey, sheetsBefore);
+        backend.saveSettings(sheets);
+        changes.put(key, before);
+        backend.saveSettings(changes);
+        checkDeleteSection();
+    }
+
+    // Deleting a section asks first, removes it, and Undo puts it back.
+    private void checkDeleteSection() {
+        String module = DemoData.MODULE_CODE;
+        String section = "G2";
+        if (!backend.getSectionCodes(module).contains(section)) {
+            return;
+        }
+        gradezzy.ui.flow.CourseSheets.askDeleteSection(window, module,
+                section, () -> { });
+        settle();
+        Node confirm = sheet();
+        check(confirm != null && SceneFinder.shows(confirm, "Delete section "
+                + section + "?"), "deleting a section asks first");
+        press(confirm == null ? null : SceneFinder.button(confirm,
+                "Delete section"), "Delete section");
+        check(!backend.getSectionCodes(module).contains(section),
+                section + " is deleted");
+        boolean logged = false;
+        for (gradezzy.model.AuditEntry entry : backend.listAuditEntries()) {
+            logged = logged || gradezzy.ui.flow.ActivityUndo.SECTION_DELETED
+                    .equals(entry.getAction());
+        }
+        check(logged, "the delete is in the activity log");
+        window.showPage(Page.RUNS);
+        settle();
+        ((gradezzy.ui.flow.RunsScreen) window.getPageScreen(Page.RUNS))
+                .showActivity();
+        settle();
+        press(SceneFinder.button(root(), "Undo"), "Undo in the activity log");
+        check(backend.getSectionCodes(module).contains(section),
+                "Undo in the activity log put " + section + " back");
+        checkNewModule();
+        check(gradezzy.ui.flow.ActivityUndo.find(
+                gradezzy.ui.flow.ActivityUndo.SECTION_DELETED, section
+                + " of every module") == null,
+                "a delete is put back only once");
     }
 
     // ----------------------------------------------------------- helpers
@@ -821,6 +1063,16 @@ public class FlowSelfTest {
     }
 
     // Returns the text of the notice, or an empty string when hidden.
+    private ButtonBase noticeAction() {
+        Node notice = scene.lookup(".notice");
+        if (notice instanceof Label && notice.isVisible()
+                && ((Label) notice).getGraphic() instanceof ButtonBase) {
+            return (ButtonBase) ((Label) notice).getGraphic();
+        }
+        return null;
+    }
+
+    // Returns the words of the notice shown now, or "".
     private String noticeText() {
         Node notice = scene.lookup(".notice");
         if (notice instanceof Label && notice.isVisible()) {
@@ -962,7 +1214,11 @@ public class FlowSelfTest {
         }
         fields.get(0).setText(mark);
         areas.get(0).setText(reason);
-        press(SceneFinder.button(sheet, "Save"), "Save");
+        Button save = SceneFinder.button(sheet, "Save");
+        if (save != null && save.isDisabled()) {
+            return "";
+        }
+        press(save, "Save");
         if (!window.isSheetOpen()) {
             return "";
         }
@@ -991,6 +1247,63 @@ public class FlowSelfTest {
             }
         }
         return value.toString();
+    }
+
+    // A module added on Home starts with no sections and no assessments,
+    // and Settings lists it.
+    private void checkNewModule() {
+        String newModule = "IS442";
+        String modulesBefore = backend.getSetting(ConfigKeys.MODULE_CODES);
+        String ownBefore = backend.getSetting(
+                ConfigKeys.OWN_SECTIONS_ONLY_MODULES);
+        String moduleBefore = window.getState().getModuleCode();
+        gradezzy.ui.flow.CourseSheets.openAddModule(window,
+                code -> window.getState().setModuleCode(code));
+        settle();
+        Node sheet = sheet();
+        List<TextField> fields = sheet == null ? new ArrayList<>()
+                : SceneFinder.ofType(sheet, TextField.class);
+        if (fields.isEmpty()) {
+            problems.add("expected: the Add module sheet has a field");
+            return;
+        }
+        fields.get(0).setText(newModule);
+        press(SceneFinder.button(sheet, "Add module"), "Add module");
+        check(backend.getModuleCodes().contains(newModule),
+                newModule + " is added");
+        check(backend.getSectionCodes(newModule).isEmpty(),
+                "a new module has no sections (it has "
+                + backend.getSectionCodes(newModule) + ")");
+        boolean anyAssessment = false;
+        for (SavedAssessment saved : backend.listAssessments()) {
+            anyAssessment = anyAssessment || saved.belongsTo(newModule, true);
+        }
+        check(!anyAssessment, "a new module has no assessments");
+        window.showPage(Page.SETTINGS);
+        settle();
+        boolean listed = false;
+        for (ComboBox<?> box : SceneFinder.ofType(root(), ComboBox.class)) {
+            listed = listed || box.getItems().contains(newModule);
+        }
+        check(listed, "Settings lists the module added on Home");
+
+        java.util.Map<String, String> back = new java.util.HashMap<>();
+        back.put(ConfigKeys.MODULE_CODES, modulesBefore);
+        back.put(ConfigKeys.OWN_SECTIONS_ONLY_MODULES, ownBefore);
+        backend.saveSettings(back);
+        window.getState().setModuleCode(moduleBefore);
+        window.showPage(Page.HOME);
+        settle();
+    }
+
+    // Says whether a dropdown on screen offers to add a section.
+    private boolean offersNewSection() {
+        for (ComboBox<?> box : SceneFinder.ofType(root(), ComboBox.class)) {
+            if (box.getItems().contains("+ New section...")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Picks a new value in the picker that shows an old one. Does

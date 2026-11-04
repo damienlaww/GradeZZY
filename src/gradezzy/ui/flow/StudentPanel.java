@@ -15,8 +15,12 @@ package gradezzy.ui.flow;
 import java.util.ArrayList;
 import java.util.List;
 
+import javafx.event.ActionEvent;
+import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
@@ -42,9 +46,10 @@ import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.RepairItem;
+import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.backend.ReviewRules;
-import gradezzy.ui.backend.ScoreAdjustment;
+import gradezzy.model.ScoreAdjustment;
 
 /**
  * Details of one student on the Review step.
@@ -89,6 +94,9 @@ public class StudentPanel extends ScrollPane {
 
     // The problems every graded student shares, shown on Review instead
     private final List<Anomaly> sharedProblems = new ArrayList<>();
+
+    // True while a card is built for the code sheet, not the panel
+    private boolean buildingForSheet = false;
 
     // The fix being undone on a background thread, or null. Only one
     // student is graded again at a time.
@@ -485,7 +493,8 @@ public class StudentPanel extends ScrollPane {
         if (!backend.supports(Capability.SCORE_ADJUSTMENT)) {
             return;
         }
-        List<ScoreAdjustment> changes = backend.listAdjustments(submission);
+        List<ScoreAdjustment> changes = backend.listAdjustments(
+                window.getState().getRun(), submission);
         if (changes.isEmpty()) {
             return;
         }
@@ -540,9 +549,9 @@ public class StudentPanel extends ScrollPane {
         Label tag;
         String title = Problems.fixedTitle(anomaly.getType());
         if (status == FixStatus.APPROVED) {
-            tag = Parts.pill("Fix approved", Tone.GOOD);
+            tag = Parts.pill("Fix kept", Tone.GOOD);
         } else if (status == FixStatus.UNDONE) {
-            tag = Parts.pill("Fix undone", Tone.NEUTRAL);
+            tag = Parts.pill("Fix rejected", Tone.NEUTRAL);
             title = Problems.title(anomaly.getType());
         } else if (status == FixStatus.APPLIED) {
             tag = Parts.pill("Fixed for you", Tone.WARN);
@@ -579,17 +588,128 @@ public class StudentPanel extends ScrollPane {
             addUndoingNote(card, anomaly);
         } else if (status == FixStatus.APPLIED) {
             buttons.getChildren().addAll(
-                    Parts.small("Approve",
+                    Parts.small("Keep fix",
                     () -> approveRepair(backend, repair), Tone.GOOD),
-                    Parts.small("Undo",
+                    Parts.small("Reject fix",
                     () -> rejectRepair(backend, repair), Tone.BAD));
-        } else if (ReviewRules.isRepairSettled(anomaly)
-                && backend.supports(Capability.REPAIR_DECISION_UNDO)) {
-            buttons.getChildren().add(Parts.small("Change decision",
-                    () -> undoRepairDecision(backend, repair)));
+        } else if (canTakeBack(backend, anomaly)) {
+            Button undo = Parts.small("Undo",
+                    () -> undoRepairDecision(backend, repair));
+            Parts.tip(undo, "Take back this decision, so the fix waits for "
+                    + "you again. The files and marks stay as they are.");
+            buttons.getChildren().add(undo);
         }
+        addOpenCode(buttons, anomaly);
         addButtons(card, buttons);
         return card;
+    }
+
+    // Adds Open code to a card, opening the code sheet on the question
+    // the issue is about, or on the first question when it names none.
+    private void addOpenCode(HBox buttons, Anomaly anomaly) {
+        if (!window.getBackend().supports(Capability.SOURCE_VIEW)
+                || submission.getQuestionResults().isEmpty()) {
+            return;
+        }
+        if (buildingForSheet) {
+            return;
+        }
+        String questionId = questionOf(anomaly);
+        Button open = Parts.small("Open code",
+                () -> openCodeFor(anomaly, questionId));
+        String where = "this student's code";
+        if (questionId != null) {
+            where = questionId + "'s code and test output";
+        }
+        Parts.tip(open, "Show " + where + ".");
+        buttons.getChildren().add(open);
+    }
+
+    // Opens the code sheet on an issue's question, with the issue and its
+    // buttons at the top, so it can be decided while reading the code.
+    private void openCodeFor(Anomaly anomaly, String questionId) {
+        window.showSheet(CodeSheet.create(window, submission, questionId,
+                sheetCardOf(anomaly)));
+    }
+
+    // Builds an issue's card again for the code sheet: the same words
+    // and buttons, without Open code. Pressing a button closes the sheet
+    // first, then decides, so the panel and the notice with Undo show.
+    private Node sheetCardOf(Anomaly anomaly) {
+        DashboardBackend backend = window.getBackend();
+        VBox card = null;
+        buildingForSheet = true;
+        try {
+            GradingRun run = window.getState().getRun();
+            if (run != null && ReviewRules.isValidationFinding(
+                    anomaly.getType())) {
+                for (RepairItem repair : backend.listRepairs(run)) {
+                    if (repair.getAnomaly().getId().equals(anomaly.getId())) {
+                        card = createFixCard(repair, backend);
+                    }
+                }
+            }
+            if (card == null) {
+                card = createProblemCard(anomaly, backend);
+            }
+        } finally {
+            buildingForSheet = false;
+        }
+        for (Button button : buttonsIn(card)) {
+            EventHandler<ActionEvent> action =
+                    button.getOnAction();
+            if (action != null) {
+                button.setOnAction(event -> {
+                    window.closeSheet();
+                    action.handle(event);
+                });
+            }
+        }
+        card.getStyleClass().add("sheet-issue");
+        return card;
+    }
+
+    // Lists every button inside a node.
+    private static List<Button> buttonsIn(Node node) {
+        List<Button> found = new ArrayList<>();
+        if (node instanceof Button) {
+            found.add((Button) node);
+        } else if (node instanceof Parent) {
+            for (Node child : ((Parent) node)
+                    .getChildrenUnmodifiable()) {
+                found.addAll(buttonsIn(child));
+            }
+        }
+        return found;
+    }
+
+    // Finds the question an issue is about from its words: its id, such
+    // as Q2b, or its file or folder name. Longer ids are tried first, so
+    // "Q1a" is not taken for "Q1". Returns null when none is named.
+    private String questionOf(Anomaly anomaly) {
+        String text = anomaly.getMessage() + " "
+                + anomaly.getSuggestedAction();
+        String found = null;
+        int foundLength = 0;
+        for (QuestionResult result : submission.getQuestionResults()) {
+            Question question = result.getQuestion();
+            if (question == null) {
+                continue;
+            }
+            String[] names = {question.getId(), question.getFileName(),
+                question.getFolderName()};
+            for (String name : names) {
+                if (name != null && !name.isEmpty()
+                        && name.length() > foundLength
+                        && text.matches("(?s).*\\b"
+                        + java.util.regex.Pattern.quote(name)
+                        + "\\b.*")) {
+                    found = question.getId();
+                    foundLength = name.length();
+                }
+            }
+        }
+        return found;
     }
 
     // Says, in place of Approve and Undo, that a fix is being undone.
@@ -639,8 +759,7 @@ public class StudentPanel extends ScrollPane {
                     () -> decide(backend, anomaly,
                     ReviewDecision.REVIEWED), Tone.GOOD));
         } else {
-            buttons.getChildren().add(Parts.small("Reopen",
-                    () -> decide(backend, anomaly, ReviewDecision.OPEN)));
+            buttons.getChildren().add(undoButton(backend, anomaly));
         }
     }
 
@@ -648,6 +767,7 @@ public class StudentPanel extends ScrollPane {
 
     // Adds a card for each flag and problem that is not a fix.
     private void addProblems(DashboardBackend backend) {
+        addZeroCard(backend);
         int shared = 0;
         for (Anomaly anomaly : submission.getAnomalies()) {
             boolean finding = ReviewRules.isValidationFinding(
@@ -664,6 +784,55 @@ public class StudentPanel extends ScrollPane {
                     + "above the table.");
             note.setWrapText(true);
             body.getChildren().add(note);
+        }
+    }
+
+    // Adds a card for a 0 that nothing flagged, so the instructor can
+    // look at the code and mark it as checked; until then the student
+    // needs a look before export.
+    private void addZeroCard(DashboardBackend backend) {
+        ResultState state = Students.state(submission, backend);
+        if (state != ResultState.ZERO
+                || !submission.getAnomalies().isEmpty()) {
+            return;
+        }
+        boolean checked = backend.isZeroChecked(submission);
+        Label tag = checked ? Parts.pill("Checked", Tone.NEUTRAL)
+                : Parts.pill("Problem", Tone.BAD);
+        Label title = Parts.strong("Graded with 0 marks");
+        title.setWrapText(true);
+        Label detail = Parts.muted(checked
+                ? "You looked at this 0. The student counts as graded."
+                : "Nothing was flagged that explains the 0. Look at the "
+                + "code, then mark it as checked or change a mark.");
+        detail.setWrapText(true);
+        detail.getStyleClass().add("small-text");
+        VBox card = new VBox(Parts.GAP_SMALL, tag,
+                new VBox(LINE_GAP, title, detail));
+        card.getStyleClass().add("fix-card");
+        card.setAlignment(Pos.TOP_LEFT);
+        HBox buttons = Parts.row(Parts.GAP_SMALL);
+        if (checked) {
+            Button undo = Parts.small("Undo", () -> checkZero(backend,
+                    false));
+            Parts.tip(undo, "Take it back, so the 0 waits for you again. "
+                    + "No mark changes.");
+            buttons.getChildren().add(undo);
+        } else {
+            buttons.getChildren().add(Parts.small("Mark as checked",
+                    () -> checkZero(backend, true), Tone.GOOD));
+        }
+        addButtons(card, buttons);
+        body.getChildren().add(card);
+    }
+
+    // Marks the student's 0 as checked, or takes it back, with Undo.
+    private void checkZero(DashboardBackend backend, boolean checked) {
+        ActionResult result = backend.setZeroChecked(submission, checked);
+        apply(result, false);
+        if (result.isDone() && checked) {
+            window.notify("Marked as checked.", "Undo",
+                    () -> checkZero(backend, false));
         }
     }
 
@@ -708,11 +877,12 @@ public class StudentPanel extends ScrollPane {
         if (open) {
             addAdvice(card, anomaly);
         }
+        HBox buttons = Parts.row(Parts.GAP_SMALL);
         if (!backend.supports(Capability.FLAG_REVIEW)) {
+            addOpenCode(buttons, anomaly);
+            addButtons(card, buttons);
             return card;
         }
-
-        HBox buttons = Parts.row(Parts.GAP_SMALL);
         if (open && flag) {
             buttons.getChildren().addAll(
                     Parts.small("Looks fine", () -> decide(backend,
@@ -724,9 +894,9 @@ public class StudentPanel extends ScrollPane {
                     () -> decide(backend, anomaly,
                     ReviewDecision.REVIEWED), Tone.GOOD));
         } else if (decision != ReviewDecision.OPEN) {
-            buttons.getChildren().add(Parts.small("Reopen",
-                    () -> decide(backend, anomaly, ReviewDecision.OPEN)));
+            buttons.getChildren().add(undoButton(backend, anomaly));
         }
+        addOpenCode(buttons, anomaly);
         addButtons(card, buttons);
         return card;
     }
@@ -856,7 +1026,14 @@ public class StudentPanel extends ScrollPane {
      */
     private void undoAdjustment(DashboardBackend backend,
             ScoreAdjustment change) {
-        apply(backend.undoAdjustment(change), true);
+        ActionResult result = backend.undoAdjustment(
+                window.getState().getRun(), change);
+        if (result.isDone()) {
+            String detail = AdjustMarkSheet.describe(change);
+            ActivityUndo.forget(ActivityUndo.MARK_CHANGED, detail);
+            backend.recordActivity(ActivityUndo.MARK_CHANGE_UNDONE, detail);
+        }
+        apply(result, true);
     }
 
     /**
@@ -866,7 +1043,35 @@ public class StudentPanel extends ScrollPane {
      * @param repair the fix
      */
     private void approveRepair(DashboardBackend backend, RepairItem repair) {
-        apply(backend.approveRepair(repair), false);
+        ActionResult result = backend.approveRepair(repair);
+        apply(result, false);
+        if (result.isDone()
+                && backend.supports(Capability.REPAIR_DECISION_UNDO)) {
+            window.notify("Kept the fix for " + repair.getAnomaly()
+                    .getUsername() + ".", "Undo",
+                    () -> undoRepairDecision(backend, repair));
+        }
+    }
+
+    // Says whether a settled fix can be taken back: a kept fix always;
+    // a rejected one only in the demo, as live mode graded it again.
+    private boolean canTakeBack(DashboardBackend backend, Anomaly anomaly) {
+        if (!backend.supports(Capability.REPAIR_DECISION_UNDO)) {
+            return false;
+        }
+        return anomaly.getFixStatus() == FixStatus.APPROVED
+                || (backend.isDemo()
+                && anomaly.getFixStatus() == FixStatus.UNDONE);
+    }
+
+    // Returns the Undo button of a settled flag or problem, which puts it
+    // back to be checked again.
+    private Button undoButton(DashboardBackend backend, Anomaly anomaly) {
+        Button undo = Parts.small("Undo",
+                () -> decide(backend, anomaly, ReviewDecision.OPEN));
+        Parts.tip(undo, "Take back this decision, so it waits for you "
+                + "again. No mark changes.");
+        return undo;
     }
 
     /**
@@ -930,7 +1135,22 @@ public class StudentPanel extends ScrollPane {
      */
     private void decide(DashboardBackend backend, Anomaly anomaly,
             ReviewDecision decision) {
-        apply(backend.setDecision(anomaly, decision), false);
+        ReviewDecision before = backend.getDecision(anomaly);
+        ActionResult result = backend.setDecision(anomaly, decision);
+        apply(result, false);
+        // A decision says what was done and offers to take it back
+        if (result.isDone() && decision != ReviewDecision.OPEN) {
+            window.notify(decisionNotice(decision), "Undo",
+                    () -> decide(backend, anomaly, before));
+        }
+    }
+
+    // Says in a notice what a decision did.
+    private String decisionNotice(ReviewDecision decision) {
+        if (decision == ReviewDecision.REJECTED) {
+            return "Marked as looks fine.";
+        }
+        return "Marked as checked.";
     }
 
     // ----------------------------------------------------------- update

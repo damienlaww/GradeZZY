@@ -24,6 +24,7 @@ import java.util.UUID;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.config.ModuleSections;
 import gradezzy.grading.CancellationToken;
 import gradezzy.grading.GradingContext;
 import gradezzy.grading.GradingException;
@@ -1396,12 +1397,26 @@ public class GradingService {
                     + ConfigKeys.MODULE_CODES + ".");
         }
 
-        if (!isListed(ConfigKeys.SECTION_CODES,
-                section.getSectionCode())) {
+        if (!isListed(ConfigKeys.SECTION_CODES, section.getSectionCode())
+                && !isModuleSection(section)) {
             throw new GradingException("Section '"
                     + section.getSectionCode() + "' is not in the setting "
                     + ConfigKeys.SECTION_CODES + ".");
         }
+    }
+
+    // Says whether a section is one of its module's own sections.
+    private boolean isModuleSection(Section section) {
+        if (!config.hasKey(ConfigKeys.MODULE_SECTION_CODES)) {
+            return false;
+        }
+        for (String code : ModuleSections.forModule("", config.getString(
+                ConfigKeys.MODULE_SECTION_CODES), section.getModuleCode())) {
+            if (code.equalsIgnoreCase(section.getSectionCode())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Says whether a code is in a list setting, ignoring case.

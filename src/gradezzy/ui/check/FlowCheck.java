@@ -140,6 +140,13 @@ public class FlowCheck {
                     window.showSheet(CodeSheet.create(window, open));
                     shoot(scene, tag, "5c-code");
                     window.closeSheet();
+                    javafx.scene.control.Button openCode = SceneFinder
+                            .button(window.getRoot(), "Open code");
+                    if (openCode != null) {
+                        openCode.fire();
+                        shoot(scene, tag, "5c2-code-issue");
+                    }
+                    window.closeSheet();
                 }
                 window.advanceTo(Step.EXPORT);
                 shoot(scene, tag, "6-export");
@@ -178,7 +185,7 @@ public class FlowCheck {
         return 0;
     }
 
-    // Opens more states of the Marking steps, such as sheets and filters.
+    // Opens more states of the Grading steps, such as sheets and filters.
     private void markingExtras(FlowWindow window, DashboardBackend backend,
             Scene scene, String tag) throws IOException {
         // Pictures are named "5x-..." so they sort after Review
@@ -360,14 +367,24 @@ public class FlowCheck {
         gradezzy.ui.flow.SettingsScreen settings =
                 (gradezzy.ui.flow.SettingsScreen) window.getPageScreen(
                 Page.SETTINGS);
-        settings.previewChange(gradezzy.config.ConfigKeys.SECTION_CODES,
-                "G1,G2,G3,G4");
-        settings.previewChange(gradezzy.config.ConfigKeys.SCORE_SHEET_FILE,
-                "samples/NoSuchScoreSheet.csv");
+        settings.previewChange(gradezzy.config.ConfigKeys.OUTPUT_DIR,
+                "workspace/exports");
+        settings.previewChange(gradezzy.config.ConfigKeys.WORKING_DIR, "");
         shoot(scene, tag, "9b-settings-changed");
         settings.discardChanges();
         settings.scrollTo(true);
         shoot(scene, tag, "9c-settings-bottom");
+        settings.showAssessmentGroup();
+        shoot(scene, tag, "9d-settings-assessment");
+        java.util.List<String> sections = window.getBackend()
+                .getSectionCodes(window.getState().getModuleCode());
+        if (!sections.isEmpty()) {
+            gradezzy.ui.flow.CourseSheets.askDeleteSection(window,
+                    window.getState().getModuleCode(), sections.get(0),
+                    () -> { });
+            shoot(scene, tag, "9e-delete-confirm");
+            window.closeSheet();
+        }
         settings.scrollTo(false);
     }
 

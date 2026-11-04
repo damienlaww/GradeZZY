@@ -111,6 +111,12 @@ public class SettingField {
     // The Choose button of a path setting
     private Button chooseButton = null;
 
+    // True when the setting is changed somewhere else and only shown here
+    private boolean linked = false;
+
+    // The path field and its Choose button, for a file or folder
+    private HBox pathLine = null;
+
     // The blue dot shown when the value changed
     private final Circle dot = new Circle(DOT_RADIUS);
 
@@ -218,6 +224,9 @@ public class SettingField {
             }
             return choice.getValue();
         }
+        if (kind == SettingKind.FILE || kind == SettingKind.FOLDER) {
+            return Parts.cleanPath(field.getText());
+        }
         return field.getText().trim();
     }
 
@@ -264,6 +273,19 @@ public class SettingField {
     }
 
     /**
+     * Reads the saved value again and shows it, for a setting saved
+     * somewhere else since this row was built.
+     */
+    public void reload() {
+        original = savedValue();
+        if (kind == SettingKind.CHOICE && !original.isEmpty()
+                && !choice.getItems().contains(original)) {
+            choice.getItems().add(original);
+        }
+        setControlValue(original);
+    }
+
+    /**
      * Treats the value in the control as saved.
      *
      * <p>Tier: SHOULD.
@@ -297,11 +319,47 @@ public class SettingField {
      * @param editable true to allow changes
      */
     public void setEditable(boolean editable) {
-        field.setEditable(editable);
+        field.setEditable(editable && !linked);
         toggle.setDisable(!editable);
         choice.setDisable(!editable);
         if (chooseButton != null) {
             chooseButton.setDisable(!editable);
+        }
+    }
+
+    /**
+     * Shows a file or folder that has one home elsewhere, such as the
+     * score sheet on Set up: the path cannot be typed here, and a link
+     * opens the place where it is changed. Its saved value never counts
+     * as a change, so it never blocks Save.
+     *
+     * @param text the words of the link, such as "Change on Set up"
+     * @param action what the link opens
+     */
+    public void linkTo(String text, Runnable action) {
+        linked = true;
+        field.setEditable(false);
+        field.setFocusTraversable(false);
+        field.getStyleClass().add("linked-path");
+        if (chooseButton != null) {
+            chooseButton.setVisible(false);
+            chooseButton.setManaged(false);
+        }
+        if (pathLine != null) {
+            pathLine.getChildren().add(Parts.link(text, action));
+        }
+    }
+
+    /**
+     * Moves the keyboard focus to the setting's control.
+     */
+    public void focusControl() {
+        if (kind == SettingKind.SWITCH) {
+            toggle.requestFocus();
+        } else if (kind == SettingKind.CHOICE) {
+            choice.requestFocus();
+        } else {
+            field.requestFocus();
         }
     }
 
@@ -375,6 +433,7 @@ public class SettingField {
             HBox line = Parts.row(Parts.GAP_SMALL,
                     new Node[] {field, chooseButton});
             HBox.setHgrow(field, Priority.SOMETIMES);
+            pathLine = line;
             return line;
         }
         double width = TEXT_WIDTH;
@@ -490,7 +549,11 @@ public class SettingField {
         if (text.isEmpty()) {
             return null;
         }
-        Path path = Paths.get(text).toAbsolutePath();
+        Path path = Parts.toPath(text);
+        if (path == null) {
+            return null;
+        }
+        path = path.toAbsolutePath();
         if (kind == SettingKind.FILE) {
             path = path.getParent();
         }

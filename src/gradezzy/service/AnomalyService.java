@@ -35,6 +35,7 @@ public class AnomalyService {
     // The audit log actions this service records
     private static final String FIX_APPROVED = "Fix approved";
     private static final String FIX_UNDONE = "Fix undone";
+    private static final String FIX_REOPENED = "Fix decision taken back";
 
     // Joins the run id and username in the key that groups fixes
     private static final String GROUP_SEPARATOR = "/";
@@ -145,6 +146,28 @@ public class AnomalyService {
                 && anomaly.getFixStatus() == FixStatus.APPROVED) {
             record(FIX_APPROVED, anomaly, "");
         }
+    }
+
+    /**
+     * Takes back the approval of a fix, so it waits for a decision again.
+     * The fixed files stay as they are and the marks do not change; only
+     * an APPROVED fix is changed.
+     *
+     * @param anomaly the anomaly whose fix was approved
+     * @return true when the fix waits for a decision again
+     */
+    public boolean reopenFix(Anomaly anomaly) {
+        if (anomaly == null || anomaly.getFixStatus() != FixStatus.APPROVED) {
+            return false;
+        }
+        FixRecord fixRecord = fixManager.findRecord(anomaly);
+        if (fixRecord != null) {
+            fixRecord.getAnomaly().setFixStatus(FixStatus.APPLIED);
+        }
+        anomaly.setFixStatus(FixStatus.APPLIED);
+        saveStatus(anomaly);
+        record(FIX_REOPENED, anomaly, "");
+        return true;
     }
 
     /**

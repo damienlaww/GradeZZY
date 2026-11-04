@@ -2,7 +2,7 @@
  * File: HelpSheet.java
  *
  * Purpose: A short sheet that explains the five tabs (with the four
- * steps of Marking), the keyboard shortcuts and where files are saved,
+ * steps of Grading), the keyboard shortcuts and where files are saved,
  * and tells a first-time user where to start.
  *
  * Where it fits: Opened from Help in the top bar, over any screen.
@@ -51,7 +51,7 @@ public final class HelpSheet {
     private static final String[][] TABS = {
         {"Home", "Every section at a glance, and what to do next in "
             + "each. Choose or add assessments here."},
-        {"Marking", "The four steps for one section."},
+        {"Grading", "The four steps for one section."},
         {" 1  Set up", "Choose the section and assessment, and add the "
             + "zip files."},
         {" 2  Grade", "Each submission is checked, compiled and "
@@ -60,7 +60,7 @@ public final class HelpSheet {
             + "marks."},
         {" 4  Export", "The score sheet as provided, and a JSON file."},
         {"Statistics", "Average, spread, pass rate and each question."},
-        {"Runs", "Earlier runs, backups and the activity log."},
+        {"History", "Earlier runs, backups and the activity log."},
         {"Settings", "Everything in config.properties."},
     };
 
@@ -94,7 +94,7 @@ public final class HelpSheet {
                     ConfigKeys.ASSESSMENTS_DIR)},
         };
         Label start = Parts.muted("New here? Start on Home: it lists the "
-                + "first three steps. Rest the pointer on any \"?\" to see "
+                + "first three steps. Click any \"?\" to see "
                 + "what a word means.");
         start.setWrapText(true);
         start.setMaxWidth(TAB_NAME_WIDTH + TAB_TEXT_WIDTH + COLUMN_GAP);

@@ -20,7 +20,6 @@ import java.util.List;
 
 import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
@@ -28,11 +27,13 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
+import javafx.stage.FileChooser;
 
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Question;
 import gradezzy.model.SavedAssessment;
 import gradezzy.testcase.TesterMarks;
+import gradezzy.service.AssessmentFolderScanner;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.ImportState;
@@ -85,22 +86,38 @@ public final class AssessmentEditor {
     // The tester and starter folders
     private final TextField testers = new TextField();
     private final TextField starter = new TextField();
+    
 
     // Whether each folder can be used
     private final HBox testersStatus = Parts.row(0);
     private final HBox starterStatus = Parts.row(0);
+    
 
     // The lists that come with the folders
     private final TextField classFiles = new TextField();
     private final TextField dataFiles = new TextField();
     private final TextField placeholders = new TextField();
 
-    // Whether to grade with a new assessment at once
-    private final CheckBox useNow = new CheckBox("Grade with this "
-            + "assessment from now on");
+    // True while the saved assessment is put in the form
+    private boolean opening = false;
+
+    // The folder each kind last filled the fields from, so leaving a
+    // field without changing it fills nothing again
+    private final java.util.Map<InputKind, String> lastFilled =
+            new java.util.HashMap<>();
+
+    // Says which fields were filled in from the chosen folders
+    private final Label filledNote = new Label();
+
 
     // Says what is wrong with the form
     private final Label problem = new Label();
+
+    // True when the form sits inside a page instead of a sheet
+    private boolean inline = false;
+
+    // Called with the saved name after an inline save, or null
+    private java.util.function.Consumer<String> onSaved = null;
 
     // Not used: create builds the sheet.
     private AssessmentEditor(FlowWindow window, SavedAssessment start,
@@ -124,6 +141,27 @@ public final class AssessmentEditor {
         return new AssessmentEditor(window, start, originalName).build();
     }
 
+    /**
+     * Builds the same form to sit inside a page, such as Settings: no
+     * title, close button or scroll of its own, and Save keeps the form
+     * open. Revert puts the saved values back.
+     *
+     * @param window the window that shows it
+     * @param start the assessment to fill the form from
+     * @param originalName the name of the assessment being edited, or
+     *        null when the form creates a new one
+     * @param onSaved called with the saved name after a save
+     * @return the form
+     */
+    public static Node createInline(FlowWindow window, SavedAssessment start,
+            String originalName, java.util.function.Consumer<String> onSaved) {
+        AssessmentEditor editor = new AssessmentEditor(window, start,
+                originalName);
+        editor.inline = true;
+        editor.onSaved = onSaved;
+        return editor.build();
+    }
+
     // Builds the form and its buttons.
     private Node build() {
         String heading = "New assessment";
@@ -138,34 +176,50 @@ public final class AssessmentEditor {
         HBox top = Parts.row(Parts.GAP, new Node[] {Parts.title(heading),
             Parts.grow(), close});
 
+        filledNote.getStyleClass().addAll("small-text", "filled-note");
+        filledNote.setWrapText(true);
+        show(filledNote, false);
         fill();
         VBox form = new VBox(Parts.GAP,
                 formRow("Name", "What you call this test, such as Lab Test "
-                        + "2. It is shown on Home, Set up and Runs.", name),
-                questionBlock(),
-                formRow("Tester files", "The folder of tester programs, "
-                        + "such as Q1aTester.java, that run each answer and "
-                        + "award marks, with the data files they read.",
-                        folderField(testers, testersStatus,
-                        InputKind.TESTERS)),
-                formRow("Starter files", "The folder students were given "
-                        + "before the test, such as RenameToYourUsername. "
-                        + "Used to spot untouched answers and to supply "
-                        + "the provided class files.",
-                        folderField(starter, starterStatus,
-                        InputKind.STARTER)),
-                formRow("Provided class files", "Compiled files given "
-                        + "without source, such as DataException.class. "
-                        + "They are copied from the starter folder into "
-                        + "each student's copy. Separate with commas.",
-                        classFiles),
-                formRow("Tester data files", "Files the testers read, such "
-                        + "as personstester.txt, copied next to each tester. "
-                        + "Separate with commas.", dataFiles),
-                formRow("Unrenamed folder names", "Starter folder names a "
-                        + "student may forget to rename, such as "
-                        + "RenameToYourUsername. Separate with commas.",
-                        placeholders));
+                        + "2. It is shown on Home, Set up and History.", name),
+                section("1", "Files", "Choose these first. The questions, "
+                        + "their marks and the lists below fill in from them.",
+                        new Node[] {
+                    formRow("Tester files", "The folder of tester programs, "
+                            + "such as Q1aTester.java, that run each answer "
+                            + "and award marks, with the data files they "
+                            + "read. Choosing it fills in the questions, "
+                            + "their marks and the tester data files.",
+                            folderField(testers, testersStatus,
+                            InputKind.TESTERS)),
+                    formRow("Starter files", "The folder students were "
+                            + "given before the test, such as "
+                            + "RenameToYourUsername. Used to spot untouched "
+                            + "answers and to supply the provided class "
+                            + "files. Choosing it fills in the class files "
+                            + "and unrenamed folder names.",
+                            folderField(starter, starterStatus,
+                            InputKind.STARTER)),
+                    filledNote}),
+                section("2", "Questions", "One row per question the "
+                        + "students answer. Marks are read from each tester.",
+                        new Node[] {questionBlock()}),
+                section("3", "Found in the files", "Filled in from the "
+                        + "folders. Change them only if something is missing.",
+                        new Node[] {
+                    formRow("Provided class files", "Compiled files given "
+                            + "without source, such as DataException.class. "
+                            + "They are copied from the starter folder into "
+                            + "each student's copy. Separate with commas.",
+                            classFiles),
+                    formRow("Tester data files", "Files the testers read, "
+                            + "such as personstester.txt, copied next to each "
+                            + "tester. Separate with commas.", dataFiles),
+                    formRow("Unrenamed folder names", "Starter folder names "
+                            + "a student may forget to rename, such as "
+                            + "RenameToYourUsername. Separate with commas.",
+                            placeholders)}));
         ScrollPane scroll = new ScrollPane(form);
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
@@ -175,14 +229,27 @@ public final class AssessmentEditor {
         problem.getStyleClass().add("field-problem");
         problem.setWrapText(true);
         show(problem, false);
-        boolean isNew = originalName == null;
-        useNow.setSelected(isNew);
-        show(useNow, isNew);
+        
 
+        if (inline) {
+            // Inside a page: the page scrolls, and Revert reloads it
+            Button revert = Parts.secondary("Revert", () -> onSaved.accept(
+                    originalName));
+            Parts.tip(revert, "Put back the values saved for this "
+                    + "assessment.");
+            Button saveInline = Parts.primary("Save assessment");
+            saveInline.setOnAction(event -> save());
+            HBox buttons = Parts.row(Parts.GAP, new Node[] {Parts.grow(),
+                revert, saveInline});
+            VBox inlineBody = new VBox(Parts.GAP, form, problem, buttons);
+            inlineBody.getStyleClass().addAll("assessment-editor",
+                    "inline");
+            return inlineBody;
+        }
         Button cancel = Parts.secondary("Cancel", () -> window.closeSheet());
         Button save = Parts.primary("Save");
         save.setOnAction(event -> save());
-        HBox bottom = Parts.row(Parts.GAP, new Node[] {useNow, Parts.grow(),
+        HBox bottom = Parts.row(Parts.GAP, new Node[] {Parts.grow(),
             cancel, save});
 
         VBox body = new VBox(Parts.GAP, top, scroll, problem, bottom);
@@ -204,14 +271,20 @@ public final class AssessmentEditor {
         updateTotal();
         testers.setText(start.getTestersDirectory());
         starter.setText(start.getStarterDirectory());
+        
         classFiles.setText(joinList(start.getProvidedClassFiles()));
         dataFiles.setText(joinList(start.getTesterDataFiles()));
         placeholders.setText(joinList(start.getPlaceholderFolderNames()));
         classFiles.setPromptText("DataException.class, Shape.class");
         dataFiles.setPromptText("personstester.txt");
         placeholders.setPromptText("RenameToYourUsername");
+        opening = true;
         checkFolder(testers, testersStatus, InputKind.TESTERS);
         checkFolder(starter, starterStatus, InputKind.STARTER);
+        
+        opening = false;
+        lastFilled.put(InputKind.TESTERS, testers.getText().trim());
+        lastFilled.put(InputKind.STARTER, starter.getText().trim());
     }
 
     // Builds the questions part: a header, one row each, Add and the
@@ -231,12 +304,7 @@ public final class AssessmentEditor {
         total.getStyleClass().add("small-text");
         HBox under = Parts.row(Parts.GAP, new Node[] {add, Parts.grow(),
             total});
-        Label title = Parts.strong("Questions");
-        HBox titleLine = Parts.labelWithInfo(title, "One row per question "
-                + "the students answer. The folder and file must match the "
-                + "starter folder exactly.");
-        return new VBox(Parts.GAP_SMALL, titleLine, header, questionRows,
-                under);
+        return new VBox(Parts.GAP_SMALL, header, questionRows, under);
     }
 
     // Builds a grey column name of a fixed width.
@@ -255,6 +323,26 @@ public final class AssessmentEditor {
         label.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(label, Priority.ALWAYS);
         return label;
+    }
+
+    // Builds a numbered section of the form: a heading with a line that
+    // says what it is for, then its rows, in a light box.
+    private VBox section(String number, String title, String help,
+            Node[] rows) {
+        Label badge = new Label(number);
+        badge.getStyleClass().add("editor-step");
+        badge.setMinWidth(Label.USE_PREF_SIZE);
+        Label heading = Parts.strong(title);
+        heading.getStyleClass().add("editor-section-title");
+        Label about = Parts.muted(help);
+        about.getStyleClass().add("small-text");
+        about.setWrapText(true);
+        VBox words = new VBox(2, heading, about);
+        HBox head = Parts.row(Parts.GAP_SMALL, new Node[] {badge, words});
+        VBox box = new VBox(Parts.GAP_SMALL + 2, head);
+        box.getChildren().addAll(rows);
+        box.getStyleClass().add("editor-section");
+        return box;
     }
 
     // Builds one form row: the name and its "?" on the left, the control
@@ -313,8 +401,8 @@ public final class AssessmentEditor {
     // Reads one question's maximum mark from its tester in the chosen
     // folder, when that folder exists, then updates the total.
     private void readMark(QuestionFields fields) {
-        String folder = testers.getText().trim();
-        if (!folder.isEmpty() && Files.isDirectory(Path.of(folder))) {
+        Path folder = Parts.toPath(testers.getText());
+        if (folder != null && Files.isDirectory(folder)) {
             fields.setMaxScore(markFromTester(folder, fields.getId()));
         }
         updateTotal();
@@ -331,13 +419,18 @@ public final class AssessmentEditor {
 
     // Returns the sum of the "score += <number>" lines of a question's
     // tester, or TesterMarks.UNKNOWN.
-    private double markFromTester(String folder, String questionId) {
+    private double markFromTester(Path folder, String questionId) {
         if (questionId.isEmpty()) {
             return TesterMarks.UNKNOWN;
         }
-        Path tester = Path.of(folder).resolve(questionId
-                + window.getBackend().getSetting(
-                ConfigKeys.TESTER_CLASS_SUFFIX) + JAVA_EXTENSION);
+        Path tester;
+        try {
+            tester = folder.resolve(questionId + window.getBackend()
+                    .getSetting(ConfigKeys.TESTER_CLASS_SUFFIX)
+                    + JAVA_EXTENSION);
+        } catch (java.nio.file.InvalidPathException exception) {
+            return TesterMarks.UNKNOWN;
+        }
         if (!Files.isRegularFile(tester)) {
             return TesterMarks.UNKNOWN;
         }
@@ -375,6 +468,15 @@ public final class AssessmentEditor {
             if (!samples.isEmpty()) {
                 chosen = samples.get(0);
             }
+        } else if (kind == InputKind.ROSTER) {
+            FileChooser chooser = new FileChooser();
+            chooser.setTitle("Choose the score sheet exported from eLearn");
+            chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+                    "CSV files", "*.csv"));
+            File file = chooser.showOpenDialog(window.getWindow());
+            if (file != null) {
+                chosen = file.toPath();
+            }
         } else {
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("Choose the " + kind.getTitle().toLowerCase()
@@ -392,6 +494,10 @@ public final class AssessmentEditor {
 
     // Shows whether a folder can be used, with the check Set up uses.
     private void checkFolder(TextField field, HBox status, InputKind kind) {
+        String cleaned = Parts.cleanPath(field.getText());
+        if (!cleaned.equals(field.getText())) {
+            field.setText(cleaned);
+        }
         if (kind == InputKind.TESTERS) {
             readAllMarks();
         }
@@ -423,12 +529,126 @@ public final class AssessmentEditor {
         note.setMinWidth(0);
         status.setSpacing(Parts.GAP_SMALL);
         status.getChildren().addAll(pill, note);
+        // Only a folder the instructor chose or changed fills the fields;
+        // opening a saved assessment leaves it exactly as it was saved
+        if (item.getState() != ImportState.INVALID && !opening
+                && !text.equals(lastFilled.get(kind))) {
+            lastFilled.put(kind, text);
+            fillFromFolder(kind, Path.of(text));
+        }
+    }
+
+    // Fills the data files, provided class files and unrenamed folder
+    // names from a chosen folder. Names found are added to what is
+    // there; nothing typed is removed. A note under the fields says
+    // what was added.
+    private void fillFromFolder(InputKind kind, Path folder) {
+        List<String> added = new ArrayList<>();
+        if (kind == InputKind.TESTERS) {
+            int found = addQuestionsFrom(folder);
+            if (found > 0) {
+                added.add(Parts.plural(found, "question"));
+            }
+            int count = addTo(dataFiles,
+                    AssessmentFolderScanner.findDataFiles(folder));
+            if (count > 0) {
+                added.add(Parts.plural(count, "tester data file"));
+            }
+        } else if (kind == InputKind.STARTER) {
+            int classes = addTo(classFiles,
+                    AssessmentFolderScanner.findProvidedClassFiles(folder));
+            if (classes > 0) {
+                added.add(Parts.plural(classes, "provided class file"));
+            }
+            List<String> questionFolders = new ArrayList<>();
+            for (QuestionFields fields : questions) {
+                questionFolders.add(fields.getFolder());
+            }
+            int names = addTo(placeholders, AssessmentFolderScanner
+                    .findStarterFolderNames(folder, questionFolders));
+            if (names > 0) {
+                added.add(Parts.plural(names, "unrenamed folder name"));
+            }
+        }
+        if (added.isEmpty()) {
+            return;
+        }
+        filledNote.setText("Filled in from the folder: "
+                + String.join(", ", added) + ". Check them below.");
+        show(filledNote, true);
+    }
+
+    // Adds one question per tester the form does not list yet, with its
+    // file, folder and marks. Empty rows are dropped first, so a new
+    // assessment shows just the questions found. Returns how many were
+    // added.
+    private int addQuestionsFrom(Path folder) {
+        Path starterFolder = null;
+        String starterText = starter.getText().trim();
+        if (!starterText.isEmpty()) {
+            try {
+                starterFolder = Path.of(starterText);
+            } catch (RuntimeException exception) {
+                starterFolder = null;
+            }
+        }
+        List<Question> found = AssessmentFolderScanner.findQuestions(folder,
+                window.getBackend().getSetting(
+                ConfigKeys.TESTER_CLASS_SUFFIX), starterFolder);
+        if (found.isEmpty()) {
+            return 0;
+        }
+        for (QuestionFields fields : new ArrayList<>(questions)) {
+            if (fields.getId().trim().isEmpty()) {
+                removeQuestion(fields);
+            }
+        }
+        int added = 0;
+        for (Question question : found) {
+            boolean listed = false;
+            for (QuestionFields fields : questions) {
+                if (fields.getId().trim().equalsIgnoreCase(
+                        question.getId())) {
+                    listed = true;
+                }
+            }
+            if (!listed) {
+                addQuestion(question);
+                added++;
+            }
+        }
+        updateTotal();
+        return added;
+    }
+
+    // Adds names a field does not list yet, ignoring case, and returns
+    // how many were added.
+    private int addTo(TextField field, List<String> names) {
+        List<String> items = splitList(field.getText());
+        int added = 0;
+        for (String name : names) {
+            boolean listed = false;
+            for (String item : items) {
+                if (item.equalsIgnoreCase(name)) {
+                    listed = true;
+                }
+            }
+            if (!listed) {
+                items.add(name);
+                added++;
+            }
+        }
+        if (added > 0) {
+            field.setText(joinList(items));
+        }
+        return added;
     }
 
     // Reads the form, checks it, saves it and closes the sheet.
     private void save() {
         SavedAssessment draft = new SavedAssessment();
         draft.setName(name.getText().trim());
+        draft.setModuleCode(start.getModuleCode());
         for (QuestionFields fields : questions) {
             draft.getQuestions().add(new Question(fields.getId(),
                     fields.getFolder(), fields.getFile(),
@@ -436,6 +656,7 @@ public final class AssessmentEditor {
         }
         draft.setTestersDirectory(testers.getText().trim());
         draft.setStarterDirectory(starter.getText().trim());
+        
         draft.getProvidedClassFiles().addAll(splitList(
                 classFiles.getText()));
         draft.getTesterDataFiles().addAll(splitList(dataFiles.getText()));
@@ -459,12 +680,21 @@ public final class AssessmentEditor {
             showProblem(result.getMessage());
             return;
         }
-        window.closeSheet();
-        if (useNow.isVisible() && useNow.isSelected()) {
+        if (!inline) {
+            window.closeSheet();
+        }
+        // A new assessment is the one graded from now on; it can be
+        // switched back on Home or Set up
+        if (originalName == null) {
             window.useAssessment(draft.getName());
+            window.notify("Saved " + draft.getName() + ". It is now the "
+                    + "assessment in use.");
         } else {
             window.notify(result.getMessage());
             window.assessmentChanged();
+        }
+        if (inline && onSaved != null) {
+            onSaved.accept(draft.getName());
         }
     }
 

@@ -15,6 +15,7 @@ package gradezzy.ui.flow;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -34,6 +35,7 @@ import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
@@ -42,12 +44,14 @@ import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 
 import gradezzy.config.ConfigKeys;
+import gradezzy.config.ExportFolders;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.SavedAssessment;
 import gradezzy.model.Question;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.ui.DragDropHandler;
+import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.CapabilityStatus;
 import gradezzy.ui.backend.ImportBatch;
@@ -174,6 +178,9 @@ public class SetUpScreen extends FlowScreen {
     // True once the class files were filled from the settings
     private boolean filledDefaults = false;
 
+    // The section whose score sheet the batch holds
+    private String scoreSheetSection = "";
+
     // True when the assessment changed since the tester and starter rows
     // were filled, so they are filled again from its folders
     private boolean assessmentChanged = false;
@@ -254,6 +261,12 @@ public class SetUpScreen extends FlowScreen {
         if (!filledDefaults) {
             fillClassFiles();
             filledDefaults = true;
+            scoreSheetSection = sectionLabel();
+        }
+        // Opened for another section, such as from a card on Home: that
+        // section's score sheet replaces the last one's
+        if (!sectionLabel().equals(scoreSheetSection)) {
+            useSectionScoreSheet();
         }
         if (assessmentChanged) {
             refillAssessmentFolders();
@@ -270,6 +283,16 @@ public class SetUpScreen extends FlowScreen {
      */
     public void assessmentChanged() {
         assessmentChanged = true;
+    }
+
+    /**
+     * Adds students' zip files, as a drop on the drop area would, for
+     * files dropped on a section card on Home.
+     *
+     * @param paths the files or folders
+     */
+    public void addFiles(List<Path> paths) {
+        addSubmissions(paths);
     }
 
     /**
@@ -363,8 +386,9 @@ public class SetUpScreen extends FlowScreen {
         Parts.tip(title, "How this run will grade. They are the same for "
                 + "every student and are changed in Settings.");
         Node grow = Parts.grow();
-        Hyperlink change = smallLink("Change in Settings",
-                () -> getWindow().showPage(Page.SETTINGS));
+        Hyperlink change = smallLink("Change",
+                () -> GradingSettingsSheet.open(getWindow(),
+                () -> refresh()));
         HBox top = Parts.row(Parts.GAP,
                 new Node[] {title, grow, change});
         return Parts.card(null, new Node[] {top, facts, checksLine});
@@ -504,6 +528,7 @@ public class SetUpScreen extends FlowScreen {
         getState().setModuleCode(moduleBox.getValue());
         fillSections();
         filling = false;
+        useSectionScoreSheet();
         refresh();
     }
 
@@ -513,6 +538,7 @@ public class SetUpScreen extends FlowScreen {
             return;
         }
         getState().setSectionCode(sectionBox.getValue());
+        useSectionScoreSheet();
         refresh();
     }
 
@@ -680,6 +706,13 @@ public class SetUpScreen extends FlowScreen {
     // Adds the configured path of a kind, or the demo sample.
     private void addDefault(InputKind kind) {
         Path path = getBackend().getConfiguredPath(kind);
+        // Each section has its own score sheet
+        if (kind == InputKind.ROSTER && !getBackend().isDemo()) {
+            String sheet = getBackend().getScoreSheet(getState()
+                    .getSection());
+            path = sheet == null || sheet.trim().isEmpty() ? null
+                    : Paths.get(sheet.trim());
+        }
         if (path == null && getBackend().isDemo()) {
             List<Path> samples = getBackend().getSampleFiles(kind);
             if (!samples.isEmpty()) {
@@ -698,6 +731,45 @@ public class SetUpScreen extends FlowScreen {
             return;
         }
         useChosenClassFile(kind, path);
+        if (kind == InputKind.ROSTER) {
+            rememberScoreSheet(path);
+        }
+    }
+
+    // Shows the score sheet of the section chosen now, in place of the
+    // last section's.
+    private void useSectionScoreSheet() {
+        scoreSheetSection = sectionLabel();
+        if (getBackend().isDemo()) {
+            return;
+        }
+        getState().getBatch().clear(InputKind.ROSTER);
+        addDefault(InputKind.ROSTER);
+    }
+
+    // Names the section chosen now, such as "CS102 G1", or "".
+    private String sectionLabel() {
+        return getState().getSection() == null ? ""
+                : getState().getSection().getLabel();
+    }
+
+    // Keeps a score sheet chosen on Set up as the chosen section's, so it
+    // is there the next time this section is graded.
+    private void rememberScoreSheet(Path path) {
+        if (getBackend().isDemo() || getState().getSection() == null) {
+            return;
+        }
+        String who = ExportFolders.keyOf(getState().getModuleCode(),
+                getState().getSectionCode());
+        Map<String, String> changes = new HashMap<>();
+        changes.put(ConfigKeys.SCORE_SHEET_BY_SECTION, ExportFolders.put(
+                getBackend().getSetting(ConfigKeys.SCORE_SHEET_BY_SECTION),
+                who, path.toString()));
+        ActionResult result = getBackend().saveSettings(changes);
+        if (result.isDone()) {
+            getWindow().notify("Score sheet kept for "
+                    + getState().getSection().getLabel() + ".");
+        }
     }
 
     // Uses a score sheet, tester or starter folder the instructor chose,
@@ -794,6 +866,17 @@ public class SetUpScreen extends FlowScreen {
         return folder.toPath();
     }
 
+    // Opens the editor of the assessment in use, where its tester and
+    // starter files are chosen.
+    private void editAssessmentFiles() {
+        if (getBackend().getAssessment() != null) {
+            getWindow().editAssessment(getBackend().getAssessment()
+                    .getName());
+        } else {
+            getWindow().openAssessments();
+        }
+    }
+
     // Says whether the instructor may type test cases. Live mode needs
     // the tester generator to be finished, not only declared.
     private boolean canTypeTestCases() {
@@ -855,7 +938,7 @@ public class SetUpScreen extends FlowScreen {
                 + " was graded" + with + when + " ("
                 + Parts.plural(run.getSubmissions().size(), "student")
                 + ").");
-        Parts.tip(note, "Grading again keeps these results on Runs, where "
+        Parts.tip(note, "Grading again keeps these results in History, where "
                 + "you can open or restore them.");
         earlierRun.getChildren().addAll(note, Parts.link("Open its results",
                 () -> getWindow().openRun(run)));
@@ -1442,8 +1525,16 @@ public class SetUpScreen extends FlowScreen {
                 status = warning;
             }
         }
-        return classFileRow(iconPath, title, details, status,
-                rowLink("Change", () -> changeClassFile(kind)));
+        // Tester and starter files belong to the assessment, so they are
+        // changed in its editor; only the score sheet is chosen here
+        Hyperlink change = rowLink("Change", () -> changeClassFile(kind));
+        if (kind != InputKind.ROSTER) {
+            change = rowLink("Edit assessment",
+                    () -> editAssessmentFiles());
+            change.setPrefWidth(Region.USE_COMPUTED_SIZE);
+            change.setMinWidth(Region.USE_PREF_SIZE);
+        }
+        return classFileRow(iconPath, title, details, status, change);
     }
 
     // Builds the tester row: a folder, or the typed test cases.

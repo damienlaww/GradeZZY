@@ -271,7 +271,7 @@ public class FlowWindowTest {
         return 1;
     }
 
-    // Clicks the Marking tab once to see whether real input reaches the
+    // Clicks the Grading tab once to see whether real input reaches the
     // window. macOS drops robot input unless the app that started java
     // may control the computer (Accessibility), and shows only the
     // desktop in pictures unless it may record the screen.

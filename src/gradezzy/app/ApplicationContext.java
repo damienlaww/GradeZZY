@@ -42,6 +42,7 @@ import gradezzy.service.GradingService;
 import gradezzy.service.HistoryService;
 import gradezzy.service.PipelineFactory;
 import gradezzy.service.PlagiarismService;
+import gradezzy.service.ScoreAdjustmentService;
 import gradezzy.service.SearchService;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.service.SettingsService;
@@ -110,6 +111,8 @@ public class ApplicationContext {
                         new BackupManager(config), auditService),
                 new PlagiarismService(config,
                         new TokenSimilarityDetector(config), repository));
+        services.setScoreAdjustmentService(new ScoreAdjustmentService(
+                repository, config));
     }
 
     // Stops the app when config.properties holds a value that is not

@@ -6,7 +6,7 @@
  * Where it fits: Created by DashboardBackend.adjustScore and listed in
  * the student panel on Review.
  */
-package gradezzy.ui.backend;
+package gradezzy.model;
 
 import java.time.LocalDateTime;
 

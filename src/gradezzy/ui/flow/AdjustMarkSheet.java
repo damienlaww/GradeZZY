@@ -12,6 +12,8 @@
 package gradezzy.ui.flow;
 
 import javafx.geometry.Pos;
+import java.util.function.Supplier;
+
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -20,7 +22,9 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
+import gradezzy.model.GradingRun;
 import gradezzy.model.QuestionResult;
+import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.ActionResult;
 
@@ -61,12 +65,14 @@ public final class AdjustMarkSheet {
                 + "the change, and you can undo it.");
         help.setMaxWidth(Parts.TEXT_WIDTH);
 
-        TextField mark = new TextField(Parts.mark(result.getScore()));
+        TextField mark = new TextField();
+        mark.setPromptText(Parts.mark(result.getScore()));
         mark.setPrefWidth(MARK_WIDTH);
         mark.setMaxWidth(MARK_WIDTH);
         mark.setAccessibleText("New mark");
-        Label outOf = Parts.muted("out of " + Parts.mark(max) + ", now "
-                + Parts.mark(result.getScore()));
+        Label outOf = Parts.muted("out of " + Parts.mark(max)
+                + ". The tester gave " + Parts.mark(result.getScore())
+                + ".");
         HBox markRow = Parts.row(Parts.GAP_SMALL, new Node[] {mark, outOf});
 
         TextArea reason = new TextArea();
@@ -88,6 +94,14 @@ public final class AdjustMarkSheet {
         Button save = Parts.primary("Save");
         save.setOnAction(event -> save(window, submission, result, mark,
                 reason, problem, onSaved));
+        // Save is on only once a different mark and a reason are typed
+        Runnable refreshSave = () -> save.setDisable(!canSave(
+                mark.getText(), reason.getText(), result.getScore()));
+        mark.textProperty().addListener((observable, before, after)
+                -> refreshSave.run());
+        reason.textProperty().addListener((observable, before, after)
+                -> refreshSave.run());
+        refreshSave.run();
         HBox buttons = Parts.row(Parts.GAP,
                 new Node[] {Parts.grow(), cancel, save});
 
@@ -99,6 +113,29 @@ public final class AdjustMarkSheet {
         body.getStyleClass().add("adjust-sheet");
         body.setMaxWidth(Parts.TEXT_WIDTH);
         return body;
+    }
+
+    /**
+     * Says whether the typed mark differs from the current one and a
+     * reason is typed, so Save can be pressed. A mark that is not a
+     * number still turns Save on, so pressing it says what is wrong.
+     *
+     * @param markText the new mark as typed
+     * @param reasonText the reason as typed
+     * @param current the mark now
+     * @return true when Save can be pressed
+     */
+    public static boolean canSave(String markText, String reasonText,
+            double current) {
+        if (markText == null || markText.trim().isEmpty()
+                || reasonText == null || reasonText.trim().isEmpty()) {
+            return false;
+        }
+        try {
+            return Double.parseDouble(markText.trim()) != current;
+        } catch (NumberFormatException exception) {
+            return true;
+        }
     }
 
     /**
@@ -147,7 +184,8 @@ public final class AdjustMarkSheet {
             showProblem(problem, error);
             return;
         }
-        ActionResult saved = window.getBackend().adjustScore(submission,
+        GradingRun run = window.getState().getRun();
+        ActionResult saved = window.getBackend().adjustScore(run, submission,
                 result.getQuestion().getId(),
                 Double.parseDouble(markText.trim()), reasonText.trim());
         if (!saved.isDone()) {
@@ -155,8 +193,49 @@ public final class AdjustMarkSheet {
             return;
         }
         window.closeSheet();
-        window.notify(saved.getMessage());
+        // The change is in the activity log, with Undo there and here
+        ScoreAdjustment change = newestChange(window, submission,
+                result.getQuestion().getId());
+        if (change == null) {
+            window.notify(saved.getMessage());
+        } else {
+            Supplier<ActionResult> undo = ActivityUndo.record(
+                    window.getBackend(), ActivityUndo.MARK_CHANGED,
+                    describe(change), () -> window.getBackend()
+                    .undoAdjustment(run, change));
+            window.notify(saved.getMessage(), "Undo", () -> {
+                window.notify(undo.get().getMessage());
+                onSaved.run();
+            });
+        }
         onSaved.run();
+    }
+
+    /**
+     * Describes a changed mark for the activity log, such as
+     * "learner.bravo: Q1b 3 to 2. The tester data had a typo".
+     *
+     * @param change the change
+     * @return the words
+     */
+    public static String describe(ScoreAdjustment change) {
+        return change.getUsername() + ": " + change.getQuestionId() + " "
+                + Parts.mark(change.getPreviousScore()) + " to "
+                + Parts.mark(change.getNewScore()) + ". "
+                + change.getReason();
+    }
+
+    // Returns the newest change of a student's question, or null.
+    private static ScoreAdjustment newestChange(FlowWindow window,
+            Submission submission, String questionId) {
+        ScoreAdjustment newest = null;
+        for (ScoreAdjustment change : window.getBackend().listAdjustments(
+                window.getState().getRun(), submission)) {
+            if (change.getQuestionId().equals(questionId)) {
+                newest = change;
+            }
+        }
+        return newest;
     }
 
     // Puts a field's name above the field.

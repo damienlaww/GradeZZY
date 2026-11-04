@@ -14,12 +14,16 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -39,13 +43,18 @@ import javafx.stage.FileChooser;
 import atlantafx.base.controls.CustomTextField;
 
 import gradezzy.config.ConfigKeys;
+import gradezzy.model.Anomaly;
 import gradezzy.model.AuditEntry;
+import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
+import gradezzy.ui.backend.DashboardBackend;
+import gradezzy.ui.backend.RepairItem;
+import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.backend.RunRecord;
 
 /**
@@ -63,7 +72,25 @@ public class RunsScreen extends FlowScreen {
     private static final String FALSE = "false";
 
     // The height of a run or backup row
-    private static final double ROW_HEIGHT = 52.0;
+    private static final double ROW_HEIGHT = 64.0;
+
+    // The kinds of activity the filter offers
+    private static final String[] KINDS = {"All", "Grading", "Fixes",
+        "Flags", "Settings and deletes"};
+
+    // A day and a time of day, for the activity
+    private static final DateTimeFormatter DAY =
+            DateTimeFormatter.ofPattern("EEEE, d MMM yyyy");
+    private static final DateTimeFormatter TIME =
+            DateTimeFormatter.ofPattern("HH:mm");
+
+    // Column widths of the activity tables
+    private static final double TIME_WIDTH = 70.0;
+    private static final double STUDENT_WIDTH = 160.0;
+    private static final double UNDO_WIDTH = 80.0;
+
+    // A student's username is shorter than this
+    private static final int STUDENT_NAME_LIMIT = 40;
 
     // The height of an activity row
     private static final double ACTIVITY_ROW_HEIGHT = 44.0;
@@ -74,14 +101,14 @@ public class RunsScreen extends FlowScreen {
     private static final double ASSESSMENT_WIDTH = 150.0;
     private static final double STUDENTS_WIDTH = 84.0;
     private static final double AVERAGE_WIDTH = 190.0;
-    private static final double STATUS_WIDTH = 200.0;
+    private static final double STATUS_WIDTH = 150.0;
     private static final double ACTIONS_WIDTH = 180.0;
 
     // Column widths of the snapshot and activity tables
     private static final double SNAPSHOT_WIDTH = 260.0;
     private static final double SHOWN_WIDTH = 120.0;
     private static final double WHEN_WIDTH = 160.0;
-    private static final double ACTION_WIDTH = 200.0;
+    private static final double ACTION_WIDTH = 220.0;
 
     // The width of the average bar
     private static final double AVERAGE_BAR_WIDTH = 90.0;
@@ -101,8 +128,26 @@ public class RunsScreen extends FlowScreen {
     // The scrolling page
     private final ScrollPane view;
 
-    // Holds the view picked with the switch
-    private final StackPane body = new StackPane();
+    // Holds the view picked with the switch, one part under another
+    private final VBox body = new VBox(Parts.GAP);
+
+    // The Runs view: a search, the table and a note under it
+    private final VBox runsView = new VBox(Parts.GAP);
+
+    // Filters the runs by module, section or assessment
+    private final CustomTextField runsSearch = new CustomTextField();
+
+    // How many runs are listed
+    private final Label runsCount = Parts.muted("");
+
+    // The Activity view's kind filter
+    private final ToggleGroup kindGroup = new ToggleGroup();
+
+    // How many activity entries are listed
+    private final Label activityCount = Parts.muted("");
+
+    // The activity, one table per day
+    private final VBox activityDays = new VBox(Parts.GAP);
 
     // The Runs view
     private final PlainTable runsTable = new PlainTable(ROW_HEIGHT);
@@ -138,13 +183,13 @@ public class RunsScreen extends FlowScreen {
         createRunsTable();
         createActivity();
 
-        VBox header = Parts.header("Runs", "Every grading run, the backups "
+        VBox header = Parts.header("History", "Every grading run, the backups "
                 + "of saved results, and what was done.");
         HBox headerRow = Parts.row(Parts.GAP,
                 new Node[] {header, Parts.grow(), createSwitch()});
         page.getChildren().addAll(headerRow, body);
         view = Parts.widePage(new Node[] {page});
-        body.setAlignment(Pos.TOP_LEFT);
+        body.setFillWidth(true);
     }
 
     /**
@@ -235,15 +280,26 @@ public class RunsScreen extends FlowScreen {
 
     // Adds the columns of the runs table.
     private void createRunsTable() {
-        runsTable.addColumn("Module", MODULE_WIDTH, Pos.CENTER_LEFT);
-        runsTable.addColumn("Section", SECTION_WIDTH, Pos.CENTER_LEFT);
-        runsTable.addColumn("Assessment", ASSESSMENT_WIDTH,
-                Pos.CENTER_LEFT);
-        runsTable.addColumn("Graded", PlainTable.GROW, Pos.CENTER_LEFT);
-        runsTable.addColumn("Students", STUDENTS_WIDTH, Pos.CENTER_RIGHT);
+        runsTable.addColumn("Run", PlainTable.GROW, Pos.CENTER_LEFT);
+        runsTable.addColumn("Students", STUDENTS_WIDTH, Pos.CENTER);
         runsTable.addColumn("Average", AVERAGE_WIDTH, Pos.CENTER_LEFT);
         runsTable.addColumn("Status", STATUS_WIDTH, Pos.CENTER_LEFT);
         runsTable.addColumn("", ACTIONS_WIDTH, Pos.CENTER_RIGHT);
+        runsTable.getStyleClass().add("runs-table");
+
+        runsSearch.setPromptText("Search by module, section or assessment");
+        runsSearch.setLeft(Parts.icon(Parts.SEARCH, SEARCH_ICON_SIZE));
+        runsSearch.setPrefWidth(SEARCH_WIDTH + SEARCH_WIDTH / 3);
+        runsSearch.setMaxWidth(SEARCH_WIDTH + SEARCH_WIDTH / 3);
+        runsSearch.textProperty().addListener((observable, before,
+                after) -> refresh());
+        runsCount.getStyleClass().add("small-text");
+        HBox tools = Parts.row(Parts.GAP, new Node[] {runsSearch,
+            Parts.grow(), runsCount});
+        runsView.getChildren().addAll(tools, runsTable, restoreNote(
+                "Current marks the run each section shows on Home, Review "
+                + "and Statistics. Restore makes an earlier run current; "
+                + "the other is kept here, so you can switch back."));
     }
 
     // Builds the search field and the columns of the activity table.
@@ -258,7 +314,36 @@ public class RunsScreen extends FlowScreen {
         activityTable.addColumn("Action", ACTION_WIDTH, Pos.CENTER_LEFT);
         activityTable.addColumn("Detail", PlainTable.GROW,
                 Pos.CENTER_LEFT);
-        activity.getChildren().addAll(activitySearch, activityTable);
+        // The kinds of activity, as a row of filter buttons
+        HBox kinds = new HBox();
+        kinds.getStyleClass().add("segmented");
+        for (int index = 0; index < KINDS.length; index++) {
+            ToggleButton kind = new ToggleButton(KINDS[index]);
+            kind.setToggleGroup(kindGroup);
+            kind.setUserData(KINDS[index]);
+            if (index == 0) {
+                kind.getStyleClass().add("left-pill");
+                kind.setSelected(true);
+            } else if (index == KINDS.length - 1) {
+                kind.getStyleClass().add("right-pill");
+            } else {
+                kind.getStyleClass().add("center-pill");
+            }
+            kinds.getChildren().add(kind);
+        }
+        kinds.setMinWidth(HBox.USE_PREF_SIZE);
+        kindGroup.selectedToggleProperty().addListener((observable,
+                before, after) -> {
+            if (after == null) {
+                before.setSelected(true);
+                return;
+            }
+            refreshActivity();
+        });
+        activityCount.getStyleClass().add("small-text");
+        HBox tools = Parts.row(Parts.GAP, new Node[] {activitySearch,
+            kinds, Parts.grow(), activityCount});
+        activity.getChildren().addAll(tools, activityDays);
     }
 
     // Shows the view picked with the switch.
@@ -271,7 +356,7 @@ public class RunsScreen extends FlowScreen {
             body.getChildren().setAll(activity);
         } else {
             refreshRuns();
-            body.getChildren().setAll(runsTable);
+            body.getChildren().setAll(runsView);
         }
     }
 
@@ -282,7 +367,7 @@ public class RunsScreen extends FlowScreen {
         runsTable.clearRows();
         if (!getBackend().supports(Capability.HISTORY)) {
             runsTable.showMessage(empty("Earlier runs are not available "
-                    + "here.", "Grade a batch on Marking to see its "
+                    + "here.", "Grade a batch on Grading to see its "
                     + "results.", null, null));
             return;
         }
@@ -295,12 +380,35 @@ public class RunsScreen extends FlowScreen {
 
         Map<String, GradingRun> shown = new HashMap<>();
         Set<String> newerSeen = new HashSet<>();
+        String text = runsSearch.getText().trim().toLowerCase();
+        int listed = 0;
         for (RunRecord record : records) {
             String label = labelOf(record.getRun());
             boolean hasNewer = newerSeen.contains(label);
             newerSeen.add(label);
-            addRunRow(record, isShown(record, shown), hasNewer);
+            if (runMatches(record.getRun(), text)) {
+                addRunRow(record, isShown(record, shown), hasNewer);
+                listed++;
+            }
         }
+        runsCount.setText(Parts.plural(listed, "run"));
+        if (listed == 0) {
+            runsTable.showMessage(empty("No run matches \""
+                    + runsSearch.getText().trim() + "\".", "Try a module, "
+                    + "section or assessment name.", null, null));
+        }
+    }
+
+    // Says whether a run's module, section or assessment holds the text.
+    private boolean runMatches(GradingRun run, String text) {
+        if (text.isEmpty()) {
+            return true;
+        }
+        String all = labelOf(run);
+        if (run.getAssessment() != null) {
+            all += " " + run.getAssessment().getName();
+        }
+        return all.toLowerCase().contains(text);
     }
 
     // Explains why no run is listed.
@@ -313,7 +421,7 @@ public class RunsScreen extends FlowScreen {
             return;
         }
         runsTable.showMessage(empty("No runs yet.", "Each batch you grade "
-                + "is listed here.", "Go to Marking",
+                + "is listed here.", "Go to Grading",
                 () -> getWindow().showPage(Page.MARKING)));
     }
 
@@ -338,11 +446,25 @@ public class RunsScreen extends FlowScreen {
         assessment.setMinWidth(0);
         Parts.tip(assessment, "The assessment this run was graded with. "
                 + "Opening or resuming the run switches to it.");
-        runsTable.addRow(new Node[] {Parts.strong(module),
-            Parts.strong(sectionCode), assessment,
-            Parts.muted(run.getStartedAt().format(WHEN)), students,
-            average(run), status(run, shown, hasNewer),
-            actions(record, shown)});
+        Label name = Parts.strong(module + " · " + sectionCode);
+        name.setMinWidth(Label.USE_PREF_SIZE);
+        HBox title = Parts.row(Parts.GAP_SMALL, new Node[] {name,
+            assessment});
+        if (shown) {
+            Label current = new Label("Current");
+            current.getStyleClass().addAll("small-text", "current-badge");
+            current.setMinWidth(Label.USE_PREF_SIZE);
+            Parts.tip(current, "The run Home, Review and Statistics show "
+                    + "for this section.");
+            title.getChildren().add(current);
+        }
+        Label when = Parts.muted("Graded " + run.getStartedAt().format(WHEN));
+        when.getStyleClass().add("small-text");
+        VBox runCell = new VBox(2, title, when);
+        runCell.setAlignment(Pos.CENTER_LEFT);
+        runCell.setMinWidth(0);
+        runsTable.addRow(new Node[] {runCell, students, average(run),
+            status(run, shown, hasNewer), actions(record, shown)});
     }
 
     // Shows the average of a run as a small bar and "x / max".
@@ -365,22 +487,22 @@ public class RunsScreen extends FlowScreen {
     }
 
     // Returns the pill that says how far a run got.
-    private Label status(GradingRun run, boolean shown, boolean hasNewer) {
+    private Node status(GradingRun run, boolean shown, boolean hasNewer) {
         Label pill;
         String tip;
         int waiting = countWaiting(run);
         if (!shown && hasNewer) {
-            pill = Parts.pill("Replaced by a later run", Tone.NEUTRAL);
+            pill = Parts.pill("Earlier run", Tone.NEUTRAL);
             tip = "A newer run of this section is the one shown on Home "
                     + "and Review. Restore shows this one again instead.";
         } else if (!shown) {
-            pill = Parts.pill("Replaced by a restored run", Tone.NEUTRAL);
+            pill = Parts.pill("Not shown", Tone.NEUTRAL);
             tip = "An older run of this section was restored and is shown "
                     + "instead.";
         } else if (waiting > 0) {
             int total = run.getSubmissions().size();
-            pill = Parts.pill("Stopped at " + (total - waiting) + " of "
-                    + total, Tone.WARN);
+            pill = Parts.pill("Stopped " + (total - waiting) + "/" + total,
+                    Tone.WARN);
             tip = "Grading was cancelled, or GradeZZY closed, before every "
                     + "student was graded. Resume grades the rest; marks "
                     + "already given are kept.";
@@ -490,14 +612,43 @@ public class RunsScreen extends FlowScreen {
         if (blockedByGrading()) {
             return;
         }
+        // The run shown now, so Undo can show it again
+        GradingRun before = null;
+        if (record.getRun().getSection() != null) {
+            before = getBackend().getRun(record.getRun().getSection());
+        }
         ActionResult result = getBackend().restore(record);
-        afterRestore(result);
+        String beforeId = before == null ? null : before.getId();
+        if (result.isDone() && beforeId != null) {
+            afterRestore(result, () -> undoRestore(beforeId));
+        } else {
+            afterRestore(result, null);
+        }
+    }
+
+    // Shows the run that was shown before a restore again.
+    private void undoRestore(String runId) {
+        if (blockedByGrading()) {
+            return;
+        }
+        for (RunRecord record : getBackend().listRuns()) {
+            if (runId.equals(record.getRun().getId())) {
+                afterRestore(getBackend().restore(record), null);
+                return;
+            }
+        }
+        getWindow().notify("The earlier run is no longer listed, so it "
+                + "cannot be shown again.");
     }
 
     // Says what a restore did. After a restore the run on Review may no
-    // longer be saved, so Marking starts again on Set up.
-    private void afterRestore(ActionResult result) {
-        getWindow().notify(result.getMessage());
+    // longer be saved, so Grading starts again on Set up.
+    private void afterRestore(ActionResult result, Runnable undo) {
+        if (undo == null) {
+            getWindow().notify(result.getMessage());
+        } else {
+            getWindow().notify(result.getMessage(), "Undo", undo);
+        }
         if (result.isDone()) {
             getWindow().forgetRun();
         }
@@ -563,7 +714,11 @@ public class RunsScreen extends FlowScreen {
         }
         if (canPreview) {
             backups.getChildren().addAll(Parts.title("Saved copies"),
-                    snapshotTable());
+                    snapshotTable(), restoreNote("Restore on a saved copy "
+                    + "shows that run for its section again, as on the Runs "
+                    + "list. "
+                    + "Restore from a backup file is different: it "
+                    + "replaces every saved result with the file's copy."));
         }
     }
 
@@ -591,9 +746,9 @@ public class RunsScreen extends FlowScreen {
 
     // Builds the card that restores a backup file.
     private VBox restoreFileCard() {
-        Label text = Parts.muted("Puts back the saved results from a "
-                + "backup file. The results saved now are not backed up "
-                + "first, so back up before you restore." + gradingNote());
+        Label text = Parts.muted("Replaces every saved result with the "
+                + "copy in a backup file. The results saved now are backed "
+                + "up first, so the restore can be undone." + gradingNote());
         text.setWrapText(true);
         VBox words = new VBox(Parts.GAP_SMALL / 2,
                 Parts.strong("Restore from a backup file"), text);
@@ -604,6 +759,14 @@ public class RunsScreen extends FlowScreen {
         HBox row = Parts.row(Parts.GAP,
                 new Node[] {words, grow, chooseButton});
         return Parts.card(null, new Node[] {row});
+    }
+
+    // Returns a small note under a table that says what Restore does.
+    private Label restoreNote(String text) {
+        Label note = Parts.muted(text);
+        note.getStyleClass().add("small-text");
+        note.setWrapText(true);
+        return note;
     }
 
     // Returns a sentence saying why the buttons wait, while grading.
@@ -652,7 +815,7 @@ public class RunsScreen extends FlowScreen {
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         buttons.setAlignment(Pos.CENTER_RIGHT);
         if (shown) {
-            shownCell = Parts.pill("Shown now", Tone.NEUTRAL);
+            shownCell = Parts.pill("Current", Tone.GOOD);
         } else {
             buttons.getChildren().add(restoreButton(record));
         }
@@ -691,8 +854,9 @@ public class RunsScreen extends FlowScreen {
         Path backupFile = file.toPath();
         getWindow().confirm("Restore " + backupFile.getFileName() + "?",
                 "The saved results are replaced by the ones in this file. "
-                + "The results saved now are not backed up first. "
-                + "Original zip files and exports are not changed.",
+                + "The results saved now are backed up first, so you can "
+                + "undo it. Original zip files and exports are not "
+                + "changed.",
                 "Restore", () -> restoreFile(backupFile));
     }
 
@@ -706,8 +870,29 @@ public class RunsScreen extends FlowScreen {
         if (blockedByGrading()) {
             return;
         }
+        // A copy of the results saved now, so Undo can put them back
+        Path safety = null;
+        if (getBackend().supports(Capability.BACKUP)) {
+            ActionResult copy = getBackend().backupNow();
+            if (copy.isDone()) {
+                safety = copy.getPath();
+            }
+        }
         ActionResult result = getBackend().restoreBackup(backupFile);
-        afterRestore(result);
+        Path undoFile = safety;
+        if (result.isDone() && undoFile != null) {
+            afterRestore(result, () -> undoFileRestore(undoFile));
+        } else {
+            afterRestore(result, null);
+        }
+    }
+
+    // Puts back the results saved just before a backup file was restored.
+    private void undoFileRestore(Path safety) {
+        if (blockedByGrading()) {
+            return;
+        }
+        afterRestore(getBackend().restoreBackup(safety), null);
     }
 
     // --------------------------------------------------------- activity
@@ -715,6 +900,8 @@ public class RunsScreen extends FlowScreen {
     // Lists the activity, newest first, matching the search.
     private void refreshActivity() {
         activityTable.clearRows();
+        activityDays.getChildren().setAll(activityTable);
+        activityCount.setText("");
         if (!getBackend().supports(Capability.AUDIT_LOG)
                 || FALSE.equalsIgnoreCase(getBackend().getSetting(
                 ConfigKeys.AUDIT_ENABLED))) {
@@ -736,14 +923,33 @@ public class RunsScreen extends FlowScreen {
             return;
         }
 
+        List<AuditEntry> sorted = new ArrayList<>(entries);
+        sorted.sort(Comparator.comparing(AuditEntry::getTimestamp)
+                .reversed());
+        String kind = String.valueOf(kindGroup.getSelectedToggle()
+                .getUserData());
         int shown = 0;
-        for (AuditEntry entry : entries) {
-            if (shown < MAX_ACTIVITY_ROWS && matches(entry, text)) {
-                addActivityRow(entry);
+        LocalDate day = null;
+        PlainTable dayTable = null;
+        activityDays.getChildren().clear();
+        for (AuditEntry entry : sorted) {
+            if (shown < MAX_ACTIVITY_ROWS && matches(entry, text)
+                    && isKind(entry, kind)) {
+                LocalDate entryDay = entry.getTimestamp().toLocalDate();
+                if (!entryDay.equals(day)) {
+                    day = entryDay;
+                    dayTable = newDayTable();
+                    Label dayTitle = Parts.strong(dayName(day));
+                    dayTitle.getStyleClass().add("activity-day");
+                    activityDays.getChildren().addAll(dayTitle, dayTable);
+                }
+                addActivityRow(dayTable, entry);
                 shown++;
             }
         }
+        activityCount.setText(Parts.plural(shown, "entry", "entries"));
         if (shown == 0) {
+            activityDays.getChildren().setAll(activityTable);
             activityTable.showMessage(empty("No activity matches \""
                     + activitySearch.getText().trim() + "\".", "Try "
                     + "another word.", null, null));
@@ -760,13 +966,195 @@ public class RunsScreen extends FlowScreen {
         return all.contains(text);
     }
 
-    // Adds one entry to the activity table.
-    private void addActivityRow(AuditEntry entry) {
-        Label detail = new Label(entry.getDetail());
+    // Returns what takes an activity entry back, or null when it cannot
+    // be taken back or already was: a kept fix that is still kept, or a
+    // flag decision that is still the flag's decision.
+    private Runnable findUndo(AuditEntry entry, String student,
+            String message) {
+        if (getState().isGrading()) {
+            return null;
+        }
+        // A delete made since GradeZZY opened can be put back
+        Supplier<ActionResult> restore = ActivityUndo.find(
+                entry.getAction(), entry.getDetail());
+        if (restore != null) {
+            return () -> {
+                ActionResult result = restore.get();
+                getWindow().notify(result.isDone() ? "Put back: "
+                        + entry.getDetail() + "." : result.getMessage());
+            };
+        }
+        if (student.isEmpty()) {
+            return null;
+        }
+        String action = entry.getAction();
+        boolean fix = "Fix approved".equals(action);
+        boolean decision = ReviewDecision.AUDIT_CHECKED.equals(action)
+                || ReviewDecision.AUDIT_LOOKS_FINE.equals(action);
+        if (!fix && !decision) {
+            return null;
+        }
+        // The decision the log line made; Undo is offered only while it
+        // is still the current one, so an older line cannot take back a
+        // newer decision
+        ReviewDecision logged = ReviewDecision.AUDIT_LOOKS_FINE.equals(action)
+                ? ReviewDecision.REJECTED : ReviewDecision.REVIEWED;
+        for (GradingRun run : runsToSearch()) {
+            for (Submission submission : run.getSubmissions()) {
+                if (!submission.getUsername().equals(student)) {
+                    continue;
+                }
+                if (decision && logged == ReviewDecision.REVIEWED
+                        && DashboardBackend.ZERO_CHECK_WORDS.equals(message)
+                        && getBackend().isZeroChecked(submission)) {
+                    return () -> getWindow().notify(getBackend()
+                            .setZeroChecked(submission, false).getMessage());
+                }
+                for (Anomaly anomaly : submission.getAnomalies()) {
+                    if (!anomaly.getMessage().equals(message)) {
+                        continue;
+                    }
+                    if (fix && anomaly.getFixStatus() == FixStatus.APPROVED
+                            && getBackend().supports(
+                            Capability.REPAIR_DECISION_UNDO)) {
+                        return () -> takeBackFix(run, anomaly);
+                    }
+                    if (decision && getBackend().getDecision(anomaly)
+                            == logged) {
+                        return () -> takeBackDecision(anomaly);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    // Returns the run on Review and every listed run, each once.
+    private List<GradingRun> runsToSearch() {
+        List<GradingRun> runs = new ArrayList<>();
+        if (getState().getRun() != null) {
+            runs.add(getState().getRun());
+        }
+        if (getBackend().supports(Capability.HISTORY)) {
+            for (RunRecord record : getBackend().listRuns()) {
+                if (!runs.contains(record.getRun())) {
+                    runs.add(record.getRun());
+                }
+            }
+        }
+        return runs;
+    }
+
+    // Takes back a kept fix, so it waits for review again.
+    private void takeBackFix(GradingRun run, Anomaly anomaly) {
+        for (RepairItem repair : getBackend().listRepairs(run)) {
+            if (repair.getAnomaly() == anomaly) {
+                getWindow().notify(getBackend().undoRepairDecision(repair)
+                        .getMessage());
+                return;
+            }
+        }
+        getWindow().notify("That fix can no longer be taken back.");
+    }
+
+    // Puts a flag or problem back to be checked again.
+    private void takeBackDecision(Anomaly anomaly) {
+        getBackend().setDecision(anomaly, ReviewDecision.OPEN);
+        getWindow().notify("Put the item for " + anomaly.getUsername()
+                + " back to check. No mark changed.");
+    }
+
+    // Builds the table of one day's activity.
+    private PlainTable newDayTable() {
+        PlainTable table = new PlainTable(ACTIVITY_ROW_HEIGHT);
+        table.addColumn("Time", TIME_WIDTH, Pos.CENTER_LEFT);
+        table.addColumn("Action", ACTION_WIDTH, Pos.CENTER_LEFT);
+        table.addColumn("Student", STUDENT_WIDTH, Pos.CENTER_LEFT);
+        table.addColumn("Detail", PlainTable.GROW, Pos.CENTER_LEFT);
+        table.addColumn("", UNDO_WIDTH, Pos.CENTER_RIGHT);
+        return table;
+    }
+
+    // Names a day, such as "Today", "Yesterday" or "4 Nov 2026".
+    private String dayName(LocalDate day) {
+        LocalDate today = LocalDate.now();
+        if (day.equals(today)) {
+            return "Today";
+        } else if (day.equals(today.minusDays(1))) {
+            return "Yesterday";
+        }
+        return day.format(DAY);
+    }
+
+    // Says whether an entry is of the kind picked, by its action's words.
+    private boolean isKind(AuditEntry entry, String kind) {
+        String action = entry.getAction().toLowerCase();
+        if (KINDS[0].equals(kind)) {
+            return true;
+        } else if ("Grading".equals(kind)) {
+            return action.contains("grading") || action.contains("run")
+                    || action.contains("mark change")
+                    || action.contains("result") || action.contains("student");
+        } else if ("Fixes".equals(kind)) {
+            return action.contains("fix");
+        } else if ("Flags".equals(kind)) {
+            return action.contains("flag") || action.contains("check");
+        }
+        return action.contains("backup") || action.contains("restore")
+                || action.contains("setting") || action.contains("export")
+                || action.contains("save") || action.contains("deleted")
+                || action.contains("module") || action.contains("section")
+                || action.contains("assessment");
+    }
+
+    // Returns the colour of an action: kept and approved are green,
+    // taken back, undone and cancelled are amber, failures are red.
+    private Tone toneOf(String action) {
+        String words = action.toLowerCase();
+        if (words.contains("fail") || words.contains("refused")) {
+            return Tone.BAD;
+        } else if (words.contains("deleted") || words.contains("removed")) {
+            return Tone.BAD;
+        } else if (words.contains("undone") || words.contains("cancel")
+                || words.contains("taken back") || words.contains("replaced")) {
+            return Tone.WARN;
+        } else if (words.contains("approved") || words.contains("kept")
+                || words.contains("reviewed") || words.contains("made")
+                || words.contains("restored")) {
+            return Tone.GOOD;
+        }
+        return Tone.NEUTRAL;
+    }
+
+    // Adds one entry to a day's table: the time, the action as a pill,
+    // the student it is about, and the rest of the detail.
+    private void addActivityRow(PlainTable table, AuditEntry entry) {
+        String detailText = entry.getDetail();
+        String student = "";
+        int colon = detailText.indexOf(": ");
+        if (colon > 0 && colon < STUDENT_NAME_LIMIT
+                && !detailText.substring(0, colon).contains(" ")) {
+            student = detailText.substring(0, colon);
+            detailText = detailText.substring(colon + 2);
+        }
+        Label detail = new Label(Parts.shortenPaths(detailText));
+        detail.setMinWidth(0);
         detail.setTooltip(new Tooltip(entry.getDetail()));
-        Label when = Parts.muted(entry.getTimestamp().format(WHEN));
-        activityTable.addRow(new Node[] {when,
-            Parts.strong(entry.getAction()), detail});
+        Label time = Parts.muted(entry.getTimestamp().format(TIME));
+        Label who = Parts.strong(student.isEmpty() ? "-" : student);
+        who.setMinWidth(0);
+        Node undoCell = new Label("");
+        Runnable undo = findUndo(entry, student, detailText);
+        if (undo != null) {
+            Button button = Parts.small("Undo", () -> {
+                undo.run();
+                refreshActivity();
+            });
+            Parts.tip(button, "Take this back. No other change is undone.");
+            undoCell = button;
+        }
+        table.addRow(new Node[] {time, Parts.pill(entry.getAction(),
+            toneOf(entry.getAction())), who, detail, undoCell});
     }
 
     // ----------------------------------------------------------- shared
