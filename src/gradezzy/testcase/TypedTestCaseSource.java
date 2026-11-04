@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import gradezzy.model.Assessment;
+import gradezzy.model.Question;
 
 /**
  * Supplies tester files built from test cases typed into the app.
@@ -84,8 +85,32 @@ public class TypedTestCaseSource implements TestCaseSource {
     @Override
     public List<TesterFile> prepareTesters(
             Assessment assessment) throws TestCaseException {
-        // TODO(Zach): implement: grouping testCases by question and calling
-        //     testerGenerator.writeTester for each group
-        return new ArrayList<>();
+        // A case for a question that does not exist would be dropped
+        // silently, so stop and tell the instructor
+        for (TestCase testCase : testCases) {
+            if (assessment.findQuestion(testCase.getQuestionId()) == null) {
+                throw new TestCaseException("A typed test case is for "
+                        + "question '" + testCase.getQuestionId()
+                        + "', which is not in this assessment.");
+            }
+        }
+
+        List<TesterFile> testers = new ArrayList<>();
+        for (Question question : assessment.getQuestions()) {
+            List<TestCase> casesOfQuestion = new ArrayList<>();
+            for (TestCase testCase : testCases) {
+                if (question.getId().equals(testCase.getQuestionId())) {
+                    casesOfQuestion.add(testCase);
+                }
+            }
+
+            if (!casesOfQuestion.isEmpty()) {
+                Path file = testerGenerator.writeTester(question,
+                        casesOfQuestion, outputDirectory);
+                testers.add(new TesterFile(question.getId(),
+                        testerGenerator.getClassName(question), file));
+            }
+        }
+        return testers;
     }
 }

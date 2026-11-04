@@ -8,18 +8,38 @@
  */
 package gradezzy.testcase;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.Question;
 
 /**
  * Writes the Java source of a tester from typed test cases.
  *
+ * <p>The generated tester extends the student's class, has no package and
+ * prints the same lines as the provided testers: a header per test case,
+ * the expected and actual values, the pass or fail marker, and the total
+ * score as a decimal on the last line. Each passed case is worth 1 mark,
+ * so TesterMarks finds the maximum mark from the file.
+ *
  * <p>Tier: SHOULD. Owner: Zach.
  */
 public class TesterGenerator {
+
+    // The marks one passed test case earns, like the provided testers
+    private static final int MARKS_PER_CASE = 1;
+
+    // The line printed between test cases, like the provided testers
+    private static final String SEPARATOR =
+            "-------------------------------------------------------";
+
+    // The file ending of a tester source
+    private static final String SOURCE_EXTENSION = ".java";
 
     // The application settings
     private final AppConfig config;
@@ -37,14 +57,38 @@ public class TesterGenerator {
      * Builds tester source code that prints the pass and fail markers and then
      * the score, like the provided testers.
      *
+     * <p>Each case compares the expected expression with the result using
+     * {@code Objects.deepEquals}, so the return type need not be known and
+     * arrays are compared by content.
+     *
      * @param question the question
      * @param testCases the test cases
      * @return the Java source of the tester class
      */
     public String generateSource(Question question, List<TestCase> testCases) {
-        // TODO(Zach): implement: source generation in the same output format as
-        //     the provided tester files
-        return "";
+        String passMarker = config.getString(ConfigKeys.PASS_MARKER);
+        String failMarker = config.getString(ConfigKeys.FAIL_MARKER);
+        String headerMarker = config.getString(ConfigKeys.TEST_HEADER_MARKER);
+
+        StringBuilder source = new StringBuilder();
+        addLine(source, "import java.util.*;");
+        addLine(source, "");
+        addLine(source, "public class " + getClassName(question)
+                + " extends " + question.getId() + " {");
+        addLine(source, "");
+        addLine(source, "    private static double score;");
+        addLine(source, "");
+        addLine(source, "    public static void main(String[] args) {");
+        addLine(source, "        int tcNum = 1;");
+
+        for (TestCase testCase : testCases) {
+            addCase(source, testCase, passMarker, failMarker, headerMarker);
+        }
+
+        addLine(source, "        System.out.println(score);");
+        addLine(source, "    }");
+        addLine(source, "}");
+        return source.toString();
     }
 
     /**
@@ -58,7 +102,79 @@ public class TesterGenerator {
      */
     public Path writeTester(Question question, List<TestCase> testCases,
             Path outputDirectory) throws TestCaseException {
-        // TODO(Zach): implement: writing generateSource to <className>.java
-        return null;
+        Path file = outputDirectory.resolve(
+                getClassName(question) + SOURCE_EXTENSION);
+        String source = generateSource(question, testCases);
+
+        try {
+            Files.createDirectories(outputDirectory);
+            Files.write(file, source.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException exception) {
+            throw new TestCaseException("Could not write the tester "
+                    + file + ".", exception);
+        }
+
+        return file;
+    }
+
+    /**
+     * Returns the tester class name for a question, such as Q1aTester.
+     *
+     * @param question the question
+     * @return the tester class name
+     */
+    public String getClassName(Question question) {
+        return question.getId()
+                + config.getString(ConfigKeys.TESTER_CLASS_SUFFIX);
+    }
+
+    // Adds the block that runs one test case
+    private void addCase(StringBuilder source, TestCase testCase,
+            String passMarker, String failMarker, String headerMarker) {
+        String call = testCase.getMethodName() + "("
+                + testCase.getArgumentExpressions() + ")";
+
+        addLine(source, "        {");
+        addLine(source, "            try {");
+        addLine(source, "                System.out.println(\"" + headerMarker
+                + " \" + tcNum++ + \": \" + "
+                + toStringLiteral(call) + ");");
+        addLine(source, "                Object expected = "
+                + testCase.getExpectedExpression() + ";");
+        addLine(source, "                Object result = " + call + ";");
+        addLine(source, "                System.out.println(\"Expected  :|\""
+                + " + expected + \"|\");");
+        addLine(source, "                System.out.println(\"Actual    :|\""
+                + " + result + \"|\");");
+        addLine(source, "                if (Objects.deepEquals(expected, "
+                + "result)) {");
+        addLine(source, "                    score += " + MARKS_PER_CASE + ";");
+        addLine(source, "                    System.out.println(\""
+                + passMarker + "\");");
+        addLine(source, "                } else {");
+        addLine(source, "                    System.out.println(\""
+                + failMarker + "\");");
+        addLine(source, "                }");
+        addLine(source, "            } catch (Exception e) {");
+        addLine(source, "                System.out.println(\"" + failMarker
+                + " -> Exception\");");
+        addLine(source, "            }");
+        addLine(source, "            System.out.println(\"" + SEPARATOR
+                + "\");");
+        addLine(source, "        }");
+    }
+
+    // Adds one line of generated source
+    private void addLine(StringBuilder source, String text) {
+        source.append(text);
+        source.append("\n");
+    }
+
+    // Turns text into a Java string literal, so it can be printed as it is
+    private String toStringLiteral(String text) {
+        String escaped = text.replace("\\", "\\\\");
+        escaped = escaped.replace("\"", "\\\"");
+        escaped = escaped.replace("\n", " ");
+        return "\"" + escaped + "\"";
     }
 }
