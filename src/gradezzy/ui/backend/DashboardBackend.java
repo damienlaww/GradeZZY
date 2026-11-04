@@ -26,6 +26,7 @@ import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.plagiarism.SimilarityPair;
+import gradezzy.service.ClassFileMatch;
 import gradezzy.stats.StatisticsSummary;
 
 /**
@@ -176,6 +177,44 @@ public interface DashboardBackend {
      * @return one sentence per problem, empty when the folder is fine
      */
     List<String> checkTesters(Path testersDirectory, Path starterDirectory);
+
+    /**
+     * Checks whether a score sheet, tester folder or starter folder
+     * belongs with the chosen uploads, and looks nearby for one that fits
+     * them better. It only reads files, so it takes well under a second,
+     * but still call it off the window's thread. Grading is never blocked
+     * by what it finds.
+     *
+     * @param kind the roster, tester or starter group
+     * @param chosen the chosen file or folder
+     * @param submissions the usable uploads chosen on Set up
+     * @return what the check found; ClassFileMatch.fits() when it has
+     *         nothing to say
+     */
+    ClassFileMatch checkClassFileMatch(InputKind kind, Path chosen,
+            List<ImportItem> submissions);
+
+    /**
+     * Looks near a graded run's score sheet for one that lists more of
+     * its graded students, for Export when most of them are not on the
+     * sheet. It only reads files, but call it off the window's thread.
+     *
+     * @param gradingRun the run
+     * @return the better sheet; ClassFileMatch.fits() when the sheet fits
+     *         or nothing better is found
+     */
+    ClassFileMatch findBetterScoreSheet(GradingRun gradingRun);
+
+    /**
+     * Gives a graded run another score sheet without grading again: each
+     * student is matched to the new sheet and the run is saved. Call it
+     * off the window's thread.
+     *
+     * @param gradingRun the run
+     * @param scoreSheet the score sheet to use from now on
+     * @return done, or failed with the reason
+     */
+    ActionResult changeScoreSheet(GradingRun gradingRun, Path scoreSheet);
 
     // --------------------------------------------------------- grading
 

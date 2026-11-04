@@ -2,7 +2,10 @@
  * File: BellCurveChart.java
  *
  * Purpose: Draws how the total marks spread: one bar per mark (how many
- * students got it) with a smooth bell curve on top. The small chart
+ * students got it) with a smooth bell curve on top. The curve is
+ * stretched so its peak meets the tallest bar, because a small class
+ * spread over many marks gives a true curve too low to see; it shows the
+ * shape of the spread, not a number of students. The small chart
  * groups the marks into five wider bars instead, so a small class still
  * shows the bell's shape. The full chart also
  * shades the band where most students fall (the average plus or minus
@@ -17,6 +20,7 @@ package gradezzy.ui.flow;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.Region;
 import javafx.scene.shape.Line;
+import javafx.scene.shape.Polygon;
 import javafx.scene.shape.Polyline;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.SVGPath;
@@ -190,10 +194,18 @@ public class BellCurveChart extends Region {
         ChartScale x = new ChartScale(lowMark, highMark, left,
                 left + plotWidth);
 
-        double tallest = curveHeight(stats.getMean(), binMarks);
+        double tallest = 0;
         for (int count : counts) {
             tallest = Math.max(tallest, count);
         }
+        // The curve's peak meets the tallest bar, so its shape shows even
+        // when a few students are spread over many marks
+        double peak = curveHeight(stats.getMean(), binMarks);
+        double curveScale = 1.0;
+        if (peak > 0 && tallest > 0) {
+            curveScale = tallest / peak;
+        }
+        tallest = Math.max(tallest, peak * curveScale);
         int gridStep = gridStep(tallest * HEADROOM);
         double yMax = Math.max(gridStep, Math.ceil(tallest * HEADROOM
                 / gridStep) * gridStep);
@@ -204,7 +216,7 @@ public class BellCurveChart extends Region {
             drawBand(x, top, plotHeight);
         }
         drawBars(counts, x, y, single, binMarks, bottom);
-        drawCurve(x, y, binMarks, lowMark, highMark);
+        drawCurve(x, y, binMarks * curveScale, lowMark, highMark);
         addLine(left, bottom, left + plotWidth, bottom, "chart-axis");
         drawTicks(x, max, bottom, single);
         if (!small) {
@@ -285,22 +297,30 @@ public class BellCurveChart extends Region {
         getChildren().add(bar);
     }
 
-    // Draws the bell curve of the average and spread.
+    // Draws the bell curve of the average and spread, with the area under
+    // it tinted so the shape reads at a glance. binMarks also carries the
+    // stretch that makes the curve's peak meet the tallest bar.
     private void drawCurve(ChartScale x, ChartScale y, double binMarks,
             double lowMark, double highMark) {
         if (stats.getSpread() <= 0 || stats.getCount() < 2) {
             return;
         }
         Polyline curve = new Polyline();
+        Polygon area = new Polygon();
+        area.getPoints().addAll(x.map(lowMark), y.map(0));
         double step = (highMark - lowMark) / CURVE_STEPS;
         for (int i = 0; i <= CURVE_STEPS; i++) {
             double mark = lowMark + i * step;
-            curve.getPoints().addAll(x.map(mark),
-                    y.map(curveHeight(mark, binMarks)));
+            double at = y.map(curveHeight(mark, binMarks));
+            curve.getPoints().addAll(x.map(mark), at);
+            area.getPoints().addAll(x.map(mark), at);
         }
+        area.getPoints().addAll(x.map(highMark), y.map(0));
+        area.getStyleClass().add("chart-curve-area");
+        area.setMouseTransparent(true);
         curve.getStyleClass().add("chart-curve");
         curve.setMouseTransparent(true);
-        getChildren().add(curve);
+        getChildren().addAll(area, curve);
     }
 
     // Labels the marks along the bottom.
@@ -360,7 +380,8 @@ public class BellCurveChart extends Region {
         up.setLayoutY(top + plotHeight / 2);
     }
 
-    // Returns the height of the bell curve at a mark, in students.
+    // Returns the height of the true bell curve at a mark, in students,
+    // before it is stretched to the tallest bar.
     private double curveHeight(double mark, double binMarks) {
         double spread = stats.getSpread();
         if (spread <= 0) {

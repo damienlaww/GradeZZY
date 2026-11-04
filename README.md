@@ -127,7 +127,7 @@ or run on the instructor's laptop.
 | `README.md` | This file. |
 | `docs/` | The project brief and coding style PDFs. Not in git. |
 | `samples/` | The provided testers, score sheet, starter folder and six sample submissions. Not in git. |
-| `test/` | `make-dummies.sh`, which builds the dummy submissions in `samples/dummy-submissions/` from the provided samples. |
+| `samples/e2e/` | The end-to-end test set: 42 students for section G4, with duplicate, damaged, late and copied uploads. `make_e2e.py` rebuilds it; its `README.md` lists the expected marks. Graded with `samples/Tester-Files`. |
 | `workspace/` | Created while grading: working copies, exports, database. Not in git. |
 
 Two things to know:
@@ -161,7 +161,7 @@ The base package is `gradezzy`. Each package has one job.
 | `report` | One class per export format. | `Exporter` (interface), `CsvScoreSheetExporter`, `JsonExporter`, `StudentReportExporter`, `AnomalyReportExporter`, `AuditLogExporter`, `JsonWriter`, `JsonFields` |
 | `stats` | Statistics for the dashboard. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
-| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AssessmentLibrary`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ServiceRegistry` |
+| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AssessmentLibrary`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ClassFileMatcher`, `ServiceRegistry` |
 | `ui` | JavaFX only: starting the window and small shared helpers. | `MainApp`, `ThemeManager`, `GradingTask`, `DragDropHandler` |
 | `ui.flow` | The window: tabs Home (a card per section), Marking (Set up, Grade, Review, Export), Statistics, Runs and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `HomeScreen`, `AssessmentsSheet`, `AssessmentEditor`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts`, the review table cells `Review...Cell`, and comparators such as `StudentNameComparator` |
 | `ui.backend` | The one interface the screens call, and its live version that calls the services. | `DashboardBackend`, `LiveBackend`, `Capability`, small view classes such as `RepairItem` and `RunRecord` |
@@ -523,12 +523,10 @@ What to build, in order:
    `Q2` folder, a missing `Q1b.java`, a file named `q1a.java`, an empty
    zip, a file that is not a zip, and a `Q1a.java` holding
    `while (true) { }`. Share them with the team; they test everyone's
-   stage, and the brief rewards extra edge cases. Done:
-   `sh test/make-dummies.sh` builds these six plus a username folder
-   inside a username folder and the untouched starter folder, in
-   `samples/dummy-submissions/`. Only the script is in git, because the
-   dummies are built from the restricted samples. Add that folder on the
-   Set up step to grade them; none of them stops the batch.
+   stage, and the brief rewards extra edge cases. Done: the end-to-end
+   set in `samples/e2e/` covers all six and many more (see its
+   `README.md`). `python3 -I samples/e2e/make_e2e.py .` rebuilds it from
+   the provided samples. None of its uploads stops the batch.
 5. As each teammate finishes a service, open its screen in live mode
    (`sh run.sh`) and check that the real data looks right.
    `design/UI-INTEGRATION.md` says which screen shows which service;
@@ -760,9 +758,15 @@ Facts from the provided files:
 - Maximum scores are 3, 3, 5, 5 and 4. They are not a setting: each
   question's maximum is the sum of the `score += <number>` lines in its
   tester (`testcase.TesterMarks`), read from the batch's tester folder.
-  A tester with no such line stops Start grading, and Set up asks the
+  Comments and quoted text are ignored, and every `score +=` on a line
+  counts. Start grading is stopped, with the reason, when a question has
+  no tester, its tester never adds to the score, or it changes the score
+  in a way that cannot be counted (`score = score + 1`, `score++`,
+  `score += MARK`, or a `score +=` inside a loop). Set up then asks the
   instructor to confirm the marks, warning when they do not add up to the
-  score sheet's `Calculated Final Grade Denominator`.
+  score sheet's `Calculated Final Grade Denominator`; the console prints
+  the same marks and warning. Old `max.score` lines in a personal
+  `config.properties` are ignored, and the console says so.
 
 Rules that matter here:
 
@@ -1077,6 +1081,7 @@ by this section.
 | `CharsetDecoder`, `CodingErrorAction`, `ByteBuffer` | `fix.EncodingFixer`, `report.CsvScoreSheetExporter` | Tells whether a Java file is valid UTF-8, which javac needs, and whether a score sheet is UTF-8 or Windows-1252, so the export is written the same way. | A decoder turns bytes into characters; set to `REPORT`, it throws instead of guessing when the bytes are not UTF-8. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. | Reads a file of `key=value` lines into a lookup table. |
 | JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs to SQLite so Runs can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
+| `Thread.sleep`, `InterruptedException` | `util.FileUtils` | Waits briefly before retrying a move that Windows blocked, such as when antivirus holds a new file open. | Pauses for half a second, then tries the move again, up to five times. |
 | `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |
 | Shutdown hook (`Runtime.addShutdownHook`), a daemon `Thread` | `exec.ProcessRunner`, `exec.RunningProcesses`, `exec.TesterHarness`, `exec.HarnessWatchdog` | No tester keeps running after GradeZZY closes or crashes. | A shutdown hook is a thread Java starts as the program ends; ours stops every tester still running. The watchdog is a second thread inside each tester run that sleeps until the time limit plus 2 seconds, then ends the run, in case GradeZZY is gone. |
 | `PrintStream` subclass, `System.setOut`, `StackWalker` | `exec.TesterHarness`, `exec.TrustedPrintStream`, `exec.TrustedFrameCheck` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. | All printing goes through our `PrintStream`, which checks who called it and marks a line only when no student method is on the call stack. |
@@ -1086,7 +1091,8 @@ by this section.
 | `java` options `--limit-modules`, `--illegal-native-access=deny`; `UUID` | `exec.TesterRunner` (`UUID` also for anomaly ids) | Student code gets only core Java and no native code; a new random token for every tester run. | Command-line options that shrink what student code can reach; a `UUID` is a random id nobody can guess. |
 | `java.util.zip` (`ZipFile`, `ZipEntry`, `Enumeration`, `CRC32`) | `ingest.ZipExtractor` | Unzips submissions safely. | Opens a zip and hands us its entries one at a time, like an `Iterator`. |
 | `java.util.regex.Pattern`, `matches`, `replaceFirst` | `service.SettingsService`, `ingest.SubmissionLoader`, `ingest.ZipExtractor.isSafeEntry` | The zip name setting is itself a pattern; unsafe Windows file names are a pattern too. | A pattern describes a family of strings, such as "2023-2024-" followed by a username. |
-| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream`, `testcase.TesterMarks` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
+| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
+| `StandardCharsets.ISO_8859_1` | `testcase.TesterMarks` | Opens a tester file whatever encoding it was saved in, to read its `score +=` lines. | A way of turning bytes into characters that accepts every byte, so a tester saved in Windows-1252 still opens. |
 | `java.time` (`LocalDateTime`, `DateTimeFormatter`) | `model`, `persistence`, `report.AuditLogExporter`, `service`, `ui.demo` | Run and audit times. | The current date and time, and how to print it. |
 | `java.util.Random` | `ui.demo.DemoData` | Synthetic marks for `--demo`, always from the same seed. | Gives the same "random" numbers every time, so the demo looks the same. |
 
@@ -1205,6 +1211,18 @@ implemented. `[x]` means it works now.
   Resume skip them too
 - [x] Flag untouched starter files, empty answers and hard-coded answers
   (`detection` package)
+- [x] Set up checks that the score sheet, tester folder and starter
+  folder belong with the uploads, and offers a better one nearby with
+  "Use this file instead" (`service.ClassFileMatcher`,
+  `ui.flow.ClassFileMatchCheck`). A score sheet fits when at least half
+  the uploads are on it; testers and starter files fit when they use the
+  methods the students' files declare. It only warns: grading can start
+- [x] Export warns when graded students are not on the score sheet.
+  When most of them are not, it offers a sheet nearby that lists them
+  with "Use this file instead", which matches the students to that sheet
+  and saves the run without grading again
+  (`GradingService.changeScoreSheet`, `ui.flow.ScoreSheetSearch`,
+  `ui.flow.ScoreSheetChange`); otherwise it points back to Set up
 - [ ] Test cases typed into the app (`testcase.TypedTestCaseSource`,
   `TesterGenerator`, `ui.flow.TestCasesSheet`)
 - [x] Progress bar and estimated time of completion

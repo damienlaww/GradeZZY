@@ -341,7 +341,8 @@ public class SectionView {
         long high = Math.round(Math.min(max, stats.getMean()
                 + stats.getSpread()));
         return "Most students (about 2 in 3) scored between " + low
-                + " and " + high + "." + hover;
+                + " and " + high + ". The curve shows the shape of the "
+                + "spread, stretched to the tallest bar." + hover;
     }
 
     // ------------------------------------------------------ ring card

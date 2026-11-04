@@ -444,8 +444,15 @@
 .chart-curve {
     -fx-fill: transparent;
     -fx-stroke: -color-accent-emphasis;
-    -fx-stroke-width: 2;
+    -fx-stroke-width: 3;
     -fx-stroke-line-join: round;
+}
+
+/* The tinted area under the bell curve, so its shape reads at a glance */
+.chart-curve-area {
+    -fx-fill: -color-accent-emphasis;
+    -fx-opacity: 0.14;
+    -fx-stroke: transparent;
 }
 
 .chart-mean {
@@ -637,6 +644,61 @@
     -fx-text-fill: -color-fg-subtle;
 }
 
+/* The reason under a choice lines up with the choice's words */
+.choice-hint {
+    -fx-padding: 0 0 0 23px;
+}
+
+/* Export: a small bold name over a part of the score sheet card */
+.card-section {
+    -fx-font-size: 13px;
+}
+
+/* Export: graded students who are not on the score sheet */
+.sheet-warning {
+    -fx-padding: 12px 16px;
+}
+
+.warning-title {
+    -fx-font-weight: bold;
+}
+
+/* Export: the better score sheet named in the warning */
+.sheet-suggestion-text {
+    -fx-fill: -color-fg-default;
+}
+
+.sheet-suggestion-name {
+    -fx-font-weight: bold;
+}
+
+/* Export: what the score sheet will get, three counts with hairlines
+   between them and no box around them */
+.outcome-cell {
+    -fx-padding: 2px 16px;
+    -fx-spacing: 2px;
+    -fx-border-color: transparent transparent transparent
+        -color-border-muted;
+}
+
+.outcome-cell.first {
+    -fx-padding: 2px 16px 2px 0;
+    -fx-border-color: transparent;
+}
+
+.outcome-count {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+}
+
+.outcome-count.warn-text {
+    -fx-text-fill: -color-warning-fg;
+}
+
+.saved-line {
+    -fx-padding: 4px 0 0 0;
+}
+
 /* Typed test cases sheet */
 .code-text {
     -fx-font-family: "IBM Plex Mono";
@@ -708,6 +770,33 @@
 /* A problem every student shares, such as a missing tester */
 .banner.warn {
     -fx-background-color: -color-warning-subtle;
+}
+
+/* A pill in a banner is already on its colour, so it keeps its dot and
+   words but not its own padding: the banner's edges line up on both
+   sides. */
+.banner > .pill {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* A better score sheet or folder than the chosen one, offered under a
+   class file row on Set up with a "Use this file instead" button */
+.match-suggestion {
+    -fx-background-color: -color-warning-subtle;
+    -fx-background-radius: 8px;
+    -fx-border-color: -color-warning-muted;
+    -fx-border-radius: 8px;
+    -fx-padding: 8px 12px;
+}
+
+.match-suggestion-text {
+    -fx-fill: -color-fg-default;
+    -fx-font-size: 12px;
+}
+
+.match-suggestion-name {
+    -fx-font-weight: bold;
 }
 
 /* The results table: a white box with a hairline border, no shadow,

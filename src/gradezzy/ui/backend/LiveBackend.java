@@ -51,6 +51,8 @@ import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.report.ExportException;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
+import gradezzy.service.ClassFileMatch;
+import gradezzy.service.ClassFileMatcher;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.stats.StatisticsFilter;
 import gradezzy.stats.StatisticsSummary;
@@ -180,9 +182,8 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public Assessment getAssessment(Path testersDirectory) {
-        if (testersDirectory == null) {
-            return assessment;
-        }
+        // Read now, even for the folder in Settings, so the marks match
+        // what checkMaxScores reads at the same moment
         return new AssessmentFactory(config).create(
                 assessment.getModuleCode(), testersDirectory);
     }
@@ -357,6 +358,81 @@ public class LiveBackend implements DashboardBackend {
             problems.add(problem.replace(fullPath, folderName));
         }
         return problems;
+    }
+
+    /**
+     * Calls ClassFileMatcher with the uploads' paths and usernames, for
+     * the assessment in use.
+     */
+    @Override
+    public ClassFileMatch checkClassFileMatch(InputKind kind, Path chosen,
+            List<ImportItem> submissions) {
+        List<Path> uploads = new ArrayList<>();
+        List<String> usernames = new ArrayList<>();
+        for (ImportItem item : submissions) {
+            uploads.add(item.getPath());
+            usernames.addAll(item.getStudents());
+        }
+
+        ClassFileMatcher matcher = new ClassFileMatcher(config,
+                getAssessment());
+        if (kind == InputKind.ROSTER) {
+            return matcher.checkScoreSheet(chosen, usernames, uploads);
+        } else if (kind == InputKind.TESTERS) {
+            return matcher.checkTesters(chosen, uploads);
+        } else if (kind == InputKind.STARTER) {
+            return matcher.checkStarter(chosen, uploads);
+        }
+        return ClassFileMatch.fits();
+    }
+
+    /**
+     * Calls ClassFileMatcher with the run's score sheet, the usernames of
+     * its graded students and their uploads.
+     */
+    @Override
+    public ClassFileMatch findBetterScoreSheet(GradingRun gradingRun) {
+        if (gradingRun == null) {
+            return ClassFileMatch.fits();
+        }
+        Path sheet = gradingRun.getScoreSheetFile();
+        if (sheet == null) {
+            sheet = getConfiguredPath(InputKind.ROSTER);
+        }
+
+        List<String> usernames = new ArrayList<>();
+        List<Path> uploads = new ArrayList<>();
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (ResultState.hasTotal(submission)) {
+                usernames.add(submission.getUsername());
+            }
+            Path upload = submission.getOriginalPath();
+            if (upload != null && !uploads.contains(upload)) {
+                uploads.add(upload);
+            }
+        }
+        ClassFileMatcher matcher = new ClassFileMatcher(config,
+                gradingRun.getAssessment());
+        return matcher.checkScoreSheet(sheet, usernames, uploads,
+                "graded student");
+    }
+
+    /**
+     * Calls GradingService.changeScoreSheet.
+     */
+    @Override
+    public ActionResult changeScoreSheet(GradingRun gradingRun,
+            Path scoreSheet) {
+        try {
+            int onSheet = services.getGradingService().changeScoreSheet(
+                    gradingRun, scoreSheet);
+            return ActionResult.done("The marks now go to "
+                    + scoreSheet.getFileName() + ", which lists " + onSheet
+                    + " of the " + gradingRun.getSubmissions().size()
+                    + " students.");
+        } catch (GradingException exception) {
+            return ActionResult.failed(exception.getMessage());
+        }
     }
 
     // Says whether a folder holds at least one tester file.

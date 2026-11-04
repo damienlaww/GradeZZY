@@ -31,6 +31,12 @@ public final class FileUtils {
     // The encoding Excel on Windows uses when it saves a "CSV" file
     private static final String WINDOWS_CHARSET = "windows-1252";
 
+    // How many times a move is tried before giving up
+    private static final int MOVE_ATTEMPTS = 5;
+
+    // How long to wait between tries, in milliseconds
+    private static final long MOVE_WAIT_MILLIS = 500;
+
     /**
      * Not used: every method here is static.
      */
@@ -83,6 +89,31 @@ public final class FileUtils {
             }
         }
         Files.deleteIfExists(directory);
+    }
+
+    /**
+     * Moves a file or folder, trying again for a short time if it fails.
+     * On Windows, a program such as antivirus can hold a new file open for
+     * a moment, which stops its folder from being renamed.
+     *
+     * @param source the file or folder to move
+     * @param target where it is moved to
+     * @throws IOException if the last try also fails
+     */
+    public static void moveWithRetry(Path source,
+            Path target) throws IOException {
+        for (int attempt = 1; attempt < MOVE_ATTEMPTS; attempt++) {
+            try {
+                Files.move(source, target);
+                return;
+            } catch (IOException exception) {
+                // The file may be free again after a short wait
+                waitBeforeRetry();
+            }
+        }
+
+        // The last try reports the real error
+        Files.move(source, target);
     }
 
     /**
@@ -191,6 +222,15 @@ public final class FileUtils {
                         + current);
             }
             current = current.getParent();
+        }
+    }
+
+    // Waits before the next move; keeps an interrupt for the caller.
+    private static void waitBeforeRetry() {
+        try {
+            Thread.sleep(MOVE_WAIT_MILLIS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
         }
     }
 }

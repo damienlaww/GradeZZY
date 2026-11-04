@@ -12,6 +12,7 @@
  */
 package gradezzy.ui.flow;
 
+import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 import javafx.animation.PauseTransition;
+import javafx.application.HostServices;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
@@ -139,6 +141,10 @@ public class FlowWindow {
 
     // True for the dark theme
     private boolean dark;
+
+    // Opens folders in Finder or File Explorer; null in the checks, which
+    // have no application to ask
+    private HostServices hostServices = null;
 
     /**
      * Creates the window.
@@ -644,6 +650,36 @@ public class FlowWindow {
         for (Runnable callback : callbacks) {
             callback.run();
         }
+    }
+
+    /**
+     * Gives the window the application's host services, so it can open
+     * a folder in Finder or File Explorer. COULD.
+     *
+     * @param services the host services, or null for none
+     */
+    public void setHostServices(HostServices services) {
+        hostServices = services;
+    }
+
+    /**
+     * Opens a folder in Finder or File Explorer. When the folder does
+     * not exist yet, or nothing can open it, a notice says where it is
+     * instead. COULD.
+     *
+     * @param folder the folder, as the settings give it
+     */
+    public void openFolder(String folder) {
+        File file = new File(folder).getAbsoluteFile();
+        if (!file.isDirectory()) {
+            notify("Nothing is saved in " + folder + " yet.");
+            return;
+        }
+        if (hostServices == null) {
+            notify("The files are in " + file.getPath() + ".");
+            return;
+        }
+        hostServices.showDocument(file.toURI().toString());
     }
 
     /**
