@@ -106,7 +106,7 @@ public class WorkingCopyManager {
 
             // Build first, so a corrupt retry keeps the previous copy.
             FileUtils.deleteDirectory(target);
-            Files.move(staging, target);
+            FileUtils.moveWithRetry(staging, target);
             submission.setWorkingCopyPath(target);
             warnSkipped(submission, skippedNames);
             return target;
