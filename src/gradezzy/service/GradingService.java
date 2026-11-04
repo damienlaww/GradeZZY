@@ -279,8 +279,22 @@ public class GradingService {
                     ConfigKeys.SCORE_SHEET_FILE));
         }
 
+        // Each question's maximum comes from this batch's testers. Typed
+        // test cases have no tester folder yet, so they use the settings.
+        Path testersDirectory = null;
+        if (testCaseSource instanceof UploadedTesterSource) {
+            UploadedTesterSource uploaded =
+                    (UploadedTesterSource) testCaseSource;
+            testersDirectory = uploaded.getTestersDirectory();
+        }
+        List<String> markProblems =
+                assessmentFactory.findMaxScoreProblems(testersDirectory);
+        if (!markProblems.isEmpty()) {
+            throw new GradingException(markProblems.get(0));
+        }
+
         Assessment assessment = assessmentFactory.create(
-                section.getModuleCode());
+                section.getModuleCode(), testersDirectory);
         String runId = RUN_ID_PREFIX + System.currentTimeMillis();
         GradingRun gradingRun = new GradingRun(runId, assessment, section,
                 LocalDateTime.now());
@@ -289,11 +303,7 @@ public class GradingService {
         gradingRun.setScoreSheetFile(rosterFile);
         gradingRun.setStarterDirectory(starterDirectory);
         // Kept so Resume after a restart uses the same testers
-        if (testCaseSource instanceof UploadedTesterSource) {
-            UploadedTesterSource uploaded =
-                    (UploadedTesterSource) testCaseSource;
-            gradingRun.setTestersDirectory(uploaded.getTestersDirectory());
-        }
+        gradingRun.setTestersDirectory(testersDirectory);
         GradingContext context = new GradingContext(config, assessment);
         context.setRunId(runId);
 

@@ -24,6 +24,7 @@ import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.fix.FixRecord;
 import gradezzy.grading.ProgressListener;
+import gradezzy.ingest.RosterReader;
 import gradezzy.model.Anomaly;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
@@ -153,6 +154,41 @@ public class LiveBackend implements DashboardBackend {
     @Override
     public Assessment getAssessment() {
         return assessment;
+    }
+
+    /**
+     * Calls AssessmentFactory.create with the tester folder.
+     */
+    @Override
+    public Assessment getAssessment(Path testersDirectory) {
+        if (testersDirectory == null) {
+            return assessment;
+        }
+        return new AssessmentFactory(config).create(
+                assessment.getModuleCode(), testersDirectory);
+    }
+
+    /**
+     * Calls AssessmentFactory.findMaxScoreProblems.
+     */
+    @Override
+    public List<String> checkMaxScores(Path testersDirectory) {
+        return new AssessmentFactory(config).findMaxScoreProblems(
+                testersDirectory);
+    }
+
+    /**
+     * Calls RosterReader.readDenominator on the score sheet, or the one in
+     * Settings when none is given.
+     */
+    @Override
+    public double getScoreSheetDenominator(Path scoreSheetFile) {
+        Path sheet = scoreSheetFile;
+        if (sheet == null) {
+            sheet = Paths.get(config.getString(
+                    ConfigKeys.SCORE_SHEET_FILE));
+        }
+        return new RosterReader(config).readDenominator(sheet);
     }
 
     /**
