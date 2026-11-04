@@ -87,9 +87,10 @@ public class TesterInstaller {
     }
 
     /**
-     * Copies the data files listed in config next to a tester. Only files
-     * found in the tester folder are copied; when the instructor did not
-     * supply one, the copy inside the submission is used.
+     * Copies the data files listed in config next to a tester. The
+     * student's own copy of each file is deleted first, so a student
+     * cannot change the data the tester checks against. Only the tester
+     * folder's copy is used.
      *
      * @param sourceDirectory the source directory
      * @param questionFolder the question folder
@@ -102,6 +103,7 @@ public class TesterInstaller {
 
         try {
             for (String dataFileName : dataFileNames) {
+                Files.deleteIfExists(questionFolder.resolve(dataFileName));
                 Path dataFile = sourceDirectory.resolve(dataFileName);
                 if (Files.isRegularFile(dataFile)) {
                     copyReplacing(dataFile, questionFolder);
@@ -113,10 +115,9 @@ public class TesterInstaller {
         }
     }
 
-    // Adds an anomaly for each data file the tester reads that is in
-    // neither the tester folder nor the submission, since the tester
-    // would then fail those cases with no warning. The score is not
-    // changed.
+    // Adds an anomaly for each data file the tester reads that is not in
+    // the tester folder, since the tester would then fail those cases
+    // with no warning. The score is not changed.
     private void flagMissingDataFiles(Path testerFile, Path questionFolder,
             Submission submission) throws IOException {
         // ISO-8859-1 reads any bytes, so a tester saved in another
@@ -136,8 +137,8 @@ public class TesterInstaller {
                         AnomalyType.MISSING_FILE, Severity.ERROR,
                         submission.getUsername(),
                         testerFile.getFileName() + " reads " + dataFileName
-                        + ", which is in neither the tester folder nor "
-                        + "the submission, so its cases will fail.",
+                        + ", which is not in the tester folder, so its "
+                        + "cases will fail.",
                         MISSING_DATA_ACTION));
             }
         }
