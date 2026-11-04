@@ -663,6 +663,15 @@
     -fx-font-weight: bold;
 }
 
+/* Export: the better score sheet named in the warning */
+.sheet-suggestion-text {
+    -fx-fill: -color-fg-default;
+}
+
+.sheet-suggestion-name {
+    -fx-font-weight: bold;
+}
+
 /* Export: what the score sheet will get, three counts with hairlines
    between them and no box around them */
 .outcome-cell {

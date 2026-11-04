@@ -75,6 +75,9 @@ public class ClassFileMatcher {
     // A count fits when it is at least half of its total
     private static final int HALF = 2;
 
+    // The word for the students the Set up check counts
+    private static final String UPLOAD = "upload";
+
     // Every file the check reads or lists has one of these endings
     private static final String JAVA_EXTENSION = ".java";
     private static final String CSV_EXTENSION = ".csv";
@@ -148,6 +151,26 @@ public class ClassFileMatcher {
      */
     public ClassFileMatch checkScoreSheet(Path sheet, List<String> usernames,
             List<Path> uploads) {
+        return checkScoreSheet(sheet, usernames, uploads, UPLOAD);
+    }
+
+    /**
+     * Checks that most of some students are on a score sheet, as the
+     * method above does, and names them with a word of the caller's, such
+     * as "graded student", in the problem and the suggestion.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param sheet the chosen score sheet
+     * @param usernames the usernames to look for
+     * @param uploads the zip files and folders they came from
+     * @param noun one of the students, such as "upload"; an "s" is added
+     *        for more than one
+     * @return the problem and a better sheet, either of which may be
+     *         missing
+     */
+    public ClassFileMatch checkScoreSheet(Path sheet, List<String> usernames,
+            List<Path> uploads, String noun) {
         Set<String> wanted = new HashSet<>();
         for (String username : usernames) {
             wanted.add(username.toLowerCase(Locale.ROOT));
@@ -170,7 +193,7 @@ public class ClassFileMatcher {
             return ClassFileMatch.fits();
         }
         if (problem == null) {
-            problem = describeStudentsOnSheet(onSheet, total);
+            problem = describeStudentsOnSheet(onSheet, total, noun);
         }
 
         Path configured = readConfiguredPath(ConfigKeys.SCORE_SHEET_FILE);
@@ -189,7 +212,7 @@ public class ClassFileMatcher {
         }
         return new ClassFileMatch(problem, best, ", "
                 + describeWhere(best, sheet, configured) + ", lists "
-                + describeShare(bestCount, total) + ".");
+                + describeShare(bestCount, total, noun) + ".");
     }
 
     // Counts the wanted usernames that are on a score sheet.
@@ -230,33 +253,34 @@ public class ClassFileMatcher {
         return reason;
     }
 
-    // Says how few of the uploads are on a sheet.
-    private String describeStudentsOnSheet(int onSheet, int total) {
+    // Says how few of the students are on a sheet.
+    private String describeStudentsOnSheet(int onSheet, int total,
+            String noun) {
         if (total == 1) {
-            return "The upload is not on this score sheet.";
+            return "The " + noun + " is not on this score sheet.";
         }
         if (onSheet == 0) {
-            return "None of the " + total + " uploads are on this score "
-                    + "sheet.";
+            return "None of the " + total + " " + noun + "s are on this "
+                    + "score sheet.";
         }
         String verb = " are";
         if (onSheet == 1) {
             verb = " is";
         }
-        return "Only " + onSheet + " of the " + total + " uploads" + verb
-                + " on this score sheet.";
+        return "Only " + onSheet + " of the " + total + " " + noun + "s"
+                + verb + " on this score sheet.";
     }
 
-    // Says how many of the uploads a sheet lists, such as "40 of the 42
+    // Says how many of the students a sheet lists, such as "40 of the 42
     // uploads".
-    private String describeShare(int count, int total) {
+    private String describeShare(int count, int total, String noun) {
         if (total == 1) {
-            return "the upload";
+            return "the " + noun;
         }
         if (count == total) {
-            return "all " + total + " uploads";
+            return "all " + total + " " + noun + "s";
         }
-        return count + " of the " + total + " uploads";
+        return count + " of the " + total + " " + noun + "s";
     }
 
     // --------------------------------------------------------- testers

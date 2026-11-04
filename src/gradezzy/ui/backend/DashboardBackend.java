@@ -194,6 +194,28 @@ public interface DashboardBackend {
     ClassFileMatch checkClassFileMatch(InputKind kind, Path chosen,
             List<ImportItem> submissions);
 
+    /**
+     * Looks near a graded run's score sheet for one that lists more of
+     * its graded students, for Export when most of them are not on the
+     * sheet. It only reads files, but call it off the window's thread.
+     *
+     * @param gradingRun the run
+     * @return the better sheet; ClassFileMatch.fits() when the sheet fits
+     *         or nothing better is found
+     */
+    ClassFileMatch findBetterScoreSheet(GradingRun gradingRun);
+
+    /**
+     * Gives a graded run another score sheet without grading again: each
+     * student is matched to the new sheet and the run is saved. Call it
+     * off the window's thread.
+     *
+     * @param gradingRun the run
+     * @param scoreSheet the score sheet to use from now on
+     * @return done, or failed with the reason
+     */
+    ActionResult changeScoreSheet(GradingRun gradingRun, Path scoreSheet);
+
     // --------------------------------------------------------- grading
 
     /**
