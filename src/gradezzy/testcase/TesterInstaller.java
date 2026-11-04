@@ -12,8 +12,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,6 +39,10 @@ public class TesterInstaller {
 
     // The application settings
     private final AppConfig config;
+
+    // The bytes of each file of the tester folder, kept from the first
+    // read, so code run for one student cannot change them for the next
+    private final HashMap<Path, byte[]> originals = new HashMap<>();
 
     /**
      * Creates a new tester installer.
@@ -105,7 +109,7 @@ public class TesterInstaller {
             for (String dataFileName : dataFileNames) {
                 Files.deleteIfExists(questionFolder.resolve(dataFileName));
                 Path dataFile = sourceDirectory.resolve(dataFileName);
-                if (Files.isRegularFile(dataFile)) {
+                if (hasOriginal(dataFile)) {
                     copyReplacing(dataFile, questionFolder);
                 }
             }
@@ -127,7 +131,7 @@ public class TesterInstaller {
             throws IOException {
         // ISO-8859-1 reads any bytes, so a tester saved in another
         // encoding cannot stop grading; the names searched are ASCII
-        String testerSource = Files.readString(testerFile,
+        String testerSource = new String(readOriginal(testerFile),
                 StandardCharsets.ISO_8859_1);
         List<String> dataFileNames = config.getList(
                 ConfigKeys.TESTER_DATA_FILES);
@@ -135,7 +139,7 @@ public class TesterInstaller {
 
         for (String dataFileName : dataFileNames) {
             boolean needed = testerSource.contains(dataFileName);
-            boolean present = Files.isRegularFile(
+            boolean present = hasOriginal(
                     testerFile.resolveSibling(dataFileName));
             if (needed && !present) {
                 missing.add(dataFileName);
@@ -162,14 +166,44 @@ public class TesterInstaller {
     }
 
     /**
-     * Copies a file into a folder, replacing a file with the same name.
+     * Copies a file of the tester folder into a folder, replacing a file
+     * with the same name.
      *
      * @param file the file to copy
      * @param folder the folder to copy it into
      * @throws IOException if the copy fails
      */
     private void copyReplacing(Path file, Path folder) throws IOException {
-        Files.copy(file, folder.resolve(file.getFileName()),
-                StandardCopyOption.REPLACE_EXISTING);
+        Path target = folder.resolve(file.getFileName());
+        Files.deleteIfExists(target);
+        Files.write(target, readOriginal(file));
+    }
+
+    /**
+     * Returns the bytes of a file of the tester folder as first read. Every
+     * file is read while the first student is installed, before any tester
+     * of the run can change it. The worker threads share this object, so
+     * only one of them reads at a time.
+     *
+     * @param file the file
+     * @return its bytes
+     * @throws IOException if it cannot be read
+     */
+    private synchronized byte[] readOriginal(Path file) throws IOException {
+        if (!originals.containsKey(file)) {
+            originals.put(file, Files.readAllBytes(file));
+        }
+        return originals.get(file);
+    }
+
+    /**
+     * Checks whether the tester folder has a file, or had it when first
+     * read.
+     *
+     * @param file the file
+     * @return true if the file can be used
+     */
+    private synchronized boolean hasOriginal(Path file) {
+        return originals.containsKey(file) || Files.isRegularFile(file);
     }
 }

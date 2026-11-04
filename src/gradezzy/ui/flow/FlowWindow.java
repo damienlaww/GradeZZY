@@ -12,7 +12,9 @@
 package gradezzy.ui.flow;
 
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javafx.animation.PauseTransition;
@@ -36,6 +38,7 @@ import javafx.stage.WindowEvent;
 import javafx.util.Duration;
 
 import gradezzy.model.GradingRun;
+import gradezzy.model.Student;
 import gradezzy.ui.ThemeManager;
 import gradezzy.ui.backend.DashboardBackend;
 
@@ -75,6 +78,12 @@ public class FlowWindow {
 
     // What the window remembers between steps
     private final FlowState state = new FlowState();
+
+    // The lookup of students with no submission still running, or null
+    private MissingStudentsLookup missingLookup = null;
+
+    // What to run when that lookup ends
+    private final List<Runnable> missingCallbacks = new ArrayList<>();
 
     // Sets the AtlantaFX theme
     private final ThemeManager themes = new ThemeManager();
@@ -383,14 +392,28 @@ public class FlowWindow {
      */
     public void confirm(String title, String detail, String okText,
             Runnable onOk) {
+        Label text = Parts.subtitle(detail);
+        text.setMaxWidth(Parts.TEXT_WIDTH);
+        confirm(title, text, okText, onOk);
+    }
+
+    /**
+     * Asks a yes or no question in a sheet, with something richer than
+     * a sentence under it, such as a table.
+     *
+     * @param title the question
+     * @param content what is shown under the question
+     * @param okText the text of the button that goes ahead
+     * @param onOk what to do when the instructor goes ahead
+     */
+    public void confirm(String title, Node content, String okText,
+            Runnable onOk) {
         Button cancel = Parts.secondary("Cancel", () -> closeSheet());
         Button ok = Parts.primary(okText);
         ok.setOnAction(event -> confirmed(onOk));
-        Label text = Parts.subtitle(detail);
-        text.setMaxWidth(Parts.TEXT_WIDTH);
         HBox buttons = Parts.row(Parts.GAP,
                 new Node[] {Parts.grow(), cancel, ok});
-        VBox body = new VBox(Parts.GAP, Parts.title(title), text,
+        VBox body = new VBox(Parts.GAP, Parts.title(title), content,
                 buttons);
         body.getStyleClass().add("confirm");
         showSheet(body);
@@ -460,6 +483,69 @@ public class FlowWindow {
     private void confirmed(Runnable onOk) {
         closeSheet();
         onOk.run();
+    }
+
+    /**
+     * Returns the students on a run's score sheet with no submission. The
+     * first time, live mode reads the score sheet on a background thread,
+     * returns an empty list and runs whenDone once the students are known.
+     *
+     * @param run the run
+     * @param whenDone what to run once a background lookup ends
+     * @return the students, or an empty list while they are looked up
+     */
+    public List<Student> findMissingStudents(GradingRun run,
+            Runnable whenDone) {
+        List<Student> known = state.getMissingStudents(run);
+        if (known != null) {
+            return known;
+        }
+        if (backend.isDemo()) {
+            state.setMissingStudents(run, backend.listMissingStudents(run));
+            return state.getMissingStudents(run);
+        }
+        missingCallbacks.add(whenDone);
+        if (missingLookup == null || missingLookup.getRun() != run) {
+            MissingStudentsLookup lookup = new MissingStudentsLookup(
+                    backend, run);
+            lookup.setOnSucceeded(event -> missingFound(lookup));
+            lookup.setOnFailed(event -> missingNotFound(lookup));
+            missingLookup = lookup;
+            Thread worker = new Thread(lookup, "gradezzy-roster");
+            worker.setDaemon(true);
+            worker.start();
+        }
+        return new ArrayList<>();
+    }
+
+    // Keeps the students a finished lookup found and tells the screens.
+    private void missingFound(MissingStudentsLookup lookup) {
+        if (lookup != missingLookup) {
+            return;
+        }
+        missingLookup = null;
+        state.setMissingStudents(lookup.getRun(), lookup.getValue());
+        runMissingCallbacks();
+    }
+
+    // Treats a failed lookup as no student missing, so it is not retried
+    // on every redraw.
+    private void missingNotFound(MissingStudentsLookup lookup) {
+        if (lookup != missingLookup) {
+            return;
+        }
+        missingLookup = null;
+        state.setMissingStudents(lookup.getRun(), new ArrayList<>());
+        runMissingCallbacks();
+    }
+
+    // Runs, once each, what the screens asked to run after the lookup.
+    private void runMissingCallbacks() {
+        List<Runnable> callbacks = new ArrayList<>(missingCallbacks);
+        missingCallbacks.clear();
+        for (Runnable callback : callbacks) {
+            callback.run();
+        }
     }
 
     /**

@@ -30,6 +30,7 @@ import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
+import gradezzy.testcase.FolderSnapshot;
 import gradezzy.testcase.QuestionFolderFinder;
 import gradezzy.testcase.QuestionWorkspace;
 import gradezzy.testcase.TestCaseException;
@@ -133,7 +134,8 @@ public class CompileStage implements GradingStage {
      * is not graded, and gets an INTERNAL_ERROR instead of a
      * COMPILE_ERROR, so the student is not blamed. Each question is
      * compiled in its own copy of its folder, so code run for Q1a cannot
-     * change what Q1b's tester sees.
+     * change what Q1b's tester sees. A snapshot of each compiled copy is
+     * kept, so ExecuteStage can undo any change made to it later.
      *
      * @param submission the submission
      * @param context the context
@@ -157,9 +159,13 @@ public class CompileStage implements GradingStage {
                 if (testerError.isEmpty()) {
                     Path copy = prepareCopy(submission, assessment,
                             question);
-                    submission.addQuestionResult(compileQuestion(
-                            submission, question, tester, copy,
-                            context.getTesters()));
+                    QuestionResult result = compileQuestion(submission,
+                            question, tester, copy, context.getTesters());
+                    submission.addQuestionResult(result);
+                    if (result.isCompiled()) {
+                        saveSnapshot(context.getConfig(), submission,
+                                tester, copy);
+                    }
                     removeTesterSource(folder.resolve(
                             tester.getClassName() + JAVA_EXTENSION));
                 } else {
@@ -535,6 +541,26 @@ public class CompileStage implements GradingStage {
         } catch (IOException exception) {
             throw new GradingException("The tester source could not be "
                     + "removed: " + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Remembers the compiled files of a question's copy for ExecuteStage.
+     *
+     * @param config the application settings
+     * @param submission the submission
+     * @param tester the tester of the question
+     * @param copy the copy of the question folder
+     * @throws GradingException if the copy cannot be read
+     */
+    private void saveSnapshot(AppConfig config, Submission submission,
+            TesterFile tester, Path copy) throws GradingException {
+        try {
+            tester.saveSnapshot(submission.getUsername(), new FolderSnapshot(
+                    copy, config.getList(ConfigKeys.TESTER_DATA_FILES)));
+        } catch (IOException exception) {
+            throw new GradingException("The compiled files could not be "
+                    + "read: " + exception.getMessage(), exception);
         }
     }
 

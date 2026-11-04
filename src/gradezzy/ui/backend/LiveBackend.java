@@ -10,6 +10,7 @@
 package gradezzy.ui.backend;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -22,8 +23,14 @@ import javafx.scene.control.TreeItem;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.exec.ProcessRunner;
+import gradezzy.exec.SourceCompiler;
 import gradezzy.fix.FixRecord;
+import gradezzy.grading.CompileStage;
+import gradezzy.grading.GradingException;
 import gradezzy.grading.ProgressListener;
+import gradezzy.ingest.IngestException;
+import gradezzy.ingest.RosterReader;
 import gradezzy.model.Anomaly;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
@@ -31,6 +38,7 @@ import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.Section;
+import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.plagiarism.SimilarityPair;
@@ -156,6 +164,41 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
+     * Calls AssessmentFactory.create with the tester folder.
+     */
+    @Override
+    public Assessment getAssessment(Path testersDirectory) {
+        if (testersDirectory == null) {
+            return assessment;
+        }
+        return new AssessmentFactory(config).create(
+                assessment.getModuleCode(), testersDirectory);
+    }
+
+    /**
+     * Calls AssessmentFactory.findMaxScoreProblems.
+     */
+    @Override
+    public List<String> checkMaxScores(Path testersDirectory) {
+        return new AssessmentFactory(config).findMaxScoreProblems(
+                testersDirectory);
+    }
+
+    /**
+     * Calls RosterReader.readDenominator on the score sheet, or the one in
+     * Settings when none is given.
+     */
+    @Override
+    public double getScoreSheetDenominator(Path scoreSheetFile) {
+        Path sheet = scoreSheetFile;
+        if (sheet == null) {
+            sheet = Paths.get(config.getString(
+                    ConfigKeys.SCORE_SHEET_FILE));
+        }
+        return new RosterReader(config).readDenominator(sheet);
+    }
+
+    /**
      * Returns exec.run.timeout.seconds.
      */
     @Override
@@ -263,6 +306,114 @@ public class LiveBackend implements DashboardBackend {
         }
         return new ImportItem(kind, path, "", ImportState.ACCEPTED,
                 "Folder found.");
+    }
+
+    /**
+     * Calls CompileStage.checkTesterFolder with the chosen starter folder,
+     * or the one in Settings when none is chosen. A folder that is missing
+     * or holds no tester is one short problem, and a full path in a
+     * problem is shortened to the folder's name.
+     */
+    @Override
+    public List<String> checkTesters(Path testersDirectory,
+            Path starterDirectory) {
+        List<String> problems = new ArrayList<>();
+        String folderName = String.valueOf(testersDirectory.getFileName());
+        if (!Files.isDirectory(testersDirectory)) {
+            problems.add("The tester folder " + folderName
+                    + " could not be found.");
+            return problems;
+        }
+        if (!holdsTester(testersDirectory)) {
+            problems.add(folderName + " holds no tester files, such as "
+                    + firstTesterName() + ".");
+            return problems;
+        }
+
+        CompileStage stage = new CompileStage(new SourceCompiler(config,
+                new ProcessRunner(config)), starterDirectory);
+        List<String> found = new ArrayList<>();
+        try {
+            found = stage.checkTesterFolder(config, assessment,
+                    testersDirectory);
+        } catch (GradingException exception) {
+            found.add("The testers could not be checked: "
+                    + exception.getMessage());
+        }
+        String fullPath = testersDirectory.toString();
+        for (String problem : found) {
+            problems.add(problem.replace(fullPath, folderName));
+        }
+        return problems;
+    }
+
+    // Says whether a folder holds at least one tester file.
+    private boolean holdsTester(Path folder) {
+        String ending = config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
+                + ".java";
+        try {
+            for (Path file : FileUtils.listFiles(folder, ".java")) {
+                if (file.getFileName().toString().endsWith(ending)) {
+                    return true;
+                }
+            }
+        } catch (IOException exception) {
+            return false;
+        }
+        return false;
+    }
+
+    // Returns the tester file name of the first question, such as
+    // Q1aTester.java.
+    private String firstTesterName() {
+        String suffix = config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
+                + ".java";
+        if (assessment == null || assessment.getQuestions().isEmpty()) {
+            return suffix;
+        }
+        return assessment.getQuestions().get(0).getId() + suffix;
+    }
+
+    /**
+     * Reads the run's score sheet with RosterReader, or the one in
+     * Settings when the run has none, and keeps the students with no
+     * submission in the run.
+     */
+    @Override
+    public List<Student> listMissingStudents(GradingRun gradingRun) {
+        List<Student> missing = new ArrayList<>();
+        if (gradingRun == null) {
+            return missing;
+        }
+
+        Path scoreSheet = gradingRun.getScoreSheetFile();
+        if (scoreSheet == null) {
+            scoreSheet = getConfiguredPath(InputKind.ROSTER);
+        }
+
+        List<Student> roster = new ArrayList<>();
+        try {
+            roster = new RosterReader(config).readRoster(scoreSheet);
+        } catch (IngestException exception) {
+            return missing;
+        }
+
+        for (Student student : roster) {
+            if (!hasSubmission(gradingRun, student.getUsername())) {
+                missing.add(student);
+            }
+        }
+        return missing;
+    }
+
+    // Says whether the run has a submission of a username.
+    private boolean hasSubmission(GradingRun gradingRun, String username) {
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (submission.getUsername().equalsIgnoreCase(username)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -40,6 +40,16 @@ public class RosterReader {
     // again by another tool may leave out of each student row
     private static final String END_OF_LINE_COLUMN = "End-of-Line Indicator";
 
+    // The column that holds the most marks a student can get
+    private static final String DENOMINATOR_COLUMN =
+            "Calculated Final Grade Denominator";
+
+    /**
+     * Returned by readDenominator when the score sheet gives no single
+     * denominator.
+     */
+    public static final double UNKNOWN_DENOMINATOR = -1.0;
+
     // The application settings
     private final AppConfig config;
 
@@ -125,6 +135,70 @@ public class RosterReader {
             }
         }
         return null;
+    }
+
+    /**
+     * Reads the denominator of the score sheet: the value of Calculated
+     * Final Grade Denominator, which the provided sheet gives as 20 on
+     * every row. The question maximums should add up to it.
+     *
+     * @param scoreSheetFile the score sheet file
+     * @return the denominator, or UNKNOWN_DENOMINATOR when the sheet
+     *         cannot be read, has no such column, or its rows disagree
+     */
+    public double readDenominator(Path scoreSheetFile) {
+        List<String> values = new ArrayList<>();
+        try {
+            String text = FileUtils.readText(scoreSheetFile);
+            if (text.startsWith("\uFEFF")) {
+                text = text.substring(1);
+            }
+            List<String> records = splitRecords(
+                    TextUtils.normaliseLineEndings(text));
+            if (records.isEmpty()) {
+                return UNKNOWN_DENOMINATOR;
+            }
+
+            List<String> header = TextUtils.splitCsvLine(records.get(0));
+            int column = header.indexOf(DENOMINATOR_COLUMN);
+            if (column < 0) {
+                return UNKNOWN_DENOMINATOR;
+            }
+            for (int index = 1; index < records.size(); index++) {
+                List<String> fields = TextUtils.splitCsvLine(
+                        records.get(index));
+                if (column < fields.size()) {
+                    values.add(fields.get(column).trim());
+                }
+            }
+        } catch (IOException exception) {
+            return UNKNOWN_DENOMINATOR;
+        } catch (IllegalArgumentException exception) {
+            return UNKNOWN_DENOMINATOR;
+        }
+
+        return findSingleNumber(values);
+    }
+
+    // The one number every value holds, or UNKNOWN_DENOMINATOR if there is
+    // none, one is not a number, or two differ
+    private double findSingleNumber(List<String> values) {
+        if (values.isEmpty()) {
+            return UNKNOWN_DENOMINATOR;
+        }
+
+        double first = UNKNOWN_DENOMINATOR;
+        try {
+            first = Double.parseDouble(values.get(0));
+            for (String value : values) {
+                if (Double.parseDouble(value) != first) {
+                    return UNKNOWN_DENOMINATOR;
+                }
+            }
+        } catch (NumberFormatException exception) {
+            return UNKNOWN_DENOMINATOR;
+        }
+        return first;
     }
 
     // Builds the error shown when the roster cannot be read or is malformed.
