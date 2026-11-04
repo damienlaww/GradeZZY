@@ -150,7 +150,7 @@ public class SettingsScreen extends FlowScreen {
      */
     public SettingsScreen(FlowWindow window) {
         super(window);
-        discardButton = Parts.secondary("Discard", () -> discardChanges());
+        discardButton = Parts.secondary("Discard", () -> askDiscard());
         changesDot.getStyleClass().add("setting-dot");
         changesMark.setAlignment(Pos.CENTER);
         changesMark.setPadding(new Insets(0, DOT_TEXT_GAP, 0, 0));
@@ -268,6 +268,13 @@ public class SettingsScreen extends FlowScreen {
             field.reset();
         }
         refreshBar();
+    }
+
+    // Asks before throwing away the changes that are not saved.
+    private void askDiscard() {
+        getWindow().confirm("Discard your changes?", "Every setting goes "
+                + "back to what config.properties holds now.",
+                "Discard changes", () -> discardChanges());
     }
 
     /**

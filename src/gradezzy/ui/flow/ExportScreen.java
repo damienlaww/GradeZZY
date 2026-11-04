@@ -478,7 +478,7 @@ public class ExportScreen extends FlowScreen {
         actions.setBack(() -> getWindow().show(Step.REVIEW));
         if (exported) {
             actions.addSecondary(Parts.secondary("Export again",
-                    () -> export()));
+                    () -> askExportAgain()));
             actions.setPrimary("Grade another section",
                     () -> gradeAnother(), true);
             return;
@@ -486,6 +486,13 @@ public class ExportScreen extends FlowScreen {
         boolean ready = getState().getRun() != null
                 && getBackend().supports(Capability.EXPORT_RESULTS);
         actions.setPrimary("Export score sheet", () -> export(), ready);
+    }
+
+    // Asks before writing the files again over the last export.
+    private void askExportAgain() {
+        getWindow().confirm("Export again?", "The files from the last "
+                + "export are replaced with new ones.", "Export again",
+                () -> export());
     }
 
     // Empties the batch and goes back to Set up.
