@@ -22,14 +22,8 @@ import javafx.scene.control.TreeItem;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
-import gradezzy.exec.ProcessRunner;
-import gradezzy.exec.SourceCompiler;
 import gradezzy.fix.FixRecord;
-import gradezzy.grading.CompileStage;
-import gradezzy.grading.GradingException;
 import gradezzy.grading.ProgressListener;
-import gradezzy.ingest.IngestException;
-import gradezzy.ingest.RosterReader;
 import gradezzy.model.Anomaly;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
@@ -37,7 +31,6 @@ import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.Section;
-import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.plagiarism.SimilarityPair;
@@ -270,68 +263,6 @@ public class LiveBackend implements DashboardBackend {
         }
         return new ImportItem(kind, path, "", ImportState.ACCEPTED,
                 "Folder found.");
-    }
-
-    /**
-     * Calls CompileStage.checkTesterFolder with the starter folder in
-     * Settings. A tester folder that cannot be checked at all is one
-     * problem.
-     */
-    @Override
-    public List<String> checkTesters(Path testersDirectory) {
-        CompileStage stage = new CompileStage(new SourceCompiler(config,
-                new ProcessRunner(config)), null);
-        try {
-            return stage.checkTesterFolder(config, assessment,
-                    testersDirectory);
-        } catch (GradingException exception) {
-            List<String> problems = new ArrayList<>();
-            problems.add("The testers could not be checked: "
-                    + exception.getMessage());
-            return problems;
-        }
-    }
-
-    /**
-     * Reads the run's score sheet with RosterReader, or the one in
-     * Settings when the run has none, and keeps the students with no
-     * submission in the run.
-     */
-    @Override
-    public List<Student> listMissingStudents(GradingRun gradingRun) {
-        List<Student> missing = new ArrayList<>();
-        if (gradingRun == null) {
-            return missing;
-        }
-
-        Path scoreSheet = gradingRun.getScoreSheetFile();
-        if (scoreSheet == null) {
-            scoreSheet = getConfiguredPath(InputKind.ROSTER);
-        }
-
-        List<Student> roster = new ArrayList<>();
-        try {
-            roster = new RosterReader(config).readRoster(scoreSheet);
-        } catch (IngestException exception) {
-            return missing;
-        }
-
-        for (Student student : roster) {
-            if (!hasSubmission(gradingRun, student.getUsername())) {
-                missing.add(student);
-            }
-        }
-        return missing;
-    }
-
-    // Says whether the run has a submission of a username.
-    private boolean hasSubmission(GradingRun gradingRun, String username) {
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (submission.getUsername().equalsIgnoreCase(username)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
