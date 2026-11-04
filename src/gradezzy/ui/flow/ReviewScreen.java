@@ -226,20 +226,22 @@ public class ReviewScreen extends FlowScreen {
         createFilters();
         createSearch();
         createTable();
+        // The retry note has its own line above the table, as the shared
+        // note does, so a narrow window never cuts its words off
         banner.getStyleClass().add("banner");
         banner.setMinWidth(0);
-        HBox.setHgrow(banner, Priority.SOMETIMES);
         sharedBanner.getStyleClass().addAll("banner", "warn");
 
         HBox tools = Parts.row(Parts.GAP,
-                new Node[] {createFilterBar(), banner, Parts.grow()});
+                new Node[] {createFilterBar(), Parts.grow()});
         tools.getChildren().add(search);
         VBox.setMargin(tools, new Insets(Parts.GAP_SMALL / 2, 0, 0, 0));
 
         VBox header = new VBox(HEADING_GAP, Parts.heading(
                 "Review the results"), subtitle);
         guide.getStyleClass().add("review-guide");
-        main.getChildren().addAll(header, tools, guide, sharedBanner, table);
+        main.getChildren().addAll(header, tools, guide, banner, sharedBanner,
+                table);
         main.getStyleClass().add("review-main");
         VBox.setVgrow(table, Priority.ALWAYS);
         HBox.setHgrow(main, Priority.ALWAYS);
@@ -774,10 +776,13 @@ public class ReviewScreen extends FlowScreen {
         banner.setVisible(show);
         banner.setManaged(show);
         if (show) {
+            Label text = Parts.strong(Parts.plural(couldNot, "submission")
+                    + " did not finish.");
+            text.setWrapText(true);
+            text.setMinWidth(0);
+            HBox.setHgrow(text, Priority.ALWAYS);
             banner.getChildren().addAll(Parts.pill("Could not grade",
-                    Tone.BAD), Parts.strong(Parts.plural(couldNot,
-                    "submission") + " did not finish."),
-                    retryAction(run, couldNot));
+                    Tone.BAD), text, retryAction(run, couldNot));
         }
     }
 

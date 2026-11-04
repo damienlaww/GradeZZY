@@ -710,6 +710,14 @@
     -fx-background-color: -color-warning-subtle;
 }
 
+/* A pill in a banner is already on its colour, so it keeps its dot and
+   words but not its own padding: the banner's edges line up on both
+   sides. */
+.banner > .pill {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
 /* A better score sheet or folder than the chosen one, offered under a
    class file row on Set up with a "Use this file instead" button */
 .match-suggestion {
