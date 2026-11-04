@@ -601,14 +601,9 @@
     -fx-alignment: center-right;
 }
 
-/* Export: compact figure tiles beside the small bell curve */
-.glance-figure {
-    -fx-padding: 10px 14px;
-    -fx-spacing: 2px;
-}
-
+/* Export: the list of figures beside the small bell curve */
 .glance-figure .figure-value {
-    -fx-font-size: 22px;
+    -fx-font-size: 20px;
 }
 
 .arrow-link {

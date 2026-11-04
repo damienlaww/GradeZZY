@@ -558,7 +558,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls ExportService.export for the whole run.
+     * Calls ExportService.export for the chosen students.
      */
     @Override
     public ActionResult export(GradingRun gradingRun,
@@ -572,7 +572,7 @@ public class LiveBackend implements DashboardBackend {
                 ConfigKeys.OUTPUT_DIR));
         try {
             Path written = services.getExportService().export(gradingRun,
-                    formatName, outputFolder);
+                    scope, formatName, outputFolder);
             if (written == null) {
                 return ActionResult.failed(waitingMessage(
                         Capability.EXPORT_RESULTS));
@@ -580,8 +580,9 @@ public class LiveBackend implements DashboardBackend {
 
             String note = "";
             if (scope.size() < gradingRun.getSubmissions().size()) {
-                note = " The whole run was exported, because exporting "
-                        + "only chosen students is not connected yet.";
+                note = " It holds " + scope.size() + " of "
+                        + gradingRun.getSubmissions().size()
+                        + " students.";
             }
             return ActionResult.saved("Exported " + formatName
                     + " to " + written + "." + note, written);

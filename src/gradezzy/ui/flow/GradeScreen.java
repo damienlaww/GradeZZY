@@ -68,6 +68,13 @@ public class GradeScreen extends FlowScreen
     // The separator between parts of a line
     private static final String DOT = " · ";
 
+    // The width of the "Now:" line, so it does not move as names change
+    private static final double NOW_WIDTH = 420.0;
+
+    // The width of the name in the "Now:" line, so the step after it
+    // stays in one place
+    private static final double NAME_WIDTH = 180.0;
+
     // The rows of the "So far" card, top to bottom
     private static final int GRADED = 0;
     private static final int REVIEW = 1;
@@ -92,8 +99,14 @@ public class GradeScreen extends FlowScreen
     // "About 1 minute left"
     private final Label timeLeft = Parts.muted("");
 
-    // What is happening now
+    // "Now:", or a message when no student is being graded
     private final Label now = Parts.muted("");
+
+    // The student being graded now
+    private final Label nowName = Parts.muted("");
+
+    // What is being done to that student, such as "· saving"
+    private final Label nowStage = Parts.muted("");
 
     // Why grading could not run, shown only after a failure
     private final Label reason = Parts.muted("");
@@ -240,9 +253,8 @@ public class GradeScreen extends FlowScreen
         HBox count = new HBox(Parts.GAP_SMALL / 2, done, ofTotal);
         count.setAlignment(Pos.BASELINE_LEFT);
         VBox left = new VBox(count, timeLeft);
-        now.getStyleClass().add("small-text");
-        now.setMinWidth(0);
-        HBox top = new HBox(Parts.GAP, left, Parts.grow(), now);
+        HBox nowLine = createNowLine();
+        HBox top = new HBox(Parts.GAP, left, Parts.grow(), nowLine);
         top.setAlignment(Pos.BOTTOM_LEFT);
         reason.setWrapText(true);
         reason.setVisible(false);
@@ -256,6 +268,49 @@ public class GradeScreen extends FlowScreen
         fill.maxWidthProperty().bind(bar.widthProperty().multiply(progress));
         fill.minWidthProperty().bind(fill.maxWidthProperty());
         return Parts.card(null, new Node[] {top, reason, bar});
+    }
+
+    // Builds the "Now:" line. It has a fixed width and the name has a
+    // fixed width, so "Now:" and the step stay put as names change.
+    private HBox createNowLine() {
+        Label[] parts = {now, nowName, nowStage};
+        String[] styles = {"grade-now", "grade-now-name", "grade-now-stage"};
+        for (int index = 0; index < parts.length; index++) {
+            parts[index].getStyleClass().add("small-text");
+            parts[index].getStyleClass().add(styles[index]);
+            // Cut instead of pushing the count aside
+            parts[index].setMinWidth(0);
+        }
+        nowName.setPrefWidth(NAME_WIDTH);
+        nowName.setMaxWidth(NAME_WIDTH);
+        HBox line = new HBox(Parts.FIGURE_UNIT_GAP,
+                new Node[] {now, nowName, nowStage});
+        line.setAlignment(Pos.BASELINE_LEFT);
+        line.setPrefWidth(NOW_WIDTH);
+        line.setMinWidth(0);
+        return line;
+    }
+
+    // Shows a message in the "Now:" line in place of a student.
+    private void showMessage(String message) {
+        now.setText(message);
+        showNowParts(false);
+    }
+
+    // Shows a student and what is being done to them in the "Now:" line.
+    private void showNow(Submission submission, String words) {
+        now.setText("Now:");
+        nowName.setText(Students.name(submission));
+        nowStage.setText(words);
+        showNowParts(true);
+    }
+
+    // Shows or hides the name and the step of the "Now:" line.
+    private void showNowParts(boolean shown) {
+        nowName.setVisible(shown);
+        nowName.setManaged(shown);
+        nowStage.setVisible(shown);
+        nowStage.setManaged(shown);
     }
 
     // Builds the card with the small bell curve.
@@ -351,7 +406,7 @@ public class GradeScreen extends FlowScreen
      * @param submission the student
      */
     private void showStudent(Submission submission) {
-        now.setText("Now: " + Students.name(submission));
+        showNow(submission, "");
     }
 
     /**
@@ -367,7 +422,7 @@ public class GradeScreen extends FlowScreen
         if (index >= 0 && index < STAGE_WORDS.length) {
             words = STAGE_WORDS[index];
         }
-        now.setText("Now: " + Students.name(submission) + DOT + words);
+        showNow(submission, DOT.trim() + " " + words);
     }
 
     /**
@@ -404,13 +459,13 @@ public class GradeScreen extends FlowScreen
         }
         if (gradingRun != null && hasUnfinished(gradingRun)) {
             heading.setText("Grading stopped");
-            now.setText("The rest are waiting; press Resume to grade "
+            showMessage("The rest are waiting; press Resume to grade "
                     + "them.");
             refreshAfterGrading();
             return;
         }
         heading.setText("Grading finished");
-        now.setText("");
+        showMessage("");
         getWindow().notify("Grading finished.");
         getState().reach(Step.REVIEW);
         if (isOnScreen()) {
@@ -429,7 +484,7 @@ public class GradeScreen extends FlowScreen
         failure = message;
         end();
         heading.setText("Grading could not run");
-        now.setText("");
+        showMessage("");
         reason.setText(message);
         reason.setVisible(true);
         reason.setManaged(true);
@@ -479,7 +534,7 @@ public class GradeScreen extends FlowScreen
         }
         subtitle.setText(about + ". You can leave this tab; grading "
                 + "carries on.");
-        now.setText("Starting");
+        showMessage("Starting");
         timeLeft.setText("");
         reason.setVisible(false);
         reason.setManaged(false);

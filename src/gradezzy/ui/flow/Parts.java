@@ -405,14 +405,7 @@ public final class Parts {
     public static VBox figure(String label, String value, String unit,
             String hint) {
         Label name = styled(new Label(label), "figure-label");
-        HBox line = new HBox(FIGURE_UNIT_GAP, figureValue(value));
-        line.setAlignment(Pos.BASELINE_LEFT);
-        if (unit != null) {
-            Label after = styled(new Label(unit), "figure-unit");
-            after.setMinWidth(Region.USE_PREF_SIZE);
-            line.getChildren().add(after);
-        }
-        VBox tile = new VBox(name, line);
+        VBox tile = new VBox(name, figureLine(value, unit));
         tile.getStyleClass().add("figure");
         if (hint != null) {
             tile.getChildren().add(styled(new Label(hint), "figure-hint"));
@@ -486,6 +479,25 @@ public final class Parts {
             return String.valueOf((long) mark);
         }
         return String.valueOf(mark);
+    }
+
+    /**
+     * Returns the large value of a figure with its unit after it, such
+     * as "8.8 / 20", without the tile around it. SHOULD.
+     *
+     * @param value the value, such as "8.8" or "67%"
+     * @param unit the smaller text after it, or null
+     * @return the value and unit on one line
+     */
+    public static HBox figureLine(String value, String unit) {
+        HBox line = new HBox(FIGURE_UNIT_GAP, figureValue(value));
+        line.setAlignment(Pos.BASELINE_LEFT);
+        if (unit != null) {
+            Label after = styled(new Label(unit), "figure-unit");
+            after.setMinWidth(Region.USE_PREF_SIZE);
+            line.getChildren().add(after);
+        }
+        return line;
     }
 
     // Returns the large value of a figure tile. A percent sign is drawn

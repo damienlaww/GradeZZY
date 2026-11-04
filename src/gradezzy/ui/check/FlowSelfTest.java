@@ -54,6 +54,7 @@ import gradezzy.ui.flow.MarkStats;
 import gradezzy.ui.flow.Page;
 import gradezzy.ui.flow.Parts;
 import gradezzy.ui.flow.Step;
+import gradezzy.ui.flow.StudentPanel;
 import gradezzy.ui.flow.Students;
 
 /**
@@ -401,10 +402,17 @@ public class FlowSelfTest {
         Node card = cardOf(flag);
         check(card != null && SceneFinder.shows(card, "Flag"),
                 "the panel shows the flag");
+        StudentPanel panel = studentPanel();
+        if (panel != null) {
+            panel.setVvalue(panel.getVmax());
+        }
         press(card == null ? null : SceneFinder.button(card, "Looks fine"),
                 "Looks fine");
         check(backend.getDecision(flag) == ReviewDecision.REJECTED,
                 "the flag was rejected");
+        check(panel != null && panel.getVvalue() > panel.getVmin(),
+                "the panel kept its place after Looks fine (it is at "
+                + (panel == null ? "no panel" : panel.getVvalue()) + ")");
         card = cardOf(flag);
         press(card == null ? null : SceneFinder.button(card, "Reopen"),
                 "Reopen");
@@ -717,15 +725,20 @@ public class FlowSelfTest {
         return "";
     }
 
+    // Returns the student panel, or null.
+    private StudentPanel studentPanel() {
+        for (StudentPanel panel : SceneFinder.ofType(root(),
+                StudentPanel.class)) {
+            return panel;
+        }
+        return null;
+    }
+
     // Returns the line that says who is being graded now.
     private String nowText() {
-        for (Label label : SceneFinder.ofType(root(), Label.class)) {
-            String text = label.getText();
-            if (text != null && text.startsWith("Now: ")) {
-                return text;
-            }
-        }
-        return "";
+        return SceneFinder.text(root(), "grade-now") + " "
+                + SceneFinder.text(root(), "grade-now-name") + " "
+                + SceneFinder.text(root(), "grade-now-stage");
     }
 
     // Returns the open sheet, or null.

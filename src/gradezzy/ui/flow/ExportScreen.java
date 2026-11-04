@@ -29,8 +29,6 @@ import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.ToggleGroup;
-import javafx.scene.layout.ColumnConstraints;
-import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -57,9 +55,6 @@ public class ExportScreen extends FlowScreen {
     // The width of the small bell curve
     private static final double CHART_WIDTH = 340.0;
 
-    // The share of the figure grid for each column
-    private static final double HALF = 50.0;
-
     // The size of the arrow after "See all statistics"
     private static final double ARROW_SIZE = 13.0;
 
@@ -78,8 +73,8 @@ public class ExportScreen extends FlowScreen {
     // The small bell curve
     private final BellCurveChart chart = new BellCurveChart(true);
 
-    // The four figures, two by two
-    private final GridPane figures = new GridPane();
+    // The four figures, one per row with hairlines between them
+    private final VBox figures = new VBox();
 
     // The chart and figures, or a note when nobody is graded
     private final HBox glance = Parts.row(Parts.GAP + Parts.GAP_SMALL / 2);
@@ -214,13 +209,8 @@ public class ExportScreen extends FlowScreen {
         chart.setPrefWidth(CHART_WIDTH);
         chart.setMinWidth(CHART_WIDTH);
         chart.setMaxWidth(CHART_WIDTH);
-        figures.setHgap(Parts.GAP);
-        figures.setVgap(Parts.GAP);
-        ColumnConstraints left = new ColumnConstraints();
-        left.setPercentWidth(HALF);
-        ColumnConstraints right = new ColumnConstraints();
-        right.setPercentWidth(HALF);
-        figures.getColumnConstraints().addAll(left, right);
+        // The chart grows to the height of the figures beside it
+        chart.setMaxHeight(Double.MAX_VALUE);
         HBox.setHgrow(figures, Priority.ALWAYS);
         glance.getChildren().addAll(chart, figures);
         return Parts.card(null, new Node[] {top, glance, noMarks});
@@ -294,20 +284,23 @@ public class ExportScreen extends FlowScreen {
         String max = "/ " + Parts.mark(stats.getMaxTotal());
         double mean = Math.round(stats.getMean() * ONE_DECIMAL)
                 / ONE_DECIMAL;
-        figures.add(figure("Average", Parts.mark(mean), max), 0, 0);
-        figures.add(figure("Median", Parts.mark(stats.getMedian()), max),
-                1, 0);
-        figures.add(figure("Passed", Math.round(stats.getPassRate()
-                * PERCENT) + "%", null), 0, 1);
-        figures.add(figure("Highest", Parts.mark(stats.getHighest()), max),
-                1, 1);
+        HBox first = figure("Average", Parts.mark(mean), max);
+        first.getStyleClass().add("first");
+        HBox last = figure("Highest", Parts.mark(stats.getHighest()), max);
+        last.getStyleClass().add("last");
+        figures.getChildren().addAll(first,
+                figure("Median", Parts.mark(stats.getMedian()), max),
+                figure("Passed", Math.round(stats.getPassRate() * PERCENT)
+                + "%", null), last);
     }
 
-    // Builds one compact figure tile.
-    private VBox figure(String name, String value, String unit) {
-        VBox tile = Parts.figure(name, value, unit, null);
-        tile.getStyleClass().add("glance-figure");
-        return tile;
+    // Builds one row of the figure list: the name on the left and the
+    // value on the right.
+    private HBox figure(String name, String value, String unit) {
+        HBox row = Parts.row(Parts.GAP, new Node[] {Parts.muted(name),
+                Parts.grow(), Parts.figureLine(value, unit)});
+        row.getStyleClass().addAll("card-row", "glance-figure");
+        return row;
     }
 
     // Fills the similar code card, or hides it when the check is off.

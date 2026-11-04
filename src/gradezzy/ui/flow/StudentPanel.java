@@ -85,6 +85,10 @@ public class StudentPanel extends ScrollPane {
     // The student shown, or null
     private Submission submission = null;
 
+    // The fix being undone on a background thread, or null. Only one
+    // student is graded again at a time.
+    private Anomaly undoing = null;
+
     /**
      * Creates an empty panel.
      *
@@ -113,9 +117,21 @@ public class StudentPanel extends ScrollPane {
      * @param shown the student, or null for none
      */
     public void show(Submission shown) {
+        boolean sameStudent = isSameStudent(shown);
         submission = shown;
-        setVvalue(0);
         refresh();
+        // A new student starts at the top; the same one stays in place
+        if (!sameStudent) {
+            setVvalue(getVmin());
+        }
+    }
+
+    // Says whether a student is the one shown now.
+    private boolean isSameStudent(Submission shown) {
+        if (shown == null || submission == null) {
+            return false;
+        }
+        return shown.getUsername().equals(submission.getUsername());
     }
 
     /**
@@ -144,9 +160,39 @@ public class StudentPanel extends ScrollPane {
     }
 
     /**
-     * Redraws the panel for the student shown.
+     * Redraws the panel for the student shown, keeping how far down it
+     * is scrolled.
      */
     public void refresh() {
+        double offset = scrolledBy();
+        rebuild();
+        scrollDownBy(offset);
+    }
+
+    // Returns how far down the panel is scrolled, in pixels.
+    private double scrolledBy() {
+        double hidden = body.getHeight() - getViewportBounds().getHeight();
+        if (hidden <= 0) {
+            return 0;
+        }
+        return getVvalue() * hidden;
+    }
+
+    // Scrolls down by a number of pixels, as far as the panel allows.
+    // The panel is laid out first so the new height is known.
+    private void scrollDownBy(double offset) {
+        applyCss();
+        layout();
+        double hidden = body.getHeight() - getViewportBounds().getHeight();
+        if (hidden <= 0) {
+            setVvalue(getVmin());
+            return;
+        }
+        setVvalue(Math.min(getVmax(), offset / hidden));
+    }
+
+    // Builds the panel's contents for the student shown.
+    private void rebuild() {
         body.getChildren().clear();
         if (submission == null) {
             return;
@@ -489,6 +535,8 @@ public class StudentPanel extends ScrollPane {
                 addAdvice(card, anomaly);
             }
             addCheckButton(buttons, anomaly, backend);
+        } else if (status == FixStatus.APPLIED && undoing != null) {
+            addUndoingNote(card, anomaly);
         } else if (status == FixStatus.APPLIED) {
             buttons.getChildren().addAll(
                     Parts.small("Approve",
@@ -502,6 +550,19 @@ public class StudentPanel extends ScrollPane {
         }
         addButtons(card, buttons);
         return card;
+    }
+
+    // Says, in place of Approve and Undo, that a fix is being undone.
+    private void addUndoingNote(VBox card, Anomaly anomaly) {
+        String text = "Wait until the other fix is undone.";
+        if (anomaly == undoing) {
+            text = "Undoing the fix and grading this student again. "
+                    + "This can take a minute; you can keep reviewing.";
+        }
+        Label note = Parts.muted(text);
+        note.getStyleClass().add("small-text");
+        note.setWrapText(true);
+        card.getChildren().add(note);
     }
 
     // Adds one row per line of a fix's value: red with a minus for what
@@ -726,13 +787,44 @@ public class StudentPanel extends ScrollPane {
     }
 
     /**
-     * Undoes a fix made for the student.
+     * Undoes a fix made for the student. Live mode grades the student
+     * again, so it runs on a background thread and the card says so
+     * until it ends.
      *
      * @param backend the backend that keeps the fixes
      * @param repair the fix
      */
     private void rejectRepair(DashboardBackend backend, RepairItem repair) {
-        apply(backend.rejectRepair(repair), false);
+        if (backend.isDemo()) {
+            apply(backend.rejectRepair(repair), false);
+            return;
+        }
+        if (undoing != null) {
+            return;
+        }
+
+        UndoFixJob job = new UndoFixJob(backend, repair);
+        job.setOnSucceeded(event -> undoFinished(job.getValue()));
+        job.setOnFailed(event -> undoFailed(job));
+        undoing = repair.getAnomaly();
+        refresh();
+        Thread worker = new Thread(job, "gradezzy-undo");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Shows the outcome of an undo that ran in the background. It is
+    // always told, as the instructor may have moved on to someone else.
+    private void undoFinished(ActionResult result) {
+        undoing = null;
+        apply(result, true);
+    }
+
+    // Shows why an undo stopped before it finished.
+    private void undoFailed(UndoFixJob job) {
+        undoing = null;
+        apply(ActionResult.failed("The fix was not undone: "
+                + job.getException().getMessage()), true);
     }
 
     /**

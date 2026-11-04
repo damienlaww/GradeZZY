@@ -48,6 +48,10 @@ public class ExportService {
     // failed export never replaces the earlier file
     private static final String TEMP_SUFFIX = ".part";
 
+    // Joins the counts in the name of an export of some students, such
+    // as 3_OF_6
+    private static final String OF_SEPARATOR = "_OF_";
+
     // The registered exporters
     private final List<Exporter> exporters = new ArrayList<>();
 
@@ -134,6 +138,60 @@ public class ExportService {
      */
     public Path export(GradingRun gradingRun, String formatName,
             Path outputDirectory) throws ExportException {
+        return export(gradingRun, formatName, outputDirectory, "");
+    }
+
+    /**
+     * Exports only some students of a run. The CSV keeps every row of
+     * the score sheet but fills the mark only for these students; the
+     * JSON lists only them. The file name gets the counts, for example
+     * RUN-1792545961628-CS102-G2-3_OF_6-JSON.json, so it never replaces
+     * the export of the whole run. When the students are the whole run,
+     * or none are given, this is the same as exporting the whole run.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param gradingRun the grading run
+     * @param scope the students to export, all from this run
+     * @param formatName the format name, for example CSV
+     * @param outputDirectory the folder to write to, created if missing
+     * @return the file that was written
+     * @throws ExportException if there is no run, the format is unknown,
+     *         the folder cannot be created or the exporter wrote no file
+     */
+    public Path export(GradingRun gradingRun, List<Submission> scope,
+            String formatName, Path outputDirectory)
+            throws ExportException {
+        if (gradingRun == null) {
+            throw new ExportException("There is no run to export.");
+        }
+
+        int total = gradingRun.getSubmissions().size();
+        if (scope == null || scope.isEmpty() || scope.size() >= total) {
+            return export(gradingRun, formatName, outputDirectory);
+        }
+
+        GradingRun part = new GradingRun(gradingRun.getId(),
+                gradingRun.getAssessment(), gradingRun.getSection(),
+                gradingRun.getStartedAt());
+        part.setScoreSheetFile(gradingRun.getScoreSheetFile());
+        part.setStarterDirectory(gradingRun.getStarterDirectory());
+        part.setTestersDirectory(gradingRun.getTestersDirectory());
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (scope.contains(submission)) {
+                part.addSubmission(submission);
+            }
+        }
+
+        String counts = part.getSubmissions().size() + OF_SEPARATOR
+                + total;
+        return export(part, formatName, outputDirectory, counts);
+    }
+
+    // Exports a run; nameExtra, if not empty, goes into the file name
+    // before the format.
+    private Path export(GradingRun gradingRun, String formatName,
+            Path outputDirectory, String nameExtra) throws ExportException {
         if (gradingRun == null) {
             throw new ExportException("There is no run to export.");
         }
@@ -159,7 +217,7 @@ public class ExportService {
         }
 
         Path outputFile = outputDirectory.resolve(
-                createFileName(gradingRun, exporter));
+                createFileName(gradingRun, exporter, nameExtra));
 
         Path tempFile = outputFile.resolveSibling(outputFile.getFileName()
                 + TEMP_SUFFIX);
@@ -290,11 +348,15 @@ public class ExportService {
     // Builds the file name from the run id, module, section, format
     // name and the exporter's extension. The format name is needed
     // because two formats can share an extension.
-    private String createFileName(GradingRun gradingRun, Exporter exporter) {
+    private String createFileName(GradingRun gradingRun, Exporter exporter,
+            String nameExtra) {
         String name = gradingRun.getId() + NAME_SEPARATOR
                 + gradingRun.getSection().getModuleCode() + NAME_SEPARATOR
-                + gradingRun.getSection().getSectionCode() + NAME_SEPARATOR
-                + exporter.getFormatName();
+                + gradingRun.getSection().getSectionCode() + NAME_SEPARATOR;
+        if (!nameExtra.isEmpty()) {
+            name = name + nameExtra + NAME_SEPARATOR;
+        }
+        name = name + exporter.getFormatName();
 
         return makeSafe(name) + "." + makeSafe(exporter.getFileExtension());
     }

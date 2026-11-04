@@ -2,7 +2,9 @@
  * File: BellCurveChart.java
  *
  * Purpose: Draws how the total marks spread: one bar per mark (how many
- * students got it) with a smooth bell curve on top. The full chart also
+ * students got it) with a smooth bell curve on top. The small chart
+ * groups the marks into five wider bars instead, so a small class still
+ * shows the bell's shape. The full chart also
  * shades the band where most students fall (the average plus or minus
  * one spread) and draws lines at the average and the pass mark.
  *
@@ -39,6 +41,11 @@ public class BellCurveChart extends Region {
     // How many bins when marks are grouped
     private static final int GROUPED_BINS = 20;
 
+    // How many bins the small chart always uses, such as 0 to 4, 4 to 8
+    // and so on out of 20. With one bar per mark, a few students spread
+    // over the marks give a curve too low to see against the bars.
+    private static final int SMALL_BINS = 5;
+
     // Space for the axis labels of the full chart: left, right, top,
     // bottom
     private static final double[] FULL_MARGINS = {40, 12, 30, 36};
@@ -69,9 +76,6 @@ public class BellCurveChart extends Region {
 
     // How far the average and pass lines rise above the plot
     private static final double LINE_RISE = 6.0;
-
-    // The number of x-axis labels on the small chart
-    private static final int SMALL_TICKS = 4;
 
     // The usual gap between x-axis labels on the full chart, in marks
     private static final int FULL_TICK_MARKS = 2;
@@ -162,7 +166,12 @@ public class BellCurveChart extends Region {
         }
 
         double max = stats.getMaxTotal();
-        boolean single = max <= MOST_SINGLE_BARS && max == Math.rint(max);
+        boolean single = !small && max <= MOST_SINGLE_BARS
+                && max == Math.rint(max);
+        int binCount = GROUPED_BINS;
+        if (small) {
+            binCount = SMALL_BINS;
+        }
         int[] counts;
         double binMarks;
         double lowMark;
@@ -173,8 +182,8 @@ public class BellCurveChart extends Region {
             lowMark = -HALF_MARK;
             highMark = max + HALF_MARK;
         } else {
-            counts = stats.countBins(GROUPED_BINS);
-            binMarks = max / GROUPED_BINS;
+            counts = stats.countBins(binCount);
+            binMarks = max / binCount;
             lowMark = 0.0;
             highMark = max;
         }
@@ -299,7 +308,8 @@ public class BellCurveChart extends Region {
             boolean single) {
         double step;
         if (small) {
-            step = max / SMALL_TICKS;
+            // One label on each edge between bars
+            step = max / SMALL_BINS;
         } else if (single && max <= MOST_SINGLE_BARS / 2) {
             step = FULL_TICK_MARKS;
         } else {

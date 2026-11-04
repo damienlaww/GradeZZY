@@ -135,9 +135,9 @@ public enum Capability {
     /** Exports only some students. */
     EXPORT_SCOPE("Export only chosen students",
             "Exports only the students you selected or filtered.",
-            "Jing Yuan, Huxley", null, CapabilityStatus.PROPOSED,
-            "An export method that takes the visible or selected "
-            + "students instead of the whole run."),
+            "Jing Yuan, Huxley", "ExportService.export",
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; the CSV fills only the ticked students' rows."),
 
     /** The statistics dashboard. */
     STATISTICS("Statistics",
