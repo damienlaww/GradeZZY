@@ -32,7 +32,10 @@ import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 import gradezzy.testcase.QuestionFolderFinder;
 import gradezzy.testcase.QuestionWorkspace;
+import gradezzy.testcase.TestCaseException;
 import gradezzy.testcase.TesterFile;
+import gradezzy.testcase.TesterInstaller;
+import gradezzy.testcase.UploadedTesterSource;
 import gradezzy.util.FileUtils;
 
 /**
@@ -164,6 +167,79 @@ public class CompileStage implements GradingStage {
                             testerError);
                 }
             }
+        }
+    }
+
+    /**
+     * Lists what is wrong with a tester folder, so Set up can warn before
+     * grading starts: questions with no tester, data files that are
+     * missing, and testers that do not compile with the starter code.
+     * Tier: SHOULD.
+     *
+     * @param config the application settings
+     * @param assessment the assessment
+     * @param testersDirectory the tester folder
+     * @return one sentence per problem, empty when the folder is fine
+     * @throws GradingException if javac cannot be run
+     */
+    public List<String> checkTesterFolder(AppConfig config,
+            Assessment assessment, Path testersDirectory)
+            throws GradingException {
+        List<String> problems = new ArrayList<>();
+        List<TesterFile> testers = new ArrayList<>();
+
+        try {
+            testers = new UploadedTesterSource(testersDirectory, config)
+                    .prepareTesters(assessment);
+        } catch (TestCaseException exception) {
+            problems.add(exception.getMessage());
+            return problems;
+        }
+
+        TesterInstaller installer = new TesterInstaller(config);
+        for (Question question : assessment.getQuestions()) {
+            TesterFile tester = TesterFile.findFor(testers,
+                    question.getId());
+            if (tester == null) {
+                problems.add(question.getId()
+                        + " has no tester, so it will get no marks.");
+            } else {
+                addDataFileProblems(installer, tester, problems);
+                addCompileProblem(config, question, tester, problems);
+            }
+        }
+        return problems;
+    }
+
+    // Adds a sentence for each data file the tester reads but its folder
+    // does not have.
+    private void addDataFileProblems(TesterInstaller installer,
+            TesterFile tester, List<String> problems) {
+        String testerName = tester.getClassName() + JAVA_EXTENSION;
+
+        try {
+            List<String> missing = installer.findMissingDataFiles(
+                    tester.getSourceFile());
+            for (String dataFileName : missing) {
+                problems.add(testerName + " reads " + dataFileName
+                        + ", which is not in the tester folder.");
+            }
+        } catch (IOException exception) {
+            problems.add(testerName + " could not be read: "
+                    + exception.getMessage());
+        }
+    }
+
+    // Adds a sentence when the tester does not compile with the starter.
+    private void addCompileProblem(AppConfig config, Question question,
+            TesterFile tester, List<String> problems)
+            throws GradingException {
+        String testerError = compileWithStarter(config, question, tester);
+
+        if (!testerError.isEmpty()) {
+            problems.add(tester.getClassName() + JAVA_EXTENSION
+                    + " does not compile with the starter code ("
+                    + testerError + ").");
         }
     }
 

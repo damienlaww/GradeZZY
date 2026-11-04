@@ -744,8 +744,9 @@ Facts from the provided files:
   must be compiled and run with the question folder as the working
   directory (`javac Q1aTester.java`, then `java Q1aTester`, inside `Q1`).
 - The Q2 testers open `personstester.txt` and `studentstester.txt` by
-  relative name. Those files are inside the sample zips but not in
-  `Tester-Files`; ask the team where the instructor will supply them.
+  relative name. The instructor supplies them in the tester folder
+  (`Tester-Files` has them). A student's own copy is deleted before
+  grading, so an edited data file cannot change a mark.
 - `Q2` needs the provided `DataException.class`, and `Q3` needs
   `Shape.class`, `Circle.class` and `Rectangle.class`, in the folder.
 - For each test case a tester prints `Passed` or a line starting with
