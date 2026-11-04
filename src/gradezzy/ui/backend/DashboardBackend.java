@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 
 
+import gradezzy.config.ConfigKeys;
+import gradezzy.config.ExportFolders;
 import gradezzy.grading.GradingException;
 import gradezzy.grading.ProgressListener;
 import gradezzy.model.Anomaly;
@@ -22,6 +24,7 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.SavedAssessment;
+import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
@@ -295,6 +298,44 @@ public interface DashboardBackend {
     ActionResult setDecision(Anomaly anomaly, ReviewDecision decision);
 
     /**
+     * Says whether the instructor checked a student graded with 0 marks
+     * that nothing flagged. Kept until GradeZZY closes.
+     *
+     * @param submission the student
+     * @return true once checked
+     */
+    default boolean isZeroChecked(Submission submission) {
+        return ZeroChecks.isChecked(submission);
+    }
+
+    /**
+     * Marks a student's 0 as checked, or takes that back. It never
+     * changes a mark, and it is in the activity log.
+     *
+     * @param submission the student
+     * @param checked true to mark it as checked
+     * @return what happened
+     */
+    default ActionResult setZeroChecked(Submission submission,
+            boolean checked) {
+        if (submission == null) {
+            return ActionResult.failed("Choose a student first.");
+        }
+        if (ZeroChecks.set(submission, checked)) {
+            recordActivity(checked ? ReviewDecision.AUDIT_CHECKED
+                    : ReviewDecision.AUDIT_TAKEN_BACK,
+                    submission.getUsername() + ": " + ZERO_CHECK_WORDS);
+        }
+        return ActionResult.done(checked ? "Marked the 0 of "
+                + submission.getUsername() + " as checked. No mark changed."
+                : "The 0 of " + submission.getUsername()
+                + " waits for a look again.");
+    }
+
+    /** The activity log's words for a 0 nothing flagged. */
+    String ZERO_CHECK_WORDS = "graded with 0 marks";
+
+    /**
      * Says whether an anomaly still waits for the instructor.
      *
      * @param anomaly the anomaly
@@ -368,30 +409,34 @@ public interface DashboardBackend {
     /**
      * Changes a question's mark by hand.
      *
+     * @param run the run the student is in, as shown on Review
      * @param submission the student
      * @param questionId the question
      * @param newScore the new mark, within the question's maximum
      * @param reason why the mark changed; required
      * @return what happened
      */
-    ActionResult adjustScore(Submission submission, String questionId,
-            double newScore, String reason);
+    ActionResult adjustScore(GradingRun run, Submission submission,
+            String questionId, double newScore, String reason);
 
     /**
      * Restores the mark before a manual change.
      *
+     * @param run the run the change was made in, as shown on Review
      * @param adjustment the change to undo
      * @return what happened
      */
-    ActionResult undoAdjustment(ScoreAdjustment adjustment);
+    ActionResult undoAdjustment(GradingRun run, ScoreAdjustment adjustment);
 
     /**
-     * Returns the manual changes to one student's marks, newest first.
+     * Returns the manual changes to one student's marks, oldest first.
      *
+     * @param run the run the student is in, as shown on Review
      * @param submission the student
      * @return the changes
      */
-    List<ScoreAdjustment> listAdjustments(Submission submission);
+    List<ScoreAdjustment> listAdjustments(GradingRun run,
+            Submission submission);
 
     // ---------------------------------------------------------- export
 
@@ -451,6 +496,15 @@ public interface DashboardBackend {
     List<AuditEntry> listAuditEntries();
 
     /**
+     * Adds a line to the activity log, such as a section that was
+     * deleted.
+     *
+     * @param action what was done, such as "Section deleted"
+     * @param detail what it was done to
+     */
+    void recordActivity(String action, String detail);
+
+    /**
      * Records an instructor action in the audit log.
      *
      * @param action a short name for the action
@@ -467,6 +521,39 @@ public interface DashboardBackend {
      * @return the value, or an empty string
      */
     String getSetting(String key);
+
+    /**
+     * Returns the score sheet of a section: its own if one was chosen,
+     * else the one in SCORE_SHEET_FILE.
+     *
+     * @param section the section, or null for the one for all
+     * @return the score sheet's path, as written in the settings
+     */
+    default String getScoreSheet(Section section) {
+        String module = section == null ? null : section.getModuleCode();
+        String code = section == null ? null : section.getSectionCode();
+        if (code == null) {
+            return getSetting(ConfigKeys.SCORE_SHEET_FILE);
+        }
+        String own = ExportFolders.exact(getSetting(
+                ConfigKeys.SCORE_SHEET_BY_SECTION), ExportFolders.keyOf(
+                module, code));
+        return own.isEmpty() ? getSetting(ConfigKeys.SCORE_SHEET_FILE) : own;
+    }
+
+    /**
+     * Returns the folder a section's exports are saved in: its own if one
+     * is set in Settings, else its module's, else the folder for all.
+     *
+     * @param section the section, or null for the folder for all
+     * @return the folder
+     */
+    default String getExportFolder(Section section) {
+        String module = section == null ? null : section.getModuleCode();
+        String code = section == null ? null : section.getSectionCode();
+        return ExportFolders.resolve(getSetting(ConfigKeys.OUTPUT_DIR),
+                getSetting(ConfigKeys.OUTPUT_DIR_BY_SECTION), module, code);
+    }
 
     /**
      * Checks a new value for a setting.

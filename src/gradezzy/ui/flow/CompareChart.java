@@ -4,8 +4,9 @@
  * Purpose: Draws one smooth bell curve per section on the same axes, so
  * up to three sections can be compared. Each curve is scaled to the
  * share of students (not the number), so sections of different sizes
- * compare fairly. Each curve has a light fill, a dot at its peak and
- * the section's name next to the dot.
+ * compare fairly. Each curve has a light fill. A dashed upright line
+ * marks each average, labelled with the sections and the average, such
+ * as "G1 · average 8.8"; sections with the same average share a line.
  *
  * Where it fits: The Compare sections view of the Statistics tab. Its
  * colours come from the series-1 to series-3 classes in flow.css,
@@ -15,7 +16,9 @@
 package gradezzy.ui.flow;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import javafx.geometry.BoundingBox;
 import javafx.geometry.Bounds;
@@ -44,7 +47,7 @@ public class CompareChart extends Region {
     private static final double PERCENT = 100.0;
 
     // Leaves room above the tallest curve for its label
-    private static final double HEADROOM = 1.15;
+    private static final double HEADROOM = 1.3;
 
     // The most gridlines
     private static final int MOST_GRIDLINES = 5;
@@ -70,8 +73,6 @@ public class CompareChart extends Region {
     // How far a label sits from what it labels
     private static final double LABEL_GAP = 6.0;
 
-    // How far a section's name sits above its dot
-    private static final double NAME_GAP = 10.0;
 
     // The gap kept between two names moved apart
     private static final double NAME_SPACING = 2.0;
@@ -172,11 +173,7 @@ public class CompareChart extends Region {
         axis.getStyleClass().add("chart-axis");
         getChildren().add(axis);
         drawTicks(max, left, plotWidth, bottom);
-        List<Bounds> placed = new ArrayList<>();
-        for (int index = 0; index < stats.size(); index++) {
-            drawPeak(index, max, yMax, left, plotWidth, top, plotHeight,
-                    placed);
-        }
+        drawAverages(max, yMax, left, plotWidth, top, plotHeight);
         drawAxisNames(max, left, plotWidth, top, plotHeight, height);
     }
 
@@ -226,42 +223,70 @@ public class CompareChart extends Region {
         getChildren().addAll(fill, curve);
     }
 
-    // Draws the dot at a curve's peak and the section's name above it,
-    // moving the name up when it would cover a name already placed.
-    private void drawPeak(int index, double max, double yMax, double left,
-            double plotWidth, double top, double plotHeight,
-            List<Bounds> placed) {
-        MarkStats one = stats.get(index);
-        double mean = Math.max(0, Math.min(max, one.getMean()));
-        double x = left + plotWidth * mean / max;
-        double y = top + plotHeight - plotHeight
-                * Math.min(yMax, peak(one)) / yMax;
-        Circle dot = new Circle(x, y, DOT_RADIUS);
-        dot.getStyleClass().addAll("compare-dot", seriesClass(index));
-        getChildren().add(dot);
+    // Draws one dashed upright line per average, from the axis to the
+    // top. Sections with the same average share one line. A label at the
+    // top names the sections and the average, such as "G1, G2 · average
+    // 8.8", and each curve has a dot where it meets its line.
+    private void drawAverages(double max, double yMax, double left,
+            double plotWidth, double top, double plotHeight) {
+        double bottom = top + plotHeight;
+        // Sections whose averages round to the same mark share a line
+        Map<String, List<Integer>> groups = new LinkedHashMap<>();
+        for (int index = 0; index < stats.size(); index++) {
+            String mean = String.format("%.1f", stats.get(index).getMean());
+            groups.computeIfAbsent(mean, key -> new ArrayList<>()).add(index);
+        }
+        List<Bounds> placed = new ArrayList<>();
+        for (Map.Entry<String, List<Integer>> group : groups.entrySet()) {
+            List<Integer> members = group.getValue();
+            MarkStats first = stats.get(members.get(0));
+            double mean = Math.max(0, Math.min(max, first.getMean()));
+            double x = left + plotWidth * mean / max;
+            Line line = new Line(x, top, x, bottom);
+            line.getStyleClass().add("compare-mean-line");
+            if (members.size() == 1) {
+                line.getStyleClass().add(seriesClass(members.get(0)));
+            }
+            line.setMouseTransparent(true);
+            getChildren().add(line);
 
-        Text name = addText(names.get(index), "chart-label");
-        double textWidth = name.getLayoutBounds().getWidth();
-        double textHeight = name.getLayoutBounds().getHeight();
-        double nameTop = y - NAME_GAP - textHeight;
-        Bounds box = new BoundingBox(x - textWidth / 2, nameTop, textWidth,
-                textHeight);
-        boolean moved = true;
-        while (moved) {
-            moved = false;
-            for (Bounds other : placed) {
-                if (other.intersects(box)) {
-                    nameTop = other.getMinY() - textHeight
-                            - NAME_SPACING;
-                    box = new BoundingBox(box.getMinX(), nameTop,
-                            textWidth, textHeight);
-                    moved = true;
+            List<String> who = new ArrayList<>();
+            for (int index : members) {
+                who.add(names.get(index));
+                double y = bottom - plotHeight
+                        * Math.min(yMax, peak(stats.get(index))) / yMax;
+                Circle dot = new Circle(x, y, DOT_RADIUS);
+                dot.getStyleClass().addAll("compare-dot", seriesClass(index));
+                getChildren().add(dot);
+            }
+            Text label = addText(String.join(", ", who) + " \u00B7 average "
+                    + group.getKey(), "chart-label");
+            if (members.size() == 1) {
+                label.getStyleClass().add(seriesClass(members.get(0)));
+            }
+            double width = label.getLayoutBounds().getWidth();
+            double height = label.getLayoutBounds().getHeight();
+            // Kept inside the plot, beside the line's top
+            double labelX = Math.min(left + plotWidth - width,
+                    Math.max(left, x + LABEL_GAP));
+            double labelTop = top;
+            Bounds box = new BoundingBox(labelX, labelTop, width, height);
+            boolean moved = true;
+            while (moved) {
+                moved = false;
+                for (Bounds other : placed) {
+                    if (other.intersects(box)) {
+                        labelTop = other.getMaxY() + NAME_SPACING;
+                        box = new BoundingBox(labelX, labelTop, width,
+                                height);
+                        moved = true;
+                    }
                 }
             }
+            placed.add(box);
+            label.setLayoutX(labelX);
+            label.setLayoutY(labelTop - label.getLayoutBounds().getMinY());
         }
-        placed.add(box);
-        name.setLayoutX(box.getMinX());
-        name.setLayoutY(nameTop - name.getLayoutBounds().getMinY());
     }
 
     // Labels the marks along the bottom.

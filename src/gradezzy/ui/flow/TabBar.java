@@ -18,7 +18,7 @@ import javafx.scene.control.Button;
 import javafx.scene.layout.HBox;
 
 /**
- * The tabs Marking, Statistics, Runs and Settings.
+ * The tabs Grading, Statistics, Runs and Settings.
  */
 public class TabBar extends HBox {
 

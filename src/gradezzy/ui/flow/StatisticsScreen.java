@@ -310,7 +310,7 @@ public class StatisticsScreen extends FlowScreen {
             subtitle.setText("No module is set up yet.");
             body.getChildren().setAll(emptyState("Nothing graded yet",
                     "Add a module in Settings, then grade a section in "
-                    + "Marking."));
+                    + "Grading."));
             return;
         }
         fillSections();
@@ -340,7 +340,7 @@ public class StatisticsScreen extends FlowScreen {
     }
 
     // Fills the section picker and picks a section: the one asked for,
-    // else the one on Marking if it has marks, else the first with marks.
+    // else the one on Grading if it has marks, else the first with marks.
     private void fillSections() {
         List<String> sections = getBackend().getSectionCodes(moduleCode);
         if (!sections.contains(sectionCode)) {
@@ -486,11 +486,11 @@ public class StatisticsScreen extends FlowScreen {
             if (isGraded(runOf(code))) {
                 return emptyState(sectionCode + " has not been graded yet",
                         "Choose another section above, or grade this one "
-                        + "in Marking.");
+                        + "in Grading.");
             }
         }
         return emptyState("Nothing graded yet", "Grade a section of "
-                + moduleCode + " in Marking and its charts appear here.");
+                + moduleCode + " in Grading and its charts appear here.");
     }
 
     // --------------------------------------------------------- compare
@@ -528,7 +528,7 @@ public class StatisticsScreen extends FlowScreen {
 
         if (graded.isEmpty()) {
             body.getChildren().setAll(emptyState("Nothing graded yet",
-                    "Grade a section of " + moduleCode + " in Marking, "
+                    "Grade a section of " + moduleCode + " in Grading, "
                     + "then grade another to compare them."));
             return;
         }
@@ -537,7 +537,7 @@ public class StatisticsScreen extends FlowScreen {
                     "Compare needs two graded sections",
                     "Only " + graded.get(0) + " of " + moduleCode
                     + " has been graded so far. Grade another section in "
-                    + "Marking, then come back to compare them."));
+                    + "Grading, then come back to compare them."));
             return;
         }
         compareView.show(sections, runs, stats, assessment, sectionCode);
@@ -587,7 +587,7 @@ public class StatisticsScreen extends FlowScreen {
         Label title = Parts.title("Statistics are not available yet");
         Label text = Parts.muted("This version cannot work out statistics."
                 + " The marks are still on the score sheet you export in "
-                + "Marking.");
+                + "Grading.");
         text.setWrapText(true);
         VBox box = new VBox(EMPTY_GAP, title, text);
         box.getStyleClass().addAll("flow-card", "stats-empty");
@@ -595,13 +595,13 @@ public class StatisticsScreen extends FlowScreen {
         body.getChildren().setAll(box);
     }
 
-    // Returns an empty state with a link that opens the Marking tab.
+    // Returns an empty state with a link that opens the Grading tab.
     private VBox emptyState(String heading, String help) {
         Label title = Parts.title(heading);
         Label text = Parts.muted(help);
         text.setWrapText(true);
         VBox box = new VBox(EMPTY_GAP, title, text, Parts.link(
-                "Open Marking", () -> getWindow().showPage(Page.MARKING)));
+                "Open Grading", () -> getWindow().showPage(Page.MARKING)));
         box.getStyleClass().addAll("flow-card", "stats-empty");
         box.setAlignment(Pos.CENTER);
         return box;

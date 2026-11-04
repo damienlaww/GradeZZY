@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javafx.beans.binding.Bindings;
+import javafx.beans.binding.NumberBinding;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
@@ -40,6 +41,9 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.scene.text.Text;
 
 import atlantafx.base.controls.CustomTextField;
 
@@ -80,6 +84,15 @@ public class ReviewScreen extends FlowScreen {
     // compile"
     private static final double STATUS_WIDTH = 220.0;
 
+    // The narrowest the status column gets, so "Status" fits
+    private static final double STATUS_MIN_WIDTH = 110.0;
+
+    // A pill's dot, gap and padding, and the cell's padding, beyond its
+    // words; and the font of its words, from flow.css
+    private static final double PILL_EXTRA = 56.0;
+    private static final String PILL_FONT = "IBM Plex Sans";
+    private static final double PILL_FONT_SIZE = 12.0;
+
     // The width of the arrow column that shows a row can be opened
     private static final double OPEN_WIDTH = 36.0;
 
@@ -89,11 +102,19 @@ public class ReviewScreen extends FlowScreen {
     // The smallest width of the student column
     private static final double STUDENT_WIDTH = 190.0;
 
+    
+
+    // The widest the student column gets
+    // It must be finite: with Double.MAX_VALUE the table makes the
+    // column endlessly wide and cuts off the table's right border
+    private static final double STUDENT_MAX_WIDTH = 4000.0;
+
     // The width of the search field
     private static final double SEARCH_WIDTH = 220.0;
 
     // The hint in the search field
-    private static final String NAMES_PROMPT = "Name or username";
+    private static final String NAMES_PROMPT = "Name or username  ("
+            + Parts.shortcut("F") + ")";
 
     // The search field is never narrower than this
     private static final double SEARCH_MIN_WIDTH = 140.0;
@@ -126,6 +147,9 @@ public class ReviewScreen extends FlowScreen {
     // Where the first question column goes, after tick and student
     private static final int FIRST_QUESTION_COLUMN = 2;
 
+    // The most fixes named when keeping them all
+    private static final int MAX_LISTED_FIXES = 8;
+
     // Averages are shown to one decimal place
     private static final double ONE_DECIMAL = 10.0;
 
@@ -143,6 +167,9 @@ public class ReviewScreen extends FlowScreen {
     // The table
     private final TableView<Submission> table = new TableView<>();
 
+    // The rounded frame around the table, which draws its border
+    private final StackPane tableFrame = new StackPane();
+
     // The note shown in the table when no row passes the filter
     private final Label placeholder = Parts.muted("No student matches.");
 
@@ -156,6 +183,14 @@ public class ReviewScreen extends FlowScreen {
     private final ToggleButton failedButton = new ToggleButton("Failed");
     private final ToggleButton missingButton =
             new ToggleButton("No submission");
+
+    // The status column, as wide as the widest pill shown
+    private final TableColumn<Submission, Submission> statusColumn =
+            new TableColumn<>("Status");
+
+    // The student column, narrower while the student panel is open
+    private final TableColumn<Submission, Submission> studentColumn =
+            new TableColumn<>("Student");
 
     // The arrow column, hidden while the student panel is open
     private final TableColumn<Submission, Submission> openColumn =
@@ -241,15 +276,15 @@ public class ReviewScreen extends FlowScreen {
                 "Review the results"), subtitle);
         guide.getStyleClass().add("review-guide");
         main.getChildren().addAll(header, tools, guide, banner, sharedBanner,
-                table);
+                tableFrame);
         main.getStyleClass().add("review-main");
-        VBox.setVgrow(table, Priority.ALWAYS);
+        VBox.setVgrow(tableFrame, Priority.ALWAYS);
         HBox.setHgrow(main, Priority.ALWAYS);
         main.setMinWidth(0);
 
         empty.getChildren().addAll(Parts.heading("Nothing to review yet"),
                 Parts.subtitle("Grade a section first, or open an earlier "
-                + "run from Runs."),
+                + "run from History."),
                 Parts.link("Go to Set up", () -> window.show(Step.SET_UP)));
         empty.getStyleClass().add("empty-state");
         empty.setAlignment(Pos.CENTER);
@@ -464,7 +499,8 @@ public class ReviewScreen extends FlowScreen {
         allButton.setSelected(true);
         Parts.tip(allButton, "Every student in this run.");
         Parts.tip(reviewButton, "Students with a fix to approve, a flag to "
-                + "look at, or a problem to check before you export.");
+                + "look at, a total of 0, or code that did not compile or "
+                + "timed out. Check them before you export.");
         Parts.tip(failedButton, "Students whose code did not compile, "
                 + "timed out or could not be graded.");
         allButton.getStyleClass().add("left-pill");
@@ -524,17 +560,19 @@ public class ReviewScreen extends FlowScreen {
         tickAllBox.setOnAction(event -> tickAll(tickAllBox.isSelected()));
         tickAllBox.setAccessibleText("Tick every student shown");
         tick.setGraphic(tickAllBox);
-        Parts.tip(tickAllBox, "Tick every student shown. Ticked students "
-                + "are the ones exported; with none ticked, every student "
-                + "is exported.");
+        Parts.tip(tickAllBox, "Tick every student shown, to approve their "
+                + "fixes together or export only them.");
         tick.setSortable(false);
         fixWidth(tick, TICK_WIDTH);
         tick.setCellValueFactory(cell -> studentOf(cell));
         tick.setCellFactory(column -> new ReviewTickCell(this));
 
-        TableColumn<Submission, Submission> student =
-                new TableColumn<>("Student");
+        TableColumn<Submission, Submission> student = studentColumn;
         student.setMinWidth(STUDENT_WIDTH);
+        // The name column takes the spare width, so the marks, status and
+        // arrow sit flush on the right
+        student.setPrefWidth(STUDENT_WIDTH);
+        student.setMaxWidth(STUDENT_MAX_WIDTH);
         student.setCellValueFactory(cell -> studentOf(cell));
         student.setCellFactory(column -> new ReviewStudentCell());
         student.setComparator(new StudentNameComparator());
@@ -545,8 +583,7 @@ public class ReviewScreen extends FlowScreen {
         total.setCellFactory(column -> new ReviewMarkCell(true));
         total.getStyleClass().add("centred");
 
-        TableColumn<Submission, Submission> status =
-                new TableColumn<>("Status");
+        TableColumn<Submission, Submission> status = statusColumn;
         fixWidth(status, STATUS_WIDTH);
         status.setCellValueFactory(cell -> studentOf(cell));
         status.setCellFactory(column -> new ReviewStatusCell(getBackend()));
@@ -570,16 +607,25 @@ public class ReviewScreen extends FlowScreen {
         table.getSelectionModel().selectedItemProperty().addListener(
                 (observable, before, after) -> showStudent(after));
 
-        // The box ends at the last row, or fills the space and scrolls
-        table.maxHeightProperty().bind(Bindings.max(MIN_TABLE_HEIGHT,
-                Bindings.size(sorted).multiply(ROW_HEIGHT)
-                .add(HEADER_HEIGHT + BORDERS)));
-        table.setMinHeight(MIN_TABLE_HEIGHT);
+        // The box ends at the last row, or fills the space and scrolls.
+        // Only an empty table keeps room for its message.
+        NumberBinding fitted = Bindings.size(sorted).multiply(ROW_HEIGHT)
+                .add(HEADER_HEIGHT + BORDERS);
+        NumberBinding shown = Bindings.when(Bindings.isEmpty(sorted))
+                .then(MIN_TABLE_HEIGHT).otherwise(fitted);
+        tableFrame.maxHeightProperty().bind(shown);
+        tableFrame.minHeightProperty().bind(Bindings.min(shown,
+                MIN_TABLE_HEIGHT));
+        table.setMinHeight(0);
 
-        // Rounds the corners of the header and the last row too
+        // The frame draws the rounded border, so nothing clips it; the
+        // table inside is clipped a little smaller, so the header and
+        // the last row have round corners too
+        tableFrame.getChildren().add(table);
+        tableFrame.getStyleClass().add("table-frame");
         Rectangle corners = new Rectangle();
-        corners.setArcWidth(CORNER_ARC);
-        corners.setArcHeight(CORNER_ARC);
+        corners.setArcWidth(CORNER_ARC - 2);
+        corners.setArcHeight(CORNER_ARC - 2);
         corners.widthProperty().bind(table.widthProperty());
         corners.heightProperty().bind(table.heightProperty());
         table.setClip(corners);
@@ -717,6 +763,10 @@ public class ReviewScreen extends FlowScreen {
         }
         // The panel already shows the student the arrow would open
         openColumn.setVisible(!panel.isVisible());
+        // The name column always takes the spare width, so the marks and
+        // status stay flush on the right; its minimum keeps names readable
+        // and the status column's fixed width keeps every pill whole
+        studentColumn.setMaxWidth(STUDENT_MAX_WIDTH);
     }
 
     // Returns a student's mark for one question, or null.
@@ -768,6 +818,7 @@ public class ReviewScreen extends FlowScreen {
                 + run.getSection().getSectionCode() + " · "
                 + run.getAssessment().getName() + average);
 
+        fitStatusColumn();
         refreshBanner(run);
         refreshSharedBanner(run);
         applyFilter();
@@ -775,11 +826,29 @@ public class ReviewScreen extends FlowScreen {
         refreshActions();
     }
 
+    // Makes the status column as wide as its widest pill, so the marks
+    // and statuses end at the table's right edge with no gap after them.
+    private void fitStatusColumn() {
+        Font font = Font.font(PILL_FONT, FontWeight.BOLD, PILL_FONT_SIZE);
+        double widest = 0;
+        for (Submission submission : rows) {
+            Text text = new Text(Students.pill(submission, getBackend())
+                    .getText());
+            text.setFont(font);
+            widest = Math.max(widest, text.getLayoutBounds().getWidth());
+        }
+        double width = Math.max(STATUS_MIN_WIDTH, Math.min(STATUS_WIDTH,
+                Math.ceil(widest + PILL_EXTRA)));
+        statusColumn.setMinWidth(width);
+        statusColumn.setPrefWidth(width);
+        statusColumn.setMaxWidth(width);
+    }
+
     // Counts the students with something still to check.
     private int countNeedingReview() {
         int count = 0;
         for (Submission submission : rows) {
-            if (Students.openCount(submission, getBackend()) > 0) {
+            if (Students.needsLook(submission, getBackend())) {
                 count++;
             }
         }
@@ -969,8 +1038,7 @@ public class ReviewScreen extends FlowScreen {
         if (onlyMissing && !ResultState.isNoSubmission(submission)) {
             return false;
         }
-        if (onlyReview
-                && Students.openCount(submission, getBackend()) == 0) {
+        if (onlyReview && !Students.needsLook(submission, getBackend())) {
             return false;
         }
         if (onlyFailed && !Students.isFailed(Students.state(
@@ -1011,7 +1079,15 @@ public class ReviewScreen extends FlowScreen {
             panel.show(null);
             panel.setVisible(false);
             panel.setManaged(false);
-            getWindow().notify(describeMadeRow(submission));
+            if (ResultState.isSkippedFile(submission)) {
+                getWindow().confirm(Students.SKIPPED_WORDS,
+                        describeMadeRow(submission) + " Choose a new copy "
+                        + "of the zip on Set up, then grade it.",
+                        "Replace file", () -> getWindow().show(
+                        Step.SET_UP));
+            } else {
+                getWindow().notify(describeMadeRow(submission));
+            }
             return;
         }
         panel.show(submission);
@@ -1112,9 +1188,15 @@ public class ReviewScreen extends FlowScreen {
         actions.setStatus(statusText());
         List<RepairItem> open = openRepairs();
         if (!open.isEmpty()) {
-            actions.addSecondary(Parts.secondary("Approve all "
+            actions.addSecondary(Parts.secondary("Keep all "
                     + Parts.plural(open.size(), "fix", "fixes"),
                     () -> askApproveAll(open)));
+        }
+        List<Anomaly> flags = openFlags();
+        if (!flags.isEmpty()) {
+            actions.addSecondary(Parts.secondary("Mark all "
+                    + flags.size() + " as checked",
+                    () -> askCheckAll(flags)));
         }
         actions.setPrimary("Continue to export", () -> continueToExport(),
                 true);
@@ -1134,9 +1216,7 @@ public class ReviewScreen extends FlowScreen {
         int ticked = getState().getSelected().size();
         if (ticked > 0) {
             text = text + " " + Parts.plural(ticked, "student")
-                    + " ticked for export.";
-        } else {
-            text = text + " All " + rows.size() + " are exported.";
+                    + " ticked.";
         }
         return text;
     }
@@ -1149,9 +1229,9 @@ public class ReviewScreen extends FlowScreen {
         int ticked = getState().getSelected().size();
         if (ticked == 0) {
             Label text = Parts.muted("Click a student to see each "
-                    + "question's tests and to approve fixes and check "
-                    + "flags. Tick students to export only them; with none "
-                    + "ticked, all " + rows.size() + " are exported.");
+                    + "question's tests, approve fixes and check flags. "
+                    + "Tick students to act on several at once. You choose "
+                    + "who to export on Export.");
             text.getStyleClass().add("small-text");
             text.setWrapText(true);
             text.setMinWidth(0);
@@ -1164,16 +1244,34 @@ public class ReviewScreen extends FlowScreen {
         }
         guide.getStyleClass().add("ticked");
         Label text = Parts.strong(Parts.plural(ticked, "student")
-                + " ticked for export");
-        Label rest = Parts.muted("Only they are exported. The other "
-                + (rows.size() - ticked) + " keep their marks here.");
+                + " ticked");
+        Label rest = Parts.muted("Approve their fixes together, or export "
+                + "only them.");
         rest.getStyleClass().add("small-text");
         rest.setMinWidth(0);
-        guide.getChildren().addAll(text, rest, Parts.grow(),
-                Parts.link("Clear ticks", () -> clearTicks()));
+        guide.getChildren().addAll(text, rest, Parts.grow());
+        if (getBackend().supports(Capability.EXPORT_SCOPE)) {
+            guide.getChildren().add(Parts.link("Export only these",
+                    () -> exportTicked()));
+        }
+        guide.getChildren().add(Parts.link("Clear ticks",
+                () -> clearTicks()));
     }
 
-    // Unticks every student, so all of them are exported again.
+    // Chooses the ticked students on Export and goes there.
+    private void exportTicked() {
+        List<Submission> picked = getState().getExportPicked();
+        picked.clear();
+        for (Submission submission : getState().getSelected()) {
+            if (!ResultState.isMadeOnReview(submission)) {
+                picked.add(submission);
+            }
+        }
+        getState().setExportOnlyPicked(!picked.isEmpty());
+        continueToExport();
+    }
+
+    // Unticks every student.
     private void clearTicks() {
         tickAllBox.setSelected(false);
         tickAll(false);
@@ -1215,22 +1313,135 @@ public class ReviewScreen extends FlowScreen {
         if (!getState().getSelected().isEmpty()) {
             whose = "the ticked students";
         }
-        getWindow().confirm("Approve all " + Parts.plural(open.size(),
-                "fix", "fixes") + "?", "The fixed files of " + whose
-                + " are kept and their marks stay as they are now.",
-                "Approve all", () -> approveAll(open));
+        VBox content = new VBox(Parts.GAP_SMALL);
+        Label about = Parts.muted("The fixed files of " + whose + " are "
+                + "kept and their marks stay as they are now:");
+        about.setWrapText(true);
+        content.getChildren().add(about);
+        int listed = 0;
+        for (RepairItem repair : open) {
+            if (listed == MAX_LISTED_FIXES) {
+                content.getChildren().add(Parts.muted("and "
+                        + (open.size() - listed) + " more"));
+                break;
+            }
+            Anomaly anomaly = repair.getAnomaly();
+            Label line = new Label("• " + anomaly.getUsername() + ": "
+                    + Problems.fixedTitle(anomaly.getType()));
+            line.setWrapText(true);
+            content.getChildren().add(line);
+            listed++;
+        }
+        getWindow().confirm("Keep all " + Parts.plural(open.size(),
+                "fix", "fixes") + "?", content, "Keep all",
+                () -> approveAll(open));
+    }
+
+    // Returns the open flags and problems that are not fixes, for the
+    // ticked students or all.
+    private List<Anomaly> openFlags() {
+        List<Anomaly> open = new ArrayList<>();
+        if (!getBackend().supports(Capability.FLAG_REVIEW)) {
+            return open;
+        }
+        List<Submission> scope = getState().getSelected();
+        for (Submission submission : rows) {
+            if (!scope.isEmpty() && !scope.contains(submission)) {
+                continue;
+            }
+            for (Anomaly anomaly : submission.getAnomalies()) {
+                if (anomaly.getFixStatus() != FixStatus.APPLIED
+                        && getBackend().needsReview(anomaly)) {
+                    open.add(anomaly);
+                }
+            }
+        }
+        return open;
+    }
+
+    // Asks before marking every open flag and problem as checked,
+    // naming each one.
+    private void askCheckAll(List<Anomaly> flags) {
+        String whose = "every student";
+        if (!getState().getSelected().isEmpty()) {
+            whose = "the ticked students";
+        }
+        VBox content = new VBox(Parts.GAP_SMALL);
+        Label about = Parts.muted("These flags and problems of " + whose
+                + " are marked as checked. No mark changes, and you can "
+                + "undo it:");
+        about.setWrapText(true);
+        content.getChildren().add(about);
+        int listed = 0;
+        for (Anomaly anomaly : flags) {
+            if (listed == MAX_LISTED_FIXES) {
+                content.getChildren().add(Parts.muted("and "
+                        + (flags.size() - listed) + " more"));
+                break;
+            }
+            Label line = new Label("• " + anomaly.getUsername() + ": "
+                    + Problems.title(anomaly.getType()));
+            line.setWrapText(true);
+            content.getChildren().add(line);
+            listed++;
+        }
+        getWindow().confirm("Mark all " + flags.size() + " as checked?",
+                content, "Mark all as checked", () -> checkAll(flags));
+    }
+
+    // Marks every open flag and problem as checked, and offers Undo.
+    private void checkAll(List<Anomaly> flags) {
+        List<Anomaly> done = new ArrayList<>();
+        for (Anomaly anomaly : flags) {
+            if (getBackend().setDecision(anomaly,
+                    ReviewDecision.REVIEWED).isDone()) {
+                done.add(anomaly);
+            }
+        }
+        panel.refresh();
+        refreshStatuses();
+        getWindow().notify("Marked " + Parts.plural(done.size(), "item")
+                + " as checked.", "Undo", () -> uncheckAll(done));
+    }
+
+    // Puts flags marked as checked together back to be checked.
+    private void uncheckAll(List<Anomaly> flags) {
+        for (Anomaly anomaly : flags) {
+            getBackend().setDecision(anomaly, ReviewDecision.OPEN);
+        }
+        getWindow().notify("Put " + Parts.plural(flags.size(), "item")
+                + " back to check.");
+        panel.refresh();
+        refreshStatuses();
     }
 
     // Approves every waiting fix.
     private void approveAll(List<RepairItem> open) {
-        int approved = 0;
+        List<RepairItem> kept = new ArrayList<>();
         for (RepairItem repair : open) {
             if (getBackend().approveRepair(repair).isDone()) {
-                approved++;
+                kept.add(repair);
             }
         }
-        getWindow().notify("Approved " + Parts.plural(approved, "fix",
-                "fixes") + ".");
+        int approved = kept.size();
+        if (getBackend().supports(Capability.REPAIR_DECISION_UNDO)) {
+            getWindow().notify("Kept " + Parts.plural(approved, "fix",
+                    "fixes") + ".", "Undo", () -> unkeepAll(kept));
+        } else {
+            getWindow().notify("Kept " + Parts.plural(approved, "fix",
+                    "fixes") + ".");
+        }
+        panel.refresh();
+        refreshStatuses();
+    }
+
+    // Takes back fixes kept together, so they wait for review again.
+    private void unkeepAll(List<RepairItem> kept) {
+        for (RepairItem repair : kept) {
+            getBackend().undoRepairDecision(repair);
+        }
+        getWindow().notify("Put " + Parts.plural(kept.size(), "fix",
+                "fixes") + " back to review.");
         panel.refresh();
         refreshStatuses();
     }

@@ -81,7 +81,7 @@ public class FlowWindowScenarios {
 
     // ------------------------------------------------------- scenarios
 
-    // Clicks every tab; the step row shows only on Marking.
+    // Clicks every tab; the step row shows only on Grading.
     private void tabs() {
         test.section("Tabs");
         for (Page page : Page.values()) {
@@ -92,7 +92,7 @@ public class FlowWindowScenarios {
                     + "shows it");
             boolean stepRow = test.firstStyled("step-row") != null;
             test.check(stepRow == (page == Page.MARKING), "the step row "
-                    + "is shown only on Marking (" + page.getLabel()
+                    + "is shown only on Grading (" + page.getLabel()
                     + ")");
         }
         test.endScenario("01-tabs");
@@ -238,7 +238,7 @@ public class FlowWindowScenarios {
                 "Backups shows Back up now");
         test.endScenario("09-runs-backups");
         clickToggle("Activity");
-        test.check(test.waitFor(() -> shows("When")),
+        test.check(test.waitFor(() -> shows("Time")),
                 "Activity shows the activity table");
         test.endScenario("09-runs-activity");
         clickToggle("Runs");
@@ -322,7 +322,7 @@ public class FlowWindowScenarios {
         test.waitFor(() -> window.getCurrentPage() == page);
     }
 
-    // Shows the Marking tab.
+    // Shows the Grading tab.
     private void showMarking() {
         openTab(Page.MARKING);
     }

@@ -19,6 +19,7 @@ import java.util.Map;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.config.ModuleSections;
 import gradezzy.grading.ProgressListener;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
@@ -52,7 +53,7 @@ import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.backend.ReviewRules;
 import gradezzy.ui.backend.RunCallback;
 import gradezzy.ui.backend.RunRecord;
-import gradezzy.ui.backend.ScoreAdjustment;
+import gradezzy.model.ScoreAdjustment;
 import gradezzy.ui.backend.SimilarityDetail;
 
 /**
@@ -266,6 +267,15 @@ public final class DemoBackend implements DashboardBackend {
     public List<String> getModuleCodes() {
         List<String> codes = new ArrayList<>();
         codes.add(DemoData.MODULE_CODE);
+        // Modules added in this session, after the sample ones
+        for (String code : getSetting(ConfigKeys.MODULE_CODES).split(",")) {
+            String trimmed = code.trim();
+            if (!trimmed.isEmpty() && !trimmed.equalsIgnoreCase(
+                    DemoData.MODULE_CODE) && !trimmed.equalsIgnoreCase(
+                    DemoData.EMPTY_MODULE_CODE)) {
+                codes.add(trimmed);
+            }
+        }
         codes.add(DemoData.EMPTY_MODULE_CODE);
         return codes;
     }
@@ -281,13 +291,9 @@ public final class DemoBackend implements DashboardBackend {
             codes.add(DemoData.EMPTY_MODULE_SECTION);
             return codes;
         }
-        for (String code : getSetting(ConfigKeys.SECTION_CODES)
-                .split(",")) {
-            if (!code.trim().isEmpty()) {
-                codes.add(code.trim());
-            }
-        }
-        return codes;
+        return ModuleSections.forModule(getSetting(ConfigKeys.SECTION_CODES),
+                getSetting(ConfigKeys.MODULE_SECTION_CODES),
+                getSetting(ConfigKeys.OWN_SECTIONS_ONLY_MODULES), moduleCode);
     }
 
     /**
@@ -636,7 +642,12 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public ActionResult setDecision(Anomaly anomaly,
             ReviewDecision decision) {
+        ReviewDecision before = getDecision(anomaly);
         decisions.put(anomaly.getId(), decision);
+        if (before != decision) {
+            recordAudit(decision.getAuditAction(), anomaly.getUsername()
+                    + ": " + anomaly.getMessage());
+        }
         return ActionResult.done("Marked the flag for "
                 + anomaly.getUsername() + " as "
                 + decision.getLabel().toLowerCase() + ". No mark changed.");
@@ -674,6 +685,8 @@ public final class DemoBackend implements DashboardBackend {
                     + "this finding. Handle it by hand.");
         }
         repair.getAnomaly().setFixStatus(FixStatus.APPROVED);
+        recordAudit("Fix approved", repair.getAnomaly().getUsername()
+                + ": " + repair.getAnomaly().getMessage());
         return ActionResult.done("Approved the fix for "
                 + repair.getAnomaly().getUsername() + ".");
     }
@@ -703,6 +716,8 @@ public final class DemoBackend implements DashboardBackend {
                     + "undo.");
         }
         repair.getAnomaly().setFixStatus(FixStatus.APPLIED);
+        recordAudit("Fix decision taken back", repair.getAnomaly()
+                .getUsername() + ": " + repair.getAnomaly().getMessage());
         return ActionResult.done("The fix for "
                 + repair.getAnomaly().getUsername() + " waits for review "
                 + "again.");
@@ -753,7 +768,7 @@ public final class DemoBackend implements DashboardBackend {
      * Changes the mark in memory and keeps the earlier one for undo.
      */
     @Override
-    public ActionResult adjustScore(Submission submission,
+    public ActionResult adjustScore(GradingRun run, Submission submission,
             String questionId, double newScore, String reason) {
         QuestionResult result = findResult(submission, questionId);
         if (result == null) {
@@ -784,9 +799,11 @@ public final class DemoBackend implements DashboardBackend {
      * Restores the earlier mark and forgets the change.
      */
     @Override
-    public ActionResult undoAdjustment(ScoreAdjustment adjustment) {
-        GradingRun run = findRunOf(adjustment.getUsername());
-        Submission submission = findSubmission(run,
+    public ActionResult undoAdjustment(GradingRun run,
+            ScoreAdjustment adjustment) {
+        GradingRun shown = run != null ? run
+                : findRunOf(adjustment.getUsername());
+        Submission submission = findSubmission(shown,
                 adjustment.getUsername());
         if (submission == null) {
             return ActionResult.failed("The student is no longer in the "
@@ -808,7 +825,8 @@ public final class DemoBackend implements DashboardBackend {
      * Returns the changes made in this session, newest first.
      */
     @Override
-    public List<ScoreAdjustment> listAdjustments(Submission submission) {
+    public List<ScoreAdjustment> listAdjustments(GradingRun run,
+            Submission submission) {
         List<ScoreAdjustment> oldestFirst =
                 adjustmentsOf(submission.getUsername());
         List<ScoreAdjustment> newestFirst = new ArrayList<>();
@@ -931,6 +949,16 @@ public final class DemoBackend implements DashboardBackend {
      * Adds an entry to the audit log in memory.
      */
     @Override
+    public void recordActivity(String action, String detail) {
+        recordAudit(action, detail);
+    }
+
+    /**
+     * Adds a line to the demo's activity log.
+     *
+     * @param action what was done
+     * @param detail what it was done to
+     */
     public void recordAudit(String action, String detail) {
         audit.add(0, new AuditEntry(LocalDateTime.now(), action, detail));
     }
@@ -1028,6 +1056,10 @@ public final class DemoBackend implements DashboardBackend {
         SavedAssessment clean = draft.copy();
         clean.setName(draft.getName().trim());
         SavedAssessment old = findAssessment(originalName);
+        // An edit that does not say the module keeps the one saved
+        if (clean.getModuleCode().isEmpty() && old != null) {
+            clean.setModuleCode(old.getModuleCode());
+        }
         boolean inUse = old != null
                 && old.getName().equals(assessment.getName());
         if (old != null) {

@@ -281,9 +281,10 @@ public class SectionView {
         Node spread = Parts.figure("Spread", "± " + oneDecimal(
                 stats.getSpread()), "marks", "Standard deviation");
         Node passed = Parts.figure("Passed", percent(stats.getPassRate()),
-                null, stats.getPassCount() + " of " + stats.getCount()
-                + " scored " + Parts.mark(roundOne(stats.getPassMark()))
-                + " or more");
+                null, "Pass mark " + Parts.mark(roundOne(
+                stats.getPassMark())) + " / " + max + " · "
+                + stats.getPassCount() + " of " + stats.getCount()
+                + " passed");
         Node range = Parts.figure("Range", Parts.mark(roundOne(
                 stats.getLowest())) + " to " + Parts.mark(roundOne(
                 stats.getHighest())), null, "Lowest to highest total");
@@ -355,6 +356,12 @@ public class SectionView {
         int total = 0;
         for (Submission submission : run.getSubmissions()) {
             ResultState state = Students.state(submission, backend);
+            // A 0 whose flags are all checked is graded
+            if (state == ResultState.ZERO
+                    && !Students.isUncheckedZero(submission, state,
+                    backend)) {
+                state = ResultState.COMPLETED;
+            }
             for (int index = 0; index < STATE_ORDER.length; index++) {
                 if (STATE_ORDER[index] == state) {
                     counts[index]++;
@@ -393,7 +400,7 @@ public class SectionView {
         legend.setMaxHeight(Region.USE_PREF_SIZE);
         HBox.setHgrow(legend, Priority.ALWAYS);
         HBox body = Parts.row(RING_GAP, new Node[] {ring, legend});
-        Label summary = smallMuted(statusSentence(counts, total));
+        Label summary = smallMuted(statusSentence(run, total));
         summary.setWrapText(true);
         VBox content = new VBox(Parts.GAP, summary, body);
         return card(Parts.title("Student status"), content);
@@ -401,19 +408,19 @@ public class SectionView {
 
     // Says how many students are done and how many need a look, such as
     // "1 of 6 students is fully graded. 5 need a look on Review."
-    private static String statusSentence(int[] counts, int total) {
+    // Uses the same rule as Review, so both say the same number.
+    private String statusSentence(GradingRun run, int total) {
         int done = 0;
         int attention = 0;
         int waiting = 0;
-        for (int index = 0; index < STATE_ORDER.length; index++) {
-            ResultState state = STATE_ORDER[index];
-            if (state == ResultState.COMPLETED
-                    || state == ResultState.ZERO) {
-                done += counts[index];
+        for (Submission submission : run.getSubmissions()) {
+            ResultState state = Students.state(submission, backend);
+            if (Students.needsLook(submission, backend)) {
+                attention++;
             } else if (state == ResultState.UNGRADED) {
-                waiting += counts[index];
+                waiting++;
             } else {
-                attention += counts[index];
+                done++;
             }
         }
         if (attention == 0 && waiting == 0) {

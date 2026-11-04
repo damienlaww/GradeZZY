@@ -52,6 +52,15 @@ public class FlowState {
     // The students ticked on Review, used as the export scope
     private final List<Submission> selected = new ArrayList<>();
 
+    // The assessment open in Settings, or null for the one in use
+    private String settingsAssessment = null;
+
+    // The students chosen on Export when only some are exported
+    private final List<Submission> exportPicked = new ArrayList<>();
+
+    // Whether Export fills in only the chosen students
+    private boolean exportOnlyPicked = false;
+
     // The chosen files the grading now running skips, until it ends
     private final List<ImportItem> pendingSkipped = new ArrayList<>();
 
@@ -146,6 +155,8 @@ public class FlowState {
     public void setRun(GradingRun run) {
         this.run = run;
         selected.clear();
+        exportPicked.clear();
+        exportOnlyPicked = false;
     }
 
     /**
@@ -175,6 +186,8 @@ public class FlowState {
         furthest = Step.SET_UP;
         run = null;
         selected.clear();
+        exportPicked.clear();
+        exportOnlyPicked = false;
     }
 
     /**
@@ -294,5 +307,52 @@ public class FlowState {
      */
     public List<Submission> getSelected() {
         return selected;
+    }
+
+    /**
+     * Returns the students chosen on Export, used when only some are
+     * exported. Ticking on Review does not change it.
+     *
+     * @return the chosen students, which can be changed
+     */
+    public List<Submission> getExportPicked() {
+        return exportPicked;
+    }
+
+    /**
+     * Says whether Export fills in only the chosen students.
+     *
+     * @return true for only the chosen students
+     */
+    public boolean isExportOnlyPicked() {
+        return exportOnlyPicked;
+    }
+
+    /**
+     * Sets whether Export fills in only the chosen students.
+     *
+     * @param onlyPicked true for only the chosen students
+     */
+    public void setExportOnlyPicked(boolean onlyPicked) {
+        exportOnlyPicked = onlyPicked;
+    }
+
+    /**
+     * Returns the assessment open in Settings.
+     *
+     * @return its name, or null for the one in use
+     */
+    public String getSettingsAssessment() {
+        return settingsAssessment;
+    }
+
+    /**
+     * Remembers the assessment open in Settings, so it stays open when
+     * the page is built again.
+     *
+     * @param name its name, or null for the one in use
+     */
+    public void setSettingsAssessment(String name) {
+        settingsAssessment = name;
     }
 }

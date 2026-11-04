@@ -38,6 +38,9 @@ public class ProcessRunner {
     // Milliseconds in one second
     private static final long MILLIS_PER_SECOND = 1000;
 
+    // How long to wait for a stopped process to end
+    private static final long EXIT_WAIT_MILLIS = 1000;
+
     // Every program any ProcessRunner started that has not ended. A
     // shutdown hook stops them all if GradeZZY closes during a run.
     private static final RunningProcesses RUNNING = startShutdownHook();
@@ -217,6 +220,22 @@ public class ProcessRunner {
         stopKeepingOutput(process);
         // Also closes the streams of the process
         process.destroyForcibly();
+        // On Windows a stopping java.exe holds its working folder, so
+        // wait a moment for it to end before the folder is reused
+        waitForExit(process.toHandle());
+    }
+
+    // Waits briefly for a stopped process to end.
+    private static void waitForExit(ProcessHandle handle) {
+        try {
+            handle.onExit().get(EXIT_WAIT_MILLIS,
+                    java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException
+                | java.util.concurrent.ExecutionException exception) {
+            // It is still stopping; the folder delete tries again
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
@@ -278,6 +297,7 @@ public class ProcessRunner {
         for (ProcessHandle child : children) {
             if (child.isAlive()) {
                 child.destroyForcibly();
+                waitForExit(child);
             }
         }
     }

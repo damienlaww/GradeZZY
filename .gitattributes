@@ -1,0 +1,8 @@
+# Keep script line endings right on every OS: a .sh file with CRLF
+# fails in Git Bash, and cmd.exe expects CRLF in .bat files.
+*.sh text eol=lf
+*.bat text eol=crlf
+*.properties text eol=lf
+*.java text
+*.css text
+*.md text

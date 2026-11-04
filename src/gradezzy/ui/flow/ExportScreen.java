@@ -70,9 +70,12 @@ public class ExportScreen extends FlowScreen {
     // The separator between parts of a line
     private static final String DOT = " · ";
 
+    // The height of the list of students to choose from
+    private static final double PICKER_HEIGHT = 280.0;
+
     // The words of the ticked choice, before its count
     private static final String TICKED_WORDS =
-            "Only the students ticked on Review";
+            "Only the students I choose";
 
     // How many ticked students the export question names
     private static final int NAMES_IN_CONFIRM = 3;
@@ -103,8 +106,8 @@ public class ExportScreen extends FlowScreen {
     private final RadioButton tickedOnly = new RadioButton(TICKED_WORDS);
 
     // Why the ticked choice is off, under it
-    private final Label tickedReason = new Label("Tick students on Review "
-            + "to export only them.");
+    private final Hyperlink tickedReason = Parts.link("Choose students",
+            () -> openPicker());
 
     // The ticked choice and its reason
     private final VBox tickedRow = new VBox(Parts.GAP_SMALL / 2);
@@ -255,11 +258,10 @@ public class ExportScreen extends FlowScreen {
         everyone.setToggleGroup(scope);
         tickedOnly.setToggleGroup(scope);
         everyone.setSelected(true);
-        everyone.setOnAction(event -> refreshBlanks());
-        tickedOnly.setOnAction(event -> refreshBlanks());
+        everyone.setOnAction(event -> chooseEveryone());
+        tickedOnly.setOnAction(event -> choosePicked());
         json.setSelected(true);
-        tickedReason.getStyleClass().addAll("small-text", "choice-reason",
-                "choice-hint");
+        tickedReason.getStyleClass().addAll("small-text", "choice-reason");
         tickedRow.getChildren().addAll(tickedOnly, tickedReason);
         VBox choices = new VBox(Parts.GAP_SMALL + 2, everyone, tickedRow,
                 json);
@@ -360,36 +362,44 @@ public class ExportScreen extends FlowScreen {
         return label;
     }
 
+    // Returns the folder this run's section exports to.
+    private String exportFolder() {
+        GradingRun run = getState().getRun();
+        return getBackend().getExportFolder(run == null ? null
+                : run.getSection());
+    }
+
     // Opens the export folder in Finder or File Explorer.
     private void openOutput() {
-        getWindow().openFolder(getBackend().getSetting(
-                ConfigKeys.OUTPUT_DIR));
+        getWindow().openFolder(exportFolder());
     }
 
     // ---------------------------------------------------------- refresh
 
     // Sets up the two export choices for a run.
     private void refreshScope(GradingRun run) {
-        int ticked = getState().getSelected().size();
         everyone.setText("Every student (" + run.getSubmissions().size()
                 + ")");
         boolean supported = getBackend().supports(Capability.EXPORT_SCOPE);
         tickedRow.setVisible(supported);
         tickedRow.setManaged(supported);
-        boolean canScope = supported && ticked > 0;
-        tickedOnly.setDisable(!canScope);
-        tickedReason.setVisible(!canScope);
-        tickedReason.setManaged(!canScope);
-        if (canScope) {
-            tickedOnly.setText(TICKED_WORDS + " (" + ticked + ")");
-            // Ticking on Review says which students to export
+        // Drops chosen students who are no longer in the run
+        getState().getExportPicked().retainAll(run.getSubmissions());
+        int picked = getState().getExportPicked().size();
+        if (supported && getState().isExportOnlyPicked() && picked > 0) {
             tickedOnly.setSelected(true);
         } else {
-            tickedOnly.setText(TICKED_WORDS);
+            getState().setExportOnlyPicked(false);
             everyone.setSelected(true);
         }
-        savedTo.setText("Files are saved in " + getBackend().getSetting(
-                ConfigKeys.OUTPUT_DIR) + ".");
+        if (picked > 0) {
+            tickedOnly.setText(TICKED_WORDS + " (" + picked + ")");
+            tickedReason.setText("Change who is chosen");
+        } else {
+            tickedOnly.setText(TICKED_WORDS);
+            tickedReason.setText("Choose students");
+        }
+        savedTo.setText("Files are saved in " + exportFolder() + ".");
         refreshBlanks();
     }
 
@@ -437,7 +447,7 @@ public class ExportScreen extends FlowScreen {
         addReason(reasons, failed, "could not be graded");
         addReason(reasons, notOpened, "could not be opened");
         addReason(reasons, waiting, "not graded yet");
-        addReason(reasons, notTicked, "not ticked");
+        addReason(reasons, notTicked, "not chosen");
         addReason(reasons, noSubmission, "no submission");
         int blank = failed + notOpened + waiting + notTicked + noSubmission;
         if (filled + blank + offSheet == 0) {
@@ -553,10 +563,98 @@ public class ExportScreen extends FlowScreen {
         }
     }
 
+    // Exports every student again.
+    private void chooseEveryone() {
+        getState().setExportOnlyPicked(false);
+        refreshBlanks();
+    }
+
+    // Exports only the chosen students, asking who when nobody is chosen.
+    private void choosePicked() {
+        if (getState().getExportPicked().isEmpty()) {
+            everyone.setSelected(true);
+            openPicker();
+            return;
+        }
+        getState().setExportOnlyPicked(true);
+        refreshBlanks();
+    }
+
+    // Opens the sheet that chooses which students to export.
+    private void openPicker() {
+        GradingRun run = getState().getRun();
+        if (run == null) {
+            return;
+        }
+        List<Submission> picked = getState().getExportPicked();
+        VBox list = new VBox(Parts.GAP_SMALL);
+        List<CheckBox> boxes = new ArrayList<>();
+        List<Submission> graded = new ArrayList<>();
+        for (Submission submission : run.getSubmissions()) {
+            if (!ResultState.hasTotal(submission)) {
+                continue;
+            }
+            CheckBox box = new CheckBox(Students.name(submission) + "  ·  "
+                    + Parts.mark(submission.getTotalScore()) + " / "
+                    + Parts.mark(run.getAssessment().getMaxTotal()));
+            box.setSelected(picked.contains(submission));
+            box.setAccessibleText("Export " + Students.name(submission));
+            boxes.add(box);
+            graded.add(submission);
+            list.getChildren().add(box);
+        }
+        ScrollPane scroll = new ScrollPane(list);
+        scroll.setFitToWidth(true);
+        scroll.setPrefViewportHeight(PICKER_HEIGHT);
+        scroll.getStyleClass().add("picker-list");
+
+        Hyperlink all = Parts.link("Tick all", () -> setAll(boxes, true));
+        Hyperlink none = Parts.link("Untick all",
+                () -> setAll(boxes, false));
+        Button cancel = Parts.secondary("Cancel",
+                () -> getWindow().closeSheet());
+        Button done = Parts.primary("Use these students");
+        done.setOnAction(event -> pickerDone(boxes, graded));
+        VBox body = new VBox(Parts.GAP,
+                Parts.title("Choose who to export"),
+                Parts.subtitle("Only the ticked students' marks are filled "
+                + "in. The other rows of the score sheet are left as they "
+                + "are. Students with no mark are not listed."),
+                Parts.row(Parts.GAP, new Node[] {all, none}), scroll,
+                Parts.row(Parts.GAP, new Node[] {Parts.grow(), cancel,
+                done}));
+        body.setMaxWidth(Parts.TEXT_WIDTH);
+        getWindow().showSheet(body);
+    }
+
+    // Ticks or unticks every box of the picker.
+    private void setAll(List<CheckBox> boxes, boolean ticked) {
+        for (CheckBox box : boxes) {
+            box.setSelected(ticked);
+        }
+    }
+
+    // Keeps the students ticked in the picker and exports only them.
+    private void pickerDone(List<CheckBox> boxes, List<Submission> graded) {
+        List<Submission> picked = getState().getExportPicked();
+        picked.clear();
+        for (int index = 0; index < boxes.size(); index++) {
+            if (boxes.get(index).isSelected()) {
+                picked.add(graded.get(index));
+            }
+        }
+        getState().setExportOnlyPicked(!picked.isEmpty());
+        getWindow().closeSheet();
+        GradingRun run = getState().getRun();
+        if (run != null) {
+            refreshScope(run);
+        }
+    }
+
     // Returns the students the chosen export choice covers.
     private List<Submission> chooseScope(GradingRun run) {
         if (tickedOnly.isSelected()) {
-            return new ArrayList<>(getState().getSelected());
+            return new ArrayList<>(getState().getExportPicked());
         }
         return new ArrayList<>(run.getSubmissions());
     }
@@ -590,7 +688,8 @@ public class ExportScreen extends FlowScreen {
         last.getStyleClass().add("last");
         figures.getChildren().addAll(first,
                 figure("Median", Parts.mark(stats.getMedian()), max),
-                figure("Passed", Math.round(stats.getPassRate() * PERCENT)
+                figure("Passed (pass mark " + Parts.mark(stats.getPassMark())
+                + ")", Math.round(stats.getPassRate() * PERCENT)
                 + "%", null), last);
     }
 
@@ -811,14 +910,13 @@ public class ExportScreen extends FlowScreen {
         int total = run.getSubmissions().size();
         String who = "every student";
         if (count < total) {
-            who = "the " + count + " ticked students ("
+            who = "the " + count + " chosen students ("
                     + listNames(scope) + "). The other " + (total - count)
                     + " rows of the score sheet are left as they are";
         }
         String detail = "The marks of " + who + " are filled into a copy "
                 + "of the score sheet for " + run.getSection().getLabel()
-                + ", saved in " + getBackend().getSetting(
-                ConfigKeys.OUTPUT_DIR) + ".";
+                + ", saved in " + exportFolder() + ".";
         if (json.isSelected()) {
             detail += " A JSON file with every question and test is saved "
                     + "beside it.";
@@ -857,8 +955,7 @@ public class ExportScreen extends FlowScreen {
     private int countNeedingReview(List<Submission> scope) {
         int count = 0;
         for (Submission submission : scope) {
-            if (Students.state(submission, getBackend())
-                    == ResultState.NEEDS_REVIEW) {
+            if (Students.needsLook(submission, getBackend())) {
                 count++;
             }
         }

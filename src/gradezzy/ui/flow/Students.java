@@ -27,6 +27,12 @@ import gradezzy.util.TextUtils;
  */
 public final class Students {
 
+    /** The words shown for a 0 whose flags are all checked. */
+    public static final String SETTLED_ZERO_WORDS = "Graded, 0 marks";
+
+    /** The words shown for a chosen file that could not be opened. */
+    public static final String SKIPPED_WORDS = "Not graded: zip unreadable";
+
     // The most questions named in a pill; more are counted instead
     private static final int MAX_NAMED_QUESTIONS = 3;
 
@@ -94,15 +100,87 @@ public final class Students {
             DashboardBackend backend) {
         ResultState state = state(submission, backend);
         if (ResultState.isSkippedFile(submission)) {
-            return Parts.pill("Could not open", Tone.BAD);
+            return Parts.pill(SKIPPED_WORDS, Tone.BAD);
         } else if (state == ResultState.NEEDS_REVIEW) {
             int open = openCount(submission, backend);
             return Parts.pill(Parts.plural(open, "thing") + " to check",
                     Tone.WARN);
         } else if (state == ResultState.COMPILE_ERROR) {
-            return Parts.pill(compileWords(submission), tone(state));
+            return Parts.pill(compileWords(submission),
+                    tone(submission, backend));
+        } else if (state == ResultState.ZERO
+                && !isUncheckedZero(submission, state, backend)) {
+            return Parts.pill(SETTLED_ZERO_WORDS, Tone.NEUTRAL);
         }
-        return Parts.pill(words(state), tone(state));
+        return Parts.pill(words(state), tone(submission, backend));
+    }
+
+    /**
+     * Returns the colour of a student's status. Red means no mark could
+     * be given; amber means partly marked or something to check, so a
+     * student with 19 of 20 and one timed-out test is amber, not red.
+     *
+     * @param submission the submission
+     * @param backend the backend that knows the review decisions
+     * @return the tone
+     */
+    public static Tone tone(Submission submission,
+            DashboardBackend backend) {
+        if (ResultState.isSkippedFile(submission)) {
+            return Tone.BAD;
+        }
+        ResultState state = state(submission, backend);
+        if ((state == ResultState.COMPILE_ERROR
+                || state == ResultState.TIMED_OUT)
+                && submission.getTotalScore() > 0.0) {
+            return Tone.WARN;
+        }
+        return tone(state);
+    }
+
+    /**
+     * Says whether a student needs the instructor before export: an open
+     * fix or flag, a total of 0, or code that did not compile, timed out
+     * or could not be graded. Review, Home, Grade, Export and Statistics
+     * all count students with this one rule, so their numbers agree.
+     * Students not graded yet, and rows made on Review, are counted on
+     * their own instead.
+     *
+     * @param submission the submission
+     * @param backend the backend that knows the review decisions
+     * @return true when the student needs a look
+     */
+    public static boolean needsLook(Submission submission,
+            DashboardBackend backend) {
+        if (ResultState.isMadeOnReview(submission)) {
+            return false;
+        }
+        ResultState state = state(submission, backend);
+        if (state == ResultState.UNGRADED
+                || state == ResultState.NO_SUBMISSION) {
+            return false;
+        }
+        return openCount(submission, backend) > 0
+                || isUncheckedZero(submission, state, backend)
+                || isFailed(state);
+    }
+
+    /**
+     * Says whether a total of 0 still needs a look: nothing was flagged
+     * that the instructor checked, so nothing explains the 0 yet. A 0
+     * whose flags are all settled counts as graded, and so does a 0 the
+     * instructor marked as checked on the student's panel.
+     *
+     * @param submission the submission
+     * @param state its state
+     * @param backend the backend that knows which 0s were checked
+     * @return true for a 0 nobody has looked into
+     */
+    public static boolean isUncheckedZero(Submission submission,
+            ResultState state, DashboardBackend backend) {
+        return state == ResultState.ZERO
+                && submission.getAnomalies().isEmpty()
+                && !backend.isZeroChecked(submission);
     }
 
     /**
@@ -150,7 +228,7 @@ public final class Students {
         if (state == ResultState.COMPLETED) {
             return "Graded";
         } else if (state == ResultState.ZERO) {
-            return "Graded, 0 marks";
+            return "0 marks, check why";
         } else if (state == ResultState.NEEDS_REVIEW) {
             return "Needs review";
         } else if (state == ResultState.COMPILE_ERROR) {
@@ -162,7 +240,7 @@ public final class Students {
         } else if (state == ResultState.NO_SUBMISSION) {
             return "No submission";
         }
-        return "Waiting";
+        return "Not graded yet";
     }
 
     /**
@@ -178,7 +256,8 @@ public final class Students {
             return Tone.WARN;
         } else if (state == ResultState.COMPILE_ERROR
                 || state == ResultState.TIMED_OUT
-                || state == ResultState.COULD_NOT_GRADE) {
+                || state == ResultState.COULD_NOT_GRADE
+                || state == ResultState.ZERO) {
             return Tone.BAD;
         }
         return Tone.NEUTRAL;
