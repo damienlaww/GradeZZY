@@ -188,6 +188,16 @@ public class SetUpScreen extends FlowScreen {
     // The problems found in that tester folder
     private final List<String> testerProblems = new ArrayList<>();
 
+    // The marks read from the testers, kept so the tester files are read
+    // again only when the folder or the assessment in use changes, not on
+    // every redraw. markedTesters and markedBase say what they were read
+    // for; markedAssessment is null until the first read.
+    private Assessment markedAssessment = null;
+    private final List<String> markProblems = new ArrayList<>();
+    private Path markedTesters = null;
+    private Assessment markedBase = null;
+    private boolean markedTyped = false;
+
     /**
      * Creates the Set up step.
      *
@@ -749,6 +759,7 @@ public class SetUpScreen extends FlowScreen {
 
     // Redraws the lists, the settings and the action bar.
     private void refresh() {
+        readMarksIfChanged();
         refreshAssessment();
         refreshEarlierRun();
         refreshFiles();
@@ -761,8 +772,8 @@ public class SetUpScreen extends FlowScreen {
     // choice. The marks come from the chosen tester folder, so a new
     // folder updates them.
     private void refreshAssessment() {
-        Assessment assessment = getBackend().getAssessment(
-                findUsableTesters());
+        readMarksIfChanged();
+        Assessment assessment = markedAssessment;
         if (assessment == null) {
             assessmentText.setText("None is set yet.");
             return;
@@ -987,21 +998,53 @@ public class SetUpScreen extends FlowScreen {
         return item.getPath();
     }
 
-    // Lists the testers with no "score += <number>" line. Typed test
-    // cases have no tester folder, so they have nothing to list.
-    private List<String> findMarkProblems() {
-        if (getState().getBatch().isUsingTypedTestCases()) {
-            return new ArrayList<>();
+    // Reads the marks and their problems from the testers when the tester
+    // folder, the assessment in use or the typed test cases choice has
+    // changed since the last read.
+    private void readMarksIfChanged() {
+        Path testers = findUsableTesters();
+        Assessment base = getBackend().getAssessment();
+        boolean typed = getState().getBatch().isUsingTypedTestCases();
+        boolean sameFolder = (testers == null && markedTesters == null)
+                || (testers != null && testers.equals(markedTesters));
+        if (markedAssessment != null && sameFolder && base == markedBase
+                && typed == markedTyped) {
+            return;
         }
-        return getBackend().checkMaxScores(findUsableTesters());
+        readMarks();
+    }
+
+    // Reads the marks and their problems from the testers now. Both come
+    // from the same folder at the same moment, so they always agree.
+    private void readMarks() {
+        Path testers = findUsableTesters();
+        markedTesters = testers;
+        markedBase = getBackend().getAssessment();
+        markedTyped = getState().getBatch().isUsingTypedTestCases();
+        markedAssessment = getBackend().getAssessment(testers);
+        markProblems.clear();
+        // Typed test cases have no tester folder, so nothing to check
+        if (!markedTyped) {
+            markProblems.addAll(getBackend().checkMaxScores(testers));
+        }
+    }
+
+    // Lists why some questions have no maximum mark, from the last read
+    private List<String> findMarkProblems() {
+        return markProblems;
     }
 
     // Shows each question's maximum mark in a table and asks the
     // instructor to confirm them before grading starts. Warns when they
-    // do not add up to the score sheet's denominator.
+    // do not add up to the score sheet's denominator. The testers are
+    // read again first, in case a file changed since Set up opened.
     private void confirmStart() {
-        Assessment assessment = getBackend().getAssessment(
-                findUsableTesters());
+        readMarks();
+        if (!markProblems.isEmpty()) {
+            refreshActions();
+            return;
+        }
+        Assessment assessment = markedAssessment;
         double denominator = getBackend().getScoreSheetDenominator(
                 findUsableScoreSheet());
         VBox content = new VBox(Parts.GAP, createMarksTable(assessment),
@@ -1380,17 +1423,18 @@ public class SetUpScreen extends FlowScreen {
         actions.reset();
         // A tester with no "score += <number>" line has no maximum mark,
         // so grading cannot start until it is fixed
-        List<String> markProblems = findMarkProblems();
+        readMarksIfChanged();
+        List<String> unknownMarks = findMarkProblems();
         boolean ready = batch.isReady() && !getState().isGrading()
-                && filesBeingChecked == 0 && markProblems.isEmpty();
+                && filesBeingChecked == 0 && unknownMarks.isEmpty();
         actions.setPrimary("Start grading", () -> confirmStart(), ready);
         if (getState().isGrading()) {
             actions.setStatus("A batch is being graded. See step 2.");
         } else if (filesBeingChecked > 0) {
             actions.setStatus("Checking " + Parts.plural(filesBeingChecked,
                     "file") + "...");
-        } else if (!markProblems.isEmpty()) {
-            actions.setStatus(markProblems.get(0));
+        } else if (!unknownMarks.isEmpty()) {
+            actions.setStatus(unknownMarks.get(0));
         } else if (!batch.isReady()) {
             List<String> reasons = batch.getBlockingReasons();
             if (reasons.isEmpty()) {

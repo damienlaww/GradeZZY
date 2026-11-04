@@ -73,12 +73,7 @@ public class RosterReader {
     public List<Student> readRoster(
             Path scoreSheetFile) throws IngestException {
         try {
-            String text = FileUtils.readText(scoreSheetFile);
-            if (text.startsWith("\uFEFF")) {
-                text = text.substring(1);
-            }
-            List<String> records = splitRecords(
-                    TextUtils.normaliseLineEndings(text));
+            List<String> records = readRecords(scoreSheetFile);
             if (records.isEmpty()) {
                 throw new IllegalArgumentException("The roster is empty.");
             }
@@ -157,12 +152,7 @@ public class RosterReader {
     public double readDenominator(Path scoreSheetFile) {
         List<String> values = new ArrayList<>();
         try {
-            String text = FileUtils.readText(scoreSheetFile);
-            if (text.startsWith("\uFEFF")) {
-                text = text.substring(1);
-            }
-            List<String> records = splitRecords(
-                    TextUtils.normaliseLineEndings(text));
+            List<String> records = readRecords(scoreSheetFile);
             if (records.isEmpty()) {
                 return UNKNOWN_DENOMINATOR;
             }
@@ -186,6 +176,17 @@ public class RosterReader {
         }
 
         return findSingleNumber(values);
+    }
+
+    // Reads the score sheet and splits it into records, without a byte
+    // order mark. Shared by readRoster and readDenominator.
+    private List<String> readRecords(Path scoreSheetFile)
+            throws IOException {
+        String text = FileUtils.readText(scoreSheetFile);
+        if (text.startsWith("\uFEFF")) {
+            text = text.substring(1);
+        }
+        return splitRecords(TextUtils.normaliseLineEndings(text));
     }
 
     // The one number every value holds, or UNKNOWN_DENOMINATOR if there is

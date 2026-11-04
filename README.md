@@ -760,9 +760,15 @@ Facts from the provided files:
 - Maximum scores are 3, 3, 5, 5 and 4. They are not a setting: each
   question's maximum is the sum of the `score += <number>` lines in its
   tester (`testcase.TesterMarks`), read from the batch's tester folder.
-  A tester with no such line stops Start grading, and Set up asks the
+  Comments and quoted text are ignored, and every `score +=` on a line
+  counts. Start grading is stopped, with the reason, when a question has
+  no tester, its tester never adds to the score, or it changes the score
+  in a way that cannot be counted (`score = score + 1`, `score++`,
+  `score += MARK`, or a `score +=` inside a loop). Set up then asks the
   instructor to confirm the marks, warning when they do not add up to the
-  score sheet's `Calculated Final Grade Denominator`.
+  score sheet's `Calculated Final Grade Denominator`; the console prints
+  the same marks and warning. Old `max.score` lines in a personal
+  `config.properties` are ignored, and the console says so.
 
 Rules that matter here:
 
@@ -1086,7 +1092,8 @@ by this section.
 | `java` options `--limit-modules`, `--illegal-native-access=deny`; `UUID` | `exec.TesterRunner` (`UUID` also for anomaly ids) | Student code gets only core Java and no native code; a new random token for every tester run. | Command-line options that shrink what student code can reach; a `UUID` is a random id nobody can guess. |
 | `java.util.zip` (`ZipFile`, `ZipEntry`, `Enumeration`, `CRC32`) | `ingest.ZipExtractor` | Unzips submissions safely. | Opens a zip and hands us its entries one at a time, like an `Iterator`. |
 | `java.util.regex.Pattern`, `matches`, `replaceFirst` | `service.SettingsService`, `ingest.SubmissionLoader`, `ingest.ZipExtractor.isSafeEntry` | The zip name setting is itself a pattern; unsafe Windows file names are a pattern too. | A pattern describes a family of strings, such as "2023-2024-" followed by a username. |
-| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream`, `testcase.TesterMarks` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
+| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
+| `StandardCharsets.ISO_8859_1` | `testcase.TesterMarks` | Opens a tester file whatever encoding it was saved in, to read its `score +=` lines. | A way of turning bytes into characters that accepts every byte, so a tester saved in Windows-1252 still opens. |
 | `java.time` (`LocalDateTime`, `DateTimeFormatter`) | `model`, `persistence`, `report.AuditLogExporter`, `service`, `ui.demo` | Run and audit times. | The current date and time, and how to print it. |
 | `java.util.Random` | `ui.demo.DemoData` | Synthetic marks for `--demo`, always from the same seed. | Gives the same "random" numbers every time, so the demo looks the same. |
 
