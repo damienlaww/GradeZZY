@@ -375,8 +375,7 @@ public class LiveBackend implements DashboardBackend {
         return false;
     }
 
-    // Returns the tester file name of the first question, such as
-    // Q1aTester.java.
+    // Returns the first question's tester file name, such as Q1aTester.java.
     private String firstTesterName() {
         String suffix = config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
                 + ".java";
