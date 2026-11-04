@@ -183,6 +183,9 @@ public class GradeScreen extends FlowScreen
         total = getState().getBatch().countStudents();
         updateCount();
         getState().setGrading(true);
+        // Review shows the files grading skips as "Could not open"
+        getState().setSkippedFiles(
+                getState().getBatch().getUnusableSubmissions());
         // The backend records "Grading started" with the real count
         getBackend().startGrading(getState().getBatch(),
                 getState().getSection(), this, this);
@@ -393,6 +396,7 @@ public class GradeScreen extends FlowScreen
     public void onFinished(GradingRun gradingRun) {
         getState().setGrading(false);
         getState().setRun(gradingRun);
+        getState().attachSkippedFiles(gradingRun);
         end();
         if (gradingRun != null) {
             for (Submission submission : gradingRun.getSubmissions()) {

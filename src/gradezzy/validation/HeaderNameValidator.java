@@ -109,7 +109,7 @@ public class HeaderNameValidator extends AbstractValidator {
                         AnomalyType.MISSING_HEADER_NAME, Severity.WARNING,
                         question.getFolderName() + "/"
                         + question.getFileName() + " has " + problem
-                        + " in its header. Working copy file: " + file));
+                        + " in its header."));
             }
         }
 

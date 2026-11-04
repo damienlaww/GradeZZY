@@ -15,8 +15,10 @@ import java.util.List;
 
 import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
+import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.ImportBatch;
+import gradezzy.ui.backend.ImportItem;
 
 /**
  * The shared state of the guided window.
@@ -47,6 +49,19 @@ public class FlowState {
 
     // The students ticked on Review, used as the export scope
     private final List<Submission> selected = new ArrayList<>();
+
+    // The chosen files grading skipped because they cannot be used
+    private final List<ImportItem> skippedFiles = new ArrayList<>();
+
+    // The run the skipped files belong to, or null before it ends
+    private GradingRun skippedRun = null;
+
+    // True from the start of grading until the skipped files have a run
+    private boolean skippedWaiting = false;
+
+    // The students on the score sheet with no submission, and their run
+    private List<Student> missingStudents = null;
+    private GradingRun missingRun = null;
 
     /**
      * Creates an empty state on the first step.
@@ -156,6 +171,73 @@ public class FlowState {
         furthest = Step.SET_UP;
         run = null;
         selected.clear();
+    }
+
+    /**
+     * Keeps the chosen files grading is about to skip, until the run they
+     * belong to ends.
+     *
+     * @param files the files that cannot be used
+     */
+    public void setSkippedFiles(List<ImportItem> files) {
+        skippedFiles.clear();
+        skippedFiles.addAll(files);
+        skippedRun = null;
+        skippedWaiting = true;
+    }
+
+    /**
+     * Ties the skipped files to the run that has just ended. Only the
+     * first run to end after grading started gets them.
+     *
+     * @param gradingRun the run, or null when grading failed
+     */
+    public void attachSkippedFiles(GradingRun gradingRun) {
+        if (!skippedWaiting) {
+            return;
+        }
+        skippedWaiting = false;
+        skippedRun = gradingRun;
+    }
+
+    /**
+     * Returns the files grading skipped for a run.
+     *
+     * @param gradingRun the run
+     * @return the files, empty for another run
+     */
+    public List<ImportItem> getSkippedFiles(GradingRun gradingRun) {
+        List<ImportItem> files = new ArrayList<>();
+        if (gradingRun != null && gradingRun == skippedRun) {
+            files.addAll(skippedFiles);
+        }
+        return files;
+    }
+
+    /**
+     * Returns the students on a run's score sheet with no submission, if
+     * they were looked up already.
+     *
+     * @param gradingRun the run
+     * @return the students, or null when not looked up yet
+     */
+    public List<Student> getMissingStudents(GradingRun gradingRun) {
+        if (gradingRun == null || gradingRun != missingRun) {
+            return null;
+        }
+        return missingStudents;
+    }
+
+    /**
+     * Keeps the students on a run's score sheet with no submission.
+     *
+     * @param gradingRun the run
+     * @param students the students
+     */
+    public void setMissingStudents(GradingRun gradingRun,
+            List<Student> students) {
+        missingRun = gradingRun;
+        missingStudents = new ArrayList<>(students);
     }
 
     /**

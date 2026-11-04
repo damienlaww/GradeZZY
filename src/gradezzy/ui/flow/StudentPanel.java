@@ -12,6 +12,7 @@
  */
 package gradezzy.ui.flow;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javafx.geometry.Pos;
@@ -84,6 +85,9 @@ public class StudentPanel extends ScrollPane {
 
     // The student shown, or null
     private Submission submission = null;
+
+    // The problems every graded student shares, shown on Review instead
+    private final List<Anomaly> sharedProblems = new ArrayList<>();
 
     /**
      * Creates an empty panel.
@@ -525,11 +529,45 @@ public class StudentPanel extends ScrollPane {
 
     // Adds a card for each flag and problem that is not a fix.
     private void addProblems(DashboardBackend backend) {
+        int shared = 0;
         for (Anomaly anomaly : submission.getAnomalies()) {
-            if (!ReviewRules.isValidationFinding(anomaly.getType())) {
+            boolean finding = ReviewRules.isValidationFinding(
+                    anomaly.getType());
+            if (!finding && isShared(anomaly)) {
+                shared++;
+            } else if (!finding) {
                 body.getChildren().add(createProblemCard(anomaly, backend));
             }
         }
+        if (shared > 0) {
+            Label note = Parts.muted("Also " + Parts.plural(shared,
+                    "problem") + " every graded student shares, shown "
+                    + "above the table.");
+            note.setWrapText(true);
+            body.getChildren().add(note);
+        }
+    }
+
+    /**
+     * Keeps the problems every graded student shares. Review shows them
+     * once above the table, so the panel leaves out their cards.
+     *
+     * @param problems one anomaly per shared problem
+     */
+    public void setSharedProblems(List<Anomaly> problems) {
+        sharedProblems.clear();
+        sharedProblems.addAll(problems);
+    }
+
+    // Says whether a problem has the same type and words as a shared one.
+    private boolean isShared(Anomaly anomaly) {
+        for (Anomaly shared : sharedProblems) {
+            if (shared.getType() == anomaly.getType()
+                    && shared.getMessage().equals(anomaly.getMessage())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Builds the card of one flag or problem.

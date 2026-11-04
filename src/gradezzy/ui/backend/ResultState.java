@@ -38,7 +38,23 @@ public enum ResultState {
     ZERO("Scored zero"),
 
     /** Graded with nothing left to review. */
-    COMPLETED("Completed");
+    COMPLETED("Completed"),
+
+    /** On the score sheet, but no file of this student was graded. */
+    NO_SUBMISSION("No submission");
+
+    /**
+     * The reason stored on a row made for a student with no submission,
+     * which marks the row as one.
+     */
+    public static final String NO_SUBMISSION_REASON =
+            "Nothing of this student was graded in this run.";
+
+    /**
+     * The start of the reason stored on a row made for a chosen file that
+     * grading skipped, which marks the row as one.
+     */
+    public static final String COULD_NOT_OPEN_PREFIX = "Could not open ";
 
     // The words shown for this state
     private final String label;
@@ -68,6 +84,9 @@ public enum ResultState {
             boolean waitingForReview) {
         SubmissionStatus status = submission.getStatus();
 
+        if (isNoSubmission(submission)) {
+            return NO_SUBMISSION;
+        }
         if (status == SubmissionStatus.FAILED) {
             return COULD_NOT_GRADE;
         }
@@ -107,6 +126,45 @@ public enum ResultState {
             }
         }
         return of(submission, waiting);
+    }
+
+    /**
+     * Says whether a row stands for a student on the score sheet with no
+     * submission in the run.
+     *
+     * @param submission the row
+     * @return true for a student with no submission
+     */
+    public static boolean isNoSubmission(Submission submission) {
+        return submission.getStatus() == SubmissionStatus.PENDING
+                && NO_SUBMISSION_REASON.equals(
+                        submission.getIngestFailure());
+    }
+
+    /**
+     * Says whether a row stands for a chosen file that grading skipped
+     * because it could not be opened.
+     *
+     * @param submission the row
+     * @return true for a skipped file
+     */
+    public static boolean isSkippedFile(Submission submission) {
+        String failure = submission.getIngestFailure();
+        return submission.getStatus() == SubmissionStatus.FAILED
+                && failure != null
+                && failure.startsWith(COULD_NOT_OPEN_PREFIX);
+    }
+
+    /**
+     * Says whether a row was made on Review rather than graded: a student
+     * with no submission or a skipped file. Such a row has no marks to
+     * export and nothing to open.
+     *
+     * @param submission the row
+     * @return true for a row made on Review
+     */
+    public static boolean isMadeOnReview(Submission submission) {
+        return isNoSubmission(submission) || isSkippedFile(submission);
     }
 
     /**

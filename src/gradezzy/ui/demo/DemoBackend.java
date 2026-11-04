@@ -501,6 +501,23 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
+     * Returns no problems: the demo testers are always fine.
+     */
+    @Override
+    public List<String> checkTesters(Path testersDirectory,
+            Path starterDirectory) {
+        return new ArrayList<>();
+    }
+
+    /**
+     * Returns no students: every demo student has a submission.
+     */
+    @Override
+    public List<Student> listMissingStudents(GradingRun gradingRun) {
+        return new ArrayList<>();
+    }
+
+    /**
      * Runs one question again. The timed-out sample question passes;
      * any other question keeps its result.
      */
