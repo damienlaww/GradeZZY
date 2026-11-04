@@ -444,8 +444,15 @@
 .chart-curve {
     -fx-fill: transparent;
     -fx-stroke: -color-accent-emphasis;
-    -fx-stroke-width: 2;
+    -fx-stroke-width: 3;
     -fx-stroke-line-join: round;
+}
+
+/* The tinted area under the bell curve, so its shape reads at a glance */
+.chart-curve-area {
+    -fx-fill: -color-accent-emphasis;
+    -fx-opacity: 0.14;
+    -fx-stroke: transparent;
 }
 
 .chart-mean {
