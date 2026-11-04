@@ -9,6 +9,7 @@
 package gradezzy.testcase;
 
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -26,6 +27,10 @@ public class TesterFile {
 
     // The location of the tester source
     private final Path sourceFile;
+
+    // The snapshot of this question's folder for each student, saved after
+    // compiling and taken back right before the tester runs
+    private final HashMap<String, FolderSnapshot> snapshots = new HashMap<>();
 
     /**
      * Creates a new tester file.
@@ -65,6 +70,28 @@ public class TesterFile {
      */
     public Path getSourceFile() {
         return sourceFile;
+    }
+
+    /**
+     * Keeps a student's snapshot until the tester runs. The worker threads
+     * share this object, so only one of them changes the map at a time.
+     *
+     * @param username the student
+     * @param snapshot the snapshot of the question folder
+     */
+    public synchronized void saveSnapshot(String username,
+            FolderSnapshot snapshot) {
+        snapshots.put(username, snapshot);
+    }
+
+    /**
+     * Hands back a student's snapshot and forgets it, to free the memory.
+     *
+     * @param username the student
+     * @return the snapshot, or null if none was saved
+     */
+    public synchronized FolderSnapshot takeSnapshot(String username) {
+        return snapshots.remove(username);
     }
 
     /**
