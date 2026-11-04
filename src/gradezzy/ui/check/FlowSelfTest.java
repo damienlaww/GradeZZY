@@ -233,10 +233,11 @@ public class FlowSelfTest {
                 "the notice says six files were added");
         check(count(SceneFinder.texts(root(), "pill"), "Cannot be used")
                 == 1, "exactly one file row says Cannot be used");
-        check(start.isDisabled(), "Start grading stays disabled");
-        check(statusText().contains("cannot be used"),
-                "the action bar says a ZIP file cannot be used (it says \""
-                + statusText() + "\")");
+        check(!start.isDisabled(), "Start grading is enabled, as the "
+                + "unusable file is skipped");
+        check(statusText().contains("cannot be used and is skipped"),
+                "the action bar says a ZIP file cannot be used and is "
+                + "skipped (it says \"" + statusText() + "\")");
 
         ImportItem invalid = null;
         for (ImportItem item : files) {

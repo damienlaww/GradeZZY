@@ -150,6 +150,16 @@ public class SetUpScreen extends FlowScreen {
     // How many chosen files are still being checked in the background
     private int filesBeingChecked = 0;
 
+    // The tester folder check still running, or null
+    private TesterCheck testerCheck = null;
+
+    // The tester and starter folders the problems below were found with,
+    // or null when they must be checked again
+    private String checkedFolders = null;
+
+    // The problems found in that tester folder
+    private final List<String> testerProblems = new ArrayList<>();
+
     /**
      * Creates the Set up step.
      *
@@ -503,7 +513,7 @@ public class SetUpScreen extends FlowScreen {
             }
         }
         if (path != null) {
-            getState().getBatch().add(getBackend().inspect(kind, path));
+            inspectClassFile(kind, path);
         }
     }
 
@@ -513,13 +523,52 @@ public class SetUpScreen extends FlowScreen {
         if (path == null) {
             return;
         }
-        ImportBatch batch = getState().getBatch();
-        batch.clear(kind);
-        batch.add(getBackend().inspect(kind, path));
         if (kind == InputKind.TESTERS) {
-            batch.setUsingTypedTestCases(false);
+            getState().getBatch().setUsingTypedTestCases(false);
+        }
+        inspectClassFile(kind, path);
+        refresh();
+    }
+
+    // Checks a score sheet, tester or starter folder and puts it in the
+    // batch. Live mode reads it on a background thread; the demo reads no
+    // files.
+    private void inspectClassFile(InputKind kind, Path path) {
+        if (getBackend().isDemo()) {
+            useClassFile(getBackend().inspect(kind, path));
+            return;
+        }
+        List<Path> paths = new ArrayList<>();
+        paths.add(path);
+        FileInspection inspection = new FileInspection(getBackend(), kind,
+                paths);
+        inspection.setOnSucceeded(event -> classFileInspected(inspection));
+        inspection.setOnFailed(event -> inspectionFailed(inspection));
+        filesBeingChecked += inspection.getPathCount();
+        Thread worker = new Thread(inspection, "gradezzy-inspect");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Uses the class file a background check has finished.
+    private void classFileInspected(FileInspection inspection) {
+        filesBeingChecked -= inspection.getPathCount();
+        for (ImportItem item : inspection.getValue()) {
+            useClassFile(item);
         }
         refresh();
+    }
+
+    // Replaces the batch's file of the item's kind with the item. A new
+    // tester or starter folder is checked again for tester problems.
+    private void useClassFile(ImportItem item) {
+        ImportBatch batch = getState().getBatch();
+        batch.clear(item.getKind());
+        batch.add(item);
+        if (item.getKind() == InputKind.TESTERS
+                || item.getKind() == InputKind.STARTER) {
+            forgetTesterCheck();
+        }
     }
 
     // Asks for a file or folder of a kind, or returns the demo sample.
@@ -737,6 +786,7 @@ public class SetUpScreen extends FlowScreen {
 
     // Redraws the score sheet, tester and starter rows.
     private void refreshClassFiles() {
+        checkTestersIfChanged();
         HBox[] rows = {
             createClassFileRow(InputKind.ROSTER, "Score sheet", null),
             createTesterRow(),
@@ -772,6 +822,21 @@ public class SetUpScreen extends FlowScreen {
         }
         ImportItem item = items.get(0);
         if (batch.getEffectiveState(item) == ImportState.INVALID) {
+            return null;
+        }
+        return item.getPath();
+    }
+
+    // Returns the chosen starter folder when it can be used, or null for
+    // the one in Settings.
+    private Path findUsableStarter() {
+        ImportBatch batch = getState().getBatch();
+        List<ImportItem> items = batch.getItems(InputKind.STARTER);
+        if (items.isEmpty()) {
+            return null;
+        }
+        ImportItem item = items.get(0);
+        if (!batch.getEffectiveState(item).isUsable()) {
             return null;
         }
         return item.getPath();
@@ -858,6 +923,111 @@ public class SetUpScreen extends FlowScreen {
         return block;
     }
 
+    // Names the tester and starter folders a check uses, so a change to
+    // either starts a new check.
+    private String describeFolders(Path testers, Path starter) {
+        return testers + "|" + starter;
+    }
+
+    // Makes the next refresh check the testers again, even when the same
+    // folders are chosen, as their files may have changed.
+    private void forgetTesterCheck() {
+        checkedFolders = null;
+        testerCheck = null;
+        testerProblems.clear();
+    }
+
+    // Starts the tester folder check when the folders are new to it.
+    private void checkTestersIfChanged() {
+        Path testers = findUsableTesters();
+        if (testers == null) {
+            return;
+        }
+        Path starter = findUsableStarter();
+        String folders = describeFolders(testers, starter);
+        if (folders.equals(checkedFolders)) {
+            return;
+        }
+        if (testerCheck != null
+                && folders.equals(testerCheck.getFolders())) {
+            return;
+        }
+        if (getBackend().isDemo()) {
+            showTesterProblems(folders, getBackend().checkTesters(testers,
+                    starter));
+            return;
+        }
+        TesterCheck check = new TesterCheck(getBackend(), testers, starter,
+                folders);
+        check.setOnSucceeded(event -> testerCheckDone(check));
+        check.setOnFailed(event -> testerCheckFailed(check));
+        testerCheck = check;
+        Thread worker = new Thread(check, "gradezzy-testers");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Shows what a finished check found, unless a newer one started.
+    private void testerCheckDone(TesterCheck check) {
+        if (check != testerCheck) {
+            return;
+        }
+        testerCheck = null;
+        showTesterProblems(check.getFolders(), check.getValue());
+        refreshClassFiles();
+    }
+
+    // Shows that a check stopped before it finished.
+    private void testerCheckFailed(TesterCheck check) {
+        if (check != testerCheck) {
+            return;
+        }
+        testerCheck = null;
+        List<String> problems = new ArrayList<>();
+        problems.add("The testers could not be checked: "
+                + check.getException().getMessage());
+        showTesterProblems(check.getFolders(), problems);
+        refreshClassFiles();
+    }
+
+    // Keeps the problems found with a tester and starter folder.
+    private void showTesterProblems(String folders, List<String> problems) {
+        checkedFolders = folders;
+        testerProblems.clear();
+        testerProblems.addAll(problems);
+    }
+
+    // Adds the tester check's progress or problems to the tester row's
+    // detail, and returns the pill to show instead, or null.
+    private Label addTesterNotes(VBox notes) {
+        Path testers = findUsableTesters();
+        if (testers == null) {
+            return null;
+        }
+        String folders = describeFolders(testers, findUsableStarter());
+        if (!folders.equals(checkedFolders)) {
+            notes.getChildren().add(smallNote("Checking the testers..."));
+            return null;
+        }
+        if (testerProblems.isEmpty()) {
+            return null;
+        }
+        for (String problem : testerProblems) {
+            notes.getChildren().add(smallNote(problem));
+        }
+        return Parts.pill(Parts.plural(testerProblems.size(),
+                "tester problem"), Tone.WARN);
+    }
+
+    // Returns a small grey note that wraps.
+    private Label smallNote(String text) {
+        Label label = Parts.muted(text);
+        label.getStyleClass().add("small-text");
+        label.setMinWidth(0);
+        label.setWrapText(true);
+        return label;
+    }
+
     // Builds one class file row, with an optional link after the detail.
     private HBox createClassFileRow(InputKind kind, String title,
             Hyperlink extra) {
@@ -885,7 +1055,14 @@ public class SetUpScreen extends FlowScreen {
         if (extra != null) {
             line.getChildren().add(extra);
         }
-        return classFileRow(iconPath, title, line, status,
+        VBox details = new VBox(line);
+        if (kind == InputKind.TESTERS) {
+            Label warning = addTesterNotes(details);
+            if (warning != null) {
+                status = warning;
+            }
+        }
+        return classFileRow(iconPath, title, details, status,
                 rowLink("Change", () -> changeClassFile(kind)));
     }
 
@@ -929,7 +1106,7 @@ public class SetUpScreen extends FlowScreen {
     }
 
     // Lays out a class file row: icon, name and detail, status, link.
-    private HBox classFileRow(String iconPath, String title, HBox detail,
+    private HBox classFileRow(String iconPath, String title, Node detail,
             Label status, Hyperlink change) {
         VBox text = new VBox(Parts.strong(title), detail);
         text.setMinWidth(0);
@@ -1059,9 +1236,13 @@ public class SetUpScreen extends FlowScreen {
                 actions.setStatus(reasons.get(0));
             }
         } else {
+            String skipped = batch.describeSkipped();
+            if (!skipped.isEmpty()) {
+                skipped = " " + skipped;
+            }
             actions.setStatus(Parts.plural(batch.countStudents(),
                     "student") + " ready to grade in "
-                    + getState().getSection().getLabel() + ".");
+                    + getState().getSection().getLabel() + "." + skipped);
         }
     }
 

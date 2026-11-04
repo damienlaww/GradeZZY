@@ -298,8 +298,9 @@ public class ImportBatch {
             reasons.add("Add at least one student ZIP file.");
         }
 
+        // Files that cannot be used are skipped, unless nothing else is left
         int invalid = count(InputKind.SUBMISSION, ImportState.INVALID);
-        if (invalid > 0) {
+        if (invalid > 0 && listStudents().isEmpty()) {
             reasons.add(invalid + " chosen file" + plural(invalid)
                     + " or folder" + plural(invalid)
                     + " cannot be used. Replace or remove "
@@ -315,6 +316,39 @@ public class ImportBatch {
                     + "folder instead.");
         }
         return reasons;
+    }
+
+    /**
+     * Returns the chosen student files and folders that cannot be used.
+     * Grading skips them and grades the rest.
+     *
+     * @return the files, in the order they were chosen
+     */
+    public List<ImportItem> getUnusableSubmissions() {
+        List<ImportItem> unusable = new ArrayList<>();
+        for (ImportItem item : getItems(InputKind.SUBMISSION)) {
+            if (getEffectiveState(item) == ImportState.INVALID) {
+                unusable.add(item);
+            }
+        }
+        return unusable;
+    }
+
+    /**
+     * Returns the note shown when some chosen files will be skipped, such
+     * as "1 chosen file cannot be used and is skipped.".
+     *
+     * @return the note, or empty text when every file can be used
+     */
+    public String describeSkipped() {
+        int invalid = getUnusableSubmissions().size();
+        if (invalid == 0) {
+            return "";
+        }
+        if (invalid == 1) {
+            return "1 chosen file cannot be used and is skipped.";
+        }
+        return invalid + " chosen files cannot be used and are skipped.";
     }
 
     /**
