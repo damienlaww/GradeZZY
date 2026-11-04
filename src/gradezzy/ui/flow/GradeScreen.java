@@ -645,7 +645,13 @@ public class GradeScreen extends FlowScreen
 
     // Redraws the bell curve of the graded students.
     private void updateChart() {
+        // The run's own marks, read from its testers; the assessment in
+        // Settings only until the run is known
         Assessment assessment = getBackend().getAssessment();
+        GradingRun run = getState().getRun();
+        if (run != null && run.getAssessment() != null) {
+            assessment = run.getAssessment();
+        }
         if (assessment == null) {
             return;
         }

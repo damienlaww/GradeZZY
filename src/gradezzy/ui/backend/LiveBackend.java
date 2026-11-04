@@ -180,9 +180,8 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public Assessment getAssessment(Path testersDirectory) {
-        if (testersDirectory == null) {
-            return assessment;
-        }
+        // Read now, even for the folder in Settings, so the marks match
+        // what checkMaxScores reads at the same moment
         return new AssessmentFactory(config).create(
                 assessment.getModuleCode(), testersDirectory);
     }

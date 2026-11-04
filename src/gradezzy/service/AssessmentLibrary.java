@@ -229,12 +229,27 @@ public class AssessmentLibrary {
             }
             if (readMaxScore(draft.getTestersDirectory(), id)
                     <= TesterMarks.UNKNOWN) {
-                return tester.getFileName() + " has no \"score += "
-                        + "<number>\" line, so " + id + " has no maximum "
-                        + "mark. Add one per test case.";
+                return describeUnknownMark(tester, id);
             }
         }
         return "";
+    }
+
+    // Says why a tester gives no maximum mark: the first problem
+    // TesterMarks finds, such as a score change it cannot count
+    private String describeUnknownMark(Path tester, String questionId) {
+        try {
+            List<String> problems = TesterMarks.findProblems(tester);
+            if (!problems.isEmpty()) {
+                return problems.get(0);
+            }
+        } catch (IOException exception) {
+            return tester.getFileName() + " could not be read, so "
+                    + questionId + " has no maximum mark.";
+        }
+        return tester.getFileName() + " has no \"score += <number>\" "
+                + "line, so " + questionId + " has no maximum mark. Add "
+                + "one per test case.";
     }
 
     /**
