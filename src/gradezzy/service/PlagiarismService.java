@@ -4,6 +4,8 @@
  * Purpose: Runs the similarity check on a finished run.
  *
  * Where it fits: Used by LiveBackend for the Similar code card on Export.
+ * The run is saved after each check, so the flags are kept when the app
+ * is closed.
  */
 package gradezzy.service;
 
@@ -20,6 +22,8 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
+import gradezzy.persistence.PersistenceException;
+import gradezzy.persistence.ResultRepository;
 import gradezzy.plagiarism.SimilarityDetector;
 import gradezzy.plagiarism.SimilarityPair;
 
@@ -49,16 +53,35 @@ public class PlagiarismService {
     // The algorithm used to compare submissions
     private final SimilarityDetector similarityDetector;
 
+    // The store the checked run is saved to, or null to save nothing
+    private final ResultRepository repository;
+
     /**
-     * Creates a new plagiarism service.
+     * Creates a new plagiarism service that saves nothing.
      *
      * @param config the application settings
      * @param similarityDetector the algorithm used to compare submissions
      */
     public PlagiarismService(AppConfig config,
             SimilarityDetector similarityDetector) {
+        this(config, similarityDetector, null);
+    }
+
+    /**
+     * Creates a new plagiarism service that saves the run after each
+     * check.
+     *
+     * @param config the application settings
+     * @param similarityDetector the algorithm used to compare submissions
+     * @param repository the store the run is saved to, or null to save
+     *        nothing
+     */
+    public PlagiarismService(AppConfig config,
+            SimilarityDetector similarityDetector,
+            ResultRepository repository) {
         this.config = config;
         this.similarityDetector = similarityDetector;
+        this.repository = repository;
     }
 
     /**
@@ -69,7 +92,8 @@ public class PlagiarismService {
      * id and keeps its fix status, so a review decision about it is kept.
      * Submissions still waiting or being graded are left out and left
      * unchanged. One check runs at a time, so two checks of a run at once
-     * cannot both add their anomalies.
+     * cannot both add their anomalies. The run is then saved when the
+     * database is switched on, so the flags are kept after a restart.
      *
      * @param gradingRun the grading run
      * @return the similar pairs found, most similar first, or an empty
@@ -100,7 +124,25 @@ public class PlagiarismService {
                     pair.getSecondUsername(), pair.getFirstUsername(), pair);
         }
 
+        saveRun(gradingRun);
         return pairs;
+    }
+
+    // Saves the run with its new flags when the database is switched on.
+    // A failure keeps the flags in memory, so they still show until the
+    // app is closed; GradingService already warns when a run cannot be
+    // saved.
+    private void saveRun(GradingRun gradingRun) {
+        if (repository == null
+                || !config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+            return;
+        }
+
+        try {
+            repository.saveRun(gradingRun);
+        } catch (PersistenceException exception) {
+            // See the comment above
+        }
     }
 
     // Says whether grading of a submission has ended, so its working copy

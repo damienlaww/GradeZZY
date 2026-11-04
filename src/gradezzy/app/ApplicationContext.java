@@ -12,8 +12,10 @@
 package gradezzy.app;
 
 import java.nio.file.Paths;
+import java.util.List;
 
 import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigException;
 import gradezzy.config.ConfigKeys;
 import gradezzy.fix.CaseNameFixer;
 import gradezzy.fix.EncodingFixer;
@@ -45,6 +47,7 @@ import gradezzy.service.ServiceRegistry;
 import gradezzy.service.SettingsService;
 import gradezzy.service.StatisticsService;
 import gradezzy.stats.StatisticsCalculator;
+import gradezzy.util.TextUtils;
 
 /**
  * Creates and connects the services of the application.
@@ -66,11 +69,17 @@ public class ApplicationContext {
     private final String startupProblem;
 
     /**
-     * Builds every service from the configuration.
+     * Builds every service from the configuration. Every setting is
+     * checked first, so a bad value stops the app at once with a message
+     * naming all the bad settings, rather than failing later when that
+     * setting is first read.
      *
      * @param config the application settings
+     * @throws ConfigException if a setting in config.properties is not
+     *         valid
      */
     public ApplicationContext(AppConfig config) {
+        checkSettings(config);
         this.config = config;
         this.repository = new SqliteResultRepository(
                 config.getString(ConfigKeys.DATABASE_FILE));
@@ -89,7 +98,8 @@ public class ApplicationContext {
                 auditService);
 
         this.services = new ServiceRegistry(config, gradingService,
-                new AnomalyService(fixManager, repository, auditService),
+                new AnomalyService(fixManager, repository, auditService,
+                        gradingService),
                 createExportService(),
                 new StatisticsService(new StatisticsCalculator(config),
                         repository, gradingService),
@@ -99,7 +109,19 @@ public class ApplicationContext {
                 new HistoryService(config, repository,
                         new BackupManager(config), auditService),
                 new PlagiarismService(config,
-                        new TokenSimilarityDetector(config)));
+                        new TokenSimilarityDetector(config), repository));
+    }
+
+    // Stops the app when config.properties holds a value that is not
+    // valid, naming every such setting at once.
+    private static void checkSettings(AppConfig config) {
+        List<String> problems = new SettingsService(config).findProblems();
+        if (problems.isEmpty()) {
+            return;
+        }
+        throw new ConfigException("Fix these settings in "
+                + config.getConfigFile() + ", then start GradeZZY again: "
+                + TextUtils.join(" ", problems));
     }
 
     /**
@@ -176,7 +198,7 @@ public class ApplicationContext {
     // To add an export format, write a class that implements Exporter
     // and register it here.
     private ExportService createExportService() {
-        ExportService exportService = new ExportService();
+        ExportService exportService = new ExportService(config);
 
         exportService.registerExporter(new CsvScoreSheetExporter(config,
                 Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE))));

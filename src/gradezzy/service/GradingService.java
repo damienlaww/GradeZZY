@@ -10,6 +10,7 @@
  */
 package gradezzy.service;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -17,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -41,6 +43,7 @@ import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
+import gradezzy.report.ScoreFormatter;
 import gradezzy.testcase.TestCaseException;
 import gradezzy.testcase.TestCaseSource;
 import gradezzy.testcase.UploadedTesterSource;
@@ -75,6 +78,16 @@ public class GradingService {
     private static final String GRADING_CANCELLED = "Grading cancelled";
     private static final String GRADING_RETRIED = "Grading retried";
     private static final String GRADING_RESUMED = "Grading resumed";
+    private static final String STUDENTS_ADDED = "Students added";
+    private static final String RESULT_REPLACED = "Result replaced";
+    private static final String LATE_UPLOAD_REFUSED = "Late upload refused";
+
+    // Written in the audit log for a student who has no total
+    private static final String NOT_GRADED = "not graded";
+
+    // The message when Undo or a late batch is tried during grading
+    private static final String STILL_GRADING = "Grading is still "
+            + "running. Try again when it has finished.";
 
     // What the instructor can do when a run cannot be saved. PersistStage
     // gives its warning the same text, so both are found as save warnings.
@@ -103,6 +116,17 @@ public class GradingService {
 
     // The last run started, kept so Retry can grade it again
     private GradingRun lastRun = null;
+
+    // The id of the run being graded now, or null while it is still
+    // being loaded. Written by the grading thread and read by cancel on
+    // the window's thread, so only through the synchronized methods.
+    private String currentRunId = null;
+
+    // How many batches, retries or resumes are being graded now. Undo and
+    // a late batch wait until it is 0, because they share the stop flag
+    // and the run with the grading thread. Only read and changed in the
+    // synchronized methods below.
+    private int activeGradings = 0;
 
     // The shared information of the last run started, kept for Retry
     private GradingContext lastContext = null;
@@ -232,6 +256,20 @@ public class GradingService {
             TestCaseSource testCaseSource, ProgressListener listener,
             Path scoreSheetFile, Path starterDirectory)
             throws GradingException {
+        beginGrading();
+        try {
+            return gradeBatch(inputPaths, section, testCaseSource, listener,
+                    scoreSheetFile, starterDirectory);
+        } finally {
+            endGrading();
+        }
+    }
+
+    // Prepares and grades a whole batch; see startGrading.
+    private GradingRun gradeBatch(List<Path> inputPaths, Section section,
+            TestCaseSource testCaseSource, ProgressListener listener,
+            Path scoreSheetFile, Path starterDirectory)
+            throws GradingException {
         GradingRun gradingRun = null;
         try {
             gradingRun = prepareRun(inputPaths, section, testCaseSource,
@@ -271,6 +309,7 @@ public class GradingService {
             Path scoreSheetFile, Path starterDirectory)
             throws GradingException {
         checkArguments(inputPaths, section, testCaseSource, listener);
+        setCurrentRunId(null);
         cancellationToken.reset();
 
         Path rosterFile = scoreSheetFile;
@@ -294,6 +333,7 @@ public class GradingService {
                     (UploadedTesterSource) testCaseSource;
             gradingRun.setTestersDirectory(uploaded.getTestersDirectory());
         }
+        setCurrentRunId(runId);
         GradingContext context = new GradingContext(config, assessment);
         context.setRunId(runId);
 
@@ -301,34 +341,53 @@ public class GradingService {
         // stops the run before any zip is extracted.
         readRoster(context, rosterFile);
 
+        List<Submission> submissions = loadSubmissions(inputPaths, section);
+        for (Submission submission : submissions) {
+            gradingRun.addSubmission(submission);
+        }
+        addTesters(context, testCaseSource);
+
+        lastRun = gradingRun;
+        lastContext = context;
+        addSessionRun(gradingRun);
+        return gradingRun;
+    }
+
+    // Loads the chosen zips and folders as submissions of a section.
+    private List<Submission> loadSubmissions(List<Path> inputPaths,
+            Section section) throws GradingException {
         try {
             SubmissionLoader loader = new SubmissionLoader(config);
-            List<Submission> submissions = loader.loadSubmissions(
-                    inputPaths, section);
-
-            for (Submission submission : submissions) {
-                gradingRun.addSubmission(submission);
-            }
-
-            context.getTesters().addAll(
-                    testCaseSource.prepareTesters(assessment));
+            return loader.loadSubmissions(inputPaths, section);
         } catch (IngestException exception) {
             throw new GradingException("The submissions could not be "
                     + "read: " + exception.getMessage(), exception);
-        } catch (TestCaseException exception) {
-            throw new GradingException("The testers could not be "
-                    + "prepared: " + exception.getMessage(), exception);
         } catch (IllegalArgumentException exception) {
             // For example a zip name pattern in the settings that is not
             // a valid regular expression, or a path that is not valid
             throw new GradingException("A setting or path is not valid: "
                     + exception.getMessage(), exception);
         }
+    }
 
-        lastRun = gradingRun;
-        lastContext = context;
-        addSessionRun(gradingRun);
-        return gradingRun;
+    // Prepares the testers of a batch and adds them to its context.
+    private void addTesters(GradingContext context,
+            TestCaseSource testCaseSource) throws GradingException {
+        try {
+            context.getTesters().addAll(
+                    testCaseSource.prepareTesters(context.getAssessment()));
+        } catch (TestCaseException exception) {
+            throw new GradingException("The testers could not be "
+                    + "prepared: " + exception.getMessage(), exception);
+        } catch (IllegalArgumentException exception) {
+            throw new GradingException("A setting or path is not valid: "
+                    + exception.getMessage(), exception);
+        }
+    }
+
+    // Keeps the id of the run being graded, for cancel.
+    private synchronized void setCurrentRunId(String runId) {
+        currentRunId = runId;
     }
 
     /**
@@ -339,8 +398,8 @@ public class GradingService {
     public synchronized void cancel() {
         if (!cancellationToken.isCancelled()) {
             String detail = "Grading was stopped.";
-            if (lastRun != null) {
-                detail = "Grading of " + lastRun.getId() + " was stopped.";
+            if (currentRunId != null) {
+                detail = "Grading of " + currentRunId + " was stopped.";
             }
             auditService.record(GRADING_CANCELLED, detail);
         }
@@ -427,12 +486,17 @@ public class GradingService {
         auditService.record(GRADING_RETRIED, "Grading "
                 + retryRun.getSubmissions().size() + " submission(s) of "
                 + gradingRun.getId() + " again.");
-        cancellationToken.reset();
-        GradingPipeline pipeline = createPipeline(gradingRun);
-        pipeline.run(retryRun, lastContext,
-                new RetryProgressListener(listener, gradingRun));
-
-        saveRun(gradingRun, true);
+        beginGrading();
+        try {
+            setCurrentRunId(gradingRun.getId());
+            cancellationToken.reset();
+            GradingPipeline pipeline = createPipeline(gradingRun);
+            pipeline.run(retryRun, lastContext,
+                    new RetryProgressListener(listener, gradingRun));
+            saveRun(gradingRun, true);
+        } finally {
+            endGrading();
+        }
         return gradingRun;
     }
 
@@ -447,12 +511,11 @@ public class GradingService {
      * with the score sheet, testers and starter folder it was started
      * with. Any other run, even an earlier one of this session, is loaded
      * from the database, with the students already matched in it. It is
-     * graded with the tester folder saved with it, if the database holds
-     * one. The database does not save the tester or starter folder yet,
-     * so for now such a run uses the ones in the settings
-     * (paths.testers.dir and paths.starter.dir), and every student graded
-     * again gets a warning saying so, because other testers can give
-     * other marks.
+     * graded with the tester and starter folders saved with it. A run
+     * saved before the database kept those folders uses the ones in the
+     * settings (paths.testers.dir and paths.starter.dir), and every
+     * student graded again gets a warning saying so, because other
+     * testers can give other marks.
      *
      * <p>Tier: SHOULD.
      *
@@ -515,13 +578,528 @@ public class GradingService {
         auditService.record(GRADING_RESUMED, "Grading the "
                 + resumeRun.getSubmissions().size() + " unfinished "
                 + "submission(s) of " + gradingRun.getId() + ".");
+        beginGrading();
+        try {
+            setCurrentRunId(gradingRun.getId());
+            cancellationToken.reset();
+            GradingPipeline pipeline = createPipeline(gradingRun);
+            pipeline.run(resumeRun, lastContext,
+                    new RetryProgressListener(listener, gradingRun));
+            saveRun(gradingRun, true);
+        } finally {
+            endGrading();
+        }
+        return gradingRun;
+    }
+
+    /**
+     * Grades one student of a run again from the upload, whatever their
+     * status, for example after the instructor undid a fix. The fixes in
+     * the student's getRejectedFixes list are skipped, so the marks match
+     * the files as submitted. The run is saved afterwards.
+     *
+     * <p>The last run started in this session is graded with its own
+     * testers. An earlier run is graded with the score sheet, tester and
+     * starter folders recorded on it, as Resume does.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param gradingRun the run that holds the student
+     * @param submission the student to grade again
+     * @param listener the object told about progress, or null to tell
+     *        nobody
+     * @throws GradingException if grading is still running, the student
+     *         is not in the run, has an upload that could not be used, or
+     *         the run's testers cannot be prepared
+     */
+    public void regradeSubmission(GradingRun gradingRun,
+            Submission submission, ProgressListener listener)
+            throws GradingException {
+        beginOnlyGrading();
+        try {
+            regradeAlone(gradingRun, submission, listener);
+        } finally {
+            endGrading();
+        }
+    }
+
+    // Grades one student again while nothing else is graded; see
+    // regradeSubmission.
+    private void regradeAlone(GradingRun gradingRun, Submission submission,
+            ProgressListener listener) throws GradingException {
+        if (gradingRun == null || submission == null
+                || !gradingRun.getSubmissions().contains(submission)) {
+            throw new GradingException("That student is not in the run.");
+        }
+        if (submission.getIngestFailure() != null) {
+            throw new GradingException("The upload of "
+                    + submission.getUsername() + " could not be used, so "
+                    + "it cannot be graded again.");
+        }
+
+        ProgressListener progress = listener;
+        if (progress == null) {
+            progress = new QuietProgressListener();
+        }
+        GradingContext context = findContext(gradingRun);
+
+        // The student goes through the pipeline on their own, in a run
+        // that shares the id, assessment and section.
+        GradingRun oneRun = new GradingRun(gradingRun.getId(),
+                gradingRun.getAssessment(), gradingRun.getSection(),
+                gradingRun.getStartedAt());
+        resetForRetry(submission);
+        oneRun.addSubmission(submission);
+
+        setCurrentRunId(gradingRun.getId());
         cancellationToken.reset();
         GradingPipeline pipeline = createPipeline(gradingRun);
-        pipeline.run(resumeRun, lastContext,
-                new RetryProgressListener(listener, gradingRun));
+        try {
+            pipeline.run(oneRun, context,
+                    new RetryProgressListener(progress, gradingRun));
+        } finally {
+            saveRun(gradingRun, true);
+        }
+    }
 
-        saveRun(gradingRun, true);
+    /**
+     * Says whether a batch, a retry, a resume, an undo or a late batch is
+     * being graded now. Undo and a late batch are refused while it is.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @return true while grading is running
+     */
+    public synchronized boolean isGrading() {
+        return activeGradings > 0;
+    }
+
+    // Counts one more grading that is running.
+    private synchronized void beginGrading() {
+        activeGradings++;
+    }
+
+    // Counts one more grading, but only if nothing else is graded now.
+    private synchronized void beginOnlyGrading() throws GradingException {
+        if (activeGradings > 0) {
+            throw new GradingException(STILL_GRADING);
+        }
+        activeGradings++;
+    }
+
+    // Counts one grading that has ended.
+    private synchronized void endGrading() {
+        activeGradings--;
+    }
+
+    /**
+     * Finds the newest run of a module and section: the one started
+     * last, from this session's runs and the saved ones. A run of this
+     * session is used in place of its saved copy, so its testers stay
+     * loaded. Set up uses this to ask whether a late batch should join
+     * that run.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param moduleCode the module code, such as CS102
+     * @param sectionCode the section code, such as G3
+     * @return the newest run, or null if the section has none
+     */
+    public GradingRun findNewestRun(String moduleCode, String sectionCode) {
+        if (moduleCode == null || sectionCode == null) {
+            return null;
+        }
+
+        List<GradingRun> sessionCopy = getSessionRuns();
+        GradingRun newest = null;
+        for (GradingRun gradingRun : sessionCopy) {
+            if (isRunOf(gradingRun, moduleCode, sectionCode)
+                    && isNewer(gradingRun, newest)) {
+                newest = gradingRun;
+            }
+        }
+
+        for (GradingRun savedRun : listSavedRuns()) {
+            if (isRunOf(savedRun, moduleCode, sectionCode)
+                    && !hasRunWithId(sessionCopy, savedRun.getId())
+                    && isNewer(savedRun, newest)) {
+                newest = savedRun;
+            }
+        }
+        return newest;
+    }
+
+    /**
+     * Grades a late batch into an existing run of the same section, so
+     * the section keeps one run for Review, Export and Statistics. A new
+     * username is added to the run. A username already in the run is
+     * graded again from the new upload, and the new result replaces the
+     * old one; the audit log keeps the old total, for example "Replaced
+     * alicia.tan.2024: 20 to 18". A late upload that cannot be opened (a
+     * damaged zip or a refused duplicate) never replaces a result: the
+     * student keeps it and the audit log says why. The run keeps its id
+     * and start time.
+     *
+     * <p>The batch must be graded with the same tester folder and score
+     * sheet as the run, because other testers or another roster would
+     * make the marks of one section disagree. Otherwise nothing is
+     * graded and the reason is given.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param gradingRun the run to add to, for example from findNewestRun
+     * @param inputPaths the zip files or folders of the late batch
+     * @param testCaseSource where the tester files come from
+     * @param listener the object told about progress
+     * @param scoreSheetFile the score sheet chosen for the batch, or null
+     *        for the one in the settings
+     * @return the same run, now holding the late batch too
+     * @throws GradingException if grading is still running, an argument
+     *         is missing, the tester folder or score sheet differs from the
+     *         run's, or the uploads or testers cannot be read
+     */
+    public GradingRun addToRun(GradingRun gradingRun, List<Path> inputPaths,
+            TestCaseSource testCaseSource, ProgressListener listener,
+            Path scoreSheetFile) throws GradingException {
+        beginOnlyGrading();
+        try {
+            return addLateBatch(gradingRun, inputPaths, testCaseSource,
+                    listener, scoreSheetFile);
+        } finally {
+            endGrading();
+        }
+    }
+
+    // Grades a late batch into a run while nothing else is graded; see
+    // addToRun.
+    private GradingRun addLateBatch(GradingRun gradingRun,
+            List<Path> inputPaths, TestCaseSource testCaseSource,
+            ProgressListener listener, Path scoreSheetFile)
+            throws GradingException {
+        GradingRun batchRun = null;
+        List<String> replacedUsernames = new ArrayList<>();
+        List<String> oldTotals = new ArrayList<>();
+        List<Submission> removedOlder = new ArrayList<>();
+        try {
+            batchRun = prepareLateBatch(gradingRun, inputPaths,
+                    testCaseSource, listener, scoreSheetFile,
+                    replacedUsernames, oldTotals, removedOlder);
+        } catch (GradingException exception) {
+            auditService.record(GRADING_NOT_STARTED, exception.getMessage());
+            throw exception;
+        }
+
+        auditService.record(STUDENTS_ADDED, "Grading "
+                + batchRun.getSubmissions().size() + " submission(s) into "
+                + gradingRun.getId() + " for "
+                + gradingRun.getSection().getLabel() + ".");
+        saveRun(gradingRun, false);
+
+        // Saved even if grading stops with an error, so the run on
+        // record holds the late batch and not the results it replaced
+        GradingPipeline pipeline = createPipeline(gradingRun);
+        try {
+            pipeline.run(batchRun, lastContext,
+                    new RetryProgressListener(listener, gradingRun));
+        } finally {
+            saveRun(gradingRun, true);
+        }
+
+        // Written after grading, so each line has the new total too. A
+        // late zip that turned out to be damaged gives the student their
+        // earlier result back; its working copy was kept, because a zip
+        // that cannot be unpacked never replaces one.
+        boolean restored = false;
+        for (int index = 0; index < replacedUsernames.size(); index++) {
+            String username = replacedUsernames.get(index);
+            Submission late = findLoaded(gradingRun, username);
+            if (isUnusableUpload(late)) {
+                putBackOlder(gradingRun, username, removedOlder);
+                auditService.record(LATE_UPLOAD_REFUSED, "Kept the earlier "
+                        + "result of " + username + " (" + oldTotals.get(index)
+                        + "), because the late upload could not be opened.");
+                restored = true;
+            } else {
+                auditService.record(RESULT_REPLACED, "Replaced " + username
+                        + ": " + oldTotals.get(index) + " to "
+                        + describeTotal(late) + ".");
+            }
+        }
+        if (restored) {
+            saveRun(gradingRun, true);
+        }
         return gradingRun;
+    }
+
+    // Says whether a late upload could not be used at all: it was refused
+    // when loaded, or its zip could not be unpacked.
+    private boolean isUnusableUpload(Submission late) {
+        if (late == null || late.getIngestFailure() != null) {
+            return true;
+        }
+        for (Anomaly anomaly : late.getAnomalies()) {
+            if (anomaly.getType() == AnomalyType.INVALID_ARCHIVE) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Replaces the late copies of a student with the results they had
+    // before the late batch.
+    private void putBackOlder(GradingRun gradingRun, String username,
+            List<Submission> removedOlder) {
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (submission.getUsername().equalsIgnoreCase(username)) {
+                gradingRun.removeSubmission(submission);
+            }
+        }
+        for (Submission older : removedOlder) {
+            if (older.getUsername().equalsIgnoreCase(username)) {
+                gradingRun.addSubmission(older);
+            }
+        }
+    }
+
+    // Checks a late batch, reads its roster and testers, loads its zips
+    // and puts them in the run, replacing older results of the same
+    // usernames. Each replaced student is added to replacedUsernames,
+    // with their old total at the same place in oldTotals, and the
+    // submissions taken out go to removedOlder. Nothing in the run
+    // changes until every check and file has passed. The returned run
+    // holds only the batch, for the pipeline.
+    private GradingRun prepareLateBatch(GradingRun gradingRun,
+            List<Path> inputPaths, TestCaseSource testCaseSource,
+            ProgressListener listener, Path scoreSheetFile,
+            List<String> replacedUsernames, List<String> oldTotals,
+            List<Submission> removedOlder) throws GradingException {
+        if (gradingRun == null) {
+            throw new GradingException("Choose the run to add these "
+                    + "students to.");
+        }
+        Section section = gradingRun.getSection();
+        checkArguments(inputPaths, section, testCaseSource, listener);
+        checkSameFiles(gradingRun, testCaseSource, scoreSheetFile);
+
+        setCurrentRunId(gradingRun.getId());
+        cancellationToken.reset();
+        GradingContext context = new GradingContext(config,
+                gradingRun.getAssessment());
+        context.setRunId(gradingRun.getId());
+        readRoster(context, findScoreSheet(gradingRun));
+        List<Submission> lateSubmissions = loadSubmissions(inputPaths,
+                section);
+        addTesters(context, testCaseSource);
+
+        // Only a copy that could be opened replaces an earlier result. A
+        // late zip that is damaged, or a refused duplicate, never costs a
+        // student the marks they already have.
+        List<String> lateUsernames = new ArrayList<>();
+        for (Submission late : lateSubmissions) {
+            if (late.getIngestFailure() == null) {
+                lateUsernames.add(late.getUsername().toLowerCase(
+                        Locale.ROOT));
+            }
+        }
+
+        // Older results of the same students leave the run first, so the
+        // run never holds two results for one student. The old total is
+        // taken before any copy is removed.
+        for (Submission older : gradingRun.getSubmissions()) {
+            String key = older.getUsername().toLowerCase(Locale.ROOT);
+            if (lateUsernames.contains(key)) {
+                if (!containsIgnoringCase(replacedUsernames,
+                        older.getUsername())) {
+                    replacedUsernames.add(older.getUsername());
+                    oldTotals.add(describeTotal(findLoaded(gradingRun,
+                            older.getUsername())));
+                }
+                gradingRun.removeSubmission(older);
+                removedOlder.add(older);
+            }
+        }
+
+        GradingRun batchRun = new GradingRun(gradingRun.getId(),
+                gradingRun.getAssessment(), section,
+                gradingRun.getStartedAt());
+        for (Submission late : lateSubmissions) {
+            String key = late.getUsername().toLowerCase(Locale.ROOT);
+            if (lateUsernames.contains(key)
+                    || findLoaded(gradingRun, key) == null) {
+                gradingRun.addSubmission(late);
+                batchRun.addSubmission(late);
+            } else {
+                auditService.record(LATE_UPLOAD_REFUSED, "Kept the earlier "
+                        + "result of " + late.getUsername() + ", because "
+                        + "the late upload could not be used: "
+                        + late.getIngestFailure());
+            }
+        }
+
+        lastRun = gradingRun;
+        lastContext = context;
+        addSessionRun(gradingRun);
+        return batchRun;
+    }
+
+    // Refuses a late batch whose tester folder or score sheet is not the
+    // run's. A run saved before its tester folder was recorded is taken
+    // to use the one in the settings, as Resume does.
+    private void checkSameFiles(GradingRun gradingRun,
+            TestCaseSource testCaseSource, Path scoreSheetFile)
+            throws GradingException {
+        String label = gradingRun.getSection().getLabel();
+
+        Path sheet = scoreSheetFile;
+        if (sheet == null) {
+            sheet = Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE));
+        }
+        Path runSheet = findScoreSheet(gradingRun);
+        if (!isSamePath(sheet, runSheet)) {
+            throw new GradingException("These students cannot be added to "
+                    + "the " + label + " run: it was graded against the "
+                    + "score sheet " + runSheet + ", not " + sheet + ". "
+                    + "Choose that score sheet, or start a new run.");
+        }
+
+        if (!(testCaseSource instanceof UploadedTesterSource)) {
+            throw new GradingException("These students cannot be added to "
+                    + "the " + label + " run: only a tester folder can be "
+                    + "checked against the one the run used. Choose the "
+                    + "run's tester folder, or start a new run.");
+        }
+        UploadedTesterSource uploaded = (UploadedTesterSource) testCaseSource;
+        Path testers = uploaded.getTestersDirectory();
+        Path runTesters = gradingRun.getTestersDirectory();
+        if (runTesters == null) {
+            runTesters = Paths.get(config.getString(ConfigKeys.TESTERS_DIR));
+        }
+        if (!isSamePath(testers, runTesters)) {
+            throw new GradingException("These students cannot be added to "
+                    + "the " + label + " run: it was graded with the "
+                    + "testers in " + runTesters + ", not " + testers
+                    + ". Choose that tester folder, or start a new run.");
+        }
+    }
+
+    // The score sheet a run was graded against, or the one in the
+    // settings for a run saved before the sheet was recorded.
+    private Path findScoreSheet(GradingRun gradingRun) {
+        Path scoreSheetFile = gradingRun.getScoreSheetFile();
+        if (scoreSheetFile == null) {
+            scoreSheetFile = Paths.get(config.getString(
+                    ConfigKeys.SCORE_SHEET_FILE));
+        }
+        return scoreSheetFile;
+    }
+
+    // Says whether two paths name the same file or folder. Real paths
+    // are compared when both exist, so a link or a different spelling of
+    // the same folder still matches.
+    private boolean isSamePath(Path first, Path second) {
+        if (first == null || second == null) {
+            return first == null && second == null;
+        }
+        try {
+            return first.toRealPath().equals(second.toRealPath());
+        } catch (IOException exception) {
+            // One of them is missing, so compare the names as written
+            return first.toAbsolutePath().normalize().equals(
+                    second.toAbsolutePath().normalize());
+        }
+    }
+
+    // The shared information to grade a run again with: the last run's
+    // own, or one built from the files recorded on an earlier run.
+    private GradingContext findContext(GradingRun gradingRun)
+            throws GradingException {
+        if (gradingRun == lastRun && lastContext != null) {
+            return lastContext;
+        }
+        return prepareSavedContext(gradingRun);
+    }
+
+    // The saved runs, or an empty list when the database is off or
+    // cannot be read; this session's runs are still searched.
+    private List<GradingRun> listSavedRuns() {
+        if (repository == null
+                || !config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+            return new ArrayList<>();
+        }
+        try {
+            return repository.listRuns();
+        } catch (PersistenceException exception) {
+            return new ArrayList<>();
+        }
+    }
+
+    // Says whether a run belongs to a module and section, ignoring case.
+    private boolean isRunOf(GradingRun gradingRun, String moduleCode,
+            String sectionCode) {
+        Section section = gradingRun.getSection();
+        if (section == null) {
+            return false;
+        }
+        return moduleCode.equalsIgnoreCase(section.getModuleCode())
+                && sectionCode.equalsIgnoreCase(section.getSectionCode());
+    }
+
+    // Says whether a run started after another, or the other is null.
+    private boolean isNewer(GradingRun gradingRun, GradingRun other) {
+        if (other == null) {
+            return true;
+        }
+        if (gradingRun.getStartedAt() == null) {
+            return false;
+        }
+        if (other.getStartedAt() == null) {
+            return true;
+        }
+        return gradingRun.getStartedAt().isAfter(other.getStartedAt());
+    }
+
+    // Says whether a list holds a run with this id.
+    private boolean hasRunWithId(List<GradingRun> gradingRuns, String runId) {
+        for (GradingRun gradingRun : gradingRuns) {
+            if (gradingRun.getId().equals(runId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Says whether a list of usernames holds this one, ignoring case.
+    private boolean containsIgnoringCase(List<String> usernames,
+            String username) {
+        for (String listed : usernames) {
+            if (listed.equalsIgnoreCase(username)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Finds a student's submission in a run, ignoring case. A copy whose
+    // upload was refused is used only if no other copy was loaded, as the
+    // CSV export does.
+    private Submission findLoaded(GradingRun gradingRun, String username) {
+        Submission found = null;
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (submission.getUsername().equalsIgnoreCase(username)
+                    && (found == null || found.getIngestFailure() != null)) {
+                found = submission;
+            }
+        }
+        return found;
+    }
+
+    // The total of a student for the audit log, or "not graded".
+    private String describeTotal(Submission submission) {
+        if (submission == null
+                || submission.getStatus() != SubmissionStatus.GRADED) {
+            return NOT_GRADED;
+        }
+        return ScoreFormatter.format(submission.getTotalScore());
     }
 
     // Builds the pipeline for a run. The one-argument factory method,
@@ -760,6 +1338,8 @@ public class GradingService {
     // again from the start and would otherwise add duplicates. The window
     // may be reading these lists; Submission makes that safe. A warning
     // about a duplicate file is kept, because loading is not repeated.
+    // The fixes the instructor undid (getRejectedFixes) are kept too, so
+    // FixManager skips them again.
     private void resetForRetry(Submission submission) {
         List<Anomaly> loadingWarnings = new ArrayList<>();
         for (Anomaly anomaly : submission.getAnomalies()) {

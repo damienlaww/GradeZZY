@@ -307,6 +307,33 @@ public class SettingsService {
     }
 
     /**
+     * Checks every setting in config.properties with validate, so a bad
+     * value such as database.enabled=yes is found when the app starts,
+     * not when that setting is first read. The folders and the score
+     * sheet that must already exist are left out: they are chosen again
+     * for each batch on Set up, and a missing one is reported there.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @return one message for each bad setting, in alphabetical order of
+     *         the settings, or an empty list when all are valid
+     */
+    public List<String> findProblems() {
+        List<String> problems = new ArrayList<>();
+
+        for (String key : config.getKeys()) {
+            if (!contains(EXISTING_FOLDER_KEYS, key)
+                    && !contains(EXISTING_FILE_KEYS, key)) {
+                String message = validate(key, config.getString(key));
+                if (!message.isEmpty()) {
+                    problems.add(message);
+                }
+            }
+        }
+        return problems;
+    }
+
+    /**
      * Changes a setting in memory after checking it. The file is written
      * by save.
      *

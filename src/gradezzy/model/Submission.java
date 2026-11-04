@@ -55,6 +55,11 @@ public class Submission {
     private final List<QuestionResult> questionResults =
             new CopyOnWriteArrayList<>();
 
+    // The keys of the fixes the instructor undid, such as Fix letter
+    // case:q3. Kept when the student is graded again, so FixManager
+    // skips those fixes and the marks match the files as submitted.
+    private final List<String> rejectedFixes = new CopyOnWriteArrayList<>();
+
     /**
      * Creates a new submission.
      *
@@ -175,6 +180,37 @@ public class Submission {
      */
     public List<QuestionResult> getQuestionResults() {
         return questionResults;
+    }
+
+    /**
+     * Returns the keys of the fixes the instructor undid. Grading the
+     * student again keeps this list, and FixManager does not apply a fix
+     * whose key is in it. The list is kept in memory only until the
+     * database saves it (Huxley's rejected_fixes column), so a run resumed
+     * after a restart applies those fixes again.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @return the keys of the undone fixes, oldest first
+     */
+    public List<String> getRejectedFixes() {
+        return rejectedFixes;
+    }
+
+    /**
+     * Records that the instructor undid a fix, so it is skipped the next
+     * time the student is graded. A key already in the list is not added
+     * again.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param fixKey the key of the fix, from FixRecord.getFixKey
+     */
+    public void rejectFix(String fixKey) {
+        if (fixKey == null || rejectedFixes.contains(fixKey)) {
+            return;
+        }
+        rejectedFixes.add(fixKey);
     }
 
     /**
