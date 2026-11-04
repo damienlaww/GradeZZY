@@ -64,6 +64,11 @@ public class ClassFileMatcher {
     // How deep a question file is looked for in an unzipped upload
     private static final int MAX_FOLDER_DEPTH = 4;
 
+    // How many tokens after "static" a method name is looked for. A real
+    // declaration has a few modifiers and a type; the limit keeps a file
+    // made of "static" words from taking long.
+    private static final int MAX_DECLARATION_TOKENS = 40;
+
     // How many unknown method names a problem names
     private static final int MAX_NAMES_SHOWN = 2;
 
@@ -768,11 +773,12 @@ public class ClassFileMatcher {
     // methods a question asks for, such as getIsogramWords.
     private List<String> findStaticMethods(List<String> tokens) {
         List<String> methods = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
         for (int index = 0; index < tokens.size(); index++) {
             if (tokens.get(index).equals(STATIC_KEYWORD)) {
                 String name = findDeclaredName(tokens, index + 1);
                 if (name != null && !name.equals(MAIN_METHOD)
-                        && !methods.contains(name)) {
+                        && seen.add(name)) {
                     methods.add(name);
                 }
             }
@@ -781,10 +787,16 @@ public class ClassFileMatcher {
     }
 
     // Returns the method name declared after "static", or null when
-    // "static" starts a field, a block or a nested class instead.
+    // "static" starts a field, a block or a nested class instead. It
+    // looks at no more than MAX_DECLARATION_TOKENS tokens and stops at
+    // the next "static", so the whole file is read in one pass.
     private String findDeclaredName(List<String> tokens, int start) {
-        for (int index = start; index < tokens.size(); index++) {
+        int stop = Math.min(tokens.size(), start + MAX_DECLARATION_TOKENS);
+        for (int index = start; index < stop; index++) {
             String token = tokens.get(index);
+            if (token.equals(STATIC_KEYWORD)) {
+                return null;
+            }
             if (token.equals("(")) {
                 String name = tokens.get(index - 1);
                 if (index > start && isName(name)) {
@@ -805,6 +817,7 @@ public class ClassFileMatcher {
     // front, such as Q1a.getIsogramWords(...).
     private List<String> findCalls(List<String> tokens, String className) {
         List<String> calls = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
         for (int index = 0; index + 1 < tokens.size(); index++) {
             String name = tokens.get(index);
             String before = "";
@@ -817,7 +830,7 @@ public class ClassFileMatcher {
                     && !isNotCall(name) && !name.equals(MAIN_METHOD)
                     && !before.equals("new")
                     && (!before.equals(".") || onClass)
-                    && !calls.contains(name)) {
+                    && seen.add(name)) {
                 calls.add(name);
             }
         }
