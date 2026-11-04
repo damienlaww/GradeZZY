@@ -154,6 +154,7 @@ public class MainApp extends Application {
         boolean dark = ThemeManager.isDark(config.getString(
                 ConfigKeys.UI_THEME));
         FlowWindow window = new FlowWindow(backend, dark);
+        window.setHostServices(getHostServices());
         Scene scene = window.build(config.getInt(ConfigKeys.WINDOW_WIDTH),
                 config.getInt(ConfigKeys.WINDOW_HEIGHT));
 

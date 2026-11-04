@@ -593,14 +593,14 @@ public class FlowSelfTest {
         RadioButton ticked = null;
         for (RadioButton radio : SceneFinder.ofType(root(),
                 RadioButton.class)) {
-            if (radio.getText().startsWith("Only ticked students")) {
+            if (radio.getText().startsWith("Only the students ticked")) {
                 ticked = radio;
             }
         }
         check(ticked != null && !ticked.isDisabled()
                 && ticked.getText().endsWith("(" + TICKED_COUNT + ")"),
-                "Only ticked students (2) can be chosen");
-        press(ticked, "Only ticked students");
+                "Only the students ticked on Review (2) can be chosen");
+        press(ticked, "Only the students ticked on Review");
 
         int filesBefore = outputFileCount();
         press(window.getActionBar().getPrimaryButton(), "Export score sheet");

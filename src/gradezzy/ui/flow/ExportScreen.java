@@ -22,6 +22,7 @@ import java.util.Map;
 import javafx.concurrent.Worker;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Hyperlink;
@@ -69,6 +70,10 @@ public class ExportScreen extends FlowScreen {
     // The separator between parts of a line
     private static final String DOT = " · ";
 
+    // The words of the ticked choice, before its count
+    private static final String TICKED_WORDS =
+            "Only the students ticked on Review";
+
     // How many ticked students the export question names
     private static final int NAMES_IN_CONFIRM = 3;
 
@@ -95,15 +100,14 @@ public class ExportScreen extends FlowScreen {
     private final RadioButton everyone = new RadioButton();
 
     // Export only the ticked students
-    private final RadioButton tickedOnly = new RadioButton(
-            "Only ticked students");
+    private final RadioButton tickedOnly = new RadioButton(TICKED_WORDS);
 
-    // Why the ticked choice is off
-    private final Label tickedReason = new Label(
-            DOT + "Tick students on Review first");
+    // Why the ticked choice is off, under it
+    private final Label tickedReason = new Label("Tick students on Review "
+            + "to export only them.");
 
     // The ticked choice and its reason
-    private final HBox tickedRow = Parts.row(Parts.GAP_SMALL);
+    private final VBox tickedRow = new VBox(Parts.GAP_SMALL / 2);
 
     // Also write the JSON file
     private final CheckBox json = new CheckBox(
@@ -112,8 +116,24 @@ public class ExportScreen extends FlowScreen {
     // Where the files are saved
     private final Label savedTo = Parts.muted("");
 
-    // How many marks are filled in and why the others are left blank
-    private final Label blanks = Parts.muted("");
+    // Says when graded students are not on the score sheet, with a way
+    // back to Set up
+    private final HBox sheetWarning = Parts.row(Parts.GAP);
+    private final Label warningTitle = new Label();
+    private final Label warningText = new Label();
+
+    // What the score sheet will get, under its title
+    private final VBox outcome = new VBox(Parts.GAP_SMALL);
+
+    // The three counts of "What the score sheet will get"
+    private final Label filledCount = new Label();
+    private final Label blankCount = new Label();
+    private final Label blankWhy = Parts.muted("");
+    private final Label offCount = new Label();
+    private final VBox offCell = new VBox();
+
+    // The counts in one sentence, added to the message after an export
+    private String blankSummary = "";
 
     // Where the result of the last export is shown
     private final HBox result = Parts.row(Parts.GAP_SMALL);
@@ -227,7 +247,9 @@ public class ExportScreen extends FlowScreen {
         return Parts.card(null, new Node[] {top, glance, noMarks});
     }
 
-    // Builds the score sheet card with the export choices.
+    // Builds the score sheet card: a warning when graded students are
+    // not on the sheet, who to export, what the sheet will get and
+    // where the files go.
     private VBox createScoreSheetCard() {
         ToggleGroup scope = new ToggleGroup();
         everyone.setToggleGroup(scope);
@@ -236,19 +258,112 @@ public class ExportScreen extends FlowScreen {
         everyone.setOnAction(event -> refreshBlanks());
         tickedOnly.setOnAction(event -> refreshBlanks());
         json.setSelected(true);
-        tickedReason.getStyleClass().addAll("small-text", "choice-reason");
+        tickedReason.getStyleClass().addAll("small-text", "choice-reason",
+                "choice-hint");
         tickedRow.getChildren().addAll(tickedOnly, tickedReason);
-        VBox choices = new VBox(Parts.GAP - 2, everyone, tickedRow, json);
+        VBox choices = new VBox(Parts.GAP_SMALL + 2, everyone, tickedRow,
+                json);
         choices.getStyleClass().add("export-choices");
-        savedTo.getStyleClass().add("small-text");
-        Label about = Parts.muted("The provided score sheet with the marks "
-                + "filled in, in the same format, ready to upload.");
+
+        Label about = Parts.muted("Your score sheet with each student's "
+                + "mark filled in, in the same format, ready to upload to "
+                + "eLearn.");
         about.setWrapText(true);
-        blanks.setWrapText(true);
         result.setVisible(false);
         result.setManaged(false);
-        return Parts.card("Score sheet",
-                new Node[] {about, choices, blanks, savedTo, result});
+        return Parts.card("Score sheet", new Node[] {about,
+            createSheetWarning(), group("Who to export", choices),
+            createOutcome(), createSavedLine(), result});
+    }
+
+    // Builds the warning shown when graded students are not on the
+    // score sheet. Hidden until refreshBlanks finds some.
+    private HBox createSheetWarning() {
+        warningTitle.getStyleClass().add("warning-title");
+        warningTitle.setWrapText(true);
+        warningText.setWrapText(true);
+        VBox words = new VBox(Parts.GAP_SMALL / 2, warningTitle,
+                warningText);
+        words.setMinWidth(0);
+        HBox.setHgrow(words, Priority.ALWAYS);
+        Button back = Parts.secondary("Back to Set up",
+                () -> getWindow().show(Step.SET_UP));
+        back.setMinWidth(Button.USE_PREF_SIZE);
+        sheetWarning.getChildren().addAll(words, back);
+        sheetWarning.getStyleClass().addAll("banner", "warn",
+                "sheet-warning");
+        sheetWarning.setVisible(false);
+        sheetWarning.setManaged(false);
+        return sheetWarning;
+    }
+
+    // Builds "What the score sheet will get": three counts side by side
+    // with hairlines between them. Hidden until the sheet is read.
+    private VBox createOutcome() {
+        offCell.getChildren().addAll(offCount, Parts.muted(
+                "not on the sheet"));
+        VBox first = outcomeCell(filledCount, Parts.muted("marks filled in"));
+        first.getStyleClass().add("first");
+        HBox cells = new HBox(first, outcomeCell(blankCount, blankWhy),
+                offCell);
+        offCell.getStyleClass().add("outcome-cell");
+        offCount.getStyleClass().addAll("outcome-count", "warn-text");
+        HBox.setHgrow(offCell, Priority.ALWAYS);
+        offCell.setMaxWidth(Double.MAX_VALUE);
+        cells.getStyleClass().add("outcome-cells");
+        outcome.getChildren().addAll(sectionLabel(
+                "What the score sheet will get"), cells);
+        outcome.setVisible(false);
+        outcome.setManaged(false);
+        return outcome;
+    }
+
+    // Builds one count of "What the score sheet will get".
+    private VBox outcomeCell(Label count, Label words) {
+        count.getStyleClass().add("outcome-count");
+        words.getStyleClass().add("small-text");
+        VBox cell = new VBox(count, words);
+        cell.getStyleClass().add("outcome-cell");
+        HBox.setHgrow(cell, Priority.ALWAYS);
+        cell.setMaxWidth(Double.MAX_VALUE);
+        cell.setMinWidth(0);
+        return cell;
+    }
+
+    // Builds the line that says where the files go, with Open folder
+    // and Change in Settings.
+    private HBox createSavedLine() {
+        savedTo.getStyleClass().add("small-text");
+        savedTo.setMinWidth(0);
+        Hyperlink open = Parts.link("Open folder", () -> openOutput());
+        Hyperlink change = Parts.link("Change in Settings",
+                () -> getWindow().showPage(Page.SETTINGS));
+        open.getStyleClass().add("small-text");
+        change.getStyleClass().add("small-text");
+        Label dot = Parts.muted(DOT.trim());
+        dot.getStyleClass().add("small-text");
+        HBox line = Parts.row(Parts.FIGURE_UNIT_GAP,
+                new Node[] {savedTo, open, dot, change});
+        line.getStyleClass().add("saved-line");
+        return line;
+    }
+
+    // Puts a small bold label over a group of controls.
+    private VBox group(String title, Node content) {
+        return new VBox(Parts.GAP_SMALL, sectionLabel(title), content);
+    }
+
+    // Returns a small bold label that names a part of the card.
+    private Label sectionLabel(String text) {
+        Label label = Parts.strong(text);
+        label.getStyleClass().add("card-section");
+        return label;
+    }
+
+    // Opens the export folder in Finder or File Explorer.
+    private void openOutput() {
+        getWindow().openFolder(getBackend().getSetting(
+                ConfigKeys.OUTPUT_DIR));
     }
 
     // ---------------------------------------------------------- refresh
@@ -266,46 +381,45 @@ public class ExportScreen extends FlowScreen {
         tickedReason.setVisible(!canScope);
         tickedReason.setManaged(!canScope);
         if (canScope) {
-            tickedOnly.setText("Only ticked students (" + ticked + ")");
+            tickedOnly.setText(TICKED_WORDS + " (" + ticked + ")");
             // Ticking on Review says which students to export
             tickedOnly.setSelected(true);
         } else {
-            tickedOnly.setText("Only ticked students");
+            tickedOnly.setText(TICKED_WORDS);
             everyone.setSelected(true);
         }
-        savedTo.setText("Saved to " + getBackend().getSetting(
-                ConfigKeys.OUTPUT_DIR));
+        savedTo.setText("Files are saved in " + getBackend().getSetting(
+                ConfigKeys.OUTPUT_DIR) + ".");
         refreshBlanks();
     }
 
-    // Shows how many marks the export fills in and why others are blank.
+    // Shows what the score sheet will get and warns when graded students
+    // are not on it. Nothing shows until the score sheet is read.
     private void refreshBlanks() {
+        blankSummary = "";
+        showOutcome(false);
         GradingRun run = getState().getRun();
-        String text = "";
-        if (run != null) {
-            text = describeBlanks(run, chooseScope(run));
+        if (run == null) {
+            return;
         }
-        blanks.setText(text);
-        blanks.setVisible(!text.isEmpty());
-        blanks.setManaged(!text.isEmpty());
-    }
-
-    // Says how many score sheet marks are filled and why the rest are blank.
-    private String describeBlanks(GradingRun run, List<Submission> scope) {
         List<Student> missing = getWindow().findMissingStudents(run,
                 () -> missingFound());
         if (getState().getMissingStudents(run) == null) {
-            return "";
+            return;
         }
 
+        List<Submission> scope = chooseScope(run);
         int filled = 0;
         int failed = 0;
         int waiting = 0;
         int notTicked = 0;
+        int offSheet = 0;
         for (Submission submission : run.getSubmissions()) {
             boolean onSheet = submission.getStudent() != null;
             boolean graded = ResultState.hasTotal(submission);
-            if (onSheet && graded && scope.contains(submission)) {
+            if (!onSheet && graded) {
+                offSheet++;
+            } else if (onSheet && graded && scope.contains(submission)) {
                 filled++;
             } else if (onSheet && graded) {
                 notTicked++;
@@ -326,15 +440,77 @@ public class ExportScreen extends FlowScreen {
         addReason(reasons, notTicked, "not ticked");
         addReason(reasons, noSubmission, "no submission");
         int blank = failed + notOpened + waiting + notTicked + noSubmission;
-        if (filled + blank == 0) {
-            return "";
+        if (filled + blank + offSheet == 0) {
+            return;
         }
-        String text = Parts.plural(filled, "mark") + " filled";
+
+        filledCount.setText(String.valueOf(filled));
+        blankCount.setText(String.valueOf(blank));
+        blankWhy.setText("left blank");
+        if (blank > 0) {
+            blankWhy.setText("left blank: " + TextUtils.join(", ",
+                    reasons));
+        }
+        offCount.setText(String.valueOf(offSheet));
+        offCell.setVisible(offSheet > 0);
+        offCell.setManaged(offSheet > 0);
+        showOutcome(true);
+        refreshWarning(run, filled, offSheet, missing.size());
+
+        blankSummary = Parts.plural(filled, "mark") + " filled";
         if (blank == 0) {
-            return text + ", none left blank.";
+            blankSummary = blankSummary + ", none left blank.";
+        } else {
+            blankSummary = blankSummary + ", " + blank + " left blank: "
+                    + TextUtils.join(", ", reasons) + ".";
         }
-        return text + ", " + blank + " left blank: "
-                + TextUtils.join(", ", reasons) + ".";
+        if (offSheet > 0) {
+            blankSummary = blankSummary + " " + offSheet + " not on the "
+                    + "score sheet.";
+        }
+    }
+
+    // Shows or hides "What the score sheet will get" and the warning.
+    private void showOutcome(boolean shown) {
+        outcome.setVisible(shown);
+        outcome.setManaged(shown);
+        if (!shown) {
+            sheetWarning.setVisible(false);
+            sheetWarning.setManaged(false);
+        }
+    }
+
+    // Warns when graded students are not on the score sheet: their marks
+    // would not be saved, and grading again with the right sheet fixes it.
+    private void refreshWarning(GradingRun run, int filled, int offSheet,
+            int otherRows) {
+        boolean shown = offSheet > 0;
+        sheetWarning.setVisible(shown);
+        sheetWarning.setManaged(shown);
+        if (!shown) {
+            return;
+        }
+        String sheet = "this score sheet";
+        if (run.getScoreSheetFile() != null) {
+            sheet = run.getScoreSheetFile().getFileName().toString();
+        }
+        if (filled == 0 && offSheet == 1) {
+            warningTitle.setText("The graded student is not on the score "
+                    + "sheet");
+        } else if (filled == 0) {
+            warningTitle.setText("None of the " + offSheet + " graded "
+                    + "students are on the score sheet");
+        } else {
+            warningTitle.setText(Parts.plural(offSheet, "graded student")
+                    + " " + isOrAre(offSheet) + " not on the score sheet");
+        }
+        String text = "Their marks would not be saved to " + sheet + ".";
+        if (filled == 0) {
+            text = "No mark would be saved to " + sheet + ", which lists "
+                    + Parts.plural(otherRows, "other student") + ".";
+        }
+        warningText.setText(text + " Choose the right score sheet on Set "
+                + "up and grade again.");
     }
 
     // Counts the students with no submission whose file grading skipped.
@@ -370,7 +546,7 @@ public class ExportScreen extends FlowScreen {
         }
     }
 
-    // Shows the blank count once the score sheet is read.
+    // Shows what the score sheet will get once it is read.
     private void missingFound() {
         if (isOnScreen()) {
             refreshBlanks();
@@ -735,8 +911,8 @@ public class ExportScreen extends FlowScreen {
         getBackend().recordAudit("Exported", outcome.getMessage());
         exported = true;
         String message = outcome.getMessage();
-        if (!blanks.getText().isEmpty()) {
-            message = message + " " + blanks.getText();
+        if (!blankSummary.isEmpty()) {
+            message = message + " " + blankSummary;
         }
         showResult(true, message);
         getState().reach(Step.EXPORT);

@@ -644,6 +644,52 @@
     -fx-text-fill: -color-fg-subtle;
 }
 
+/* The reason under a choice lines up with the choice's words */
+.choice-hint {
+    -fx-padding: 0 0 0 23px;
+}
+
+/* Export: a small bold name over a part of the score sheet card */
+.card-section {
+    -fx-font-size: 13px;
+}
+
+/* Export: graded students who are not on the score sheet */
+.sheet-warning {
+    -fx-padding: 12px 16px;
+}
+
+.warning-title {
+    -fx-font-weight: bold;
+}
+
+/* Export: what the score sheet will get, three counts with hairlines
+   between them and no box around them */
+.outcome-cell {
+    -fx-padding: 2px 16px;
+    -fx-spacing: 2px;
+    -fx-border-color: transparent transparent transparent
+        -color-border-muted;
+}
+
+.outcome-cell.first {
+    -fx-padding: 2px 16px 2px 0;
+    -fx-border-color: transparent;
+}
+
+.outcome-count {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+}
+
+.outcome-count.warn-text {
+    -fx-text-fill: -color-warning-fg;
+}
+
+.saved-line {
+    -fx-padding: 4px 0 0 0;
+}
+
 /* Typed test cases sheet */
 .code-text {
     -fx-font-family: "IBM Plex Mono";
