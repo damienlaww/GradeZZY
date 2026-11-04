@@ -15,6 +15,7 @@ package gradezzy.ui.flow;
 import java.util.ArrayList;
 import java.util.List;
 
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
@@ -189,9 +190,19 @@ public class StudentPanel extends ScrollPane {
         return top;
     }
 
+    // Returns the assessment the open run was graded with, else the one
+    // in use, so the questions match the student's results.
+    private Assessment shownAssessment() {
+        GradingRun run = window.getState().getRun();
+        if (run != null && run.getAssessment() != null) {
+            return run.getAssessment();
+        }
+        return window.getBackend().getAssessment();
+    }
+
     // Builds the large total, "out of" and the status pill on one line.
     private HBox createTotal() {
-        Assessment assessment = window.getBackend().getAssessment();
+        Assessment assessment = shownAssessment();
         Label total = new Label(Parts.mark(submission.getTotalScore()));
         total.getStyleClass().add("big-total");
         total.setMinWidth(Region.USE_PREF_SIZE);
@@ -216,7 +227,7 @@ public class StudentPanel extends ScrollPane {
     private VBox createQuestions(DashboardBackend backend) {
         VBox list = new VBox();
         list.getStyleClass().add("question-list");
-        Assessment assessment = backend.getAssessment();
+        Assessment assessment = shownAssessment();
         if (assessment == null) {
             return list;
         }
@@ -227,8 +238,9 @@ public class StudentPanel extends ScrollPane {
         return list;
     }
 
-    // Builds the row of one question: name, bar, mark and Adjust, with
-    // the reason, the test squares and Grade again shown on a click.
+    // Builds the row of one question: name, bar, mark and Adjust; under
+    // them, always, a square per test or why there are none; and, on a
+    // click, the links to its code and output and to grade it again.
     private VBox createQuestion(Question question, QuestionResult result,
             DashboardBackend backend) {
         double score = 0;
@@ -259,7 +271,7 @@ public class StudentPanel extends ScrollPane {
         }
 
         VBox details = createDetails(question, result, backend);
-        VBox row = new VBox(top);
+        VBox row = new VBox(top, createSummary(result));
         row.getStyleClass().add("question-row");
         if (details.getChildren().isEmpty()) {
             return row;
@@ -269,8 +281,64 @@ public class StudentPanel extends ScrollPane {
         row.getChildren().add(details);
         row.getStyleClass().add("clickable");
         top.setOnMouseClicked(event -> toggleDetails(details));
-        Tooltip.install(top, new Tooltip("Show the tests"));
+        Parts.tipNode(top, "Show the links to " + question.getId()
+                + "'s code and output, and to grade it again");
         return row;
+    }
+
+    // Builds the line under a question's bar: a square per test with how
+    // many passed, or, when no test ran, why not.
+    private FlowPane createSummary(QuestionResult result) {
+        FlowPane line = new FlowPane(TIGHT_GAP, TIGHT_GAP);
+        line.getStyleClass().add("question-summary");
+        line.setAlignment(Pos.CENTER_LEFT);
+        if (result == null) {
+            line.getChildren().add(summaryText("Not graded", false));
+            return line;
+        }
+        List<TestCaseResult> tests = result.getTestCaseResults();
+        if (tests.isEmpty()) {
+            line.getChildren().add(summaryText(whyNoTests(result), true));
+            return line;
+        }
+        addTestSquares(line, tests);
+        int passed = 0;
+        for (TestCaseResult test : tests) {
+            if (test.isPassed()) {
+                passed++;
+            }
+        }
+        String text = passed + " of " + tests.size() + " passed";
+        if (result.isTimedOut()) {
+            text += ", timed out";
+        }
+        Label count = summaryText(text, false);
+        FlowPane.setMargin(count, new Insets(0, 0, 0, TIGHT_GAP));
+        line.getChildren().add(count);
+        return line;
+    }
+
+    // Returns the small text of a question's summary line; a problem is
+    // shown in red.
+    private Label summaryText(String text, boolean problem) {
+        Label label = Parts.muted(text);
+        label.getStyleClass().add("small-text");
+        if (problem) {
+            label.getStyleClass().add("summary-problem");
+        }
+        return label;
+    }
+
+    // Says why a graded question has no test results.
+    private String whyNoTests(QuestionResult result) {
+        if (Students.didNotCompile(result)) {
+            return "Did not compile, so no test ran";
+        } else if (!result.isCompiled()) {
+            return "Not compiled: the file or its tester is missing";
+        } else if (result.isTimedOut()) {
+            return "Timed out before any test finished";
+        }
+        return "No test results were recorded";
     }
 
     /**
@@ -292,15 +360,11 @@ public class StudentPanel extends ScrollPane {
         if (result == null) {
             return details;
         }
-        String reason = reasonFor(result);
-        if (!reason.isEmpty()) {
-            Label why = Parts.muted(reason);
-            why.getStyleClass().add("small-text");
-            details.getChildren().add(why);
-        }
-        if (!result.getTestCaseResults().isEmpty()) {
-            details.getChildren().add(createTests(
-                    result.getTestCaseResults()));
+        if (backend.supports(Capability.SOURCE_VIEW)) {
+            Hyperlink code = Parts.link("See " + question.getId()
+                    + "'s code and output", () -> openCode(question.getId()));
+            code.getStyleClass().add("small-text");
+            details.getChildren().add(code);
         }
         if (backend.supports(Capability.RETRY_QUESTION)) {
             Hyperlink retry = Parts.link("Grade " + question.getId()
@@ -311,10 +375,10 @@ public class StudentPanel extends ScrollPane {
         return details;
     }
 
-    // Builds one small square per test case.
-    private FlowPane createTests(List<TestCaseResult> results) {
-        FlowPane tests = new FlowPane(TIGHT_GAP, TIGHT_GAP);
-        tests.getStyleClass().add("test-squares");
+    // Adds one small square per test case to a line. Resting the pointer
+    // on a square shows the test's number, verdict and tester line.
+    private void addTestSquares(FlowPane tests,
+            List<TestCaseResult> results) {
         for (TestCaseResult test : results) {
             String verdict = "failed";
             if (test.isPassed()) {
@@ -330,10 +394,9 @@ public class StudentPanel extends ScrollPane {
                     && !output.trim().equalsIgnoreCase(verdict)) {
                 detail = detail + "\n" + output;
             }
-            Tooltip.install(square, new Tooltip(detail));
+            Parts.tipNode(square, detail);
             tests.getChildren().add(square);
         }
-        return tests;
     }
 
     // Returns the colour of a score bar: full marks good, some marks
@@ -347,33 +410,6 @@ public class StudentPanel extends ScrollPane {
             return Tone.WARN;
         }
         return Tone.BAD;
-    }
-
-    // Returns the short reason for a question's mark.
-    private String reasonFor(QuestionResult result) {
-        if (Students.didNotCompile(result)) {
-            return "Did not compile.";
-        } else if (!result.isCompiled()) {
-            return "Not compiled, because the file or its tester is "
-                    + "missing.";
-        }
-        if (result.isTimedOut()) {
-            return "A test ran too long and was stopped.";
-        }
-        int failed = 0;
-        int all = result.getTestCaseResults().size();
-        for (TestCaseResult test : result.getTestCaseResults()) {
-            if (!test.isPassed()) {
-                failed++;
-            }
-        }
-        if (all == 0) {
-            return "";
-        }
-        if (failed == 0) {
-            return "Every test passed.";
-        }
-        return failed + " of " + Parts.plural(all, "test") + " failed.";
     }
 
     // Returns the result of one question, or null.
@@ -721,6 +757,15 @@ public class StudentPanel extends ScrollPane {
                 + "for " + question.getId() + " is replaced by the new "
                 + "result.", "Grade again",
                 () -> retryQuestion(backend, question));
+    }
+
+    /**
+     * Opens the code and test output sheet on one question.
+     *
+     * @param questionId the question shown first, such as Q1a
+     */
+    private void openCode(String questionId) {
+        window.showSheet(CodeSheet.create(window, submission, questionId));
     }
 
     /**

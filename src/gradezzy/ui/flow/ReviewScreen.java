@@ -15,7 +15,6 @@ package gradezzy.ui.flow;
 import java.util.ArrayList;
 import java.util.List;
 
-import javafx.animation.PauseTransition;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.value.ObservableValue;
@@ -37,10 +36,10 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
-import javafx.util.Duration;
 
 import atlantafx.base.controls.CustomTextField;
 
@@ -81,17 +80,20 @@ public class ReviewScreen extends FlowScreen {
     // compile"
     private static final double STATUS_WIDTH = 220.0;
 
+    // The width of the arrow column that shows a row can be opened
+    private static final double OPEN_WIDTH = 36.0;
+
+    // The size of the icon in front of the hint under the tools
+    private static final double HINT_ICON_SIZE = 14.0;
+
     // The smallest width of the student column
     private static final double STUDENT_WIDTH = 190.0;
 
     // The width of the search field
     private static final double SEARCH_WIDTH = 220.0;
 
-    // The hint in the search field when it looks at names
+    // The hint in the search field
     private static final String NAMES_PROMPT = "Name or username";
-
-    // The hint in the search field when it looks inside the code
-    private static final String CODE_PROMPT = "Text in the code";
 
     // The search field is never narrower than this
     private static final double SEARCH_MIN_WIDTH = 140.0;
@@ -116,12 +118,6 @@ public class ReviewScreen extends FlowScreen {
 
     // The corner of the table box (twice the 12 pixel radius)
     private static final double CORNER_ARC = 24.0;
-
-    // How long typing must pause before the code is searched
-    private static final Duration CODE_SEARCH_DELAY = Duration.millis(300);
-
-    // The columns that exist before the question columns are added
-    private static final int FIXED_COLUMNS = 4;
 
     // A class file problem is shown once only when at least this many
     // graded students share it
@@ -161,6 +157,14 @@ public class ReviewScreen extends FlowScreen {
     private final ToggleButton missingButton =
             new ToggleButton("No submission");
 
+    // The arrow column, hidden while the student panel is open
+    private final TableColumn<Submission, Submission> openColumn =
+            new TableColumn<>();
+
+    // The Total column, whose tip names the run's maximum mark
+    private final TableColumn<Submission, Double> totalColumn =
+            new TableColumn<>("Total");
+
     // The counts beside the filter names
     private final Label allCount = new Label();
     private final Label reviewCount = new Label();
@@ -182,26 +186,15 @@ public class ReviewScreen extends FlowScreen {
     // The search field
     private final CustomTextField search = new CustomTextField();
 
-    // Chooses whether the search looks at names or inside the code
-    private final ToggleButton namesButton = new ToggleButton("Names");
-    private final ToggleButton codeButton = new ToggleButton("Code");
-
-    // Waits for typing to pause before searching the code
-    private final PauseTransition codeDelay =
-            new PauseTransition(CODE_SEARCH_DELAY);
-
-    // The students whose code holds the search text
-    private final List<Submission> codeMatches = new ArrayList<>();
-
-    // The code search still running whose result is wanted, or null
-    private CodeSearch latestSearch = null;
-
     // The line under the heading
     private final Label subtitle = Parts.subtitle("");
 
     // A note when some students could not be graded, in the filter row
     private final HBox banner = Parts.row(Parts.GAP);
 
+    // Says how to open a student and what ticking does, or, once any are
+    // ticked, how many are ticked for export
+    private final HBox guide = Parts.row(Parts.GAP_SMALL);
     // One note per problem every student shares, above the table
     private final VBox sharedBanner = new VBox(Parts.GAP_SMALL);
 
@@ -240,15 +233,13 @@ public class ReviewScreen extends FlowScreen {
 
         HBox tools = Parts.row(Parts.GAP,
                 new Node[] {createFilterBar(), banner, Parts.grow()});
-        if (getBackend().supports(Capability.CODE_SEARCH)) {
-            tools.getChildren().add(createSearchModeBar());
-        }
         tools.getChildren().add(search);
         VBox.setMargin(tools, new Insets(Parts.GAP_SMALL / 2, 0, 0, 0));
 
         VBox header = new VBox(HEADING_GAP, Parts.heading(
                 "Review the results"), subtitle);
-        main.getChildren().addAll(header, tools, sharedBanner, table);
+        guide.getStyleClass().add("review-guide");
+        main.getChildren().addAll(header, tools, guide, sharedBanner, table);
         main.getStyleClass().add("review-main");
         VBox.setVgrow(table, Priority.ALWAYS);
         HBox.setHgrow(main, Priority.ALWAYS);
@@ -292,16 +283,21 @@ public class ReviewScreen extends FlowScreen {
             getActions().setBack(() -> getWindow().show(Step.SET_UP));
             return;
         }
-        if (table.getColumns().size() <= FIXED_COLUMNS) {
-            addQuestionColumns();
+        Assessment graded = run.getAssessment();
+        if (graded == null) {
+            graded = getBackend().getAssessment();
         }
+        if (!showsQuestionsOf(graded)) {
+            table.getColumns().removeAll(questionColumns);
+            questionColumns.clear();
+            addQuestionColumns(graded);
+        }
+        header(totalColumn, "Total", "/ " + Parts.mark(graded.getMaxTotal()),
+                "Out of " + Parts.mark(graded.getMaxTotal()) + ", the sum "
+                + "of the question marks.");
         rows.setAll(run.getSubmissions());
         rows.addAll(findSkippedRows(run));
         rows.addAll(findMissingRows(run));
-        codeMatches.clear();
-        if (codeButton.isSelected()) {
-            searchCode();
-        }
         if (panel.getSubmission() != null
                 && !rows.contains(panel.getSubmission())) {
             closePanel();
@@ -436,6 +432,11 @@ public class ReviewScreen extends FlowScreen {
             buttons[index].setContentDisplay(ContentDisplay.RIGHT);
         }
         allButton.setSelected(true);
+        Parts.tip(allButton, "Every student in this run.");
+        Parts.tip(reviewButton, "Students with a fix to approve, a flag to "
+                + "look at, or a problem to check before you export.");
+        Parts.tip(failedButton, "Students whose code did not compile, "
+                + "timed out or could not be graded.");
         allButton.getStyleClass().add("left-pill");
         reviewButton.getStyleClass().add("center-pill");
         failedButton.getStyleClass().add("center-pill");
@@ -477,39 +478,7 @@ public class ReviewScreen extends FlowScreen {
         search.getStyleClass().add("review-search");
         search.setAccessibleText("Search students");
         search.textProperty().addListener((observable, before, after)
-                -> searchChanged());
-        codeDelay.setOnFinished(event -> searchCode());
-    }
-
-    // Builds the Names and Code switch beside the search field.
-    private HBox createSearchModeBar() {
-        ToggleGroup group = new ToggleGroup();
-        namesButton.setToggleGroup(group);
-        codeButton.setToggleGroup(group);
-        namesButton.setSelected(true);
-        namesButton.getStyleClass().add("left-pill");
-        codeButton.getStyleClass().add("right-pill");
-        group.selectedToggleProperty().addListener((observable, before,
-                after) -> searchModeClicked(before, after));
-        HBox bar = new HBox(namesButton, codeButton);
-        bar.getStyleClass().addAll("segmented", "search-mode");
-        bar.setMinWidth(HBox.USE_PREF_SIZE);
-        return bar;
-    }
-
-    /**
-     * Follows a click on Names or Code. Clicking the button that is
-     * already on would turn both off, so it stays on.
-     *
-     * @param before the button that was on
-     * @param after the button that is on now, or null for none
-     */
-    private void searchModeClicked(Toggle before, Toggle after) {
-        if (after == null) {
-            before.setSelected(true);
-            return;
-        }
-        searchModeChanged();
+                -> applyFilter());
     }
 
     // Builds the tick, student, total and status columns.
@@ -525,6 +494,9 @@ public class ReviewScreen extends FlowScreen {
         tickAllBox.setOnAction(event -> tickAll(tickAllBox.isSelected()));
         tickAllBox.setAccessibleText("Tick every student shown");
         tick.setGraphic(tickAllBox);
+        Parts.tip(tickAllBox, "Tick every student shown. Ticked students "
+                + "are the ones exported; with none ticked, every student "
+                + "is exported.");
         tick.setSortable(false);
         fixWidth(tick, TICK_WIDTH);
         tick.setCellValueFactory(cell -> studentOf(cell));
@@ -537,7 +509,7 @@ public class ReviewScreen extends FlowScreen {
         student.setCellFactory(column -> new ReviewStudentCell());
         student.setComparator(new StudentNameComparator());
 
-        TableColumn<Submission, Double> total = new TableColumn<>("Total");
+        TableColumn<Submission, Double> total = totalColumn;
         fixMarkWidth(total, TOTAL_WIDTH);
         total.setCellValueFactory(cell -> totalOf(cell));
         total.setCellFactory(column -> new ReviewMarkCell(true));
@@ -550,10 +522,17 @@ public class ReviewScreen extends FlowScreen {
         status.setCellFactory(column -> new ReviewStatusCell(getBackend()));
         status.setComparator(new StudentStateComparator(getBackend()));
 
+        TableColumn<Submission, Submission> open = openColumn;
+        fixWidth(open, OPEN_WIDTH);
+        open.setSortable(false);
+        open.setCellValueFactory(cell -> studentOf(cell));
+        open.setCellFactory(column -> new ReviewOpenCell());
+
         table.getColumns().add(tick);
         table.getColumns().add(student);
         table.getColumns().add(total);
         table.getColumns().add(status);
+        table.getColumns().add(open);
 
         SortedList<Submission> sorted = new SortedList<>(filtered);
         sorted.comparatorProperty().bind(table.comparatorProperty());
@@ -635,16 +614,58 @@ public class ReviewScreen extends FlowScreen {
                 questionId));
     }
 
-    // Adds one column per question, between Student and Total.
-    private void addQuestionColumns() {
-        Assessment assessment = getBackend().getAssessment();
+    // Says whether the question columns are those of an assessment.
+    private boolean showsQuestionsOf(Assessment assessment) {
+        List<Question> questions = assessment.getQuestions();
+        if (questions.size() != questionColumns.size()) {
+            return false;
+        }
+        for (int index = 0; index < questions.size(); index++) {
+            Object id = questionColumns.get(index).getUserData();
+            if (!questions.get(index).getId().equals(id)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Shows a column's name, and under it the most marks when given, in
+    // a box with a tip, because a column header has no tip of its own.
+    // The labels have their own style class: the header's label padding
+    // would otherwise squeeze a narrow column's name to "...".
+    private void header(TableColumn<Submission, ?> column, String name,
+            String max, String tip) {
+        Label nameLabel = new Label(name);
+        nameLabel.getStyleClass().add("head-name");
+        VBox box = new VBox(nameLabel);
+        box.getStyleClass().add("head-box");
+        if (max != null) {
+            Label maxLabel = new Label(max);
+            maxLabel.getStyleClass().add("head-max");
+            box.getChildren().add(maxLabel);
+        }
+        box.setAlignment(Pos.CENTER);
+        box.setMinWidth(VBox.USE_PREF_SIZE);
+        Parts.tipNode(box, tip);
+        column.setText("");
+        column.setGraphic(box);
+    }
+
+    // Adds one column per question of the run's assessment, between
+    // Student and Total.
+    private void addQuestionColumns(Assessment assessment) {
         if (assessment == null) {
             return;
         }
         int index = FIRST_QUESTION_COLUMN;
         for (Question question : assessment.getQuestions()) {
-            TableColumn<Submission, Double> column = new TableColumn<>(
-                    question.getId());
+            TableColumn<Submission, Double> column = new TableColumn<>();
+            column.setUserData(question.getId());
+            header(column, question.getId(), "/ " + Parts.mark(
+                    question.getMaxScore()), question.getId() + ": "
+                    + question.getFileName() + " in the "
+                    + question.getFolderName() + " folder, out of "
+                    + Parts.mark(question.getMaxScore()) + ".");
             fixMarkWidth(column, QUESTION_WIDTH);
             String id = question.getId();
             column.setCellValueFactory(cell -> questionMarkOf(cell, id));
@@ -664,6 +685,8 @@ public class ReviewScreen extends FlowScreen {
         for (TableColumn<Submission, Double> column : questionColumns) {
             column.setVisible(!narrow);
         }
+        // The panel already shows the student the arrow would open
+        openColumn.setVisible(!panel.isVisible());
     }
 
     // Returns a student's mark for one question, or null.
@@ -889,77 +912,16 @@ public class ReviewScreen extends FlowScreen {
 
     // ----------------------------------------------------------- search
 
-    // Filters again when the search text changes.
-    private void searchChanged() {
-        if (!codeButton.isSelected()) {
-            applyFilter();
-            return;
-        }
-        codeDelay.playFromStart();
-    }
-
-    // Switches the search between names and code.
-    private void searchModeChanged() {
-        codeDelay.stop();
-        codeMatches.clear();
-        latestSearch = null;
-        if (codeButton.isSelected()) {
-            search.setPromptText(CODE_PROMPT);
-            searchCode();
-            return;
-        }
-        search.setPromptText(NAMES_PROMPT);
-        applyFilter();
-    }
-
-    // Asks the backend which students' code holds the search text.
-    // Live mode reads the files on a background thread; the demo reads
-    // no files.
-    private void searchCode() {
-        codeMatches.clear();
-        latestSearch = null;
-        String text = search.getText().trim();
-        GradingRun run = getState().getRun();
-        if (text.isEmpty() || run == null) {
-            applyFilter();
-            return;
-        }
-        if (getBackend().isDemo()) {
-            codeMatches.addAll(getBackend().searchCode(run, text));
-            applyFilter();
-            return;
-        }
-        CodeSearch codeSearch = new CodeSearch(getBackend(), run, text);
-        codeSearch.setOnSucceeded(event -> searchDone(codeSearch));
-        latestSearch = codeSearch;
-        applyFilter();
-        placeholder.setText("Searching the code...");
-        Thread worker = new Thread(codeSearch, "gradezzy-search");
-        worker.setDaemon(true);
-        worker.start();
-    }
-
-    // Shows the students a search found, unless a newer search started.
-    private void searchDone(CodeSearch codeSearch) {
-        if (codeSearch != latestSearch) {
-            return;
-        }
-        latestSearch = null;
-        codeMatches.addAll(codeSearch.getValue());
-        applyFilter();
-    }
-
     // Applies the filter buttons and the search text.
     private void applyFilter() {
         String text = search.getText().trim().toLowerCase();
-        boolean inCode = codeButton.isSelected();
         boolean onlyReview = reviewButton.isSelected();
         boolean onlyFailed = failedButton.isSelected();
         boolean onlyMissing = missingButton.isSelected();
         filtered.setPredicate(submission -> passesFilter(submission, text,
-                inCode, onlyReview, onlyFailed, onlyMissing));
-        placeholder.setText(emptyNote(text, inCode, onlyReview,
-                onlyFailed, onlyMissing));
+                onlyReview, onlyFailed, onlyMissing));
+        placeholder.setText(emptyNote(text, onlyReview, onlyFailed,
+                onlyMissing));
     }
 
     /**
@@ -967,7 +929,6 @@ public class ReviewScreen extends FlowScreen {
      *
      * @param submission the student
      * @param text the search text in lower case, or an empty string
-     * @param inCode true when the search looks inside the code
      * @param onlyReview true when only students to review are shown
      * @param onlyFailed true when only students who failed are shown
      * @param onlyMissing true when only students with no submission are
@@ -975,8 +936,7 @@ public class ReviewScreen extends FlowScreen {
      * @return true when the student is shown
      */
     private boolean passesFilter(Submission submission, String text,
-            boolean inCode, boolean onlyReview, boolean onlyFailed,
-            boolean onlyMissing) {
+            boolean onlyReview, boolean onlyFailed, boolean onlyMissing) {
         if (onlyMissing && !ResultState.isNoSubmission(submission)) {
             return false;
         }
@@ -991,20 +951,14 @@ public class ReviewScreen extends FlowScreen {
         if (text.isEmpty()) {
             return true;
         }
-        if (inCode) {
-            return codeMatches.contains(submission);
-        }
         return Students.name(submission).toLowerCase().contains(text)
                 || submission.getUsername().toLowerCase().contains(text);
     }
 
     // Returns the note shown when no student passes the filter.
-    private String emptyNote(String text, boolean inCode,
-            boolean onlyReview, boolean onlyFailed, boolean onlyMissing) {
-        if (!text.isEmpty() && inCode) {
-            return "No student's code contains \"" + search.getText().trim()
-                    + "\". The search is case sensitive.";
-        } else if (!text.isEmpty()) {
+    private String emptyNote(String text, boolean onlyReview,
+            boolean onlyFailed, boolean onlyMissing) {
+        if (!text.isEmpty()) {
             return "No student matches \"" + search.getText().trim()
                     + "\".";
         } else if (onlyReview) {
@@ -1123,6 +1077,7 @@ public class ReviewScreen extends FlowScreen {
         if (!isOnScreen()) {
             return;
         }
+        refreshGuide();
         ActionBar actions = getActions();
         actions.reset();
         actions.setBack(() -> getWindow().show(Step.GRADE));
@@ -1152,8 +1107,48 @@ public class ReviewScreen extends FlowScreen {
         if (ticked > 0) {
             text = text + " " + Parts.plural(ticked, "student")
                     + " ticked for export.";
+        } else {
+            text = text + " All " + rows.size() + " are exported.";
         }
         return text;
+    }
+
+    // Under the tools: how to open a student and what a tick does, or,
+    // once students are ticked, how many will be exported.
+    private void refreshGuide() {
+        guide.getChildren().clear();
+        guide.getStyleClass().remove("ticked");
+        int ticked = getState().getSelected().size();
+        if (ticked == 0) {
+            Label text = Parts.muted("Click a student to see each "
+                    + "question's tests and to approve fixes and check "
+                    + "flags. Tick students to export only them; with none "
+                    + "ticked, all " + rows.size() + " are exported.");
+            text.getStyleClass().add("small-text");
+            text.setWrapText(true);
+            text.setMinWidth(0);
+            text.setMaxWidth(Double.MAX_VALUE);
+            text.setMinHeight(Region.USE_PREF_SIZE);
+            HBox.setHgrow(text, Priority.ALWAYS);
+            guide.getChildren().addAll(Parts.icon(Parts.HELP,
+                    HINT_ICON_SIZE), text);
+            return;
+        }
+        guide.getStyleClass().add("ticked");
+        Label text = Parts.strong(Parts.plural(ticked, "student")
+                + " ticked for export");
+        Label rest = Parts.muted("Only they are exported. The other "
+                + (rows.size() - ticked) + " keep their marks here.");
+        rest.getStyleClass().add("small-text");
+        rest.setMinWidth(0);
+        guide.getChildren().addAll(text, rest, Parts.grow(),
+                Parts.link("Clear ticks", () -> clearTicks()));
+    }
+
+    // Unticks every student, so all of them are exported again.
+    private void clearTicks() {
+        tickAllBox.setSelected(false);
+        tickAll(false);
     }
 
     // Returns the fixes still waiting, for the ticked students or all.

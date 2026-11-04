@@ -4,7 +4,7 @@
  * Purpose: Draws a ring (donut) chart of how many students are in each
  * status, with the number of students in the middle.
  *
- * Where it fits: The "Where students are" card of the Statistics tab.
+ * Where it fits: The "Student status" card of the Statistics tab.
  * The card's legend repeats every status in words with its count, so
  * the ring never relies on colour alone.
  */
@@ -49,7 +49,7 @@ public class StatusRing extends Region {
     private final List<Integer> counts = new ArrayList<>();
 
     // The colour of each part
-    private final List<Tone> tones = new ArrayList<>();
+    private final List<String> colours = new ArrayList<>();
 
     /**
      * Creates an empty ring.
@@ -67,7 +67,7 @@ public class StatusRing extends Region {
     public void clear() {
         names.clear();
         counts.clear();
-        tones.clear();
+        colours.clear();
         draw();
     }
 
@@ -76,12 +76,12 @@ public class StatusRing extends Region {
      *
      * @param name the status in words, for the tooltip
      * @param count how many students have it
-     * @param tone its colour
+     * @param colour the style class that colours it, such as "good"
      */
-    public void addPart(String name, int count, Tone tone) {
+    public void addPart(String name, int count, String colour) {
         names.add(name);
         counts.add(count);
-        tones.add(tone);
+        colours.add(colour);
         draw();
     }
 
@@ -140,7 +140,7 @@ public class StatusRing extends Region {
                         start, -Math.max(0, length - gap));
                 arc.setType(ArcType.OPEN);
                 arc.getStyleClass().addAll("ring-part",
-                        tones.get(index).getStyleClass());
+                        colours.get(index));
                 Tooltip.install(arc, new Tooltip(names.get(index) + ": "
                         + Parts.plural(count, "student")));
                 getChildren().add(arc);

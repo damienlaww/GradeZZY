@@ -13,6 +13,7 @@
  */
 package gradezzy.ui.flow;
 
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -67,6 +68,10 @@ public class GradeScreen extends FlowScreen
 
     // The separator between parts of a line
     private static final String DOT = " · ";
+
+    // When a run was graded, such as "15 Oct, 09:42"
+    private static final DateTimeFormatter WHEN =
+            DateTimeFormatter.ofPattern("d MMM, HH:mm");
 
     // The rows of the "So far" card, top to bottom
     private static final int GRADED = 0;
@@ -166,12 +171,66 @@ public class GradeScreen extends FlowScreen
     }
 
     /**
-     * Shows the buttons that fit the run: Cancel while it grades, Resume
-     * when it stopped early, Review results when it is done.
+     * When nothing is being graded, fills the screen again from the run
+     * on screen, as it ended: one opened from Home or Runs, or one graded
+     * and resumed here, so the count always covers every student. With no
+     * run, says how to start. Then shows the buttons that fit: Cancel
+     * while it grades, Resume when it stopped early, Review results when
+     * it is done.
      */
     @Override
     public void onShow() {
+        GradingRun run = getState().getRun();
+        if (!getState().isGrading() && failure == null) {
+            if (run != null) {
+                showEndedRun(run);
+            } else {
+                showNothingYet();
+            }
+        }
         refreshActions();
+    }
+
+    // Fills the screen from a run that is not being graded: how many were
+    // graded, the marks so far and each result, as when it ended.
+    private void showEndedRun(GradingRun run) {
+        prepare(run.getSection().getLabel());
+        if (run.getAssessment() != null) {
+            about = run.getSection().getLabel() + DOT
+                    + run.getAssessment().getName();
+        }
+        for (Submission submission : run.getSubmissions()) {
+            if (!isUnfinished(submission)) {
+                finished++;
+                addResult(submission);
+            }
+        }
+        total = run.getSubmissions().size();
+        ended = true;
+        String when = "";
+        if (run.getStartedAt() != null) {
+            when = DOT + "graded " + run.getStartedAt().format(WHEN);
+        }
+        subtitle.setText(about + when + ".");
+        if (hasUnfinished(run)) {
+            heading.setText("Grading stopped");
+            now.setText("The rest are waiting; press Resume to grade "
+                    + "them.");
+        } else {
+            heading.setText("Grading finished");
+            now.setText("");
+        }
+        updateCount();
+    }
+
+    // Says how to start when no batch was graded in this window yet.
+    private void showNothingYet() {
+        heading.setText("Nothing is being graded");
+        subtitle.setText("Choose the students' zip files on Set up and "
+                + "press Start grading. Progress shows here.");
+        now.setText("");
+        updateCount();
+        timeLeft.setText("");
     }
 
     /**

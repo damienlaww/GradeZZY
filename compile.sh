@@ -7,7 +7,7 @@
 #   sh compile.sh core    compile only the grading core, without JavaFX
 #
 # javac does not copy resource files, so this script also copies the
-# .css files of the ui package into classes/.
+# .css and font files of the ui package into classes/.
 #
 # When you add a new package, add its folder to CORE_SOURCES below and
 # to compile.bat.
@@ -74,5 +74,8 @@ javac -encoding UTF-8 -d classes \
 # Copy the resources javac leaves behind.
 mkdir -p classes/gradezzy/ui/css
 cp src/gradezzy/ui/css/*.css classes/gradezzy/ui/css/ || exit 1
+mkdir -p classes/gradezzy/ui/fonts
+cp src/gradezzy/ui/fonts/*.ttf src/gradezzy/ui/fonts/OFL.txt \
+    classes/gradezzy/ui/fonts/ || exit 1
 
 echo "Compiled GradeZZY into classes/ using $JAVAFX_DIR."

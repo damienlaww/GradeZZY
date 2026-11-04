@@ -1,10 +1,11 @@
 /*
  * File: FlowWindow.java
  *
- * Purpose: The window: a top bar with the tabs Marking, Statistics, Runs
- * and Settings; under it, on Marking only, the row of four steps; one
+ * Purpose: The window: a top bar with the tabs Home, Marking, Statistics,
+ * Runs and Settings; under it, on Marking only, the row of four steps; one
  * screen at a time in the middle; and the action bar at the bottom on the
- * screens that use it. Opens Help and small sheets over the screen.
+ * screens that use it. Opens Help and small sheets over the screen, and
+ * switches the assessment in use.
  *
  * Where it fits: MainApp builds one and shows its scene. Every screen
  * reaches the backend, the shared state and the action bar through it.
@@ -37,10 +38,15 @@ import javafx.stage.Window;
 import javafx.stage.WindowEvent;
 import javafx.util.Duration;
 
+import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
+import gradezzy.model.SavedAssessment;
+import gradezzy.ui.AppFonts;
 import gradezzy.model.Student;
 import gradezzy.ui.ThemeManager;
+import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.DashboardBackend;
+import gradezzy.ui.backend.InputKind;
 
 /**
  * The window of GradeZZY.
@@ -112,8 +118,8 @@ public class FlowWindow {
     // The step screens, created when first shown
     private final Map<Step, FlowScreen> screens = new HashMap<>();
 
-    // The screens of Statistics, Runs and Settings, created when first
-    // shown
+    // The screens of Home, Statistics, Runs and Settings, created when
+    // first shown
     private final Map<Page, FlowScreen> pages = new HashMap<>();
 
     // The notice that fades in at the bottom
@@ -123,7 +129,7 @@ public class FlowWindow {
     private Step currentStep = Step.SET_UP;
 
     // The tab on screen
-    private Page currentPage = Page.MARKING;
+    private Page currentPage = Page.HOME;
 
     // The open sheet, or null
     private Node sheet = null;
@@ -146,13 +152,14 @@ public class FlowWindow {
     }
 
     /**
-     * Builds the scene and shows the first step.
+     * Builds the scene and shows Home.
      *
      * @param width the starting width
      * @param height the starting height
      * @return the scene
      */
     public Scene build(double width, double height) {
+        AppFonts.load();
         themes.apply(themeName());
         frame.getStyleClass().add("flow-root");
         stepRow.getStyleClass().add("step-row");
@@ -174,7 +181,7 @@ public class FlowWindow {
             scene.getStylesheets().add(css.toExternalForm());
         }
         addShortcuts(scene);
-        show(Step.SET_UP);
+        showPage(Page.HOME);
         return scene;
     }
 
@@ -226,6 +233,97 @@ public class FlowWindow {
                 (StatisticsScreen) getPageScreen(Page.STATISTICS);
         statistics.selectSection(moduleCode, sectionCode);
         showPage(Page.STATISTICS);
+    }
+
+    /**
+     * Opens Set up on a section, as Home's cards do. Zip files chosen
+     * for another section are cleared, so they are not graded as this
+     * one.
+     *
+     * @param moduleCode the module, such as CS102
+     * @param sectionCode the section, such as G2
+     */
+    public void openSetUp(String moduleCode, String sectionCode) {
+        boolean otherSection = !sectionCode.equals(state.getSectionCode())
+                || !moduleCode.equals(state.getModuleCode());
+        if (otherSection && !state.isGrading()
+                && !state.getBatch().getItems(InputKind.SUBMISSION)
+                        .isEmpty()) {
+            state.getBatch().clear(InputKind.SUBMISSION);
+            notify("Cleared the zip files chosen for "
+                    + state.getSection().getLabel() + ".");
+        }
+        state.setModuleCode(moduleCode);
+        state.setSectionCode(sectionCode);
+        show(Step.SET_UP);
+    }
+
+    /**
+     * Opens the list of saved assessments.
+     */
+    public void openAssessments() {
+        showSheet(AssessmentsSheet.create(this));
+    }
+
+    /**
+     * Opens the assessment editor on a saved assessment, or on a new one.
+     *
+     * @param name the assessment to edit, or null to create one
+     */
+    public void editAssessment(String name) {
+        SavedAssessment start = null;
+        String originalName = null;
+        if (name != null) {
+            for (SavedAssessment saved : backend.listAssessments()) {
+                if (saved.getName().equalsIgnoreCase(name)) {
+                    start = saved;
+                    originalName = saved.getName();
+                }
+            }
+        }
+        if (start == null) {
+            start = newAssessment();
+        }
+        showSheet(AssessmentEditor.create(this, start, originalName));
+    }
+
+    /**
+     * Grades with a saved assessment from now on, and says so. Does
+     * nothing while a batch is being graded.
+     *
+     * @param name the assessment's name
+     * @return true when it is now in use
+     */
+    public boolean useAssessment(String name) {
+        if (state.isGrading()) {
+            notify("Wait for the current batch to finish first.");
+            return false;
+        }
+        ActionResult result = backend.useAssessment(name);
+        notify(result.getMessage());
+        if (result.isDone()) {
+            assessmentChanged();
+        }
+        return result.isDone();
+    }
+
+    /**
+     * Updates the screens after the assessment in use or one of its
+     * settings changed. Settings is built again when next shown, unless
+     * it holds changes that are not saved.
+     */
+    public void assessmentChanged() {
+        if (!hasUnsavedSettings()) {
+            pages.remove(Page.SETTINGS);
+        }
+        FlowScreen setUp = screens.get(Step.SET_UP);
+        if (setUp instanceof SetUpScreen) {
+            ((SetUpScreen) setUp).assessmentChanged();
+        }
+        if (sheet == null && !(currentPage == Page.SETTINGS
+                && hasUnsavedSettings())) {
+            refreshScreen();
+        }
     }
 
     /**
@@ -281,6 +379,7 @@ public class FlowWindow {
             notify("Wait for the current batch to finish first.");
             return;
         }
+        matchAssessment(run);
         state.restart();
         state.setRun(run);
         state.setModuleCode(run.getSection().getModuleCode());
@@ -657,6 +756,7 @@ public class FlowWindow {
             notify("Wait for the current batch to finish first.");
             return;
         }
+        matchAssessment(run);
         GradeScreen grade = gradeScreen();
         state.restart();
         state.setRun(run);
@@ -686,7 +786,7 @@ public class FlowWindow {
      * Returns the screen of a tab other than Marking, creating it if
      * needed. Used by the developer checks.
      *
-     * @param page Statistics, Runs or Settings
+     * @param page Home, Statistics, Runs or Settings
      * @return the screen
      */
     public FlowScreen getPageScreen(Page page) {
@@ -696,6 +796,47 @@ public class FlowWindow {
             pages.put(page, screen);
         }
         return screen;
+    }
+
+    // Switches to the assessment a run was graded with, when another is
+    // in use, so its questions, testers and checks match the run. A run
+    // whose assessment is no longer saved is shown with a note.
+    private void matchAssessment(GradingRun run) {
+        Assessment graded = run.getAssessment();
+        Assessment inUse = backend.getAssessment();
+        if (graded == null || inUse == null
+                || graded.getName().equalsIgnoreCase(inUse.getName())) {
+            return;
+        }
+        for (SavedAssessment saved : backend.listAssessments()) {
+            if (saved.getName().equalsIgnoreCase(graded.getName())) {
+                ActionResult result = backend.useAssessment(saved.getName());
+                if (result.isDone()) {
+                    notify("Switched to " + saved.getName() + ", the "
+                            + "assessment this run was graded with.");
+                    assessmentChanged();
+                } else {
+                    notify(result.getMessage());
+                }
+                return;
+            }
+        }
+        notify("This run was graded with " + graded.getName() + ", which "
+                + "is no longer saved. Grading again uses "
+                + inUse.getName() + ".");
+    }
+
+    // Returns the start of a new assessment: no name and one empty
+    // question, with only the unrenamed folder names of the one in use,
+    // which rarely change from one test to the next.
+    private SavedAssessment newAssessment() {
+        SavedAssessment fresh = new SavedAssessment();
+        Assessment inUse = backend.getAssessment();
+        if (inUse != null) {
+            fresh.getPlaceholderFolderNames().addAll(
+                    inUse.getPlaceholderFolderNames());
+        }
+        return fresh;
     }
 
     // Puts a screen in the middle of the window and fills the bars.
@@ -743,7 +884,9 @@ public class FlowWindow {
 
     // Creates the screen of a tab other than Marking.
     private FlowScreen createPage(Page page) {
-        if (page == Page.STATISTICS) {
+        if (page == Page.HOME) {
+            return new HomeScreen(this);
+        } else if (page == Page.STATISTICS) {
             return new StatisticsScreen(this);
         } else if (page == Page.RUNS) {
             return new RunsScreen(this);

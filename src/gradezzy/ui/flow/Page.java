@@ -1,8 +1,8 @@
 /*
  * File: Page.java
  *
- * Purpose: The four tabs along the top of the window: Marking, Statistics,
- * Runs and Settings.
+ * Purpose: The five tabs along the top of the window: Home, Marking,
+ * Statistics, Runs and Settings.
  *
  * Where it fits: FlowWindow shows one page at a time. Only Marking has
  * the four steps of Step.
@@ -13,6 +13,9 @@ package gradezzy.ui.flow;
  * A tab along the top of the window.
  */
 public enum Page {
+
+    /** Every section at a glance, and what to do next in each. */
+    HOME("Home", Parts.HOME),
 
     /** The four marking steps. */
     MARKING("Marking", Parts.MARKING),
