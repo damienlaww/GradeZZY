@@ -208,7 +208,7 @@ ui (JavaFX)        app.ConsoleMain
 | 4 | `DetectStage` | Runs every `Detector`. | Jun Sheng |
 | 5 | `InstallTestersStage` | Copies testers and data files into the working copy. | Zach |
 | 6 | `CompileStage` | Compiles each question in its own copy of its folder, `<working copy>/.questions/<id>/`, so Q1a's code cannot change Q1b's tester, and keeps the compiled files in memory. | Zach |
-| 7 | `ExecuteStage` | Puts back and flags any compiled file changed since compiling, then runs each tester in that copy with a time limit and parses its output. | Zach |
+| 7 | `ExecuteStage` | Puts back and flags any compiled file changed since compiling, then runs each tester in that copy with a time limit and parses its output. A test case that hangs gets no marks and the tester is run again without it, so the cases after it are still marked, as the brief describes. | Zach |
 | 8 | `ScoreStage` | Sets per-question and per-student scores. | Jing Yuan |
 | 9 | `PersistStage` | Saves the result so a run can be resumed. | Huxley |
 

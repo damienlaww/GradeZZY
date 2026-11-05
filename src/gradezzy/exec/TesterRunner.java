@@ -211,6 +211,23 @@ public class TesterRunner {
      */
     public ProcessResult runTester(Path questionFolder,
             String testerClassName) throws ProcessExecutionException {
+        return runTester(questionFolder, testerClassName, new ArrayList<>());
+    }
+
+    /**
+     * Runs a tester, skipping some of its test cases: each one fails
+     * without calling the student's code. A case that hung on an earlier
+     * run is skipped so the cases after it can still run.
+     *
+     * @param questionFolder the question folder
+     * @param testerClassName the tester class name
+     * @param skippedCases the test cases to skip, counted from 1
+     * @return the tester output and timeout flag
+     * @throws ProcessExecutionException if the operation fails
+     */
+    public ProcessResult runTester(Path questionFolder,
+            String testerClassName, List<Integer> skippedCases)
+            throws ProcessExecutionException {
         if (testerClassName == null || testerClassName.isBlank()) {
             throw new ProcessExecutionException("No tester class to run.");
         }
@@ -250,6 +267,10 @@ public class TesterRunner {
         // The harness stops itself a little after this, in case GradeZZY
         // is gone by then
         command.add(String.valueOf(timeoutSeconds));
+        command.add(config.getString(ConfigKeys.TEST_HEADER_MARKER));
+        for (Integer skippedCase : skippedCases) {
+            command.add(String.valueOf(skippedCase));
+        }
         // A new random token for every run, sent where only the harness
         // reads it before any student code starts
         String token = UUID.randomUUID().toString();
