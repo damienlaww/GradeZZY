@@ -55,7 +55,9 @@ public class QuestionFolderFinder {
     /**
      * Finds the folder that holds the question folders: the top of the
      * working copy when the username folder is missing, the folder named
-     * after the username, or the only folder there is.
+     * after the username, the only folder there is, or else the only
+     * folder that holds a question folder (so an extra IDE folder such as
+     * bin is ignored). This is the same rule as AbstractFixer's.
      *
      * @param submission the submission
      * @param assessment the assessment
@@ -80,7 +82,23 @@ public class QuestionFolderFinder {
         } else if (topFolders.size() == 1) {
             return topFolders.get(0);
         }
-        return null;
+        return findOnlyHolder(topFolders, assessment);
+    }
+
+    // Returns the only folder that holds a question folder, or null.
+    private static Path findOnlyHolder(List<Path> folders,
+            Assessment assessment) throws IOException {
+        List<Path> holders = new ArrayList<>();
+        for (Path folder : folders) {
+            if (holdsQuestionFolder(listFolders(folder), assessment)) {
+                holders.add(folder);
+            }
+        }
+
+        if (holders.size() != 1) {
+            return null;
+        }
+        return holders.get(0);
     }
 
     /**
