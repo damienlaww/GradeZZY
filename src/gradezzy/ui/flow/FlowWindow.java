@@ -353,6 +353,9 @@ public class FlowWindow {
         if (state.isGrading() || !state.getBatch().isReady()) {
             return;
         }
+        if (blockedByFix()) {
+            return;
+        }
         GradeScreen grade = gradeScreen();
         state.restart();
         advanceTo(Step.GRADE);
@@ -375,6 +378,21 @@ public class FlowWindow {
      */
     public void retryRun(GradingRun run) {
         continueRun(run, true);
+    }
+
+    /**
+     * Says whether a fix job still grades a student again, and if so
+     * tells the instructor to wait, as grading cannot start meanwhile.
+     *
+     * @return true while a fix job runs
+     */
+    public boolean blockedByFix() {
+        if (state.getFixInProgress() == null) {
+            return false;
+        }
+        notify("Wait until the fix has finished grading "
+                + state.getFixInProgress().getUsername() + " again.");
+        return true;
     }
 
     /**
@@ -836,6 +854,9 @@ public class FlowWindow {
     private void continueRun(GradingRun run, boolean retryFailed) {
         if (state.isGrading()) {
             notify("Wait for the current batch to finish first.");
+            return;
+        }
+        if (blockedByFix()) {
             return;
         }
         matchAssessment(run);

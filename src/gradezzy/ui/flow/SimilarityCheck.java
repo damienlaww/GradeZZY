@@ -5,8 +5,8 @@
  * thread, so the window does not freeze while every pair of answers is
  * compared.
  *
- * Where it fits: ExportScreen starts one when it shows the similar code
- * card in live mode, and fills the card when the check succeeds.
+ * Where it fits: ExportScreen starts one when the instructor presses
+ * Check again in live mode, and fills the card when the check succeeds.
  *
  * Note on untaught Java: javafx.concurrent.Task runs the check on a
  * background thread, as GradingTask does for grading.
@@ -59,6 +59,6 @@ public class SimilarityCheck extends Task<List<SimilarityPair>> {
      */
     @Override
     protected List<SimilarityPair> call() {
-        return backend.listSimilarPairs(run);
+        return backend.checkSimilarity(run);
     }
 }

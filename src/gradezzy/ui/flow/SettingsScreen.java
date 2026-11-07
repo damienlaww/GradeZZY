@@ -714,9 +714,11 @@ public class SettingsScreen extends FlowScreen {
                 " · "));
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
                 "CSV files", "*.csv"));
+        Choosers.prepare(chooser);
         File picked = chooser.showOpenDialog(getWindow().getWindow());
+        Choosers.remember(picked);
         if (picked != null) {
-            setScoreSheet(who, picked.getPath());
+            setScoreSheet(who, Parts.configPath(picked.toPath()));
         }
     }
 
@@ -837,9 +839,11 @@ public class SettingsScreen extends FlowScreen {
         Button choose = Parts.small("Choose", () -> {
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("Choose where these exports are saved");
+            Choosers.prepare(chooser);
             File picked = chooser.showDialog(getWindow().getWindow());
+            Choosers.remember(picked);
             if (picked != null) {
-                folder.setText(picked.getPath());
+                folder.setText(Parts.configPath(picked.toPath()));
             }
         });
         choose.setDisable(getBackend().isDemo());

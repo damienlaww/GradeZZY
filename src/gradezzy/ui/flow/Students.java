@@ -20,6 +20,7 @@ import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.ResultState;
+import gradezzy.ui.backend.StatusCounts;
 import gradezzy.util.TextUtils;
 
 /**
@@ -109,16 +110,16 @@ public final class Students {
             return Parts.pill(compileWords(submission),
                     tone(submission, backend));
         } else if (state == ResultState.ZERO
-                && !isUncheckedZero(submission, state, backend)) {
+                && !StatusCounts.isUncheckedZero(submission, state,
+                backend)) {
             return Parts.pill(SETTLED_ZERO_WORDS, Tone.NEUTRAL);
         }
         return Parts.pill(words(state), tone(submission, backend));
     }
 
     /**
-     * Returns the colour of a student's status. Red means no mark could
-     * be given; amber means partly marked or something to check, so a
-     * student with 19 of 20 and one timed-out test is amber, not red.
+     * Returns the colour of a student's status. It follows the state
+     * only, so Did not compile and Timed out look the same everywhere.
      *
      * @param submission the submission
      * @param backend the backend that knows the review decisions
@@ -129,58 +130,7 @@ public final class Students {
         if (ResultState.isSkippedFile(submission)) {
             return Tone.BAD;
         }
-        ResultState state = state(submission, backend);
-        if ((state == ResultState.COMPILE_ERROR
-                || state == ResultState.TIMED_OUT)
-                && submission.getTotalScore() > 0.0) {
-            return Tone.WARN;
-        }
-        return tone(state);
-    }
-
-    /**
-     * Says whether a student needs the instructor before export: an open
-     * fix or flag, a total of 0, or code that did not compile, timed out
-     * or could not be graded. Review, Home, Grade, Export and Statistics
-     * all count students with this one rule, so their numbers agree.
-     * Students not graded yet, and rows made on Review, are counted on
-     * their own instead.
-     *
-     * @param submission the submission
-     * @param backend the backend that knows the review decisions
-     * @return true when the student needs a look
-     */
-    public static boolean needsLook(Submission submission,
-            DashboardBackend backend) {
-        if (ResultState.isMadeOnReview(submission)) {
-            return false;
-        }
-        ResultState state = state(submission, backend);
-        if (state == ResultState.UNGRADED
-                || state == ResultState.NO_SUBMISSION) {
-            return false;
-        }
-        return openCount(submission, backend) > 0
-                || isUncheckedZero(submission, state, backend)
-                || isFailed(state);
-    }
-
-    /**
-     * Says whether a total of 0 still needs a look: nothing was flagged
-     * that the instructor checked, so nothing explains the 0 yet. A 0
-     * whose flags are all settled counts as graded, and so does a 0 the
-     * instructor marked as checked on the student's panel.
-     *
-     * @param submission the submission
-     * @param state its state
-     * @param backend the backend that knows which 0s were checked
-     * @return true for a 0 nobody has looked into
-     */
-    public static boolean isUncheckedZero(Submission submission,
-            ResultState state, DashboardBackend backend) {
-        return state == ResultState.ZERO
-                && submission.getAnomalies().isEmpty()
-                && !backend.isZeroChecked(submission);
+        return tone(state(submission, backend));
     }
 
     /**
@@ -261,17 +211,5 @@ public final class Students {
             return Tone.BAD;
         }
         return Tone.NEUTRAL;
-    }
-
-    /**
-     * Says whether a student belongs under the Failed filter.
-     *
-     * @param state the state
-     * @return true for a student who could not be graded fully
-     */
-    public static boolean isFailed(ResultState state) {
-        return state == ResultState.COMPILE_ERROR
-                || state == ResultState.TIMED_OUT
-                || state == ResultState.COULD_NOT_GRADE;
     }
 }

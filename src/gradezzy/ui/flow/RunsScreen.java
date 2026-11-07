@@ -846,8 +846,11 @@ public class RunsScreen extends FlowScreen {
                 ConfigKeys.BACKUP_DIR));
         if (Files.isDirectory(folder)) {
             chooser.setInitialDirectory(folder.toFile());
+        } else {
+            Choosers.prepare(chooser);
         }
         File file = chooser.showOpenDialog(getWindow().getWindow());
+        Choosers.remember(file);
         if (file == null) {
             return;
         }
@@ -967,8 +970,9 @@ public class RunsScreen extends FlowScreen {
     }
 
     // Returns what takes an activity entry back, or null when it cannot
-    // be taken back or already was: a kept fix that is still kept, or a
-    // flag decision that is still the flag's decision.
+    // be taken back or already was: a kept fix that is still kept, a
+    // rejected or reapplied fix still in that state, or a flag decision
+    // that is still the flag's decision.
     private Runnable findUndo(AuditEntry entry, String student,
             String message) {
         if (getState().isGrading()) {
@@ -989,9 +993,11 @@ public class RunsScreen extends FlowScreen {
         }
         String action = entry.getAction();
         boolean fix = "Fix approved".equals(action);
+        boolean undone = "Fix undone".equals(action);
+        boolean reapplied = "Fix reapplied".equals(action);
         boolean decision = ReviewDecision.AUDIT_CHECKED.equals(action)
                 || ReviewDecision.AUDIT_LOOKS_FINE.equals(action);
-        if (!fix && !decision) {
+        if (!fix && !undone && !reapplied && !decision) {
             return null;
         }
         // The decision the log line made; Undo is offered only while it
@@ -1011,7 +1017,7 @@ public class RunsScreen extends FlowScreen {
                             .setZeroChecked(submission, false).getMessage());
                 }
                 for (Anomaly anomaly : submission.getAnomalies()) {
-                    if (!anomaly.getMessage().equals(message)) {
+                    if (!isAbout(message, anomaly, !decision)) {
                         continue;
                     }
                     if (fix && anomaly.getFixStatus() == FixStatus.APPROVED
@@ -1019,11 +1025,76 @@ public class RunsScreen extends FlowScreen {
                             Capability.REPAIR_DECISION_UNDO)) {
                         return () -> takeBackFix(run, anomaly);
                     }
+                    if (undone && anomaly.getFixStatus() == FixStatus.UNDONE
+                            && UndoFixJob.canApplyAgain(getBackend())) {
+                        return () -> runFixJob(run, anomaly, true);
+                    }
+                    if (reapplied
+                            && anomaly.getFixStatus() == FixStatus.APPLIED
+                            && getBackend().supports(
+                            Capability.REPAIR_DECISIONS)) {
+                        return () -> runFixJob(run, anomaly, false);
+                    }
                     if (decision && getBackend().getDecision(anomaly)
                             == logged) {
                         return () -> takeBackDecision(anomaly);
                     }
                 }
+            }
+        }
+        return null;
+    }
+
+    // Says whether a log line's words are about an anomaly. A fix line
+    // may end with a space and the outcome.
+    private boolean isAbout(String message, Anomaly anomaly,
+            boolean fixLine) {
+        String words = anomaly.getMessage();
+        if (fixLine) {
+            return message.equals(words)
+                    || message.startsWith(words + " ");
+        }
+        return message.equals(words);
+    }
+
+    // Undoes a fix, or applies a rejected one again. Live mode grades
+    // the student again, so it runs in the background, one at a time.
+    private void runFixJob(GradingRun run, Anomaly anomaly,
+            boolean applyAgain) {
+        RepairItem repair = findRepair(run, anomaly);
+        if (repair == null) {
+            getWindow().notify("That fix can no longer be changed.");
+            return;
+        }
+        DashboardBackend backend = getBackend();
+        if (backend.isDemo() && applyAgain) {
+            getWindow().notify(backend.reapplyRepair(repair).getMessage());
+            return;
+        } else if (backend.isDemo()) {
+            getWindow().notify(backend.rejectRepair(repair).getMessage());
+            return;
+        }
+        UndoFixJob job = new UndoFixJob(backend, repair, applyAgain);
+        if (!job.startOnce(getState(), run,
+                result -> fixJobFinished(result))) {
+            getWindow().notify("Wait until the other fix has finished.");
+            return;
+        }
+        getWindow().notify("Grading " + anomaly.getUsername()
+                + " again. This can take a minute.");
+    }
+
+    // Tells how a fix job ended and redraws the activity log.
+    private void fixJobFinished(ActionResult result) {
+        getWindow().notify(result.getMessage());
+        refreshActivity();
+    }
+
+    // Finds the repair item of an anomaly in a run, or null.
+    private RepairItem findRepair(GradingRun run, Anomaly anomaly) {
+        for (RepairItem repair : getBackend().listRepairs(run)) {
+            if (repair.getAnomaly() == anomaly) {
+                return repair;
             }
         }
         return null;
@@ -1047,14 +1118,13 @@ public class RunsScreen extends FlowScreen {
 
     // Takes back a kept fix, so it waits for review again.
     private void takeBackFix(GradingRun run, Anomaly anomaly) {
-        for (RepairItem repair : getBackend().listRepairs(run)) {
-            if (repair.getAnomaly() == anomaly) {
-                getWindow().notify(getBackend().undoRepairDecision(repair)
-                        .getMessage());
-                return;
-            }
+        RepairItem repair = findRepair(run, anomaly);
+        if (repair == null) {
+            getWindow().notify("That fix can no longer be taken back.");
+            return;
         }
-        getWindow().notify("That fix can no longer be taken back.");
+        getWindow().notify(getBackend().undoRepairDecision(repair)
+                .getMessage());
     }
 
     // Puts a flag or problem back to be checked again.

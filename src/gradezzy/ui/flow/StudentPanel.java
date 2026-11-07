@@ -77,6 +77,9 @@ public class StudentPanel extends ScrollPane {
     // The gap between a title and the line under it
     private static final double LINE_GAP = 2.0;
 
+    // The total shown for a student with no marks, as on Review
+    private static final String NO_MARK = "-";
+
     // The window, for sheets and notices
     private final FlowWindow window;
 
@@ -97,10 +100,6 @@ public class StudentPanel extends ScrollPane {
 
     // True while a card is built for the code sheet, not the panel
     private boolean buildingForSheet = false;
-
-    // The fix being undone on a background thread, or null. Only one
-    // student is graded again at a time.
-    private Anomaly undoing = null;
 
     /**
      * Creates an empty panel.
@@ -257,12 +256,18 @@ public class StudentPanel extends ScrollPane {
     // Builds the large total, "out of" and the status pill on one line.
     private HBox createTotal() {
         Assessment assessment = shownAssessment();
-        Label total = new Label(Parts.mark(submission.getTotalScore()));
+        // With no marks, show the dash Review shows, not a total of 0
+        boolean hasMarks = !submission.getQuestionResults().isEmpty();
+        String totalText = NO_MARK;
+        if (hasMarks) {
+            totalText = Parts.mark(submission.getTotalScore());
+        }
+        Label total = new Label(totalText);
         total.getStyleClass().add("big-total");
         total.setMinWidth(Region.USE_PREF_SIZE);
         Label max = Parts.muted("");
         max.setMinWidth(Region.USE_PREF_SIZE);
-        if (assessment != null) {
+        if (assessment != null && hasMarks) {
             max.setText("out of " + Parts.mark(assessment.getMaxTotal()));
         }
         Label pill = Students.pill(submission, window.getBackend());
@@ -584,14 +589,20 @@ public class StudentPanel extends ScrollPane {
                 addAdvice(card, anomaly);
             }
             addCheckButton(buttons, anomaly, backend);
-        } else if (status == FixStatus.APPLIED && undoing != null) {
-            addUndoingNote(card, anomaly);
+        } else if (isWaitingOnJob(backend, anomaly)) {
+            addFixJobNote(card, anomaly);
         } else if (status == FixStatus.APPLIED) {
             buttons.getChildren().addAll(
                     Parts.small("Keep fix",
                     () -> approveRepair(backend, repair), Tone.GOOD),
                     Parts.small("Reject fix",
                     () -> rejectRepair(backend, repair), Tone.BAD));
+        } else if (status == FixStatus.UNDONE
+                && UndoFixJob.canApplyAgain(backend)) {
+            Button again = Parts.small("Apply fix again",
+                    () -> reapplyRepair(backend, repair));
+            Parts.tip(again, "Grades the student again with this fix.");
+            buttons.getChildren().add(again);
         } else if (canTakeBack(backend, anomaly)) {
             Button undo = Parts.small("Undo",
                     () -> undoRepairDecision(backend, repair));
@@ -712,10 +723,27 @@ public class StudentPanel extends ScrollPane {
         return found;
     }
 
-    // Says, in place of Approve and Undo, that a fix is being undone.
-    private void addUndoingNote(VBox card, Anomaly anomaly) {
-        String text = "Wait until the other fix is undone.";
-        if (anomaly == undoing) {
+    // Says whether a fix card waits for a fix being undone or applied
+    // again, so its buttons are hidden until that ends.
+    private boolean isWaitingOnJob(DashboardBackend backend,
+            Anomaly anomaly) {
+        if (window.getState().getFixInProgress() == null) {
+            return false;
+        }
+        FixStatus status = anomaly.getFixStatus();
+        return status == FixStatus.APPLIED || (status == FixStatus.UNDONE
+                && UndoFixJob.canApplyAgain(backend));
+    }
+
+    // Says, in place of the buttons, that a fix is being undone or
+    // applied again.
+    private void addFixJobNote(VBox card, Anomaly anomaly) {
+        String text = "Wait until the other fix has finished.";
+        boolean running = anomaly == window.getState().getFixInProgress();
+        if (running && anomaly.getFixStatus() == FixStatus.UNDONE) {
+            text = "Applying the fix again and grading this student again. "
+                    + "This can take a minute; you can keep reviewing.";
+        } else if (running) {
             text = "Undoing the fix and grading this student again. "
                     + "This can take a minute; you can keep reviewing.";
         }
@@ -1005,7 +1033,7 @@ public class StudentPanel extends ScrollPane {
      * @param backend the backend that grades
      */
     private void retrySubmission(DashboardBackend backend) {
-        apply(backend.retrySubmission(submission), true);
+        applyRegrade(backend.retrySubmission(submission));
     }
 
     /**
@@ -1015,7 +1043,7 @@ public class StudentPanel extends ScrollPane {
      * @param question the question
      */
     private void retryQuestion(DashboardBackend backend, Question question) {
-        apply(backend.retryQuestion(submission, question.getId()), true);
+        applyRegrade(backend.retryQuestion(submission, question.getId()));
     }
 
     /**
@@ -1053,15 +1081,11 @@ public class StudentPanel extends ScrollPane {
         }
     }
 
-    // Says whether a settled fix can be taken back: a kept fix always;
-    // a rejected one only in the demo, as live mode graded it again.
+    // Says whether a kept fix can be taken back. A rejected fix is
+    // applied again instead, as undoing it graded the student again.
     private boolean canTakeBack(DashboardBackend backend, Anomaly anomaly) {
-        if (!backend.supports(Capability.REPAIR_DECISION_UNDO)) {
-            return false;
-        }
         return anomaly.getFixStatus() == FixStatus.APPROVED
-                || (backend.isDemo()
-                && anomaly.getFixStatus() == FixStatus.UNDONE);
+                && backend.supports(Capability.REPAIR_DECISION_UNDO);
     }
 
     // Returns the Undo button of a settled flag or problem, which puts it
@@ -1087,32 +1111,30 @@ public class StudentPanel extends ScrollPane {
             apply(backend.rejectRepair(repair), false);
             return;
         }
-        if (undoing != null) {
+        startFixJob(backend, repair, false);
+    }
+
+    // Applies a rejected fix again; live mode does it in the background.
+    private void reapplyRepair(DashboardBackend backend,
+            RepairItem repair) {
+        if (backend.isDemo()) {
+            apply(backend.reapplyRepair(repair), false);
             return;
         }
-
-        UndoFixJob job = new UndoFixJob(backend, repair);
-        job.setOnSucceeded(event -> undoFinished(job.getValue()));
-        job.setOnFailed(event -> undoFailed(job));
-        undoing = repair.getAnomaly();
-        refresh();
-        Thread worker = new Thread(job, "gradezzy-undo");
-        worker.setDaemon(true);
-        worker.start();
+        startFixJob(backend, repair, true);
     }
 
-    // Shows the outcome of an undo that ran in the background. It is
-    // always told, as the instructor may have moved on to someone else.
-    private void undoFinished(ActionResult result) {
-        undoing = null;
-        apply(result, true);
-    }
-
-    // Shows why an undo stopped before it finished.
-    private void undoFailed(UndoFixJob job) {
-        undoing = null;
-        apply(ActionResult.failed("The fix was not undone: "
-                + job.getException().getMessage()), true);
+    // Undoes a fix, or applies it again, on a background thread. The
+    // card says so until it ends. Only one runs at a time.
+    private void startFixJob(DashboardBackend backend, RepairItem repair,
+            boolean applyAgain) {
+        FlowState state = window.getState();
+        UndoFixJob job = new UndoFixJob(backend, repair, applyAgain);
+        // The outcome is always told, as the instructor may have moved on
+        if (job.startOnce(state, state.getRun(),
+                result -> apply(result, true))) {
+            refresh();
+        }
     }
 
     /**
@@ -1162,6 +1184,16 @@ public class StudentPanel extends ScrollPane {
             window.notify(result.getMessage());
         }
         changed();
+    }
+
+    // Shows the outcome of grading again. New marks make an earlier
+    // export of the run out of date.
+    private void applyRegrade(ActionResult result) {
+        if (result.isDone()) {
+            FlowState state = window.getState();
+            state.forgetExport(state.getRun());
+        }
+        apply(result, true);
     }
 
     // Redraws the panel and tells the table.

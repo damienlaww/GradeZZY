@@ -16,6 +16,7 @@ import gradezzy.model.FixStatus;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.ResultState;
+import gradezzy.ui.backend.StatusCounts;
 
 /**
  * The status pill of a student.
@@ -80,7 +81,7 @@ public class ReviewStatusCell extends TableCell<Submission, Submission> {
         if (!items.isEmpty()) {
             return "To check:" + items + "\nClick the student to approve, "
                     + "undo or dismiss each one.";
-        } else if (Students.isFailed(state)) {
+        } else if (StatusCounts.isNotFullyGraded(state)) {
             return Students.words(state) + ". Click the student to see "
                     + "the message for each question.";
         }
