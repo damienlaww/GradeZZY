@@ -13,11 +13,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Question;
+import gradezzy.util.TextUtils;
 
 /**
  * Writes the Java source of a tester from typed test cases.
@@ -40,6 +42,12 @@ public class TesterGenerator {
     // The line printed between test cases, like the provided testers
     private static final String SEPARATOR =
             "-------------------------------------------------------";
+
+    // The line ending of the generated source
+    private static final String LINE_BREAK = "\n";
+
+    // A carriage return, the first half of a Windows line ending
+    private static final String CARRIAGE_RETURN = "\r";
 
     // The file ending of a tester source
     private static final String SOURCE_EXTENSION = ".java";
@@ -74,7 +82,7 @@ public class TesterGenerator {
         String failMarker = config.getString(ConfigKeys.FAIL_MARKER);
         String headerMarker = config.getString(ConfigKeys.TEST_HEADER_MARKER);
 
-        StringBuilder source = new StringBuilder();
+        List<String> source = new ArrayList<>();
         addLine(source, "import java.util.*;");
         addLine(source, "");
         addLine(source, "public class " + getClassName(question)
@@ -102,7 +110,8 @@ public class TesterGenerator {
         addLine(source, "        return Objects.deepEquals(expected, result);");
         addLine(source, "    }");
         addLine(source, "}");
-        return source.toString();
+        addLine(source, "");
+        return TextUtils.join(LINE_BREAK, source);
     }
 
     /**
@@ -114,12 +123,14 @@ public class TesterGenerator {
      * @param testCases the test cases
      * @param outputDirectory the output directory
      * @return the path of the written file
-     * @throws TestCaseException if the operation fails
+     * @throws TestCaseException if a case has a line break or the file
+     *         cannot be written
      */
     public Path writeTester(Question question, List<TestCase> testCases,
             Path outputDirectory) throws TestCaseException {
         Path file = outputDirectory.resolve(
                 getClassName(question) + SOURCE_EXTENSION);
+        checkOneLine(testCases);
         String source = generateSource(question, testCases);
 
         try {
@@ -145,6 +156,25 @@ public class TesterGenerator {
                 + config.getString(ConfigKeys.TESTER_CLASS_SUFFIX);
     }
 
+    // A line break typed inside a case would end a Java string literal
+    // in the tester, which then cannot compile, so refuse the case. A
+    // newline inside a string is typed as the two characters \n.
+    private void checkOneLine(List<TestCase> testCases)
+            throws TestCaseException {
+        for (TestCase testCase : testCases) {
+            String typed = testCase.getArgumentExpressions()
+                    + testCase.getExpectedExpression();
+            if (typed.contains(CARRIAGE_RETURN)
+                    || typed.contains(LINE_BREAK)) {
+                throw new TestCaseException("The typed case "
+                        + testCase.getMethodName() + " for "
+                        + testCase.getQuestionId() + " has a line break in "
+                        + "its arguments or expected result. Type it on "
+                        + "one line, writing \\n inside a string.");
+            }
+        }
+    }
+
     // Copies each data file the tester folder in the settings has
     private void copyDataFiles(Path outputDirectory) throws IOException {
         Path testersDirectory = Path.of(
@@ -160,7 +190,7 @@ public class TesterGenerator {
     }
 
     // Adds the block that runs one test case
-    private void addCase(StringBuilder source, TestCase testCase,
+    private void addCase(List<String> source, TestCase testCase,
             String passMarker, String failMarker, String headerMarker) {
         String call = testCase.getMethodName() + "("
                 + testCase.getArgumentExpressions() + ")";
@@ -195,16 +225,16 @@ public class TesterGenerator {
     }
 
     // Adds one line of generated source
-    private void addLine(StringBuilder source, String text) {
-        source.append(text);
-        source.append("\n");
+    private void addLine(List<String> source, String text) {
+        source.add(text);
     }
 
     // Turns text into a Java string literal, so it can be printed as it is
     private String toStringLiteral(String text) {
         String escaped = text.replace("\\", "\\\\");
         escaped = escaped.replace("\"", "\\\"");
-        escaped = escaped.replace("\n", " ");
+        escaped = escaped.replace(CARRIAGE_RETURN, " ");
+        escaped = escaped.replace(LINE_BREAK, " ");
         return "\"" + escaped + "\"";
     }
 }

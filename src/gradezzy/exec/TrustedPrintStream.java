@@ -203,8 +203,7 @@ class TrustedPrintStream extends PrintStream {
         if (line.startsWith(headerMarker)) {
             casesStarted++;
             if (skippedCases.contains(casesStarted)) {
-                throw new IllegalStateException("GradeZZY skipped this test "
-                        + "case: it hung on an earlier run.");
+                throw new SkippedCaseException();
             }
         }
     }
