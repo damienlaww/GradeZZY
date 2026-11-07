@@ -17,6 +17,7 @@ import java.util.UUID;
 import gradezzy.config.ConfigKeys;
 import gradezzy.exec.ProcessExecutionException;
 import gradezzy.exec.ProcessResult;
+import gradezzy.exec.SkippedCaseException;
 import gradezzy.exec.TesterRunner;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
@@ -69,6 +70,9 @@ public class ExecuteStage implements GradingStage {
 
     // Allowed rounding gap when a printed total is compared with the cap
     private static final double SCORE_TOLERANCE = 0.000001;
+
+    // Put between the logs of two runs of the same tester
+    private static final String RUN_SEPARATOR = "\n\n";
 
     // The helper that runs java
     private final TesterRunner testerRunner;
@@ -141,14 +145,22 @@ public class ExecuteStage implements GradingStage {
 
         // As the brief says: a case that hangs is removed and the tester
         // is run again, so the cases after it are still marked. Each pass
-        // skips one more case, so this ends after the last case.
+        // skips one more case. Each rerun can take the whole time limit,
+        // so after the setting's number of reruns the cases not yet run
+        // are left to the instructor, as the brief allows.
+        long maxReruns = context.getConfig().getLong(
+                ConfigKeys.MAX_HANG_RERUNS);
         List<Integer> skippedCases = new ArrayList<>();
+        // Each run's log, kept so a hung case's own output is not lost
+        List<String> runLogs = new ArrayList<>();
         ProcessResult run = runTester(folder, tester.getClassName(),
                 skippedCases);
         ProcessResult firstRun = run;
         QuestionResult parsed = scoreParser.parse(question, run);
         int stoppedCase = findStoppedCase(run, parsed, skippedCases);
-        while (stoppedCase != NO_CASE) {
+        while (stoppedCase != NO_CASE && skippedCases.size() < maxReruns) {
+            runLogs.add(labelRun(runLogs.size() + 1, stoppedCase,
+                    parsed.getOutput()));
             skippedCases.add(stoppedCase);
             putBackFiles(snapshot, question);
             run = runTester(folder, tester.getClassName(), skippedCases);
@@ -158,9 +170,22 @@ public class ExecuteStage implements GradingStage {
 
         result.setScore(parsed.getScore());
         result.setTimedOut(firstRun.isTimedOut());
-        result.setOutput(parsed.getOutput());
+        if (runLogs.isEmpty()) {
+            result.setOutput(parsed.getOutput());
+        } else {
+            runLogs.add(labelRun(runLogs.size() + 1, stoppedCase,
+                    parsed.getOutput()));
+            result.setOutput(TextUtils.join(RUN_SEPARATOR, runLogs));
+        }
         for (TestCaseResult testCase : parsed.getTestCaseResults()) {
-            result.addTestCaseResult(testCase);
+            if (skippedCases.contains(testCase.getTestNumber())) {
+                // The tester printed its own "Failed -> Exception" here
+                result.addTestCaseResult(new TestCaseResult(
+                        testCase.getTestNumber(), false,
+                        SkippedCaseException.SKIPPED_MESSAGE));
+            } else {
+                result.addTestCaseResult(testCase);
+            }
         }
 
         // Student code can set the tester's score field by reflection,
@@ -183,7 +208,8 @@ public class ExecuteStage implements GradingStage {
         }
 
         String outcome = passCount(parsed) + " case(s) passed and their "
-                + "marks are kept." + describeSkipped(skippedCases);
+                + "marks are kept." + describeSkipped(skippedCases)
+                + describeNotRun(stoppedCase);
         if (firstRun.isTimedOut()) {
             long limitSeconds = context.getConfig().getLong(
                     ConfigKeys.RUN_TIMEOUT_SECONDS);
@@ -251,6 +277,37 @@ public class ExecuteStage implements GradingStage {
         return " Case(s) " + TextUtils.join(NAME_SEPARATOR, numbers)
                 + " hung, so they got no marks and the tester was run "
                 + "again for the cases after them.";
+    }
+
+    /**
+     * Says that the reruns ran out, for the end of a message.
+     *
+     * @param stoppedCase the case the last run hung in, or NO_CASE
+     * @return a sentence with a space in front, or empty if none hung
+     */
+    private String describeNotRun(int stoppedCase) {
+        if (stoppedCase == NO_CASE) {
+            return "";
+        }
+        return " Case " + stoppedCase + " hung and the tester was not "
+                + "run again, so case " + stoppedCase + " and the cases "
+                + "after it got no marks. Check them by hand.";
+    }
+
+    /**
+     * Puts a label above the log of one run of a tester.
+     *
+     * @param runNumber the run, counted from 1
+     * @param stoppedCase the case the run hung in, or NO_CASE
+     * @param log the log of the run
+     * @return the labelled log
+     */
+    private String labelRun(int runNumber, int stoppedCase, String log) {
+        String label = "Run " + runNumber;
+        if (stoppedCase != NO_CASE) {
+            label += ": stopped at the time limit in case " + stoppedCase;
+        }
+        return "--- " + label + " ---\n" + log;
     }
 
     /**

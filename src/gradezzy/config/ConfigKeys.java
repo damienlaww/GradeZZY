@@ -205,6 +205,11 @@ public final class ConfigKeys {
     public static final String MAX_MEMORY_MB = "exec.max.memory.mb";
 
     /**
+     * How many times a tester is run again after a test case hangs.
+     */
+    public static final String MAX_HANG_RERUNS = "exec.max.hang.reruns";
+
+    /**
      * Text added to a question id to form its tester class name.
      */
     public static final String TESTER_CLASS_SUFFIX =

@@ -74,6 +74,14 @@ public class CompileStage implements GradingStage {
     private static final String BROKEN_TESTER_ACTION =
             "Fix the tester file, then grade again.";
 
+    // Part of javac's error when a tester stores what a void method returns
+    private static final String VOID_RESULT_ERROR = "void cannot be converted";
+
+    // Added to that error, because typed test cases check a returned value
+    private static final String VOID_RESULT_HINT = "; a typed test case can "
+            + "only check a method that returns a value, so remove the case "
+            + "for the void method";
+
     // Extension of a compiled class file
     private static final String CLASS_EXTENSION = ".class";
 
@@ -314,6 +322,9 @@ public class CompileStage implements GradingStage {
                 String errorLine = firstLine(result.getStandardError());
                 if (!errorLine.startsWith(testerSource)) {
                     return NO_TESTER_ERROR;
+                }
+                if (errorLine.contains(VOID_RESULT_ERROR)) {
+                    return errorLine + VOID_RESULT_HINT;
                 }
                 return errorLine;
             } finally {
