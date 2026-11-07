@@ -48,6 +48,7 @@ import gradezzy.model.SubmissionStatus;
 import gradezzy.ui.backend.PipelineStages;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.RunCallback;
+import gradezzy.ui.backend.StatusCounts;
 
 /**
  * The Grade step.
@@ -97,8 +98,10 @@ public class GradeScreen extends FlowScreen
     // The rows of the "So far" card, top to bottom
     private static final int GRADED = 0;
     private static final int REVIEW = 1;
-    private static final int FAILED = 2;
-    private static final int WAITING = 3;
+    private static final int COMPILE = 2;
+    private static final int TIMEOUT = 3;
+    private static final int COULD_NOT = 4;
+    private static final int WAITING = 5;
 
     // The scrolling page
     private final ScrollPane view;
@@ -154,8 +157,7 @@ public class GradeScreen extends FlowScreen
     private final Label noMarks = Parts.muted("Marks appear here as "
             + "students finish.");
 
-    // The pill and count of each row of "So far"
-    private final Label[] pills = new Label[WAITING + 1];
+    // The count of each row of "So far"
     private final Label[] counts = new Label[WAITING + 1];
 
     // Every student of the run that has a result, by username
@@ -451,15 +453,16 @@ public class GradeScreen extends FlowScreen
     // Builds the card with one row per kind of result.
     private VBox createSoFarCard() {
         String[] words = {"Graded", "Needs review", "Did not compile",
-            "Waiting"};
-        Tone[] tones = {Tone.GOOD, Tone.WARN, Tone.BAD, Tone.NEUTRAL};
+            "Timed out", "Could not grade", "Waiting"};
+        Tone[] tones = {Tone.GOOD, Tone.WARN, Tone.BAD, Tone.BAD, Tone.BAD,
+            Tone.NEUTRAL};
         VBox rows = new VBox();
         for (int index = 0; index < words.length; index++) {
-            pills[index] = Parts.pill(words[index], tones[index]);
+            Label pill = Parts.pill(words[index], tones[index]);
             counts[index] = Parts.strong("0");
             counts[index].getStyleClass().add("count-value");
             HBox row = Parts.row(Parts.GAP,
-                    new Node[] {pills[index], Parts.grow(), counts[index]});
+                    new Node[] {pill, Parts.grow(), counts[index]});
             row.getStyleClass().add("card-row");
             if (index == 0) {
                 row.getStyleClass().add("first");
@@ -773,33 +776,22 @@ public class GradeScreen extends FlowScreen
         noMarks.setVisible(empty);
     }
 
-    // Counts each kind of result.
+    // Counts each kind of result, the same way Review and Statistics do.
     private void updateRows() {
+        StatusCounts counted = StatusCounts.of(resultsInOrder(),
+                getBackend());
         int[] tally = new int[WAITING + 1];
-        boolean onlyCompile = true;
-        for (Submission submission : resultsInOrder()) {
-            ResultState state = Students.state(submission, getBackend());
-            if (state == ResultState.NEEDS_REVIEW
-                    || state == ResultState.ZERO) {
-                tally[REVIEW]++;
-            } else if (Students.isFailed(state)) {
-                tally[FAILED]++;
-                onlyCompile = onlyCompile
-                        && state == ResultState.COMPILE_ERROR;
-            } else if (state == ResultState.UNGRADED) {
-                tally[WAITING]++;
-            } else {
-                tally[GRADED]++;
-            }
-        }
+        tally[GRADED] = counted.count(ResultState.COMPLETED);
+        // A 0 nobody checked waits for a look like a flag does
+        tally[REVIEW] = counted.count(ResultState.NEEDS_REVIEW)
+                + counted.count(ResultState.ZERO);
+        tally[COMPILE] = counted.count(ResultState.COMPILE_ERROR);
+        tally[TIMEOUT] = counted.count(ResultState.TIMED_OUT);
+        tally[COULD_NOT] = counted.count(ResultState.COULD_NOT_GRADE);
+        tally[WAITING] = counted.count(ResultState.UNGRADED);
         // After a failure nobody is waiting: the rest are not graded
         if (failure == null) {
             tally[WAITING] += Math.max(0, total - finished);
-        }
-        if (onlyCompile) {
-            pills[FAILED].setText("Did not compile");
-        } else {
-            pills[FAILED].setText("Could not grade");
         }
         for (int index = 0; index < tally.length; index++) {
             counts[index].setText(String.valueOf(tally[index]));
@@ -819,6 +811,14 @@ public class GradeScreen extends FlowScreen
     private boolean isUnfinished(Submission submission) {
         return submission.getStatus() == SubmissionStatus.CANCELLED
                 || submission.getStatus() == SubmissionStatus.PENDING;
+    }
+
+    // Grades the rest of a run, unless a fix job still grades a student.
+    private void resume(GradingRun run) {
+        if (getWindow().blockedByFix()) {
+            return;
+        }
+        continueRun(run, false);
     }
 
     // Says whether any submission of a run still has to be graded.
@@ -871,8 +871,7 @@ public class GradeScreen extends FlowScreen
         actions.setBack(() -> getWindow().show(Step.SET_UP));
         if (run != null && hasUnfinished(run)) {
             actions.setStatus("Students already graded keep their marks.");
-            actions.setPrimary("Resume", () -> continueRun(run, false),
-                    true);
+            actions.setPrimary("Resume", () -> resume(run), true);
             return;
         }
         if (run != null) {

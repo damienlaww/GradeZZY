@@ -473,7 +473,9 @@ public final class AssessmentEditor {
             chooser.setTitle("Choose the score sheet exported from eLearn");
             chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
                     "CSV files", "*.csv"));
+            Choosers.prepare(chooser);
             File file = chooser.showOpenDialog(window.getWindow());
+            Choosers.remember(file);
             if (file != null) {
                 chosen = file.toPath();
             }
@@ -481,13 +483,16 @@ public final class AssessmentEditor {
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("Choose the " + kind.getTitle().toLowerCase()
                     + " folder");
+            Choosers.prepare(chooser);
             File folder = chooser.showDialog(window.getWindow());
+            Choosers.remember(folder);
             if (folder != null) {
                 chosen = folder.toPath();
             }
         }
         if (chosen != null) {
-            field.setText(chosen.toString());
+            // Saved as testers.dir or starter.dir when in use
+            field.setText(Parts.configPath(chosen));
             checkFolder(field, status, kind);
         }
     }

@@ -2,8 +2,8 @@
  * File: ReviewScreen.java
  *
  * Purpose: Step 3. One table of every student with a mark per question,
- * the total and a status, filtered by All, Needs review, Failed or No
- * submission and searchable by name or, where the backend can, inside
+ * the total and a status, filtered by All, Needs a look, Not fully graded
+ * or No submission and searchable by name or, where the backend can, inside
  * the code.
  * Clicking a student opens the student panel beside it.
  *
@@ -47,6 +47,7 @@ import javafx.scene.text.Text;
 
 import atlantafx.base.controls.CustomTextField;
 
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
@@ -62,6 +63,7 @@ import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.RepairItem;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.ReviewDecision;
+import gradezzy.ui.backend.StatusCounts;
 
 /**
  * The Review step.
@@ -179,8 +181,9 @@ public class ReviewScreen extends FlowScreen {
     // The filter buttons
     private final ToggleButton allButton = new ToggleButton("All");
     private final ToggleButton reviewButton =
-            new ToggleButton("Needs review");
-    private final ToggleButton failedButton = new ToggleButton("Failed");
+            new ToggleButton("Needs a look");
+    private final ToggleButton failedButton =
+            new ToggleButton("Not fully graded");
     private final ToggleButton missingButton =
             new ToggleButton("No submission");
 
@@ -483,8 +486,8 @@ public class ReviewScreen extends FlowScreen {
         }
     }
 
-    // Builds the All, Needs review, Failed and No submission buttons with
-    // their counts.
+    // Builds the All, Needs a look, Not fully graded and No submission
+    // buttons with their counts.
     private void createFilters() {
         ToggleGroup group = new ToggleGroup();
         ToggleButton[] buttons = {allButton, reviewButton, failedButton,
@@ -502,7 +505,9 @@ public class ReviewScreen extends FlowScreen {
                 + "look at, a total of 0, or code that did not compile or "
                 + "timed out. Check them before you export.");
         Parts.tip(failedButton, "Students whose code did not compile, "
-                + "timed out or could not be graded.");
+                + "timed out or could not be graded, so their marks may "
+                + "be incomplete. Files that could not be opened show "
+                + "under All.");
         allButton.getStyleClass().add("left-pill");
         reviewButton.getStyleClass().add("center-pill");
         failedButton.getStyleClass().add("center-pill");
@@ -512,7 +517,7 @@ public class ReviewScreen extends FlowScreen {
     }
 
     /**
-     * Follows a click on All, Needs review or Failed. Clicking the
+     * Follows a click on a filter button. Clicking the
      * button that is already on would turn every button off, so it
      * stays on.
      *
@@ -787,27 +792,19 @@ public class ReviewScreen extends FlowScreen {
         if (run == null) {
             return;
         }
-        int needReview = countNeedingReview();
-        int failed = 0;
-        int missing = 0;
-        for (Submission submission : rows) {
-            if (Students.isFailed(Students.state(submission,
-                    getBackend()))) {
-                failed++;
-            } else if (ResultState.isNoSubmission(submission)) {
-                missing++;
-            }
-        }
-        allCount.setText(String.valueOf(rows.size()));
-        reviewCount.setText(String.valueOf(needReview));
-        failedCount.setText(String.valueOf(failed));
-        missingCount.setText(String.valueOf(missing));
+        StatusCounts counted = StatusCounts.of(rows, getBackend());
+        allCount.setText(String.valueOf(counted.getTotal()));
+        reviewCount.setText(String.valueOf(counted.getNeedsLook()));
+        failedCount.setText(String.valueOf(counted.getNotFullyGraded()));
+        missingCount.setText(String.valueOf(counted.count(
+                ResultState.NO_SUBMISSION)));
 
         // The same figures as Export and Statistics: graded students only
         String average = "";
         MarkStats stats = MarkStats.of(rows,
                 run.getAssessment().getMaxTotal(),
-                MarkStats.DEFAULT_PASS_PERCENT);
+                MarkStats.parsePassPercent(getBackend().getSetting(
+                ConfigKeys.PASS_MARK_PERCENT)));
         if (!stats.isEmpty()) {
             average = " · average " + Parts.mark(Math.round(
                     stats.getMean() * ONE_DECIMAL) / ONE_DECIMAL)
@@ -846,13 +843,7 @@ public class ReviewScreen extends FlowScreen {
 
     // Counts the students with something still to check.
     private int countNeedingReview() {
-        int count = 0;
-        for (Submission submission : rows) {
-            if (Students.needsLook(submission, getBackend())) {
-                count++;
-            }
-        }
-        return count;
+        return StatusCounts.of(rows, getBackend()).getNeedsLook();
     }
 
     // Shows the retry note when some students could not be graded.
@@ -861,10 +852,11 @@ public class ReviewScreen extends FlowScreen {
         int couldNot = 0;
         for (Submission submission : rows) {
             // A file rejected on loading, such as one with no username,
-            // cannot be retried
+            // or a zip that could not be unpacked, cannot be retried
             if (Students.state(submission, getBackend())
                     == ResultState.COULD_NOT_GRADE
-                    && submission.getIngestFailure() == null) {
+                    && submission.getIngestFailure() == null
+                    && !ResultState.isRejectedUpload(submission)) {
                 couldNot++;
             }
         }
@@ -1027,8 +1019,9 @@ public class ReviewScreen extends FlowScreen {
      *
      * @param submission the student
      * @param text the search text in lower case, or an empty string
-     * @param onlyReview true when only students to review are shown
-     * @param onlyFailed true when only students who failed are shown
+     * @param onlyReview true when only students who need a look are shown
+     * @param onlyFailed true when only students not fully graded are
+     *        shown
      * @param onlyMissing true when only students with no submission are
      *        shown
      * @return true when the student is shown
@@ -1038,11 +1031,14 @@ public class ReviewScreen extends FlowScreen {
         if (onlyMissing && !ResultState.isNoSubmission(submission)) {
             return false;
         }
-        if (onlyReview && !Students.needsLook(submission, getBackend())) {
+        if (onlyReview && !StatusCounts.needsLook(submission,
+                getBackend())) {
             return false;
         }
-        if (onlyFailed && !Students.isFailed(Students.state(
-                submission, getBackend()))) {
+        // A file that could not be opened shows only under All
+        if (onlyFailed && (ResultState.isSkippedFile(submission)
+                || !StatusCounts.isNotFullyGraded(Students.state(
+                submission, getBackend())))) {
             return false;
         }
         if (text.isEmpty()) {
@@ -1061,7 +1057,7 @@ public class ReviewScreen extends FlowScreen {
         } else if (onlyReview) {
             return "Every student is checked.";
         } else if (onlyFailed) {
-            return "No student failed to grade.";
+            return "Every student was fully graded.";
         } else if (onlyMissing) {
             return "Every student on the score sheet has a submission.";
         }
@@ -1209,9 +1205,9 @@ public class ReviewScreen extends FlowScreen {
         if (needReview == 0) {
             text = "Every student is checked.";
         } else if (needReview == 1) {
-            text = "1 student still needs review.";
+            text = "1 student still needs a look.";
         } else {
-            text = needReview + " students still need review.";
+            text = needReview + " students still need a look.";
         }
         int ticked = getState().getSelected().size();
         if (ticked > 0) {

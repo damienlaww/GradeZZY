@@ -390,6 +390,14 @@ public interface DashboardBackend {
     ActionResult rejectRepair(RepairItem repair);
 
     /**
+     * Applies a rejected repair again, which grades the student again.
+     *
+     * @param repair the repair
+     * @return what happened
+     */
+    ActionResult reapplyRepair(RepairItem repair);
+
+    /**
      * Returns a decided repair to Applied, waiting for review again.
      *
      * @param repair the repair
@@ -654,12 +662,21 @@ public interface DashboardBackend {
     // ------------------------------------------------------ similarity
 
     /**
-     * Returns the pairs of similar submissions in a run.
+     * Returns the pairs of similar submissions found by the last check of
+     * a run, without checking again.
      *
      * @param gradingRun the run, or null
      * @return the pairs, most similar first
      */
     List<SimilarityPair> listSimilarPairs(GradingRun gradingRun);
+
+    /**
+     * Checks a run for similar submissions again and flags the pairs.
+     *
+     * @param gradingRun the run, or null
+     * @return the pairs, most similar first
+     */
+    List<SimilarityPair> checkSimilarity(GradingRun gradingRun);
 
     /**
      * Returns the evidence for one similar pair.

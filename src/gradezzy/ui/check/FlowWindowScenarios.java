@@ -147,14 +147,14 @@ public class FlowWindowScenarios {
         int total = rowCount();
         test.check(total > 0, "Review lists the students (" + total + ")");
 
-        clickToggle("Needs review");
-        test.check(test.waitFor(() -> isSelected("Needs review")),
-                "the Needs review filter is selected");
-        test.note("Needs review shows " + rowCount() + " of " + total);
-        clickToggle("Failed");
-        test.check(test.waitFor(() -> isSelected("Failed")),
-                "the Failed filter is selected");
-        test.note("Failed shows " + rowCount() + " of " + total);
+        clickToggle("Needs a look");
+        test.check(test.waitFor(() -> isSelected("Needs a look")),
+                "the Needs a look filter is selected");
+        test.note("Needs a look shows " + rowCount() + " of " + total);
+        clickToggle("Not fully graded");
+        test.check(test.waitFor(() -> isSelected("Not fully graded")),
+                "the Not fully graded filter is selected");
+        test.note("Not fully graded shows " + rowCount() + " of " + total);
         clickToggle("All");
         test.check(test.waitFor(() -> rowCount() == total),
                 "the All filter shows every student again");

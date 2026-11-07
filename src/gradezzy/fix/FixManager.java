@@ -40,6 +40,10 @@ public class FixManager {
     private final Map<String, Map<String, String>> failureReasons =
             new HashMap<>();
 
+    // The key of each rejected fix skipped, by username and anomaly id
+    private final Map<String, Map<String, String>> skippedFixKeys =
+            new HashMap<>();
+
     /**
      * Creates a new fix manager.
      */
@@ -92,6 +96,7 @@ public class FixManager {
             List<String> rejectedKeys) {
         forgetFixesOf(submission.getUsername());
         failureReasons.remove(submission.getUsername());
+        skippedFixKeys.remove(submission.getUsername());
         return applyTo(submission,
                 new ArrayList<>(submission.getAnomalies()), rejectedKeys);
     }
@@ -169,6 +174,26 @@ public class FixManager {
             return null;
         }
         return reasons.get(anomaly.getId());
+    }
+
+    /**
+     * Returns the key of the rejected fix that grading skipped for an
+     * anomaly, so the fix can be applied again. It is dropped when
+     * applyAll runs again for the anomaly's student.
+     *
+     * @param anomaly the anomaly marked UNDONE by grading
+     * @return the fix key, or null if no rejected fix was skipped for it
+     */
+    public synchronized String findRejectedKey(Anomaly anomaly) {
+        if (anomaly == null) {
+            return null;
+        }
+
+        Map<String, String> keys = skippedFixKeys.get(anomaly.getUsername());
+        if (keys == null) {
+            return null;
+        }
+        return keys.get(anomaly.getId());
     }
 
     /**
@@ -317,8 +342,19 @@ public class FixManager {
             repeats.add(anomaly);
         } else {
             skippedKeys.add(fixKey);
+            rememberSkip(anomaly, fixKey);
         }
         anomaly.setFixStatus(FixStatus.UNDONE);
+    }
+
+    // Keeps the key of the rejected fix skipped for an anomaly.
+    private void rememberSkip(Anomaly anomaly, String fixKey) {
+        Map<String, String> keys = skippedFixKeys.get(anomaly.getUsername());
+        if (keys == null) {
+            keys = new HashMap<>();
+            skippedFixKeys.put(anomaly.getUsername(), keys);
+        }
+        keys.put(anomaly.getId(), fixKey);
     }
 
     // Makes a fix key from the path the student uploaded: the path is

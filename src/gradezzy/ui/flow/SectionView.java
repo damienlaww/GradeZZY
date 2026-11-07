@@ -48,6 +48,7 @@ import gradezzy.model.TestCaseResult;
 import gradezzy.stats.StatisticsSummary;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.ResultState;
+import gradezzy.ui.backend.StatusCounts;
 
 /**
  * The figures and charts of one graded section.
@@ -352,23 +353,14 @@ public class SectionView {
     // students are done and how many need a look, then the ring and its
     // legend. Each status has its own colour and a tip that explains it.
     private VBox createRingCard(GradingRun run) {
+        // A 0 that was checked, or whose flags are settled, is graded
+        StatusCounts counted = StatusCounts.of(run.getSubmissions(),
+                backend);
         int[] counts = new int[STATE_ORDER.length];
-        int total = 0;
-        for (Submission submission : run.getSubmissions()) {
-            ResultState state = Students.state(submission, backend);
-            // A 0 whose flags are all checked is graded
-            if (state == ResultState.ZERO
-                    && !Students.isUncheckedZero(submission, state,
-                    backend)) {
-                state = ResultState.COMPLETED;
-            }
-            for (int index = 0; index < STATE_ORDER.length; index++) {
-                if (STATE_ORDER[index] == state) {
-                    counts[index]++;
-                }
-            }
-            total++;
+        for (int index = 0; index < STATE_ORDER.length; index++) {
+            counts[index] = counted.count(STATE_ORDER[index]);
         }
+        int total = counted.getTotal();
 
         StatusRing ring = new StatusRing();
         GridPane legend = new GridPane();
@@ -400,7 +392,7 @@ public class SectionView {
         legend.setMaxHeight(Region.USE_PREF_SIZE);
         HBox.setHgrow(legend, Priority.ALWAYS);
         HBox body = Parts.row(RING_GAP, new Node[] {ring, legend});
-        Label summary = smallMuted(statusSentence(run, total));
+        Label summary = smallMuted(statusSentence(counted));
         summary.setWrapText(true);
         VBox content = new VBox(Parts.GAP, summary, body);
         return card(Parts.title("Student status"), content);
@@ -409,20 +401,11 @@ public class SectionView {
     // Says how many students are done and how many need a look, such as
     // "1 of 6 students is fully graded. 5 need a look on Review."
     // Uses the same rule as Review, so both say the same number.
-    private String statusSentence(GradingRun run, int total) {
-        int done = 0;
-        int attention = 0;
-        int waiting = 0;
-        for (Submission submission : run.getSubmissions()) {
-            ResultState state = Students.state(submission, backend);
-            if (Students.needsLook(submission, backend)) {
-                attention++;
-            } else if (state == ResultState.UNGRADED) {
-                waiting++;
-            } else {
-                done++;
-            }
-        }
+    private String statusSentence(StatusCounts counted) {
+        int total = counted.getTotal();
+        int attention = counted.getNeedsLook();
+        int waiting = counted.count(ResultState.UNGRADED);
+        int done = total - attention - waiting;
         if (attention == 0 && waiting == 0) {
             return "All " + Parts.plural(total, "student") + " are graded "
                     + "and nothing waits for you.";

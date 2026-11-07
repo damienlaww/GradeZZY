@@ -15,7 +15,6 @@ package gradezzy.ui.flow;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
@@ -528,6 +527,8 @@ public class SettingField {
             chooser.setTitle("Choose a folder for " + name);
             if (start != null) {
                 chooser.setInitialDirectory(start);
+            } else {
+                Choosers.prepare(chooser);
             }
             picked = chooser.showDialog(window.getWindow());
         } else {
@@ -535,11 +536,14 @@ public class SettingField {
             chooser.setTitle("Choose a file for " + name);
             if (start != null) {
                 chooser.setInitialDirectory(start);
+            } else {
+                Choosers.prepare(chooser);
             }
             picked = chooser.showOpenDialog(window.getWindow());
         }
+        Choosers.remember(picked);
         if (picked != null) {
-            field.setText(shortPath(picked.toPath()));
+            field.setText(Parts.configPath(picked.toPath()));
         }
     }
 
@@ -561,17 +565,5 @@ public class SettingField {
             return null;
         }
         return path.toFile();
-    }
-
-    // Writes a path relative to the app folder when it is inside it,
-    // with forward slashes, as config.properties asks.
-    private String shortPath(Path picked) {
-        Path home = Paths.get("").toAbsolutePath();
-        Path absolute = picked.toAbsolutePath();
-        Path shown = absolute;
-        if (absolute.startsWith(home)) {
-            shown = home.relativize(absolute);
-        }
-        return shown.toString().replace('\\', '/');
     }
 }

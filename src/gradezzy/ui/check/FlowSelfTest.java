@@ -51,6 +51,7 @@ import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.RepairItem;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.ReviewDecision;
+import gradezzy.ui.backend.StatusCounts;
 import gradezzy.ui.demo.DemoBackend;
 import gradezzy.ui.demo.DemoData;
 import gradezzy.ui.flow.FlowWindow;
@@ -83,12 +84,14 @@ public class FlowSelfTest {
     private static final int SAMPLE_COUNT = 6;
     private static final int USABLE_COUNT = 5;
 
-    // The place of the "Could not grade" row on the Grade step
-    private static final int FAILED_ROW = 2;
+    // The places of the "Did not compile" and "Timed out" rows on the
+    // Grade step
+    private static final int COMPILE_ROW = 2;
+    private static final int TIMEOUT_ROW = 3;
 
-    // The students who could not be graded before Cancel (a compile
-    // error and a timeout)
-    private static final int FAILED_BEFORE_CANCEL = 2;
+    // The students before Cancel who did not compile, and who timed out
+    private static final int COMPILE_BEFORE_CANCEL = 1;
+    private static final int TIMEOUT_BEFORE_CANCEL = 1;
 
     // The total of learner.bravo before and after grading Q1a again
     private static final String BRAVO_BEFORE = "19";
@@ -322,10 +325,12 @@ public class FlowSelfTest {
                 + USABLE_COUNT + " students"), "the count says of 5 "
                 + "students");
         List<String> counts = SceneFinder.texts(root(), "count-value");
-        check(counts.size() > FAILED_ROW && counts.get(FAILED_ROW).equals(
-                String.valueOf(FAILED_BEFORE_CANCEL)), "So far counts two "
-                + "students who could not be graded (a compile error and a "
-                + "timeout)");
+        check(counts.size() > TIMEOUT_ROW
+                && counts.get(COMPILE_ROW).equals(
+                String.valueOf(COMPILE_BEFORE_CANCEL))
+                && counts.get(TIMEOUT_ROW).equals(
+                String.valueOf(TIMEOUT_BEFORE_CANCEL)), "So far counts one "
+                + "student who did not compile and one who timed out");
         check(SceneFinder.shows(root(), " left"), "the screen shows about "
                 + "how long is left");
 
@@ -405,6 +410,7 @@ public class FlowSelfTest {
                     "the panel shows Fix kept");
             approvedFix = fix;
         }
+        checkApplyAgain(run);
 
         Anomaly flag = null;
         for (Submission submission : run.getSubmissions()) {
@@ -456,6 +462,66 @@ public class FlowSelfTest {
         checkSettledIsGraded(run);
     }
 
+    // A rejected fix can be applied again from the activity log and
+    // from its card, which puts it back to wait for review.
+    private void checkApplyAgain(GradingRun run) {
+        RepairItem waiting = null;
+        for (RepairItem repair : backend.listRepairs(run)) {
+            if (waiting == null && !repair.isBlocked()
+                    && repair.getAnomaly().getFixStatus()
+                    == FixStatus.APPLIED) {
+                waiting = repair;
+            }
+        }
+        check(waiting != null, "a second fix waits for review");
+        if (waiting == null) {
+            return;
+        }
+        Anomaly fix = waiting.getAnomaly();
+        rejectInPanel(fix);
+
+        window.showPage(Page.RUNS);
+        settle();
+        ((gradezzy.ui.flow.RunsScreen) window.getPageScreen(Page.RUNS))
+                .showActivity();
+        settle();
+        press(SceneFinder.button(root(), "Undo"), "Undo on Fix undone");
+        check(fix.getFixStatus() == FixStatus.APPLIED,
+                "Undo on Fix undone applied the fix again");
+        boolean logged = false;
+        for (gradezzy.model.AuditEntry entry : backend.listAuditEntries()) {
+            logged = logged || "Fix reapplied".equals(entry.getAction());
+        }
+        check(logged, "Fix reapplied is in the activity log");
+        window.show(Step.REVIEW);
+        settle();
+
+        rejectInPanel(fix);
+        Node card = cardOf(fix);
+        press(card == null ? null : SceneFinder.button(card,
+                "Apply fix again"), "Apply fix again");
+        check(fix.getFixStatus() == FixStatus.APPLIED,
+                "Apply fix again put the fix back to wait for review");
+        card = cardOf(fix);
+        check(card != null && SceneFinder.shows(card, "Fixed for you"),
+                "the panel shows the fix as Fixed for you again");
+    }
+
+    // Rejects a fix in the student panel and checks its card offers
+    // Apply fix again.
+    private void rejectInPanel(Anomaly fix) {
+        openStudent(fix.getUsername());
+        Node card = cardOf(fix);
+        press(card == null ? null : SceneFinder.button(card,
+                "Reject fix"), "Reject fix");
+        check(fix.getFixStatus() == FixStatus.UNDONE,
+                "the fix was rejected");
+        card = cardOf(fix);
+        check(card != null && SceneFinder.shows(card, "Fix rejected")
+                && SceneFinder.button(card, "Apply fix again") != null,
+                "a rejected fix offers Apply fix again");
+    }
+
     // A student whose code did not compile shows Graded once every issue
     // is settled, and Open code on the issue opens their code.
     private void checkSettledIsGraded(GradingRun run) {
@@ -503,7 +569,7 @@ public class FlowSelfTest {
         check(Students.state(compiled, backend) == ResultState.COMPLETED,
                 "a settled compile error shows Graded (it shows "
                 + Students.state(compiled, backend) + ")");
-        check(!Students.needsLook(compiled, backend),
+        check(!StatusCounts.needsLook(compiled, backend),
                 "a settled student no longer needs a look");
         for (Anomaly anomaly : settled) {
             backend.setDecision(anomaly, ReviewDecision.OPEN);
@@ -786,13 +852,37 @@ public class FlowSelfTest {
         check(message.contains("for " + TICKED_COUNT + " students"),
                 "only the two ticked students were exported (it says \""
                 + message + "\")");
-        check("Grade another section".equals(window.getActionBar()
-                .getPrimaryButton().getText()), "the next step is Grade "
-                + "another section");
+        // Only part of the run was exported, so it is not marked exported
+        check("Export score sheet".equals(window.getActionBar()
+                .getPrimaryButton().getText()), "after exporting only the "
+                + "ticked students, the button still says Export score "
+                + "sheet");
+        check(!window.getState().isExported(run), "a ticked-only export "
+                + "does not mark the run exported");
         check(outputFileCount() == filesBefore,
                 "no file appeared in the output folder");
         notes.add("Export: " + message + " Output folder: "
                 + backend.getSetting(ConfigKeys.OUTPUT_DIR) + ".");
+        checkExportForgotten(run);
+    }
+
+    // With the run forgotten, Export shows no Saved note from the last
+    // export. Then the run is opened on Export again, still ticked.
+    private void checkExportForgotten(GradingRun run) {
+        List<Submission> ticked = new ArrayList<>(
+                window.getState().getSelected());
+        window.forgetRun();
+        window.advanceTo(Step.EXPORT);
+        settle();
+        check(SceneFinder.label(root(), "Saved") == null,
+                "with no run, Export shows no Saved pill");
+        check("Export score sheet".equals(window.getActionBar()
+                .getPrimaryButton().getText()), "with no run, the button "
+                + "says Export score sheet");
+        window.openRun(run);
+        window.getState().getSelected().addAll(ticked);
+        window.advanceTo(Step.EXPORT);
+        settle();
     }
 
     // Checks that the Statistics figures match MarkStats of the run.

@@ -9,8 +9,8 @@
  * screens and the export buttons of Results. The figures come from
  * MarkStats, like the Statistics tab, so the two always agree. Calls
  * export and listSimilarPairs on DashboardBackend; SimilarityCheck runs
- * the live similar code check in the background and SimilaritySheet
- * compares one pair.
+ * the live similar code check again in the background when asked, and
+ * SimilaritySheet compares one pair.
  */
 package gradezzy.ui.flow;
 
@@ -48,6 +48,7 @@ import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.ResultState;
+import gradezzy.ui.backend.StatusCounts;
 import gradezzy.util.TextUtils;
 
 /**
@@ -165,21 +166,23 @@ public class ExportScreen extends FlowScreen {
     // Where the result of the last export is shown
     private final HBox result = Parts.row(Parts.GAP_SMALL);
 
+    // The run the note in result is about, "" for none, and how many
+    // gradings had started when it was shown
+    private String noteRunId = "";
+    private int noteFromGrading = 0;
+
     // The similar code card
     private final VBox similar = new VBox();
 
     // The pairs listed in the similar code card
     private final List<SimilarityPair> shownPairs = new ArrayList<>();
 
-    // The similar code check of each run, by run id: still running, or
+    // The last Check again of each run, by run id: still running, or
     // ended with its result. Showing the step again reuses it.
     private final Map<String, SimilarityCheck> checks = new HashMap<>();
 
     // How many gradings had started when the checks above began
     private int checksFromGrading = 0;
-
-    // True after a successful export
-    private boolean exported = false;
 
     // True while the files are being written in the background
     private boolean exporting = false;
@@ -213,9 +216,15 @@ public class ExportScreen extends FlowScreen {
      */
     @Override
     public void onShow() {
+        // A note about another run, or from before grading again, is old
+        if (!currentRunId().equals(noteRunId)
+                || noteFromGrading != getState().getGradingCount()) {
+            clearNote();
+        }
         GradingRun run = getState().getRun();
         if (run == null) {
             subtitle.setText("Grade a section first.");
+            refreshBlanks();
             refreshFigures(null);
             refreshSimilar(null);
             refreshActions();
@@ -619,35 +628,39 @@ public class ExportScreen extends FlowScreen {
         ScoreSheetChange change = new ScoreSheetChange(getBackend(), run,
                 betterSheet.getSuggestion());
         if (getBackend().isDemo()) {
-            sheetChanged(change.changeNow());
+            sheetChanged(run, change.changeNow());
             return;
         }
-        change.setOnSucceeded(event -> sheetChanged(change.getValue()));
-        change.setOnFailed(event -> sheetNotChanged(change));
+        change.setOnSucceeded(event -> sheetChanged(run, change.getValue()));
+        change.setOnFailed(event -> sheetNotChanged(run, change));
         changingSheet = true;
-        useSheet.setDisable(true);
+        refreshActions();
         Thread worker = new Thread(change, "gradezzy-score-sheet");
         worker.setDaemon(true);
         worker.start();
     }
 
     // Shows why a change of score sheet stopped before it finished.
-    private void sheetNotChanged(ScoreSheetChange change) {
-        sheetChanged(ActionResult.failed(change.getException()
+    private void sheetNotChanged(GradingRun run, ScoreSheetChange change) {
+        sheetChanged(run, ActionResult.failed(change.getException()
                 .getMessage()));
     }
 
-    // Reads the new sheet's students again and says what happened.
-    private void sheetChanged(ActionResult outcome) {
+    // Reads the new sheet's students again and says what happened, if
+    // the run is still the one shown.
+    private void sheetChanged(GradingRun run, ActionResult outcome) {
         changingSheet = false;
-        useSheet.setDisable(false);
         getState().forgetMissingStudents();
         refreshBlanks();
-        if (outcome.isDone()) {
+        boolean shown = run.getId().equals(currentRunId());
+        if (shown && outcome.isDone()) {
             showNote("Score sheet changed", Tone.GOOD,
                     outcome.getMessage());
-        } else {
+        } else if (shown) {
             showNote("Not changed", Tone.BAD, outcome.getMessage());
+        }
+        if (isOnScreen()) {
+            refreshActions();
         }
     }
 
@@ -831,9 +844,8 @@ public class ExportScreen extends FlowScreen {
     }
 
     // Fills the similar code card, or hides it when the check is off.
-    // Demo pairs are in memory, so they are shown at once; the live
-    // check reads every answer, so it runs in the background, once per
-    // run until grading starts again or the instructor asks.
+    // Grading runs the check, so the pairs are only read here; a Check
+    // again still running or failed for this run is shown instead.
     private void refreshSimilar(GradingRun run) {
         similar.getChildren().clear();
         shownPairs.clear();
@@ -845,22 +857,18 @@ public class ExportScreen extends FlowScreen {
         if (!show) {
             return;
         }
-        if (getBackend().isDemo()) {
-            showPairs(run, getBackend().listSimilarPairs(run));
-            return;
-        }
         if (getState().getGradingCount() != checksFromGrading) {
-            // Grading may have changed the answers, so check them again
+            // Grading checked the answers again, so earlier checks are old
             checks.clear();
             checksFromGrading = getState().getGradingCount();
         }
         SimilarityCheck check = checks.get(run.getId());
-        // A run read again from the database is a new object without the
-        // flags of the earlier check, so it is checked again
-        if (check == null || check.getRun() != run) {
-            check = startSimilarityCheck(run);
+        if (check != null && check.getRun() == run
+                && check.getState() != Worker.State.SUCCEEDED) {
+            showCheck(check);
+            return;
         }
-        showCheck(check);
+        showPairs(run, getBackend().listSimilarPairs(run));
     }
 
     // Starts the similar code check of a run on a background thread and
@@ -921,8 +929,9 @@ public class ExportScreen extends FlowScreen {
         shownPairs.clear();
         shownPairs.addAll(pairs);
         if (pairs.isEmpty()) {
-            similar.getChildren().add(Parts.muted("No two students' "
-                    + "answers are unusually similar."));
+            similar.getChildren().add(Parts.muted("No similar pairs were "
+                    + "flagged. Use Check again if the check was off or "
+                    + "failed when grading."));
             return;
         }
         Label about = Parts.muted("These pairs share a lot of code beyond "
@@ -986,24 +995,30 @@ public class ExportScreen extends FlowScreen {
                 run.getSection().getSectionCode());
     }
 
-    // Fills the action bar.
+    // Fills the action bar. Exporting and changing the score sheet are
+    // off while either is running.
     private void refreshActions() {
         ActionBar actions = getActions();
         actions.reset();
+        boolean busy = exporting || changingSheet;
+        useSheet.setDisable(busy);
         if (exporting) {
             actions.setStatus("Saving the files...");
             actions.setPrimary("Export score sheet", () -> export(), false);
             return;
         }
         actions.setBack(() -> getWindow().show(Step.REVIEW));
-        if (exported) {
-            actions.addSecondary(Parts.secondary("Export again",
-                    () -> askExportAgain()));
+        GradingRun run = getState().getRun();
+        if (getState().isExported(run)) {
+            Button again = Parts.secondary("Export again",
+                    () -> askExportAgain());
+            again.setDisable(busy);
+            actions.addSecondary(again);
             actions.setPrimary("Grade another section",
                     () -> gradeAnother(), true);
             return;
         }
-        boolean ready = getState().getRun() != null
+        boolean ready = run != null && !busy
                 && getBackend().supports(Capability.EXPORT_RESULTS);
         actions.setPrimary("Export score sheet", () -> export(), ready);
     }
@@ -1017,10 +1032,7 @@ public class ExportScreen extends FlowScreen {
 
     // Empties the batch and goes back to Set up.
     private void gradeAnother() {
-        exported = false;
-        result.getChildren().clear();
-        result.setVisible(false);
-        result.setManaged(false);
+        clearNote();
         getState().restart();
         getState().getBatch().clear(InputKind.SUBMISSION);
         getWindow().show(Step.SET_UP);
@@ -1030,7 +1042,7 @@ public class ExportScreen extends FlowScreen {
     // once the instructor confirms.
     private void export() {
         GradingRun run = getState().getRun();
-        if (run == null || exporting) {
+        if (run == null || exporting || changingSheet) {
             return;
         }
         List<Submission> scope = chooseScope(run);
@@ -1051,8 +1063,8 @@ public class ExportScreen extends FlowScreen {
         }
         int open = countNeedingReview(scope);
         if (open > 0) {
-            detail += " " + Parts.plural(open, "student") + " still "
-                    + isOrAre(open) + " marked Needs review; you can export "
+            detail += " Still needing a look: "
+                    + Parts.plural(open, "student") + ". You can export "
                     + "again after checking them.";
         }
         String students = Parts.plural(count, "student");
@@ -1079,15 +1091,9 @@ public class ExportScreen extends FlowScreen {
         return text;
     }
 
-    // Counts the students of a scope who still need review.
+    // Counts the students of a scope who still need a look.
     private int countNeedingReview(List<Submission> scope) {
-        int count = 0;
-        for (Submission submission : scope) {
-            if (Students.needsLook(submission, getBackend())) {
-                count++;
-            }
-        }
-        return count;
+        return StatusCounts.of(scope, getBackend()).getNeedsLook();
     }
 
     // Returns "is" for one and "are" for more.
@@ -1102,17 +1108,19 @@ public class ExportScreen extends FlowScreen {
     // background thread; the demo writes no file.
     private void exportNow(List<Submission> scope) {
         GradingRun run = getState().getRun();
-        if (run == null || exporting) {
+        if (run == null || exporting || changingSheet) {
             return;
         }
         ExportJob job = new ExportJob(getBackend(), run, scope,
                 json.isSelected());
+        // Only an export of every student marks the run as exported
+        boolean wholeRun = scope.size() == run.getSubmissions().size();
         if (getBackend().isDemo()) {
-            exportDone(job.exportNow());
+            exportDone(run, wholeRun, job.exportNow());
             return;
         }
-        job.setOnSucceeded(event -> exportDone(job.getValue()));
-        job.setOnFailed(event -> exportFailed(job));
+        job.setOnSucceeded(event -> exportDone(run, wholeRun, job.getValue()));
+        job.setOnFailed(event -> exportFailed(run, job));
         exporting = true;
         refreshActions();
         Thread worker = new Thread(job, "gradezzy-export");
@@ -1121,27 +1129,44 @@ public class ExportScreen extends FlowScreen {
     }
 
     // Shows why an export stopped before it finished.
-    private void exportFailed(ExportJob job) {
-        exportDone(ActionResult.failed(job.getException().getMessage()));
+    private void exportFailed(GradingRun run, ExportJob job) {
+        exportDone(run, false, ActionResult.failed(job.getException()
+                .getMessage()));
     }
 
-    // Shows the outcome of an export and records it when it worked.
-    private void exportDone(ActionResult outcome) {
+    // Records an export that worked, and shows the outcome on screen
+    // when its run is still the one shown, else in a notice.
+    private void exportDone(GradingRun run, boolean wholeRun,
+            ActionResult outcome) {
         exporting = false;
-        if (!outcome.isDone()) {
+        if (outcome.isDone()) {
+            // The files were written, even if another run is shown now
+            getBackend().recordAudit("Exported", outcome.getMessage());
+        }
+        if (outcome.isDone() && wholeRun) {
+            getState().markExported(run);
+        }
+        boolean shown = run.getId().equals(currentRunId());
+        if (shown && outcome.isDone()) {
+            String message = outcome.getMessage();
+            if (!blankSummary.isEmpty()) {
+                message = message + " " + blankSummary;
+            }
+            showResult(true, message);
+            getState().reach(Step.EXPORT);
+        } else if (shown) {
             showResult(false, outcome.getMessage());
+        } else if (outcome.isDone()) {
+            getWindow().notify(run.getSection().getLabel() + ": "
+                    + outcome.getMessage());
+        } else {
+            getWindow().notify("The export of "
+                    + run.getSection().getLabel() + " failed: "
+                    + outcome.getMessage());
+        }
+        if (isOnScreen()) {
             refreshActions();
-            return;
         }
-        getBackend().recordAudit("Exported", outcome.getMessage());
-        exported = true;
-        String message = outcome.getMessage();
-        if (!blankSummary.isEmpty()) {
-            message = message + " " + blankSummary;
-        }
-        showResult(true, message);
-        getState().reach(Step.EXPORT);
-        refreshActions();
     }
 
     // Shows the outcome under the export choices.
@@ -1153,7 +1178,8 @@ public class ExportScreen extends FlowScreen {
         }
     }
 
-    // Shows a pill and a message under the export choices.
+    // Shows a pill and a message under the export choices, about the
+    // run shown now.
     private void showNote(String pill, Tone tone, String message) {
         result.getChildren().clear();
         result.setVisible(true);
@@ -1162,5 +1188,24 @@ public class ExportScreen extends FlowScreen {
         text.setWrapText(true);
         HBox.setHgrow(text, Priority.ALWAYS);
         result.getChildren().addAll(Parts.pill(pill, tone), text);
+        noteRunId = currentRunId();
+        noteFromGrading = getState().getGradingCount();
+    }
+
+    // Empties and hides the note under the export choices.
+    private void clearNote() {
+        result.getChildren().clear();
+        result.setVisible(false);
+        result.setManaged(false);
+        noteRunId = "";
+    }
+
+    // Returns the id of the run shown, or "" when there is none.
+    private String currentRunId() {
+        GradingRun run = getState().getRun();
+        if (run == null) {
+            return "";
+        }
+        return run.getId();
     }
 }

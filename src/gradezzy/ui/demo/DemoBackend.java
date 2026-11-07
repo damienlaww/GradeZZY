@@ -719,9 +719,29 @@ public final class DemoBackend implements DashboardBackend {
                     + "this finding. Handle it by hand.");
         }
         repair.getAnomaly().setFixStatus(FixStatus.UNDONE);
+        recordAudit("Fix undone", repair.getAnomaly().getUsername()
+                + ": " + repair.getAnomaly().getMessage());
         return ActionResult.done("Rejected the fix for "
                 + repair.getAnomaly().getUsername() + ". The working copy "
                 + "was put back. The original ZIP was never changed.");
+    }
+
+    /**
+     * Marks a rejected repair applied again.
+     */
+    @Override
+    public ActionResult reapplyRepair(RepairItem repair) {
+        Anomaly anomaly = repair.getAnomaly();
+        if (repair.isBlocked()
+                || anomaly.getFixStatus() != FixStatus.UNDONE) {
+            return ActionResult.failed("Only a rejected fix can be "
+                    + "applied again.");
+        }
+        anomaly.setFixStatus(FixStatus.APPLIED);
+        recordAudit("Fix reapplied", anomaly.getUsername() + ": "
+                + anomaly.getMessage());
+        return ActionResult.done("Applied the fix for "
+                + anomaly.getUsername() + " again. It waits for review.");
     }
 
     /**
@@ -1184,6 +1204,14 @@ public final class DemoBackend implements DashboardBackend {
                     SAMPLE_SIMILARITY));
         }
         return pairs;
+    }
+
+    /**
+     * Returns the sample pair, as the demo has nothing to check.
+     */
+    @Override
+    public List<SimilarityPair> checkSimilarity(GradingRun gradingRun) {
+        return listSimilarPairs(gradingRun);
     }
 
     /**

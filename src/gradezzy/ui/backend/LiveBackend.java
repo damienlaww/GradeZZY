@@ -37,6 +37,7 @@ import gradezzy.grading.CompileStage;
 import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
@@ -57,6 +58,7 @@ import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.service.ClassFileMatcher;
 import gradezzy.service.ServiceRegistry;
+import gradezzy.service.UndoResult;
 import gradezzy.stats.StatisticsFilter;
 import gradezzy.stats.StatisticsSummary;
 import gradezzy.testcase.TestCase;
@@ -87,6 +89,21 @@ public class LiveBackend implements DashboardBackend {
     // How many folders deep an answer file is looked for: the student's
     // folder, and one wrapper folder around it
     private static final int SOURCE_SEARCH_DEPTH = 3;
+
+    // How PlagiarismService writes a Similar code flag: its id is
+    // SIMILAR-<run>/<student>/<other student>/<question>, and its message
+    // starts "<question> is <percent>% similar"
+    private static final String SIMILAR_ID_PREFIX = "SIMILAR-";
+    private static final String SIMILAR_ID_SEPARATOR = "/";
+    private static final int SIMILAR_ID_PARTS = 3;
+    private static final int STUDENT_PART = 0;
+    private static final int OTHER_STUDENT_PART = 1;
+    private static final int QUESTION_PART = 2;
+    private static final String SIMILAR_MESSAGE_MIDDLE = " is ";
+    private static final String PERCENT_SIGN = "%";
+
+    // Turns a percentage into a similarity from 0 to 1
+    private static final double PERCENT = 100.0;
 
     // Every service of the application
     private final ServiceRegistry services;
@@ -720,14 +737,78 @@ public class LiveBackend implements DashboardBackend {
                     + "it is " + describeFixStatus(before) + ".");
         }
 
-        services.getAnomalyService().undoFix(anomaly);
+        GradingRun run = findSessionRunWith(anomaly);
+        UndoResult undone = services.getAnomalyService().undoFix(anomaly);
         forgetSavedRuns();
         if (anomaly.getFixStatus() == FixStatus.UNDONE) {
-            return ActionResult.done("Undid the fix for "
-                    + anomaly.getUsername()
-                    + ". The working copy was put back.");
+            return ActionResult.done(describeUndo(undone, anomaly)
+                    + checkAfterUndo(run));
         }
         return ActionResult.failed(explainUndoFailure(anomaly));
+    }
+
+    // Says what an undo did, with the marks before and after when the
+    // service says them, such as "Fix undone. Marks 20 to 16."
+    private String describeUndo(UndoResult undone, Anomaly anomaly) {
+        String putBack = "The working copy of " + anomaly.getUsername()
+                + " was put back.";
+        if (undone == null) {
+            return "Undid the fix. " + putBack;
+        }
+        return undone.getMessage() + " " + putBack;
+    }
+
+    /**
+     * Returns Not connected yet until the service can apply a rejected
+     * fix again.
+     */
+    @Override
+    public ActionResult reapplyRepair(RepairItem repair) {
+        // Waits for AnomalyService.reapplyFix (Jing Yuan)
+        return ActionResult.notConnected(Capability.REAPPLY_FIX);
+    }
+
+    // Grading the student again cleared their Similar code flags, so the
+    // run is checked again. It runs here until GradingService runs it
+    // after grading. Returns a sentence when the check failed, else "".
+    private String checkAfterUndo(GradingRun run) {
+        if (run == null || !isSimilarityEnabled()) {
+            return "";
+        }
+
+        try {
+            checkSimilarity(run);
+            return "";
+        } catch (RuntimeException exception) {
+            return " The similar code check failed: "
+                    + exception.getMessage();
+        }
+    }
+
+    // Returns the newest run of this session that holds an anomaly, the
+    // run AnomalyService grades again on an undo, or null.
+    private GradingRun findSessionRunWith(Anomaly anomaly) {
+        List<GradingRun> sessionRuns =
+                services.getGradingService().getSessionRuns();
+        for (int index = sessionRuns.size() - 1; index >= 0; index--) {
+            GradingRun run = sessionRuns.get(index);
+            if (holdsAnomaly(run, anomaly.getId())) {
+                return run;
+            }
+        }
+        return null;
+    }
+
+    // Says whether any submission of a run holds the anomaly with an id.
+    private boolean holdsAnomaly(GradingRun run, String anomalyId) {
+        for (Submission submission : run.getSubmissions()) {
+            for (Anomaly held : submission.getAnomalies()) {
+                if (held.getId().equals(anomalyId)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -1231,14 +1312,102 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls PlagiarismService.check.
+     * Reads the pairs back from the run's Similar code flags, so nothing
+     * is checked again and a saved run shows the pairs it was saved with.
      */
     @Override
     public List<SimilarityPair> listSimilarPairs(GradingRun gradingRun) {
+        List<SimilarityPair> pairs = new ArrayList<>();
+        if (gradingRun == null) {
+            return pairs;
+        }
+
+        String idStart = SIMILAR_ID_PREFIX + gradingRun.getId()
+                + SIMILAR_ID_SEPARATOR;
+        // Both students of a pair hold a flag, so each pair is kept once
+        List<String> pairKeys = new ArrayList<>();
+        for (Submission submission : gradingRun.getSubmissions()) {
+            for (Anomaly anomaly : submission.getAnomalies()) {
+                SimilarityPair pair = readSimilarFlag(anomaly, idStart);
+                if (pair != null && !pairKeys.contains(pairKey(pair))) {
+                    pairKeys.add(pairKey(pair));
+                    insertBySimilarity(pairs, pair);
+                }
+            }
+        }
+        return pairs;
+    }
+
+    /**
+     * Calls PlagiarismService.check.
+     */
+    @Override
+    public List<SimilarityPair> checkSimilarity(GradingRun gradingRun) {
         if (gradingRun == null) {
             return new ArrayList<>();
         }
-        return services.getPlagiarismService().check(gradingRun);
+        List<SimilarityPair> pairs =
+                services.getPlagiarismService().check(gradingRun);
+        // The check saves the run, so saved copies of it are stale
+        forgetSavedRuns();
+        return pairs;
+    }
+
+    // Reads the pair a Similar code flag of the run names, or returns
+    // null for any other anomaly or a flag that cannot be read.
+    private SimilarityPair readSimilarFlag(Anomaly anomaly, String idStart) {
+        if (anomaly.getType() != AnomalyType.SIMILAR_CODE
+                || !anomaly.getId().startsWith(idStart)) {
+            return null;
+        }
+
+        String[] parts = anomaly.getId().substring(idStart.length())
+                .split(SIMILAR_ID_SEPARATOR);
+        if (parts.length != SIMILAR_ID_PARTS) {
+            return null;
+        }
+
+        String questionId = parts[QUESTION_PART];
+        String message = anomaly.getMessage();
+        String start = questionId + SIMILAR_MESSAGE_MIDDLE;
+        int end = message.indexOf(PERCENT_SIGN);
+        if (!message.startsWith(start) || end < start.length()) {
+            return null;
+        }
+
+        try {
+            int percent = Integer.parseInt(message.substring(
+                    start.length(), end));
+            return new SimilarityPair(parts[STUDENT_PART],
+                    parts[OTHER_STUDENT_PART], questionId,
+                    percent / PERCENT);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    // Names a pair the same way whichever student comes first.
+    private String pairKey(SimilarityPair pair) {
+        String first = pair.getFirstUsername();
+        String second = pair.getSecondUsername();
+        if (first.compareTo(second) > 0) {
+            return pair.getQuestionId() + SIMILAR_ID_SEPARATOR + second
+                    + SIMILAR_ID_SEPARATOR + first;
+        }
+        return pair.getQuestionId() + SIMILAR_ID_SEPARATOR + first
+                + SIMILAR_ID_SEPARATOR + second;
+    }
+
+    // Adds a pair after every pair at least as similar, so the list stays
+    // most similar first.
+    private void insertBySimilarity(List<SimilarityPair> pairs,
+            SimilarityPair pair) {
+        int place = 0;
+        while (place < pairs.size()
+                && pairs.get(place).getSimilarity() >= pair.getSimilarity()) {
+            place++;
+        }
+        pairs.add(place, pair);
     }
 
     /**
@@ -1384,6 +1553,9 @@ public class LiveBackend implements DashboardBackend {
             Capability capability) {
         task.setOnSucceeded(event -> finishTask(task, callback, capability));
         task.setOnFailed(event -> failTask(task, callback));
+        if (isSimilarityEnabled()) {
+            task.checkSimilarityAfter(services.getPlagiarismService());
+        }
 
         Thread worker = new Thread(task, "gradezzy-grading");
         worker.setDaemon(true);
@@ -1400,6 +1572,10 @@ public class LiveBackend implements DashboardBackend {
             return;
         }
         rememberAnomalies(run, capability);
+        if (task.getSimilarityProblem() != null) {
+            recordActivity("Similar code not checked",
+                    task.getSimilarityProblem());
+        }
         if (capability != Capability.RETRY_FAILED) {
             setLastRunStarted(run);
         }

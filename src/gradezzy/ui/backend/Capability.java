@@ -97,6 +97,15 @@ public enum Capability {
             CapabilityStatus.WORKS_NOW, "Nothing; a kept fix can be taken "
             + "back. A rejected fix is graded again instead."),
 
+    /** Applies a rejected fix again and grades the student again. */
+    REAPPLY_FIX("Apply a rejected fix again",
+            "Puts a rejected fix back and grades the student with it "
+            + "again.", "Jing Yuan, Jun Sheng", null,
+            CapabilityStatus.PROPOSED,
+            "A service method, such as AnomalyService.reapplyFix, that "
+            + "takes the fix off the student's rejected list and grades "
+            + "the student again."),
+
     /** Records a review decision on a flag. */
     FLAG_REVIEW("Mark flags reviewed or rejected",
             "Records that you looked at a flag, without changing any "
