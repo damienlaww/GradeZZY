@@ -23,7 +23,7 @@ Nothing in this folder has its own testers.
 | `upload-1-main/` | The main batch: 43 student zips, an unzipped folder, a bulk zip from eLearn (`eLearn-G4-Lab-Test-download.zip`, 3 zips and an `index.html`), `marking notes.txt` and `.DS_Store` |
 | `upload-2-late/` | 4 zips that came in after grading |
 | `roster-G4.csv` | The score sheet as eLearn exports it (CRLF, `#` in front of ids) |
-| `roster-G4-excel.csv` | The same sheet saved again in Excel: byte order mark, LF, no last `#` column. Must give the same marks |
+| `roster-G4-excel.csv` | The same sheet saved again in Excel: byte order mark, LF line endings, and no `#` at the end of each row (the `End-of-Line Indicator` header is still there). A Windows checkout with git's `core.autocrlf` turns the LF into CRLF. Must give the same marks |
 | `bad-rosters/duplicate-row.csv` | aaron.lee.2024 pasted in twice. Must be refused |
 | `bad-rosters/not-a-score-sheet.csv` | A marks list with no eLearn columns. Must be refused |
 | `make_e2e.py` | Rebuilds everything above |
@@ -122,7 +122,10 @@ files, and choose the folder `samples/e2e/upload-2-late`.
 The late batch should join the G4 run. In the service this works
 (`GradingService.addToRun`). In the window, Set up should ask whether to
 add these students to that run. That question is still to be wired in
-the UI (Seth); until it is, the window starts a second run.
+the UI (Seth); until it is, the window starts a second run. The console
+cannot add a late batch at all (`run.sh console` always starts a new
+run), so the results below, such as "Chloe keeps 18", can only be checked
+in the window or by calling `addToRun`.
 
 | Zip | What it is | Result |
 |---|---|---|
