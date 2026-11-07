@@ -10,6 +10,9 @@
 package gradezzy.ui.flow;
 
 import java.net.URL;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
@@ -756,15 +759,32 @@ public final class Parts {
      * @param text the path text
      * @return the path, or null
      */
-    public static java.nio.file.Path toPath(String text) {
+    public static Path toPath(String text) {
         String path = cleanPath(text);
         if (path.isEmpty()) {
             return null;
         }
         try {
-            return java.nio.file.Paths.get(path);
-        } catch (java.nio.file.InvalidPathException exception) {
+            return Paths.get(path);
+        } catch (InvalidPathException exception) {
             return null;
         }
+    }
+
+    /**
+     * Writes a chosen path as config.properties asks: relative to the
+     * program folder when it is inside it, with forward slashes.
+     *
+     * @param picked the chosen file or folder
+     * @return the path text to save
+     */
+    public static String configPath(Path picked) {
+        Path home = Paths.get("").toAbsolutePath();
+        Path absolute = picked.toAbsolutePath();
+        Path shown = absolute;
+        if (absolute.startsWith(home)) {
+            shown = home.relativize(absolute);
+        }
+        return shown.toString().replace('\\', '/');
     }
 }

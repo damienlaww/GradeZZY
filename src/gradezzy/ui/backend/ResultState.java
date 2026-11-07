@@ -11,6 +11,7 @@ package gradezzy.ui.backend;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.QuestionResult;
+import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 
@@ -187,6 +188,22 @@ public enum ResultState {
         return submission.getStatus() == SubmissionStatus.FAILED
                 && failure != null
                 && failure.startsWith(COULD_NOT_OPEN_PREFIX);
+    }
+
+    /**
+     * Says whether a submission's zip was refused, such as a damaged one.
+     *
+     * @param submission the submission
+     * @return true when the upload has an error about its zip
+     */
+    public static boolean isRejectedUpload(Submission submission) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            if (anomaly.getType() == AnomalyType.INVALID_ARCHIVE
+                    && anomaly.getSeverity() == Severity.ERROR) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

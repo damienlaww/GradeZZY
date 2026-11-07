@@ -555,11 +555,13 @@ public class SetUpScreen extends FlowScreen {
         chooser.setTitle("Choose the students' zip files");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
                 "Zip files", ZIP_PATTERN));
+        Choosers.prepare(chooser);
         List<File> files = chooser.showOpenMultipleDialog(
                 getWindow().getWindow());
-        if (files == null) {
+        if (files == null || files.isEmpty()) {
             return;
         }
+        Choosers.remember(files.get(0));
         List<Path> paths = new ArrayList<>();
         for (File file : files) {
             paths.add(file.toPath());
@@ -764,7 +766,7 @@ public class SetUpScreen extends FlowScreen {
         Map<String, String> changes = new HashMap<>();
         changes.put(ConfigKeys.SCORE_SHEET_BY_SECTION, ExportFolders.put(
                 getBackend().getSetting(ConfigKeys.SCORE_SHEET_BY_SECTION),
-                who, path.toString()));
+                who, Parts.configPath(path)));
         ActionResult result = getBackend().saveSettings(changes);
         if (result.isDone()) {
             getWindow().notify("Score sheet kept for "
@@ -850,7 +852,9 @@ public class SetUpScreen extends FlowScreen {
             chooser.getExtensionFilters().add(
                     new FileChooser.ExtensionFilter("CSV files",
                     CSV_PATTERN));
+            Choosers.prepare(chooser);
             File file = chooser.showOpenDialog(getWindow().getWindow());
+            Choosers.remember(file);
             if (file == null) {
                 return null;
             }
@@ -859,7 +863,9 @@ public class SetUpScreen extends FlowScreen {
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle("Choose the " + kind.getTitle().toLowerCase()
                 + " folder");
+        Choosers.prepare(chooser);
         File folder = chooser.showDialog(getWindow().getWindow());
+        Choosers.remember(folder);
         if (folder == null) {
             return null;
         }

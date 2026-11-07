@@ -63,6 +63,7 @@ import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.RunRecord;
+import gradezzy.ui.backend.StatusCounts;
 
 /**
  * The Home tab.
@@ -87,6 +88,9 @@ public class HomeScreen extends FlowScreen {
     private static final int GRADE = 1;
     private static final int REVIEW = 2;
     private static final int EXPORT = 3;
+
+    // Past the last step: the section's score sheet is exported
+    private static final int EXPORTED = STEP_NAMES.length;
 
     // The gap between the four parts of the progress bar
     private static final double PROGRESS_GAP = 4.0;
@@ -689,6 +693,8 @@ public class HomeScreen extends FlowScreen {
             return GRADE;
         } else if (countToCheck(run) > 0) {
             return REVIEW;
+        } else if (getState().isExported(run)) {
+            return EXPORTED;
         }
         return EXPORT;
     }
@@ -742,6 +748,10 @@ public class HomeScreen extends FlowScreen {
             tip = "Students with a fix to keep or reject, a flag to look "
                     + "at, a total of 0, or a problem such as a compile "
                     + "error. Review shows each one.";
+        } else if (getState().isExported(run)) {
+            pill = Parts.pill("Exported", Tone.NEUTRAL);
+            tip = "The score sheet was exported since GradeZZY opened. "
+                    + "Open the results to export again.";
         } else {
             pill = Parts.pill("Graded", Tone.GOOD);
             tip = "Every student is graded and nothing waits for you. "
@@ -753,6 +763,7 @@ public class HomeScreen extends FlowScreen {
 
     // Draws the four steps as a slim bar in four parts, done ones filled,
     // the current one in blue, with "Step 3 of 4 · Review" under it.
+    // Once exported, every part is filled and it says "Exported".
     private VBox progress(int current) {
         HBox bar = new HBox(PROGRESS_GAP);
         for (int index = 0; index < STEP_NAMES.length; index++) {
@@ -772,8 +783,12 @@ public class HomeScreen extends FlowScreen {
         }
         bar.setMinHeight(PROGRESS_HEIGHT);
         bar.setMaxWidth(Double.MAX_VALUE);
-        Label words = Parts.muted("Step " + (current + 1) + " of "
-                + STEP_NAMES.length + DOT + STEP_NAMES[current]);
+        String place = "Exported";
+        if (current < EXPORTED) {
+            place = "Step " + (current + 1) + " of " + STEP_NAMES.length
+                    + DOT + STEP_NAMES[current];
+        }
+        Label words = Parts.muted(place);
         words.getStyleClass().addAll("small-text", "card-progress-words");
         return new VBox(Parts.GAP_SMALL / 2, bar, words);
     }
@@ -817,6 +832,9 @@ public class HomeScreen extends FlowScreen {
             return cardButton("Review " + Parts.plural(check, "student"),
                     () -> getWindow().openRun(run), "Go through the "
                     + "students who need a look, then export.");
+        } else if (getState().isExported(run)) {
+            return cardButton("See export", () -> openExport(run),
+                    "Open the Export step to export again if needed.");
         }
         return cardButton("Export marks", () -> openExport(run),
                 "Check the marks once more, then export the score sheet.");
@@ -1169,13 +1187,8 @@ public class HomeScreen extends FlowScreen {
     // Counts the students who need the instructor: open items, or a
     // submission that could not be graded or did not compile.
     private int countToCheck(GradingRun run) {
-        int count = 0;
-        for (Submission submission : run.getSubmissions()) {
-            if (Students.needsLook(submission, getBackend())) {
-                count++;
-            }
-        }
-        return count;
+        return StatusCounts.of(run.getSubmissions(), getBackend())
+                .getNeedsLook();
     }
 
     // Says what is wrong with the configured file or folder of a kind,
@@ -1206,12 +1219,15 @@ public class HomeScreen extends FlowScreen {
         chooser.setTitle("Choose the score sheet exported from eLearn");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
                 "CSV files", CSV_PATTERN));
+        Choosers.prepare(chooser);
         File file = chooser.showOpenDialog(getWindow().getWindow());
+        Choosers.remember(file);
         if (file == null) {
             return;
         }
         Map<String, String> changes = new HashMap<>();
-        changes.put(ConfigKeys.SCORE_SHEET_FILE, file.getPath());
+        changes.put(ConfigKeys.SCORE_SHEET_FILE,
+                Parts.configPath(file.toPath()));
         ActionResult result = getBackend().saveSettings(changes);
         getWindow().notify(result.getMessage());
         refresh();

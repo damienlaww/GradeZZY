@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import gradezzy.model.Anomaly;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
 import gradezzy.model.Student;
@@ -45,6 +46,10 @@ public class FlowState {
     // True while a batch is being graded
     private boolean grading = false;
 
+    // The fix being undone or applied again on a background thread, or
+    // null. Only one student is graded again at a time.
+    private Anomaly fixInProgress = null;
+
     // How many times grading has started, so a screen can tell that the
     // results may have changed since it last looked
     private int gradingCount = 0;
@@ -71,6 +76,10 @@ public class FlowState {
     // id, so a run opened again from Runs still has them
     private final Map<String, List<ImportItem>> skippedByRun =
             new HashMap<>();
+
+    // The ids of the runs exported since GradeZZY opened. Grading a run
+    // again takes its id out, as the export no longer matches its marks.
+    private final List<String> exportedRuns = new ArrayList<>();
 
     // The students on the score sheet with no submission, and their run
     private List<Student> missingStudents = null;
@@ -206,10 +215,12 @@ public class FlowState {
      * Ties the skipped files to the run that has just ended. Only the
      * first run to end after grading started gets them. A late batch
      * added to an earlier run adds its skipped files to that run's.
+     * The run was graded again, so an earlier export of it is forgotten.
      *
      * @param gradingRun the run, or null when grading failed
      */
     public void attachSkippedFiles(GradingRun gradingRun) {
+        forgetExport(gradingRun);
         if (!skippedWaiting) {
             return;
         }
@@ -296,6 +307,60 @@ public class FlowState {
         this.grading = grading;
         if (grading) {
             gradingCount++;
+            // A resume or retry grades the run shown again
+            forgetExport(run);
+        }
+    }
+
+    /**
+     * Returns the fix being undone or applied again in the background.
+     *
+     * @return its anomaly, or null when none is
+     */
+    public Anomaly getFixInProgress() {
+        return fixInProgress;
+    }
+
+    /**
+     * Records the fix being undone or applied again in the background.
+     *
+     * @param anomaly its anomaly, or null once the job has ended
+     */
+    public void setFixInProgress(Anomaly anomaly) {
+        fixInProgress = anomaly;
+    }
+
+    /**
+     * Records that a run's score sheet was exported.
+     *
+     * @param gradingRun the run
+     */
+    public void markExported(GradingRun gradingRun) {
+        if (gradingRun == null || isExported(gradingRun)) {
+            return;
+        }
+        exportedRuns.add(gradingRun.getId());
+    }
+
+    /**
+     * Says whether a run was exported since it was last graded.
+     *
+     * @param gradingRun the run
+     * @return true when it was exported
+     */
+    public boolean isExported(GradingRun gradingRun) {
+        return gradingRun != null
+                && exportedRuns.contains(gradingRun.getId());
+    }
+
+    /**
+     * Forgets that a run was exported, as its marks are changing.
+     *
+     * @param gradingRun the run
+     */
+    public void forgetExport(GradingRun gradingRun) {
+        if (gradingRun != null) {
+            exportedRuns.remove(gradingRun.getId());
         }
     }
 

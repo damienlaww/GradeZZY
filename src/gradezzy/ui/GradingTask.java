@@ -5,7 +5,8 @@
  * stays responsive.
  *
  * Where it fits: Created by LiveBackend, which passes its progress on to
- * the Grade step. GradingService does the grading itself.
+ * the Grade step. GradingService does the grading itself; when the
+ * similar code check is on, PlagiarismService then checks the run.
  *
  * Note on untaught Java: javafx.concurrent.Task runs the grading on a
  * background thread, so the window does not freeze.
@@ -22,6 +23,7 @@ import gradezzy.grading.ProgressListener;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
 import gradezzy.service.GradingService;
+import gradezzy.service.PlagiarismService;
 import gradezzy.testcase.TestCaseSource;
 
 /**
@@ -55,6 +57,13 @@ public class GradingTask extends Task<GradingRun> {
 
     // The object told about progress
     private final ProgressListener listener;
+
+    // Runs the similar code check once grading ends, or null to skip it
+    private PlagiarismService plagiarismService = null;
+
+    // Why the similar code check failed, or null; read on the JavaFX
+    // thread once the task ends
+    private volatile String similarityProblem = null;
 
     /**
      * Creates a task for a new batch. The listener runs on the background
@@ -117,13 +126,55 @@ public class GradingTask extends Task<GradingRun> {
     }
 
     /**
-     * Grades the batch. JavaFX calls this on a background thread.
+     * Runs the similar code check on the run once grading ends.
+     *
+     * @param plagiarismService the service that runs the check
+     */
+    public void checkSimilarityAfter(PlagiarismService plagiarismService) {
+        this.plagiarismService = plagiarismService;
+    }
+
+    /**
+     * Returns why the similar code check after grading failed.
+     *
+     * @return the reason, or null when it did not fail
+     */
+    public String getSimilarityProblem() {
+        return similarityProblem;
+    }
+
+    /**
+     * Grades the batch, then checks it for similar code. JavaFX calls
+     * this on a background thread.
      *
      * @return the finished run, or null when the service returned none
      * @throws Exception if the batch cannot start
      */
     @Override
     protected GradingRun call() throws Exception {
+        GradingRun run = grade();
+        checkSimilarity(run);
+        return run;
+    }
+
+    // Runs the similar code check here, before Review opens, until
+    // GradingService runs it after grading. A failure does not fail
+    // grading; it is kept for LiveBackend to log.
+    private void checkSimilarity(GradingRun run) {
+        if (run == null || plagiarismService == null) {
+            return;
+        }
+
+        try {
+            plagiarismService.check(run);
+        } catch (RuntimeException exception) {
+            similarityProblem = "The check stopped: "
+                    + exception.getMessage();
+        }
+    }
+
+    // Asks the service to grade, retry or resume the batch.
+    private GradingRun grade() throws Exception {
         if (kind == GradingTaskKind.RETRY_FAILED) {
             return gradingService.retryFailed(gradingRun, listener);
         } else if (kind == GradingTaskKind.RESUME) {
