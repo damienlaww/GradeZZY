@@ -214,6 +214,18 @@ public class Submission {
     }
 
     /**
+     * Takes back the undo of a fix, so it is applied again the next time
+     * the student is graded. A key not in the list is ignored.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param fixKey the key of the fix, from FixManager.findRejectedKey
+     */
+    public void unrejectFix(String fixKey) {
+        rejectedFixes.remove(fixKey);
+    }
+
+    /**
      * Records a problem found in this submission.
      *
      * @param anomaly the anomaly

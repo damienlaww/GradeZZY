@@ -6,7 +6,8 @@
  * Where it fits: The console entry point. It uses no JavaFX at all, so
  * the grading core (ingest, validation, fix, exec, grading, report) can
  * be compiled, run and tested before any screen exists. Run it with
- * "run.sh console" or "run.bat console".
+ * "run.sh console" or "run.bat console". With the similar code check on,
+ * the similar pairs are printed after the summary.
  */
 package gradezzy.app;
 
@@ -19,6 +20,7 @@ import java.util.List;
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigException;
 import gradezzy.config.ConfigKeys;
+import gradezzy.config.ExportFolders;
 import gradezzy.grading.GradingException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.model.Assessment;
@@ -26,6 +28,7 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
+import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.testcase.TestCaseSource;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.testcase.UploadedTesterSource;
@@ -44,6 +47,9 @@ public class ConsoleMain {
 
     // Number of arguments when both the module and the section are given
     private static final int MODULE_AND_SECTION = 2;
+
+    // Turns a similarity from 0 to 1 into a percentage
+    private static final int PERCENT = 100;
 
     /**
      * Not used: this class only holds the main method.
@@ -68,6 +74,7 @@ public class ConsoleMain {
             GradingRun gradingRun = gradeBatch(config, context, args);
 
             printSummary(gradingRun);
+            printSimilarPairs(config, context, gradingRun);
             context.close();
         } catch (IOException exception) {
             fail("The configuration file could not be read: "
@@ -173,8 +180,11 @@ public class ConsoleMain {
                 + TextUtils.join(", ", marks) + "; total "
                 + assessment.getMaxTotal() + ".");
 
+        // The sheet startGrading reads: the section's own, else the one
+        // for everyone
         double denominator = new RosterReader(config).readDenominator(
-                Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE)));
+                ExportFolders.findScoreSheet(config, section.getModuleCode(),
+                        section.getSectionCode()));
         if (denominator < 0) {
             System.out.println("Warning: the score sheet has no single "
                     + "denominator to check this total against.");
@@ -204,6 +214,31 @@ public class ConsoleMain {
 
         System.out.println(gradingRun.getSubmissions().size()
                 + " submission(s) processed.");
+    }
+
+    // Prints the similar pairs that grading flagged, when the similar
+    // code check is switched on. The flags are added once the whole batch
+    // is graded, so they are not in the lines printed per student.
+    private static void printSimilarPairs(AppConfig config,
+            ApplicationContext context, GradingRun gradingRun) {
+        if (!config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED)) {
+            return;
+        }
+
+        List<SimilarityPair> pairs = context.getServices()
+                .getPlagiarismService().listPairs(gradingRun);
+        if (pairs.isEmpty()) {
+            System.out.println("Similar code: no pair found.");
+            return;
+        }
+
+        System.out.println("Similar code (a review aid, not a finding):");
+        for (SimilarityPair pair : pairs) {
+            System.out.println("  " + pair.getQuestionId() + ": "
+                    + pair.getFirstUsername() + " and "
+                    + pair.getSecondUsername() + ", "
+                    + Math.round(pair.getSimilarity() * PERCENT) + "%");
+        }
     }
 
     // Prints an error for the instructor and ends with a failure code.

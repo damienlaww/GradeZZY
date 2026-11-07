@@ -1,7 +1,8 @@
 /*
  * File: GradingService.java
  *
- * Purpose: Starts, cancels, retries and resumes a grading run.
+ * Purpose: Starts, cancels, retries and resumes a grading run, and runs
+ * the similar code check when a batch has been graded.
  *
  * Where it fits: The entry point to batch grading for both the console
  * and the window. It loads the submissions, prepares the testers, builds
@@ -14,6 +15,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -24,6 +26,7 @@ import java.util.UUID;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.config.ExportFolders;
 import gradezzy.config.ModuleSections;
 import gradezzy.grading.CancellationToken;
 import gradezzy.grading.GradingContext;
@@ -47,6 +50,9 @@ import gradezzy.persistence.ResultRepository;
 import gradezzy.report.ScoreFormatter;
 import gradezzy.testcase.TestCaseException;
 import gradezzy.testcase.TestCaseSource;
+import gradezzy.testcase.TesterFile;
+import gradezzy.testcase.TesterInstaller;
+import gradezzy.testcase.TypedTestCaseSource;
 import gradezzy.testcase.UploadedTesterSource;
 
 /**
@@ -91,6 +97,12 @@ public class GradingService {
     private static final String STUDENTS_ADDED = "Students added";
     private static final String RESULT_REPLACED = "Result replaced";
     private static final String LATE_UPLOAD_REFUSED = "Late upload refused";
+    private static final String SIMILARITY_FAILED =
+            "Similar code check failed";
+
+    // The folder, inside paths.output.dir, that keeps each typed run's
+    // testers in a folder named after the run
+    private static final String TYPED_TESTERS_FOLDER = "generated-testers";
 
     // Written in the audit log for a student who has no total
     private static final String NOT_GRADED = "not graded";
@@ -119,6 +131,9 @@ public class GradingService {
 
     // The log of instructor actions, kept in the same store
     private final AuditService auditService;
+
+    // Runs the similar code check after grading, or null to skip it
+    private PlagiarismService plagiarismService = null;
 
     // The flag that stops the current run
     private final CancellationToken cancellationToken =
@@ -200,8 +215,25 @@ public class GradingService {
     }
 
     /**
-     * Grades a whole batch of submissions for one section. A submission
-     * that fails is marked FAILED and does not stop the others.
+     * Gives the service the similar code check to run when grading ends.
+     * When plagiarism.enabled is true, every batch, retry, resume,
+     * regrade and late batch is checked before the run is returned, so
+     * the console and the window both get the Similar code flags without
+     * opening Export.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param plagiarismService the check, or null to run none
+     */
+    public void setPlagiarismService(PlagiarismService plagiarismService) {
+        this.plagiarismService = plagiarismService;
+    }
+
+    /**
+     * Grades a whole batch of submissions for one section against its
+     * score sheet: the section's own in paths.score.sheet.by.section, else
+     * paths.score.sheet.file. A submission that fails is marked FAILED and
+     * does not stop the others.
      *
      * @param inputPaths the zip files or folders the instructor chose
      * @param section the section the batch belongs to
@@ -217,7 +249,7 @@ public class GradingService {
             TestCaseSource testCaseSource, ProgressListener listener)
             throws GradingException {
         return startGrading(inputPaths, section, testCaseSource, listener,
-                Path.of(config.getString(ConfigKeys.SCORE_SHEET_FILE)));
+                null);
     }
 
     /**
@@ -231,7 +263,7 @@ public class GradingService {
      * @param testCaseSource where the tester files come from
      * @param listener the object told about progress
      * @param scoreSheetFile the score sheet for this batch, or null for
-     *        the one in the settings
+     *        the section's one in the settings
      * @return the finished run, holding every submission and its results
      * @throws GradingException if the batch cannot start at all
      */
@@ -244,7 +276,8 @@ public class GradingService {
 
     /**
      * Starts a run using the roster and the starter folder chosen for
-     * this batch; null means the score sheet or the starter folder in the
+     * this batch; null means the section's score sheet (see
+     * ExportFolders.findScoreSheet) or the starter folder in the
      * settings. The starter folder is kept on the run, so Retry, and
      * Resume while this is still the last run, use it too. A start that
      * fails is written to the audit log with its reason.
@@ -256,7 +289,7 @@ public class GradingService {
      * @param testCaseSource where the tester files come from
      * @param listener the object told about progress
      * @param scoreSheetFile the score sheet for this batch, or null for
-     *        the one in the settings
+     *        the section's one in the settings
      * @param starterDirectory the starter folder for this batch, or null
      *        for the one in the settings
      * @return the finished run, holding every submission and its results
@@ -304,9 +337,11 @@ public class GradingService {
         // prepareRun kept the run's shared information in lastContext.
         GradingPipeline pipeline = createPipeline(gradingRun);
         pipeline.run(gradingRun, lastContext, listener);
+        checkSimilarity(gradingRun);
 
         // Saved again so FAILED and CANCELLED submissions, which never
-        // reach PersistStage, are on record too
+        // reach PersistStage, are on record too, with the Similar code
+        // flags
         saveRun(gradingRun, true);
         return gradingRun;
     }
@@ -319,27 +354,32 @@ public class GradingService {
             Path scoreSheetFile, Path starterDirectory)
             throws GradingException {
         checkArguments(inputPaths, section, testCaseSource, listener);
+        checkTypedCases(testCaseSource);
         setCurrentRunId(null);
         cancellationToken.reset();
 
         Path rosterFile = scoreSheetFile;
         if (rosterFile == null) {
-            rosterFile = Path.of(config.getString(
-                    ConfigKeys.SCORE_SHEET_FILE));
+            rosterFile = findSectionSheet(section);
         }
 
         // Each question's maximum comes from this batch's testers. Typed
-        // test cases have no tester folder yet, so they use the settings.
+        // test cases set their own maximums when their testers are made,
+        // so the tester folder in the settings is not checked for them.
+        boolean typed = testCaseSource instanceof TypedTestCaseSource;
         Path testersDirectory = null;
         if (testCaseSource instanceof UploadedTesterSource) {
             UploadedTesterSource uploaded =
                     (UploadedTesterSource) testCaseSource;
             testersDirectory = uploaded.getTestersDirectory();
         }
-        List<String> markProblems =
-                assessmentFactory.findMaxScoreProblems(testersDirectory);
-        if (!markProblems.isEmpty()) {
-            throw new GradingException(markProblems.get(0));
+        if (!typed) {
+            List<String> markProblems =
+                    assessmentFactory.findMaxScoreProblems(
+                            testersDirectory);
+            if (!markProblems.isEmpty()) {
+                throw new GradingException(markProblems.get(0));
+            }
         }
 
         Assessment assessment = assessmentFactory.create(
@@ -366,6 +406,9 @@ public class GradingService {
             gradingRun.addSubmission(submission);
         }
         addTesters(context, testCaseSource);
+        if (typed) {
+            keepTypedTesters(gradingRun, context);
+        }
 
         lastRun = gradingRun;
         lastContext = context;
@@ -403,6 +446,88 @@ public class GradingService {
             throw new GradingException("A setting or path is not valid: "
                     + exception.getMessage(), exception);
         }
+    }
+
+    // Refuses typed test cases when none were typed: every question
+    // would be worth 0 and every student would get an error.
+    private void checkTypedCases(TestCaseSource testCaseSource)
+            throws GradingException {
+        if (!(testCaseSource instanceof TypedTestCaseSource)) {
+            return;
+        }
+        TypedTestCaseSource typedSource =
+                (TypedTestCaseSource) testCaseSource;
+        if (typedSource.getTestCases().isEmpty()) {
+            throw new GradingException("No test case was typed, so there "
+                    + "is nothing to grade. Type at least one test case, "
+                    + "or choose a tester folder.");
+        }
+    }
+
+    // Copies the testers made from typed test cases, with their data
+    // files, into a folder of this run only, and records that folder on
+    // the run. Every typed run writes its testers to the same folder, so
+    // Undo, Resume and a rerun read this copy, never another run's.
+    private void keepTypedTesters(GradingRun gradingRun,
+            GradingContext context) throws GradingException {
+        Path runFolder = Paths.get(config.getString(ConfigKeys.OUTPUT_DIR),
+                TYPED_TESTERS_FOLDER, gradingRun.getId());
+        TesterInstaller installer = new TesterInstaller(config);
+        List<TesterFile> copies = new ArrayList<>();
+        try {
+            Files.createDirectories(runFolder);
+            for (TesterFile tester : context.getTesters()) {
+                Path source = tester.getSourceFile();
+                Path copy = runFolder.resolve(source.getFileName());
+                Files.copy(source, copy,
+                        StandardCopyOption.REPLACE_EXISTING);
+                installer.copyDataFiles(source.getParent(), runFolder);
+                copies.add(new TesterFile(tester.getQuestionId(),
+                        tester.getClassName(), copy));
+            }
+        } catch (IOException exception) {
+            throw new GradingException("The testers made from the typed "
+                    + "test cases could not be kept in " + runFolder
+                    + ": " + exception.getMessage(), exception);
+        } catch (TestCaseException exception) {
+            throw new GradingException("The testers made from the typed "
+                    + "test cases could not be kept in " + runFolder
+                    + ": " + exception.getMessage(), exception);
+        }
+
+        context.getTesters().clear();
+        context.getTesters().addAll(copies);
+        gradingRun.setTestersDirectory(runFolder);
+    }
+
+    // The score sheet of a section: its own one in the settings, else
+    // the one for everyone.
+    private Path findSectionSheet(Section section) {
+        if (section == null) {
+            return ExportFolders.findScoreSheet(config, null, null);
+        }
+        return ExportFolders.findScoreSheet(config, section.getModuleCode(),
+                section.getSectionCode());
+    }
+
+    // Runs the similar code check on a run whose grading has ended, when
+    // plagiarism.enabled is true. A failed check never fails grading:
+    // the marks stand and the audit log says why the flags are missing.
+    // Returns true when the check ran, so the caller saves the flags.
+    private boolean checkSimilarity(GradingRun gradingRun) {
+        if (plagiarismService == null
+                || !config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED)) {
+            return false;
+        }
+
+        try {
+            plagiarismService.check(gradingRun);
+        } catch (RuntimeException exception) {
+            auditService.record(SIMILARITY_FAILED, "The similar code "
+                    + "check of " + gradingRun.getId() + " stopped: "
+                    + exception);
+        }
+        return true;
     }
 
     // Keeps the id of the run being graded, for cancel.
@@ -513,6 +638,7 @@ public class GradingService {
             GradingPipeline pipeline = createPipeline(gradingRun);
             pipeline.run(retryRun, lastContext,
                     new RetryProgressListener(listener, gradingRun));
+            checkSimilarity(gradingRun);
             saveRun(gradingRun, true);
         } finally {
             endGrading();
@@ -605,6 +731,7 @@ public class GradingService {
             GradingPipeline pipeline = createPipeline(gradingRun);
             pipeline.run(resumeRun, lastContext,
                     new RetryProgressListener(listener, gradingRun));
+            checkSimilarity(gradingRun);
             saveRun(gradingRun, true);
         } finally {
             endGrading();
@@ -677,6 +804,8 @@ public class GradingService {
         try {
             pipeline.run(oneRun, context,
                     new RetryProgressListener(progress, gradingRun));
+            // Grading again cleared the student's Similar code flags
+            checkSimilarity(gradingRun);
         } finally {
             saveRun(gradingRun, true);
         }
@@ -685,8 +814,10 @@ public class GradingService {
     /**
      * Gives a graded run another score sheet, so its marks go to the
      * right sheet without grading again. Each student is matched to the
-     * new sheet by username, as grading does, the warnings about
-     * students not on the sheet are made again, and the run is saved.
+     * new sheet by username, as grading does, and the run is saved. A
+     * student now on the sheet loses the warning that they are not on
+     * it; a student still not on it keeps the warning they had, with any
+     * decision made on it, and only a student who had none gets one.
      *
      * <p>Tier: SHOULD.
      *
@@ -723,11 +854,12 @@ public class GradingService {
                 Student student = rosterReader.findByUsername(roster,
                         submission.getUsername());
                 submission.setStudent(student);
-                removeUnknownStudent(submission);
-                if (student == null) {
-                    addUnknownStudent(submission);
-                } else {
+                if (student != null) {
+                    removeUnknownStudent(submission);
                     onSheet++;
+                } else if (!hasUnknownStudent(submission)) {
+                    // A warning kept from the old sheet keeps its decision
+                    addUnknownStudent(submission);
                 }
             }
         }
@@ -744,6 +876,17 @@ public class GradingService {
                 + "on it.");
         saveRun(gradingRun, true);
         return onSheet;
+    }
+
+    // Says whether a student already has the warning that they are not on
+    // the score sheet.
+    private boolean hasUnknownStudent(Submission submission) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            if (anomaly.getType() == AnomalyType.UNKNOWN_STUDENT) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Removes the warnings that a student is not on the score sheet.
@@ -930,7 +1073,10 @@ public class GradingService {
                         + describeTotal(late) + ".");
             }
         }
-        if (restored) {
+        // Checked once the run holds the results it keeps, then saved
+        // with its flags, as after any other batch
+        boolean checked = checkSimilarity(gradingRun);
+        if (restored || checked) {
             saveRun(gradingRun, true);
         }
         return gradingRun;
@@ -942,8 +1088,17 @@ public class GradingService {
         if (late == null || late.getIngestFailure() != null) {
             return true;
         }
-        for (Anomaly anomaly : late.getAnomalies()) {
-            if (anomaly.getType() == AnomalyType.INVALID_ARCHIVE) {
+        return hasRejectedZip(late);
+    }
+
+    // Says whether ExtractStage refused a submission's zip (a zip bomb,
+    // an empty or damaged zip, or a zip slip). Only an ERROR counts: a
+    // WARNING of the same type, such as a file left out of the zip, is
+    // given to students who were still graded.
+    private boolean hasRejectedZip(Submission submission) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            if (anomaly.getType() == AnomalyType.INVALID_ARCHIVE
+                    && anomaly.getSeverity() == Severity.ERROR) {
                 return true;
             }
         }
@@ -1057,7 +1212,7 @@ public class GradingService {
 
         Path sheet = scoreSheetFile;
         if (sheet == null) {
-            sheet = Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE));
+            sheet = findSectionSheet(gradingRun.getSection());
         }
         Path runSheet = findScoreSheet(gradingRun);
         if (!isSamePath(sheet, runSheet)) {
@@ -1087,13 +1242,13 @@ public class GradingService {
         }
     }
 
-    // The score sheet a run was graded against, or the one in the
-    // settings for a run saved before the sheet was recorded.
+    // The score sheet a run was graded against, or its section's one in
+    // the settings for a run saved before the sheet was recorded, as the
+    // Export warning and the CSV export choose it.
     private Path findScoreSheet(GradingRun gradingRun) {
         Path scoreSheetFile = gradingRun.getScoreSheetFile();
         if (scoreSheetFile == null) {
-            scoreSheetFile = Paths.get(config.getString(
-                    ConfigKeys.SCORE_SHEET_FILE));
+            scoreSheetFile = findSectionSheet(gradingRun.getSection());
         }
         return scoreSheetFile;
     }
@@ -1284,12 +1439,7 @@ public class GradingService {
 
         // Resume reads the roster the run was graded against. A run saved
         // before the roster was recorded falls back to the settings.
-        Path scoreSheetFile = savedRun.getScoreSheetFile();
-        if (scoreSheetFile == null) {
-            scoreSheetFile = Paths.get(config.getString(
-                    ConfigKeys.SCORE_SHEET_FILE));
-        }
-        readRoster(context, scoreSheetFile);
+        readRoster(context, findScoreSheet(savedRun));
 
         Path testersDirectory = savedRun.getTestersDirectory();
         if (testersDirectory == null) {
@@ -1435,8 +1585,11 @@ public class GradingService {
     }
 
     // Says whether a submission stopped early and should be graded again.
+    // A refused upload or zip is left out: grading the same file again
+    // cannot help. After a zip limit is raised, grade the batch again.
     private boolean needsRetry(Submission submission) {
-        if (submission.getIngestFailure() != null) {
+        if (submission.getIngestFailure() != null
+                || hasRejectedZip(submission)) {
             return false;
         }
         SubmissionStatus status = submission.getStatus();

@@ -73,6 +73,9 @@ public class SettingsService {
     // Smallest value of a count, a size or a time limit
     private static final int MIN_POSITIVE = 1;
 
+    // Smallest value of a count or limit where 0 means none or no limit
+    private static final int MIN_NON_NEGATIVE = 0;
+
     // Range of a percentage
     private static final int MIN_PERCENT = 0;
     private static final int MAX_PERCENT = 100;
@@ -114,6 +117,13 @@ public class SettingsService {
         ConfigKeys.BACKUP_KEEP_COUNT,
         ConfigKeys.WINDOW_WIDTH,
         ConfigKeys.WINDOW_HEIGHT
+    };
+
+    // Settings that hold a whole number of 0 or more, where 0 means none
+    // or no limit
+    private static final String[] NON_NEGATIVE_INTEGER_KEYS = {
+        ConfigKeys.MAX_MEMORY_MB,
+        ConfigKeys.MAX_HANG_RERUNS
     };
 
     // Settings that hold true or false
@@ -250,6 +260,11 @@ public class SettingsService {
 
         if (contains(POSITIVE_INTEGER_KEYS, key)) {
             return checkWholeNumber(key, text, MIN_POSITIVE,
+                    Integer.MAX_VALUE);
+        }
+
+        if (contains(NON_NEGATIVE_INTEGER_KEYS, key)) {
+            return checkWholeNumber(key, text, MIN_NON_NEGATIVE,
                     Integer.MAX_VALUE);
         }
 

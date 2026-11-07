@@ -97,6 +97,10 @@ public class ApplicationContext {
         GradingService gradingService = new GradingService(config,
                 pipelineFactory, new AssessmentFactory(config), repository,
                 auditService);
+        // Grading runs the similar code check once a batch is graded
+        PlagiarismService plagiarismService = new PlagiarismService(config,
+                new TokenSimilarityDetector(config), repository);
+        gradingService.setPlagiarismService(plagiarismService);
 
         this.services = new ServiceRegistry(config, gradingService,
                 new AnomalyService(fixManager, repository, auditService,
@@ -109,8 +113,7 @@ public class ApplicationContext {
                 new SettingsService(config, auditService),
                 new HistoryService(config, repository,
                         new BackupManager(config), auditService),
-                new PlagiarismService(config,
-                        new TokenSimilarityDetector(config), repository));
+                plagiarismService);
         services.setScoreAdjustmentService(new ScoreAdjustmentService(
                 repository, config));
     }
