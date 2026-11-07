@@ -208,7 +208,7 @@ ui (JavaFX)        app.ConsoleMain
 | 4 | `DetectStage` | Runs every `Detector`. | Jun Sheng |
 | 5 | `InstallTestersStage` | Copies testers and data files into the working copy. | Zach |
 | 6 | `CompileStage` | Compiles each question in its own copy of its folder, `<working copy>/.questions/<id>/`, so Q1a's code cannot change Q1b's tester, and keeps the compiled files in memory. | Zach |
-| 7 | `ExecuteStage` | Puts back and flags any compiled file changed since compiling, then runs each tester in that copy with a time limit and parses its output. A test case that hangs gets no marks and the tester is run again without it, so the cases after it are still marked, as the brief describes. | Zach |
+| 7 | `ExecuteStage` | Puts back and flags any compiled file changed since compiling, then runs each tester in that copy with a time limit and parses its output. A test case that hangs gets no marks and the tester is run again without it, so the cases after it are still marked, as the brief describes, up to `exec.max.hang.reruns` times; then the cases left are flagged for the instructor. | Zach |
 | 8 | `ScoreStage` | Sets per-question and per-student scores. | Jing Yuan |
 | 9 | `PersistStage` | Saves the result so a run can be resumed. | Huxley |
 
@@ -1001,6 +1001,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `exec.thread.count` | `4` | Submissions graded at the same time. |
 | `exec.max.output.characters` | `100000` | Longest program output kept. In a tester run, student prints may use half of it, so the tester's own lines are never cut off. |
 | `exec.max.memory.mb` | `256` | Most memory, in MB, one tester run may use for its objects. `0` means no limit. Each run also gets a 2 MB thread stack and one CPU. |
+| `exec.max.hang.reruns` | `2` | Times a question's tester is run again, without the case that hung, so the cases after it are still marked. Each rerun can take the whole time limit. After the last one, the cases not yet run get no mark and the timeout flag asks the instructor to check them. |
 | `grading.tester.class.suffix` | `Tester` | `Q1a` becomes `Q1aTester`. |
 | `grading.pass.marker` | `Passed` | Line a tester prints for a passed test. |
 | `grading.fail.marker` | `Failed` | Start of the line for a failed test. |
@@ -1083,8 +1084,10 @@ by this section.
 | JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs to SQLite so Runs can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
 | `Thread.sleep`, `InterruptedException` | `util.FileUtils` | Waits briefly before retrying a move that Windows blocked, such as when antivirus holds a new file open. | Pauses for half a second, then tries the move again, up to five times. |
 | `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |
+| `InputStream.available()` | `exec.ProcessRunner` | Tells whether a running program has output waiting, so the runner reads it at once instead of pausing first. | Asks a stream how many bytes can be read right now without waiting; 0 means nothing has arrived yet. |
 | Shutdown hook (`Runtime.addShutdownHook`), a daemon `Thread` | `exec.ProcessRunner`, `exec.RunningProcesses`, `exec.TesterHarness`, `exec.HarnessWatchdog` | No tester keeps running after GradeZZY closes or crashes. | A shutdown hook is a thread Java starts as the program ends; ours stops every tester still running. The watchdog is a second thread inside each tester run that sleeps until the time limit plus 2 seconds, then ends the run, in case GradeZZY is gone. |
 | `PrintStream` subclass, `System.setOut`, `StackWalker` | `exec.TesterHarness`, `exec.TrustedPrintStream`, `exec.TrustedFrameCheck` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. | All printing goes through our `PrintStream`, which checks who called it and marks a line only when no student method is on the call stack. |
+| `Throwable.setStackTrace`, an overridden `toString` | `exec.SkippedCaseException` | The provided testers print the stack trace of any exception in a case, so a case GradeZZY skips prints one plain line instead of a GradeZZY stack trace. | Our exception keeps an empty list of call stack lines and prints as its message alone. |
 | Varargs `format(String, Object...)` | `exec.TrustedPrintStream` only | It overrides `PrintStream.format`, whose signature Java fixes. | `printf` calls this method, so ours must have exactly the same parameters to catch `printf` output too. |
 | Reflection (`Class.forName`, `Method.invoke`, `Class<?>`) | `exec.TesterHarness`, `exec.TrustedPrintStream`, `exec.TrustedFrameCheck` | Starts the tester's `main` from inside the harness. | Loads a class by its name at run time and calls its `main`, the way `java Q1aTester` would. |
 | `Runtime.halt`, the `jdk.lang.Process.launchMechanism` property | `exec.TesterHarness` | Ends the run without waiting for student threads, and stops student code starting other programs (macOS and Linux). | A hard stop for the tester's program, and a switch that blocks it from launching others. |
@@ -1093,6 +1096,7 @@ by this section.
 | `java.util.regex.Pattern`, `matches`, `replaceFirst` | `service.SettingsService`, `ingest.SubmissionLoader`, `ingest.ZipExtractor.isSafeEntry` | The zip name setting is itself a pattern; unsafe Windows file names are a pattern too. | A pattern describes a family of strings, such as "2023-2024-" followed by a username. |
 | `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
 | `StandardCharsets.ISO_8859_1` | `testcase.TesterMarks` | Opens a tester file whatever encoding it was saved in, to read its `score +=` lines. | A way of turning bytes into characters that accepts every byte, so a tester saved in Windows-1252 still opens. |
+| `Collections.reverseOrder()` | `testcase.TesterMarks` | Sorts a tester's case marks from largest to smallest, to find the most a number of passed cases can be worth. | `Collections.sort` as taught, given a comparator that puts the larger number first. |
 | `java.time` (`LocalDateTime`, `DateTimeFormatter`) | `model`, `persistence`, `report.AuditLogExporter`, `service`, `ui.demo` | Run and audit times. | The current date and time, and how to print it. |
 | `java.util.Random` | `ui.demo.DemoData` | Synthetic marks for `--demo`, always from the same seed. | Gives the same "random" numbers every time, so the demo looks the same. |
 
