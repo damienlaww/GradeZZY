@@ -1022,7 +1022,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `database.file` | `workspace/gradezzy.db` | Location of the database file. |
 | `database.backup.keep.count` | `5` | Backups kept before the oldest is deleted. |
 | `audit.enabled` | `true` | Log instructor actions. |
-| `ui.theme` | `light` | `light` or `dark`. |
+| `ui.theme` | `dark` | `light` or `dark`. |
 | `ui.window.width`, `ui.window.height` | `1200`, `800` | Starting window size. |
 | `ui.animations.enabled` | `true` | Show subtle animations. |
 

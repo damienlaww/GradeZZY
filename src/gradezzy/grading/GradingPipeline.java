@@ -248,13 +248,22 @@ public class GradingPipeline {
         } catch (RuntimeException exception) {
             // A bug in a stage must not stop the other submissions either.
             recordFailure(submission, exception);
+        } catch (StackOverflowError error) {
+            // Deep recursion in a stage ends this submission only, so the
+            // worker and the batch go on
+            recordFailure(submission, error);
         }
     }
 
     // Turns a failure into an anomaly with an id unique across runs. The
     // submission is touched by only one worker, so no lock is needed.
-    private void recordFailure(Submission submission, Exception exception) {
-        String message = "Grading stopped early: " + exception.getMessage();
+    private void recordFailure(Submission submission, Throwable exception) {
+        String reason = exception.getMessage();
+        if (reason == null) {
+            // A StackOverflowError usually has no message of its own
+            reason = exception.toString();
+        }
+        String message = "Grading stopped early: " + reason;
         Anomaly anomaly = new Anomaly(FAILURE_ID_PREFIX + UUID.randomUUID(),
                 AnomalyType.INTERNAL_ERROR, Severity.ERROR,
                 submission.getUsername(), message, FAILURE_ACTION);

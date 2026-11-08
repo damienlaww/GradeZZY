@@ -73,12 +73,22 @@ public class Submission {
         this.originalPath = originalPath;
     }
 
-    /** Returns the upload rejection reason, or null for an accepted upload. */
+    /**
+     * Returns why the upload was rejected before grading, for example a
+     * file that is not a ZIP file.
+     *
+     * @return the rejection reason, or null for an accepted upload
+     */
     public String getIngestFailure() {
         return ingestFailure;
     }
 
-    /** Records why this upload cannot be graded. */
+    /**
+     * Records why this upload cannot be graded. The pipeline then marks
+     * the submission FAILED without running any stage.
+     *
+     * @param ingestFailure the rejection reason
+     */
     public void setIngestFailure(String ingestFailure) {
         this.ingestFailure = ingestFailure;
     }
