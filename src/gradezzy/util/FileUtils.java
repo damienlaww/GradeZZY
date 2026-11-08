@@ -98,31 +98,42 @@ public final class FileUtils {
     // Deletes one file or empty folder. On Windows a read-only file
     // cannot be deleted, and antivirus or a process that just stopped
     // can hold a file for a moment, so it clears read-only and tries
-    // again a few times; the last try reports the real error.
+    // again a few times; the last try reports the real error. Elsewhere
+    // such a failure does not pass by itself, so it is reported at once
+    // instead of after the waits.
     private static void deleteWithRetry(Path path) throws IOException {
         for (int attempt = 1; attempt < MOVE_ATTEMPTS; attempt++) {
             try {
                 Files.deleteIfExists(path);
                 return;
             } catch (IOException exception) {
-                clearReadOnly(path);
+                if (!clearReadOnly(path)) {
+                    throw exception;
+                }
                 waitBeforeRetry();
             }
         }
         Files.deleteIfExists(path);
     }
 
-    // Clears the Windows read-only flag, where there is one.
-    private static void clearReadOnly(Path path) {
+    // Clears the Windows read-only flag. Returns false when the file is
+    // not on a Windows file system or is gone, so there is nothing to
+    // wait for.
+    private static boolean clearReadOnly(Path path) {
         try {
-            if (Files.getFileStore(path).supportsFileAttributeView(
+            if (!Files.getFileStore(path).supportsFileAttributeView(
                     DOS_VIEW)) {
-                Files.setAttribute(path, DOS_READ_ONLY, false,
-                        LinkOption.NOFOLLOW_LINKS);
+                return false;
             }
-        } catch (IOException | UnsupportedOperationException
-                | IllegalArgumentException exception) {
-            // Not a Windows file system, or the file is gone
+            Files.setAttribute(path, DOS_READ_ONLY, false,
+                    LinkOption.NOFOLLOW_LINKS);
+            return true;
+        } catch (IOException exception) {
+            return false;
+        } catch (UnsupportedOperationException exception) {
+            return false;
+        } catch (IllegalArgumentException exception) {
+            return false;
         }
     }
 

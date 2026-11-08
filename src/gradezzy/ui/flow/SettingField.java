@@ -110,9 +110,6 @@ public class SettingField {
     // The Choose button of a path setting
     private Button chooseButton = null;
 
-    // True when the setting is changed somewhere else and only shown here
-    private boolean linked = false;
-
     // The path field and its Choose button, for a file or folder
     private HBox pathLine = null;
 
@@ -318,34 +315,11 @@ public class SettingField {
      * @param editable true to allow changes
      */
     public void setEditable(boolean editable) {
-        field.setEditable(editable && !linked);
+        field.setEditable(editable);
         toggle.setDisable(!editable);
         choice.setDisable(!editable);
         if (chooseButton != null) {
             chooseButton.setDisable(!editable);
-        }
-    }
-
-    /**
-     * Shows a file or folder that has one home elsewhere, such as the
-     * score sheet on Set up: the path cannot be typed here, and a link
-     * opens the place where it is changed. Its saved value never counts
-     * as a change, so it never blocks Save.
-     *
-     * @param text the words of the link, such as "Change on Set up"
-     * @param action what the link opens
-     */
-    public void linkTo(String text, Runnable action) {
-        linked = true;
-        field.setEditable(false);
-        field.setFocusTraversable(false);
-        field.getStyleClass().add("linked-path");
-        if (chooseButton != null) {
-            chooseButton.setVisible(false);
-            chooseButton.setManaged(false);
-        }
-        if (pathLine != null) {
-            pathLine.getChildren().add(Parts.link(text, action));
         }
     }
 

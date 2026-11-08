@@ -16,7 +16,7 @@
 package gradezzy.ui.flow;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +28,8 @@ import javafx.scene.shape.Line;
 import javafx.scene.shape.Polygon;
 import javafx.scene.shape.Polyline;
 import javafx.scene.text.Text;
+
+import gradezzy.util.TextUtils;
 
 /**
  * Bell curves of several sections on one chart.
@@ -231,14 +233,21 @@ public class CompareChart extends Region {
             double plotWidth, double top, double plotHeight) {
         double bottom = top + plotHeight;
         // Sections whose averages round to the same mark share a line
-        Map<String, List<Integer>> groups = new LinkedHashMap<>();
+        // The rounded averages in the order first seen, beside the
+        // sections that have each
+        List<String> means = new ArrayList<>();
+        Map<String, List<Integer>> groups = new HashMap<>();
         for (int index = 0; index < stats.size(); index++) {
             String mean = String.format("%.1f", stats.get(index).getMean());
-            groups.computeIfAbsent(mean, key -> new ArrayList<>()).add(index);
+            if (!groups.containsKey(mean)) {
+                means.add(mean);
+                groups.put(mean, new ArrayList<>());
+            }
+            groups.get(mean).add(index);
         }
         List<Bounds> placed = new ArrayList<>();
-        for (Map.Entry<String, List<Integer>> group : groups.entrySet()) {
-            List<Integer> members = group.getValue();
+        for (String groupMean : means) {
+            List<Integer> members = groups.get(groupMean);
             MarkStats first = stats.get(members.get(0));
             double mean = Math.max(0, Math.min(max, first.getMean()));
             double x = left + plotWidth * mean / max;
@@ -259,8 +268,8 @@ public class CompareChart extends Region {
                 dot.getStyleClass().addAll("compare-dot", seriesClass(index));
                 getChildren().add(dot);
             }
-            Text label = addText(String.join(", ", who) + " \u00B7 average "
-                    + group.getKey(), "chart-label");
+            Text label = addText(TextUtils.join(", ", who)
+                    + " \u00B7 average " + groupMean, "chart-label");
             if (members.size() == 1) {
                 label.getStyleClass().add(seriesClass(members.get(0)));
             }

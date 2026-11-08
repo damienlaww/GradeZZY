@@ -135,6 +135,12 @@ public class SqliteResultRepository implements ResultRepository {
                 + "new_score REAL NOT NULL, "
                 + "reason TEXT, "
                 + "saved_at TEXT NOT NULL)",
+        // A 0 the instructor looked at; kept apart from the submissions
+        // so saving a run again does not forget it
+        "CREATE TABLE IF NOT EXISTS zero_checks ("
+                + "run_id TEXT NOT NULL, "
+                + "username TEXT NOT NULL, "
+                + "PRIMARY KEY (run_id, username))",
         "CREATE TABLE IF NOT EXISTS audit_entries ("
                 + "entry_id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + "logged_at TEXT, "
@@ -273,14 +279,28 @@ public class SqliteResultRepository implements ResultRepository {
             + "decision FROM anomalies WHERE run_id = ? "
             + "AND decision IS NOT NULL";
 
+    // Saves, removes and lists the 0s marked as checked
+    private static final String INSERT_ZERO_CHECK = "INSERT OR IGNORE "
+            + "INTO zero_checks (run_id, username) VALUES (?, ?)";
+
+    private static final String DELETE_ZERO_CHECK = "DELETE FROM "
+            + "zero_checks WHERE run_id = ? AND username = ?";
+
+    private static final String SELECT_ZERO_CHECKS = "SELECT username "
+            + "FROM zero_checks WHERE run_id = ? ORDER BY username";
+
     // Saves, removes and lists the marks changed by hand
     private static final String INSERT_ADJUSTMENT = "INSERT INTO "
             + "score_adjustments (run_id, username, question_id, "
             + "previous_score, new_score, reason, saved_at) "
             + "VALUES (?, ?, ?, ?, ?, ?, ?)";
+    // Removes one row only, so two changes saved at the same time with
+    // the same marks are taken back one at a time
     private static final String DELETE_ADJUSTMENT = "DELETE FROM "
+            + "score_adjustments WHERE rowid = (SELECT rowid FROM "
             + "score_adjustments WHERE run_id = ? AND username = ? "
-            + "AND question_id = ? AND saved_at = ?";
+            + "AND question_id = ? AND saved_at = ? "
+            + "AND previous_score = ? AND new_score = ? LIMIT 1)";
     private static final String SELECT_ADJUSTMENTS = "SELECT username, "
             + "question_id, previous_score, new_score, reason, saved_at "
             + "FROM score_adjustments WHERE run_id = ? ORDER BY saved_at";
@@ -394,6 +414,8 @@ public class SqliteResultRepository implements ResultRepository {
         String runId = gradingRun.getId();
         try {
             connection.setAutoCommit(false);
+            // A flag saved again keeps its id, so it keeps its decision
+            Map<String, String> decisions = readDecisions(runId);
             insertRunRow(gradingRun);
             for (String sql : DELETE_RUN_CONTENTS) {
                 PreparedStatement statement = null;
@@ -411,6 +433,7 @@ public class SqliteResultRepository implements ResultRepository {
             for (int index = 0; index < submissions.size(); index++) {
                 insertSubmission(runId, submissions.get(index), index);
             }
+            writeDecisions(decisions);
             connection.commit();
         } catch (SQLException exception) {
             rollback();
@@ -518,6 +541,8 @@ public class SqliteResultRepository implements ResultRepository {
         String username = submission.getUsername();
         try {
             connection.setAutoCommit(false);
+            // A flag saved again keeps its id, so it keeps its decision
+            Map<String, String> decisions = readDecisions(runId);
             int position = findPosition(runId, username);
             for (String sql : DELETE_SUBMISSION) {
                 PreparedStatement statement = null;
@@ -531,6 +556,7 @@ public class SqliteResultRepository implements ResultRepository {
                 }
             }
             insertSubmission(runId, submission, position);
+            writeDecisions(decisions);
             connection.commit();
         } catch (SQLException exception) {
             rollback();
@@ -626,6 +652,56 @@ public class SqliteResultRepository implements ResultRepository {
     }
 
     /**
+     * Saves or removes the mark that the instructor checked a student's 0.
+     *
+     * @param runId the run id
+     * @param username the student
+     * @param checked true to save the check, false to remove it
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized void updateZeroCheck(String runId, String username,
+            boolean checked) throws PersistenceException {
+        requireOpen();
+        if (runId == null || username == null) {
+            throw new PersistenceException("There is no student to save "
+                    + "the check for.");
+        }
+
+        try {
+            writeZeroCheck(runId, username, checked);
+        } catch (SQLException exception) {
+            throw new PersistenceException("The check on the 0 of "
+                    + username + " could not be saved: "
+                    + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Lists the students of a run whose 0 the instructor checked.
+     *
+     * @param runId the run id
+     * @return the usernames, in alphabetical order
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized List<String> loadZeroChecks(String runId)
+            throws PersistenceException {
+        requireOpen();
+        if (runId == null) {
+            return new ArrayList<>();
+        }
+
+        try {
+            return readZeroChecks(runId);
+        } catch (SQLException exception) {
+            throw new PersistenceException("The checked 0s of run " + runId
+                    + " could not be read: " + exception.getMessage(),
+                    exception);
+        }
+    }
+
+    /**
      * Saves a mark changed by hand.
      *
      * @param runId the run id
@@ -676,6 +752,8 @@ public class SqliteResultRepository implements ResultRepository {
                 statement.setString(2, adjustment.getUsername());
                 statement.setString(3, adjustment.getQuestionId());
                 statement.setString(4, textOf(adjustment.getSavedAt()));
+                statement.setDouble(5, adjustment.getPreviousScore());
+                statement.setDouble(6, adjustment.getNewScore());
                 statement.executeUpdate();
             } finally {
                 closeStatement(statement);
@@ -717,9 +795,12 @@ public class SqliteResultRepository implements ResultRepository {
             } finally {
                 closeQuery(rows, statement);
             }
-        } catch (SQLException | DateTimeParseException exception) {
+        } catch (SQLException exception) {
             throw new PersistenceException("The changed marks could not be "
                     + "read: " + exception.getMessage(), exception);
+        } catch (DateTimeParseException exception) {
+            throw new PersistenceException("A changed mark has a time that "
+                    + "cannot be read: " + exception.getMessage(), exception);
         }
         return changes;
     }
@@ -1464,6 +1545,51 @@ public class SqliteResultRepository implements ResultRepository {
             statement.executeUpdate();
         } finally {
             closeStatement(statement);
+        }
+    }
+
+    // Saves or removes one checked 0
+    private void writeZeroCheck(String runId, String username,
+            boolean checked) throws SQLException {
+        String sql = DELETE_ZERO_CHECK;
+        if (checked) {
+            sql = INSERT_ZERO_CHECK;
+        }
+        PreparedStatement statement = null;
+        try {
+            statement = connection.prepareStatement(sql);
+            statement.setString(1, runId);
+            statement.setString(2, username);
+            statement.executeUpdate();
+        } finally {
+            closeStatement(statement);
+        }
+    }
+
+    // Reads the usernames of a run whose 0 was checked
+    private List<String> readZeroChecks(String runId) throws SQLException {
+        List<String> usernames = new ArrayList<>();
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            statement = connection.prepareStatement(SELECT_ZERO_CHECKS);
+            statement.setString(1, runId);
+            rows = statement.executeQuery();
+            while (rows.next()) {
+                usernames.add(rows.getString("username"));
+            }
+        } finally {
+            closeQuery(rows, statement);
+        }
+        return usernames;
+    }
+
+    // Writes back decisions read before a run or student was saved
+    // again. A flag that is gone has no row, so its decision is dropped.
+    private void writeDecisions(Map<String, String> decisions)
+            throws SQLException {
+        for (String anomalyId : decisions.keySet()) {
+            writeDecision(anomalyId, decisions.get(anomalyId));
         }
     }
 

@@ -105,6 +105,27 @@ public interface ResultRepository {
             throws PersistenceException;
 
     /**
+     * Saves or removes the mark that the instructor checked a student's
+     * 0, a total that no flag explains.
+     *
+     * @param runId the run id
+     * @param username the student
+     * @param checked true to save the check, false to remove it
+     * @throws PersistenceException if the operation fails
+     */
+    void updateZeroCheck(String runId, String username,
+            boolean checked) throws PersistenceException;
+
+    /**
+     * Lists the students of a run whose 0 the instructor checked.
+     *
+     * @param runId the run id
+     * @return the usernames
+     * @throws PersistenceException if the operation fails
+     */
+    List<String> loadZeroChecks(String runId) throws PersistenceException;
+
+    /**
      * Saves a mark changed by hand, with its reason and earlier mark.
      *
      * @param runId the run id

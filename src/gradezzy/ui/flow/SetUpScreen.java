@@ -502,6 +502,9 @@ public class SetUpScreen extends FlowScreen {
             assessmentBox.setValue(assessment.getName());
         }
         assessmentBox.setDisable(getState().isGrading());
+        // The batch being graded keeps its module and section
+        moduleBox.setDisable(getState().isGrading());
+        sectionBox.setDisable(getState().isGrading());
     }
 
     // Switches the assessment in use.
@@ -712,8 +715,10 @@ public class SetUpScreen extends FlowScreen {
         if (kind == InputKind.ROSTER && !getBackend().isDemo()) {
             String sheet = getBackend().getScoreSheet(getState()
                     .getSection());
-            path = sheet == null || sheet.trim().isEmpty() ? null
-                    : Paths.get(sheet.trim());
+            path = null;
+            if (sheet != null && !sheet.trim().isEmpty()) {
+                path = Paths.get(sheet.trim());
+            }
         }
         if (path == null && getBackend().isDemo()) {
             List<Path> samples = getBackend().getSampleFiles(kind);
@@ -751,8 +756,10 @@ public class SetUpScreen extends FlowScreen {
 
     // Names the section chosen now, such as "CS102 G1", or "".
     private String sectionLabel() {
-        return getState().getSection() == null ? ""
-                : getState().getSection().getLabel();
+        if (getState().getSection() == null) {
+            return "";
+        }
+        return getState().getSection().getLabel();
     }
 
     // Keeps a score sheet chosen on Set up as the chosen section's, so it

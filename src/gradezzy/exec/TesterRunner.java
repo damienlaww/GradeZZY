@@ -63,7 +63,8 @@ public class TesterRunner {
     private static final String LIMIT_MODULES_OPTION =
             "--limit-modules=java.base";
 
-    // Student code may not load native libraries, which could do anything
+    // The tester's error output is written in UTF-8, as its normal
+    // output is, so names and messages with accents read back the same
     private static final String UTF8_ERROR_OPTION =
             "-Dstderr.encoding=UTF-8";
 
@@ -71,6 +72,7 @@ public class TesterRunner {
     private static final String OLD_UTF8_ERROR_OPTION =
             "-Dsun.stderr.encoding=UTF-8";
 
+    // Student code may not load native libraries, which could do anything
     private static final String NO_NATIVE_OPTION =
             "--illegal-native-access=deny";
 

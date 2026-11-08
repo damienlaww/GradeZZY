@@ -12,9 +12,8 @@
 package gradezzy.config;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 
 /**
  * The export folders of single modules and sections.
@@ -33,6 +32,10 @@ public final class ExportFolders {
     // A module or section code: letters, digits and dashes
     private static final String CODE_PATTERN = "[A-Za-z0-9-]+";
 
+    // Where who an entry is for, and its folder, sit in an entry
+    private static final int WHO = 0;
+    private static final int FOLDER = 1;
+
     // Not used: every method is static.
     private ExportFolders() {
     }
@@ -49,7 +52,7 @@ public final class ExportFolders {
      */
     public static String resolve(String defaultFolder, String folders,
             String moduleCode, String sectionCode) {
-        Map<String, String> entries = read(folders);
+        List<String[]> entries = read(folders);
         if (moduleCode != null && sectionCode != null) {
             String own = find(entries, keyOf(moduleCode, sectionCode));
             if (own != null) {
@@ -75,7 +78,10 @@ public final class ExportFolders {
      */
     public static String exact(String folders, String who) {
         String found = find(read(folders), who);
-        return found == null ? "" : found;
+        if (found == null) {
+            return "";
+        }
+        return found;
     }
 
     /**
@@ -86,11 +92,7 @@ public final class ExportFolders {
      * @return each entry as {who, folder}
      */
     public static List<String[]> list(String folders) {
-        List<String[]> list = new ArrayList<>();
-        for (Map.Entry<String, String> entry : read(folders).entrySet()) {
-            list.add(new String[] {entry.getKey(), entry.getValue()});
-        }
-        return list;
+        return read(folders);
     }
 
     /**
@@ -103,12 +105,12 @@ public final class ExportFolders {
      * @return the new value
      */
     public static String put(String folders, String who, String folder) {
-        Map<String, String> entries = read(folders);
-        String existing = matchingKey(entries, who);
-        if (existing != null) {
+        List<String[]> entries = read(folders);
+        int existing = indexOf(entries, who);
+        if (existing >= 0) {
             entries.remove(existing);
         }
-        entries.put(who.trim(), folder.trim());
+        entries.add(new String[] {who.trim(), folder.trim()});
         return write(entries);
     }
 
@@ -120,9 +122,9 @@ public final class ExportFolders {
      * @return the new value
      */
     public static String remove(String folders, String who) {
-        Map<String, String> entries = read(folders);
-        String existing = matchingKey(entries, who);
-        if (existing != null) {
+        List<String[]> entries = read(folders);
+        int existing = indexOf(entries, who);
+        if (existing >= 0) {
             entries.remove(existing);
         }
         return write(entries);
@@ -137,14 +139,36 @@ public final class ExportFolders {
      * @return the new value
      */
     public static String removeModule(String folders, String moduleCode) {
-        Map<String, String> entries = read(folders);
-        String module = moduleCode.trim().toLowerCase(java.util.Locale.ROOT);
-        entries.keySet().removeIf(key -> {
-            String lower = key.toLowerCase(java.util.Locale.ROOT);
-            return lower.equals(module)
-                    || lower.startsWith(module + SECTION_SEPARATOR);
-        });
-        return write(entries);
+        String module = moduleCode.trim().toLowerCase(Locale.ROOT);
+        List<String[]> kept = new ArrayList<>();
+        for (String[] entry : read(folders)) {
+            String lower = entry[WHO].toLowerCase(Locale.ROOT);
+            if (!lower.equals(module)
+                    && !lower.startsWith(module + SECTION_SEPARATOR)) {
+                kept.add(entry);
+            }
+        }
+        return write(kept);
+    }
+
+    /**
+     * Returns the value without the entries of one section in any
+     * module, for a section every module has that is deleted.
+     *
+     * @param folders the value now, or null
+     * @param sectionCode the section
+     * @return the new value
+     */
+    public static String removeSection(String folders, String sectionCode) {
+        String ending = (SECTION_SEPARATOR + sectionCode.trim())
+                .toLowerCase(Locale.ROOT);
+        List<String[]> kept = new ArrayList<>();
+        for (String[] entry : read(folders)) {
+            if (!entry[WHO].toLowerCase(Locale.ROOT).endsWith(ending)) {
+                kept.add(entry);
+            }
+        }
+        return write(kept);
     }
 
     /**
@@ -172,32 +196,41 @@ public final class ExportFolders {
             return "";
         }
         for (String entry : value.split(ENTRY_SEPARATOR)) {
-            if (entry.trim().isEmpty()) {
-                continue;
-            }
-            int equals = entry.indexOf(VALUE_SEPARATOR);
-            if (equals <= 0 || entry.substring(equals + 1).trim().isEmpty()) {
-                return "Write each folder as CS102/G1=folder, separated by ;.";
-            }
-            String who = entry.substring(0, equals).trim();
-            String[] parts = who.split(SECTION_SEPARATOR, -1);
-            if (parts.length > 2) {
-                return "Name a module, or a module and a section, such as "
-                        + "CS102/G1.";
-            }
-            for (String part : parts) {
-                if (!part.trim().matches(CODE_PATTERN)) {
-                    return "Use letters, digits and dashes for modules and "
-                            + "sections, such as CS102/G1.";
-                }
+            String problem = validateEntry(entry);
+            if (!problem.isEmpty()) {
+                return problem;
             }
         }
         return "";
     }
 
-    // Reads the value into who each folder is for and the folder.
-    private static Map<String, String> read(String value) {
-        Map<String, String> entries = new LinkedHashMap<>();
+    // Checks one entry, such as "CS102/G1=folder"; a blank one is fine.
+    private static String validateEntry(String entry) {
+        if (entry.trim().isEmpty()) {
+            return "";
+        }
+        int equals = entry.indexOf(VALUE_SEPARATOR);
+        if (equals <= 0 || entry.substring(equals + 1).trim().isEmpty()) {
+            return "Write each folder as CS102/G1=folder, separated by ;.";
+        }
+        String who = entry.substring(0, equals).trim();
+        String[] parts = who.split(SECTION_SEPARATOR, -1);
+        if (parts.length > 2) {
+            return "Name a module, or a module and a section, such as "
+                    + "CS102/G1.";
+        }
+        for (String part : parts) {
+            if (!part.trim().matches(CODE_PATTERN)) {
+                return "Use letters, digits and dashes for modules and "
+                        + "sections, such as CS102/G1.";
+            }
+        }
+        return "";
+    }
+
+    // Reads the value into entries of {who, folder}, in order.
+    private static List<String[]> read(String value) {
+        List<String[]> entries = new ArrayList<>();
         if (value == null) {
             return entries;
         }
@@ -207,24 +240,36 @@ public final class ExportFolders {
                 String who = entry.substring(0, equals).trim();
                 String folder = decode(entry.substring(equals + 1).trim());
                 if (!who.isEmpty() && !folder.isEmpty()) {
-                    entries.put(who, folder);
+                    putEntry(entries, who, folder);
                 }
             }
         }
         return entries;
     }
 
-    // Writes the entries back into one value.
-    private static String write(Map<String, String> entries) {
-        StringBuilder text = new StringBuilder();
-        for (Map.Entry<String, String> entry : entries.entrySet()) {
-            if (text.length() > 0) {
-                text.append(ENTRY_SEPARATOR);
+    // Adds an entry, or replaces the folder of one written the same way,
+    // so a repeated entry keeps its first place and its last folder.
+    private static void putEntry(List<String[]> entries, String who,
+            String folder) {
+        for (String[] entry : entries) {
+            if (entry[WHO].equals(who)) {
+                entry[FOLDER] = folder;
+                return;
             }
-            text.append(entry.getKey()).append(VALUE_SEPARATOR)
-                    .append(encode(entry.getValue()));
         }
-        return text.toString();
+        entries.add(new String[] {who, folder});
+    }
+
+    // Writes the entries back into one value.
+    private static String write(List<String[]> entries) {
+        String text = "";
+        for (String[] entry : entries) {
+            if (!text.isEmpty()) {
+                text += ENTRY_SEPARATOR;
+            }
+            text += entry[WHO] + VALUE_SEPARATOR + encode(entry[FOLDER]);
+        }
+        return text;
     }
 
     // Writes a folder so a ; in its name does not end the entry: % is
@@ -240,19 +285,22 @@ public final class ExportFolders {
     }
 
     // Returns the folder of an entry, ignoring case, or null.
-    private static String find(Map<String, String> entries, String who) {
-        String key = matchingKey(entries, who);
-        return key == null ? null : entries.get(key);
+    private static String find(List<String[]> entries, String who) {
+        int index = indexOf(entries, who);
+        if (index < 0) {
+            return null;
+        }
+        return entries.get(index)[FOLDER];
     }
 
-    // Returns the key written for a module or section, ignoring case.
-    private static String matchingKey(Map<String, String> entries,
-            String who) {
-        for (String key : entries.keySet()) {
-            if (key.equalsIgnoreCase(who.trim())) {
-                return key;
+    // Returns where the entry for a module or section is, ignoring case,
+    // or -1.
+    private static int indexOf(List<String[]> entries, String who) {
+        for (int index = 0; index < entries.size(); index++) {
+            if (entries.get(index)[WHO].equalsIgnoreCase(who.trim())) {
+                return index;
             }
         }
-        return null;
+        return -1;
     }
 }

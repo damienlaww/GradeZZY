@@ -51,6 +51,7 @@ import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.RepairItem;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.ReviewDecision;
+import gradezzy.ui.backend.ReviewRules;
 import gradezzy.ui.backend.StatusCounts;
 import gradezzy.ui.demo.DemoBackend;
 import gradezzy.ui.demo.DemoData;
@@ -401,7 +402,7 @@ public class FlowSelfTest {
             Node card = cardOf(fix);
             check(card != null && SceneFinder.shows(card, "Fixed for you"),
                     "the panel shows the fix as Fixed for you");
-            press(card == null ? null : SceneFinder.button(card,
+            press(SceneFinder.button(card,
                     "Keep fix"), "Keep fix");
             check(fix.getFixStatus() == FixStatus.APPROVED,
                     "the fix was approved");
@@ -433,7 +434,7 @@ public class FlowSelfTest {
         if (panel != null) {
             panel.setVvalue(panel.getVmax());
         }
-        press(card == null ? null : SceneFinder.button(card, "Looks fine"),
+        press(SceneFinder.button(card, "Looks fine"),
                 "Looks fine");
         check(backend.getDecision(flag) == ReviewDecision.REJECTED,
                 "the flag was rejected");
@@ -443,15 +444,19 @@ public class FlowSelfTest {
         check(backend.getDecision(flag) == ReviewDecision.OPEN,
                 "Undo in the notice put the flag back to open");
         card = cardOf(flag);
-        press(card == null ? null : SceneFinder.button(card, "Looks fine"),
+        press(SceneFinder.button(card, "Looks fine"),
                 "Looks fine again");
         check(backend.getDecision(flag) == ReviewDecision.REJECTED,
                 "the flag was rejected again");
+        String place = "no panel";
+        if (panel != null) {
+            place = String.valueOf(panel.getVvalue());
+        }
         check(panel != null && panel.getVvalue() > panel.getVmin(),
                 "the panel kept its place after Looks fine (it is at "
-                + (panel == null ? "no panel" : panel.getVvalue()) + ")");
+                + place + ")");
         card = cardOf(flag);
-        press(card == null ? null : SceneFinder.button(card, "Undo"),
+        press(SceneFinder.button(card, "Undo"),
                 "Undo");
         check(backend.getDecision(flag) == ReviewDecision.OPEN,
                 "Reopen put the flag back to open");
@@ -498,7 +503,7 @@ public class FlowSelfTest {
 
         rejectInPanel(fix);
         Node card = cardOf(fix);
-        press(card == null ? null : SceneFinder.button(card,
+        press(SceneFinder.button(card,
                 "Apply fix again"), "Apply fix again");
         check(fix.getFixStatus() == FixStatus.APPLIED,
                 "Apply fix again put the fix back to wait for review");
@@ -512,7 +517,7 @@ public class FlowSelfTest {
     private void rejectInPanel(Anomaly fix) {
         openStudent(fix.getUsername());
         Node card = cardOf(fix);
-        press(card == null ? null : SceneFinder.button(card,
+        press(SceneFinder.button(card,
                 "Reject fix"), "Reject fix");
         check(fix.getFixStatus() == FixStatus.UNDONE,
                 "the fix was rejected");
@@ -542,12 +547,11 @@ public class FlowSelfTest {
         }
         openStudent(compiled.getUsername());
         Node card = cardOf(compileError);
-        press(card == null ? null : SceneFinder.button(card, "Open code"),
+        press(SceneFinder.button(card, "Open code"),
                 "Open code");
         check(window.isSheetOpen(), "Open code opened the code sheet");
         Node codeSheet = sheet();
-        Button inSheet = codeSheet == null ? null
-                : SceneFinder.button(codeSheet, "Mark as checked");
+        Button inSheet = SceneFinder.button(codeSheet, "Mark as checked");
         check(inSheet != null, "the code sheet offers Mark as checked");
         press(inSheet, "Mark as checked in the code sheet");
         check(!window.isSheetOpen() && backend.getDecision(compileError)
@@ -579,8 +583,8 @@ public class FlowSelfTest {
         checkMarkAll(run);
     }
 
-    // Mark all as checked settles every open flag, and Undo puts them
-    // back.
+    // Mark all as checked settles every open flag it may check together,
+    // and Undo puts them back.
     private void checkMarkAll(GradingRun run) {
         Button markAll = null;
         for (Button button : SceneFinder.ofType(window.getActionBar(),
@@ -596,7 +600,7 @@ public class FlowSelfTest {
         int before = countOpenFlags(run);
         press(markAll, "Mark all as checked");
         Node sheet = sheet();
-        press(sheet == null ? null : SceneFinder.button(sheet,
+        press(SceneFinder.button(sheet,
                 "Mark all as checked"), "Mark all as checked in the sheet");
         check(countOpenFlags(run) == 0, "every flag is checked (still "
                 + countOpenFlags(run) + " open)");
@@ -662,6 +666,7 @@ public class FlowSelfTest {
         for (Submission submission : run.getSubmissions()) {
             for (Anomaly anomaly : submission.getAnomalies()) {
                 if (anomaly.getFixStatus() != FixStatus.APPLIED
+                        && ReviewRules.canCheckAll(anomaly.getType())
                         && backend.needsReview(anomaly)) {
                     open++;
                 }
@@ -695,7 +700,7 @@ public class FlowSelfTest {
                 .getChildrenUnmodifiable().get(0));
         settle();
         row = questionRow(DemoData.TIMEOUT_QUESTION);
-        press(row == null ? null : SceneFinder.link(row, "Grade "
+        press(SceneFinder.link(row, "Grade "
                 + DemoData.TIMEOUT_QUESTION + " again"), "Grade Q1a again");
         Node sheet = sheet();
         check(sheet != null, "Grade Q1a again asks first");
@@ -722,7 +727,7 @@ public class FlowSelfTest {
             return;
         }
         Node row = questionRow(ADJUSTED_QUESTION);
-        press(row == null ? null : SceneFinder.link(row, "Adjust"),
+        press(SceneFinder.link(row, "Adjust"),
                 "Adjust");
         Node sheet = sheet();
         check(sheet != null && SceneFinder.shows(sheet, "Adjust "
@@ -745,8 +750,8 @@ public class FlowSelfTest {
         QuestionResult q1b = result(bravo, ADJUSTED_QUESTION);
         check(q1b != null && q1b.getScore() == ADJUSTED_TO,
                 "Q1b has the new mark");
-        check(backend.listAdjustments(window.getState().getRun(), bravo).size() == 1,
-                "the change and its reason are kept");
+        check(backend.listAdjustments(window.getState().getRun(), bravo)
+                .size() == 1, "the change and its reason are kept");
         String change = ADJUSTED_QUESTION + " changed from "
                 + Parts.mark(ADJUSTED_FROM) + " to " + Parts.mark(ADJUSTED_TO);
         Label changeLabel = SceneFinder.label(root(), change);
@@ -763,8 +768,8 @@ public class FlowSelfTest {
         press(SceneFinder.button(line, "Undo"), "Undo");
         check(q1b != null && q1b.getScore() == ADJUSTED_FROM,
                 "Undo restored the earlier mark");
-        check(backend.listAdjustments(window.getState().getRun(), bravo).isEmpty(),
-                "Undo removed the change");
+        check(backend.listAdjustments(window.getState().getRun(), bravo)
+                .isEmpty(), "Undo removed the change");
         check(SceneFinder.label(root(), change) == null,
                 "the change is no longer listed");
         check(SceneFinder.text(root(), "big-total").equals(BRAVO_AFTER),
@@ -1088,7 +1093,7 @@ public class FlowSelfTest {
         Node confirm = sheet();
         check(confirm != null && SceneFinder.shows(confirm, "Delete section "
                 + section + "?"), "deleting a section asks first");
-        press(confirm == null ? null : SceneFinder.button(confirm,
+        press(SceneFinder.button(confirm,
                 "Delete section"), "Delete section");
         check(!backend.getSectionCodes(module).contains(section),
                 section + " is deleted");
@@ -1351,8 +1356,7 @@ public class FlowSelfTest {
                 code -> window.getState().setModuleCode(code));
         settle();
         Node sheet = sheet();
-        List<TextField> fields = sheet == null ? new ArrayList<>()
-                : SceneFinder.ofType(sheet, TextField.class);
+        List<TextField> fields = SceneFinder.ofType(sheet, TextField.class);
         if (fields.isEmpty()) {
             problems.add("expected: the Add module sheet has a field");
             return;

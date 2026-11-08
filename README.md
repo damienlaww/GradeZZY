@@ -126,7 +126,7 @@ or run on the instructor's laptop.
 | `design/` | `redesign/`, the design of the current window and its decisions; `UI-INTEGRATION.md`, how each backend method reaches the screens; `gradezzy-design.html` and `UI-REVIEW.md`, the design and review of the earlier 16-screen window, kept for reference; `concept/`, Damien's design concept and its handoff notes. |
 | `README.md` | This file. |
 | `docs/` | The project brief and coding style PDFs. Not in git. |
-| `samples/` | The provided testers, score sheet, starter folder and six sample submissions. Not in git. |
+| `samples/` | The provided testers, score sheet, starter folder and six sample submissions. Only `Tester-Files/` and `e2e/` are in git; the score sheet, starter folder and submissions are not. |
 | `samples/e2e/` | The end-to-end test set: 42 students for section G4, with duplicate, damaged, late and copied uploads. `make_e2e.py` rebuilds it; its `README.md` lists the expected marks. Graded with `samples/Tester-Files`. |
 | `workspace/` | Created while grading: working copies, exports, database. Not in git. |
 
@@ -135,10 +135,11 @@ Two things to know:
 - The brief calls the media folder `media files`. The team chose `media`.
   Rename it before submission if the instructors insist on the brief's
   name.
-- `docs/` and `samples/` are kept out of git because the documents are
-  marked restricted and the samples hold student names. Each teammate
-  copies them in from eLearn: `samples/` must contain `Tester-Files/`,
-  `student-submission/`, `RenameToYourUsername/` and
+- `docs/` and most of `samples/` are kept out of git because the
+  documents are marked restricted and the samples hold student names.
+  Only `samples/Tester-Files/` and the synthetic `samples/e2e/` set are
+  tracked. Each teammate copies the rest in from eLearn: `samples/` must
+  also contain `student-submission/`, `RenameToYourUsername/` and
   `IS442-ScoreSheet.csv`, as `config.properties` expects.
 
 ## Packages
@@ -148,8 +149,8 @@ The base package is `gradezzy`. Each package has one job.
 | Package | Responsibility | Main classes |
 |---|---|---|
 | `app` | Entry points and wiring. | `ConsoleMain`, `ApplicationContext`, `ConsoleProgressListener` |
-| `config` | Loads `config.properties`. | `AppConfig`, `ConfigKeys`, `ConfigException` |
-| `model` | Plain data classes with no logic. | `Submission`, `Student`, `Section`, `Assessment`, `SavedAssessment`, `Question`, `QuestionResult`, `TestCaseResult`, `Anomaly`, `GradingRun`, `AuditEntry`, and the enums `AnomalyType`, `Severity`, `FixStatus`, `SubmissionStatus` |
+| `config` | Loads `config.properties`, and reads and writes its per-module and per-section settings. | `AppConfig`, `ConfigKeys`, `ConfigException`, `ModuleSections`, `ExportFolders` |
+| `model` | Plain data classes with no logic. | `Submission`, `Student`, `Section`, `Assessment`, `SavedAssessment`, `Question`, `QuestionResult`, `TestCaseResult`, `Anomaly`, `GradingRun`, `AuditEntry`, `ScoreAdjustment`, and the enums `AnomalyType`, `Severity`, `FixStatus`, `SubmissionStatus` |
 | `ingest` | Accepts uploads, unzips them into a working copy, reads the roster. | `SubmissionLoader`, `ZipExtractor`, `WorkingCopyManager`, `RosterReader` |
 | `validation` | One class per structural check. | `Validator` (interface), `AbstractValidator`, `StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`, `HeaderNameValidator`, `ValidationRunner` |
 | `fix` | One class per automatic correction, each with apply and undo. | `Fixer` (interface), `AbstractFixer`, `EncodingFixer`, `FolderNameFixer`, `FolderHierarchyFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
@@ -161,7 +162,7 @@ The base package is `gradezzy`. Each package has one job.
 | `report` | One class per export format. | `Exporter` (interface), `CsvScoreSheetExporter`, `JsonExporter`, `StudentReportExporter`, `AnomalyReportExporter`, `AuditLogExporter`, `JsonWriter`, `JsonFields` |
 | `stats` | Statistics for the dashboard. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves and loads grading state. | `ResultRepository` (interface), `SqliteResultRepository`, `BackupManager` |
-| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AssessmentLibrary`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ClassFileMatcher`, `ServiceRegistry` |
+| `service` | What the user interface calls. | `GradingService`, `PipelineFactory`, `AssessmentFactory`, `AssessmentLibrary`, `AnomalyService`, `ExportService`, `StatisticsService`, `SearchService`, `AuditService`, `SettingsService`, `HistoryService`, `PlagiarismService`, `ClassFileMatcher`, `ScoreAdjustmentService`, `AssessmentFolderScanner`, `ServiceRegistry` |
 | `ui` | JavaFX only: starting the window and small shared helpers. | `MainApp`, `ThemeManager`, `GradingTask`, `DragDropHandler` |
 | `ui.flow` | The window: tabs Home (a card per section), Grading (Set up, Grade, Review, Export), Statistics, History (runs, backups and activity) and Settings, with their sheets and charts. Plain JavaFX code, no FXML. | `FlowWindow`, `HomeScreen`, `AssessmentsSheet`, `AssessmentEditor`, `SetUpScreen`, `GradeScreen`, `ReviewScreen`, `ExportScreen`, `StatisticsScreen`, `RunsScreen`, `SettingsScreen`, `BellCurveChart`, `MarkStats`, `Parts`, the review table cells `Review...Cell`, and comparators such as `StudentNameComparator` |
 | `ui.backend` | The one interface the screens call, and its live version that calls the services. | `DashboardBackend`, `LiveBackend`, `Capability`, small view classes such as `RepairItem` and `RunRecord` |
@@ -969,14 +970,18 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `app.module.codes` | `CS102` | Modules the instructor can pick from, separated by commas. The first is the default. Every module shares the sections and the assessment. |
-| `app.section.codes` | `G1` to `G10` | Sections the instructor can pick from. |
+| `app.module.codes` | `CS102` | Modules the instructor can pick from, separated by commas. The first is the default. |
+| `app.section.codes` | `G1,G2` | Sections every module has. At least one is needed, so Settings does not let the last one be deleted. |
+| `app.section.codes.by.module` | empty | Sections of one module only, such as `CS102:G5\|G6;IS442:G1`. Written when a section is added for one module only. Read through `config.ModuleSections`. |
+| `app.module.codes.own.sections.only` | empty | Modules that do not get the sections every module has, only their own, separated by commas. A module added in the window is listed here. Grading checks that the section belongs to the module. |
 | `paths.submissions.dir` | `samples/student-submission` | Folder graded by the console entry point. |
 | `paths.testers.dir` | `samples/Tester-Files` | Folder holding the tester files. |
 | `paths.score.sheet.file` | `samples/IS442-ScoreSheet.csv` | The roster and the template for the CSV export. |
+| `paths.score.sheet.by.section` | empty | The score sheet of single sections, such as `CS102/G1=Test Data/G1.csv`, separated by `;`. A section with none uses `paths.score.sheet.file`. Set in Settings; read through `config.ExportFolders`. |
 | `paths.starter.dir` | `samples/RenameToYourUsername` | Starter files, used to spot untouched answers when no starter folder is chosen on the Set up step, and by the similarity check. Set up warns when a chosen starter folder lacks some question files. |
 | `paths.working.dir` | `workspace/working` | Where working copies are created. |
 | `paths.output.dir` | `workspace/output` | Where exports are written. |
+| `paths.output.dir.by.section` | empty | Export folders of single modules or sections, such as `CS102/G1=workspace/g1-exports;IS442=workspace/is442`. A section's own folder wins over its module's, then `paths.output.dir`. Deleting a module or section removes its entries here and in `paths.score.sheet.by.section`. |
 | `paths.backup.dir` | `workspace/backup` | Where database backups are kept. |
 | `paths.assessments.dir` | `workspace/assessments` | Where saved assessments are kept, one `.properties` file each. Choosing one on Home or Set up copies its `assessment.*`, `paths.testers.dir` and `paths.starter.dir` settings into `config.properties`. |
 | `ingest.zip.name.prefix.pattern` | `^[0-9]{4}-[0-9]{4}-` | Text in front of the username in a zip file name. |
@@ -1075,15 +1080,18 @@ by this section.
 | One-line lambdas `event -> exportResults()` | 26 files in `ui` | Button handlers, table cells and callbacks. | Short for a small class that implements the handler interface (like `AgeComparator implements Comparator`) and whose one method calls `exportResults()`. Every lambda is one line that calls one method. |
 | `Runnable`, `Consumer` | `ui.flow` (`ActionBar`, `Parts`, `StepBar`, `TabBar`, ...), `exec.TrustedFrameCheck` | The type of a lambda parameter, for example "what to do when this button is pressed". | Interfaces with one method, so a screen can pass "run this later" to another class. |
 | `java.nio.file` (`Path`, `Paths`, `Files`, `DirectoryStream`, `StandardCopyOption`, `LinkOption`) | About 60 files | Every file and folder the system reads, copies, moves or writes. | `Path` is a file or folder location (like `File`); `Files` has static methods to read, copy, move and list them, and can refuse to follow links. |
-| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.UndoFixJob`, `ui.flow.SetUpScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.StudentPanel`, `ui.flow.RunsScreen`, `ui.flow.CodeSheet` | Grading (with the similar code check at the end of `GradingTask`), checking chosen files, the class files and the tester folder, reading the score sheet for students with no submission, grading a question again, exports, backups, and undoing a fix or applying a rejected one again (each grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
-| `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread. | A `HashMap` that two threads can use at the same time. |
+| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.UndoFixJob`, `ui.flow.SetUpScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.StudentPanel`, `ui.flow.RunsScreen`, `ui.flow.CodeSheet`, `ui.flow.HomeScreen`, `ui.flow.ScoreSheetSearch`, `ui.flow.ScoreSheetChange` | Grading (with the similar code check at the end of `GradingTask`), checking chosen files, the class files and the tester folder, reading the score sheet for students with no submission, grading a question again, exports, backups, and undoing a fix or applying a rejected one again (each grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
+| `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread, and the review decisions on flags. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
 | Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |
 | `CharsetDecoder`, `CodingErrorAction`, `ByteBuffer` | `fix.EncodingFixer`, `report.CsvScoreSheetExporter` | Tells whether a Java file is valid UTF-8, which javac needs, and whether a score sheet is UTF-8 or Windows-1252, so the export is written the same way. | A decoder turns bytes into characters; set to `REPORT`, it throws instead of guessing when the bytes are not UTF-8. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. | Reads a file of `key=value` lines into a lookup table. |
-| JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs to SQLite so Runs can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
-| `Thread.sleep`, `InterruptedException` | `util.FileUtils` | Waits briefly before retrying a move that Windows blocked, such as when antivirus holds a new file open. | Pauses for half a second, then tries the move again, up to five times. |
+| JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs, review decisions, checked 0s and changed marks to SQLite so History can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
+| `Thread.sleep`, `InterruptedException` | `util.FileUtils` | Waits briefly before retrying a move or delete that Windows blocked, such as when antivirus holds a new file open. | Pauses for half a second, then tries again, up to five times. |
+| `Files.getFileStore`, `Files.setAttribute(path, "dos:readonly", false)` | `util.FileUtils` | A read-only file cannot be deleted on Windows, so the flag is cleared before a delete is tried again. Elsewhere a failed delete is reported at once. | Asks which kind of disk a file is on, and on a Windows disk switches off the file's read-only tick box. |
 | `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |
+| `ProcessHandle.onExit().get` with `TimeUnit`, `TimeoutException`, `ExecutionException` | `exec.ProcessRunner` | On Windows a stopped `java.exe` holds its folder for a moment, so the runner waits up to 1 second (shared by all the children it stopped) for it to end. | `onExit()` is a result that arrives when the program ends; `get` waits for it, but gives up after the time given. |
+| `default` methods in an interface | `ui.backend.DashboardBackend` | A few methods, such as `getScoreSheet` and `setZeroChecked`, work the same in the live and demo backends, so they are written once in the interface. | An interface method with a body: each class that implements the interface gets it unless it writes its own. |
 | `InputStream.available()` | `exec.ProcessRunner` | Tells whether a running program has output waiting, so the runner reads it at once instead of pausing first. | Asks a stream how many bytes can be read right now without waiting; 0 means nothing has arrived yet. |
 | Shutdown hook (`Runtime.addShutdownHook`), a daemon `Thread` | `exec.ProcessRunner`, `exec.RunningProcesses`, `exec.TesterHarness`, `exec.HarnessWatchdog` | No tester keeps running after GradeZZY closes or crashes. | A shutdown hook is a thread Java starts as the program ends; ours stops every tester still running. The watchdog is a second thread inside each tester run that sleeps until the time limit plus 2 seconds, then ends the run, in case GradeZZY is gone. |
 | `PrintStream` subclass, `System.setOut`, `StackWalker` | `exec.TesterHarness`, `exec.TrustedPrintStream`, `exec.TrustedFrameCheck` | Marks only the lines the tester itself prints, so a student printing `Passed` is not believed. | All printing goes through our `PrintStream`, which checks who called it and marks a line only when no student method is on the call stack. |
@@ -1254,7 +1262,14 @@ implemented. `[x]` means it works now.
 - [x] Settings page backed by `config.properties`
   (`service.SettingsService`, `ui.flow.SettingsScreen`)
 - [x] SQLite persistence behind `ResultRepository`
-  (`persistence.SqliteResultRepository`)
+  (`persistence.SqliteResultRepository`); review decisions and checked
+  0s are saved with the run too, so they are there after a restart
+  (`AnomalyService.saveDecision`, `saveZeroCheck`)
+- [x] Change a question's mark by hand, with a reason, and undo it
+  (`service.ScoreAdjustmentService`, `ui.flow.AdjustMarkSheet`): a mark
+  outside 0 to the question's maximum or a blank reason is refused, only
+  the newest change of a question can be undone, changes are saved and
+  shown in the export, and grading the question again drops them
 - [ ] Audit log, exportable (`service.AuditService`,
   `report.AuditLogExporter`; the log records grading started, cancelled,
   retried and resumed, fixes approved and undone, settings saved,

@@ -839,8 +839,10 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public ActionResult undoAdjustment(GradingRun run,
             ScoreAdjustment adjustment) {
-        GradingRun shown = run != null ? run
-                : findRunOf(adjustment.getUsername());
+        GradingRun shown = run;
+        if (shown == null) {
+            shown = findRunOf(adjustment.getUsername());
+        }
         Submission submission = findSubmission(shown,
                 adjustment.getUsername());
         if (submission == null) {

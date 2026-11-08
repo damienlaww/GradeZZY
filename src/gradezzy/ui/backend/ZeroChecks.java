@@ -6,9 +6,11 @@
  * once checked, the student counts as graded.
  *
  * Where it fits: DashboardBackend's isZeroChecked and setZeroChecked use
- * it, so Live and Demo work the same. Like review decisions, it lasts
- * until GradeZZY closes. A student graded again is a new submission, so
- * a new 0 waits for a look again.
+ * it, so Live and Demo work the same. The demo keeps a check until
+ * GradeZZY closes; LiveBackend also saves it with the run and marks the
+ * students again when it reads the saved runs. A student graded again
+ * alone keeps the same submission, so the check stays until it is taken
+ * back.
  */
 package gradezzy.ui.backend;
 
@@ -40,7 +42,9 @@ final class ZeroChecks {
     // Marks a student's 0 as checked or takes it back; true when it
     // changed.
     static boolean set(Submission submission, boolean checked) {
-        return checked ? CHECKED.add(submission)
-                : CHECKED.remove(submission);
+        if (checked) {
+            return CHECKED.add(submission);
+        }
+        return CHECKED.remove(submission);
     }
 }

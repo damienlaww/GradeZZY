@@ -63,6 +63,7 @@ import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.RepairItem;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.ReviewDecision;
+import gradezzy.ui.backend.ReviewRules;
 import gradezzy.ui.backend.StatusCounts;
 
 /**
@@ -104,7 +105,7 @@ public class ReviewScreen extends FlowScreen {
     // The smallest width of the student column
     private static final double STUDENT_WIDTH = 190.0;
 
-    
+
 
     // The widest the student column gets
     // It must be finite: with Double.MAX_VALUE the table makes the
@@ -1333,8 +1334,9 @@ public class ReviewScreen extends FlowScreen {
                 () -> approveAll(open));
     }
 
-    // Returns the open flags and problems that are not fixes, for the
-    // ticked students or all.
+    // Returns the open flags that are not fixes, for the ticked students
+    // or all, that may be checked together: compile errors, timeouts,
+    // unknown students and the like are checked one at a time.
     private List<Anomaly> openFlags() {
         List<Anomaly> open = new ArrayList<>();
         if (!getBackend().supports(Capability.FLAG_REVIEW)) {
@@ -1347,6 +1349,7 @@ public class ReviewScreen extends FlowScreen {
             }
             for (Anomaly anomaly : submission.getAnomalies()) {
                 if (anomaly.getFixStatus() != FixStatus.APPLIED
+                        && ReviewRules.canCheckAll(anomaly.getType())
                         && getBackend().needsReview(anomaly)) {
                     open.add(anomaly);
                 }
@@ -1363,9 +1366,11 @@ public class ReviewScreen extends FlowScreen {
             whose = "the ticked students";
         }
         VBox content = new VBox(Parts.GAP_SMALL);
-        Label about = Parts.muted("These flags and problems of " + whose
+        Label about = Parts.muted("These flags of " + whose
                 + " are marked as checked. No mark changes, and you can "
-                + "undo it:");
+                + "undo it. Compile errors, timeouts and students not on "
+                + "the score sheet are left for you to check one at a "
+                + "time:");
         about.setWrapText(true);
         content.getChildren().add(about);
         int listed = 0;
@@ -1401,11 +1406,18 @@ public class ReviewScreen extends FlowScreen {
     }
 
     // Puts flags marked as checked together back to be checked.
+    // Puts back to check the flags Mark all checked. A flag decided
+    // otherwise since, such as marked as looking fine, keeps that.
     private void uncheckAll(List<Anomaly> flags) {
+        int reopened = 0;
         for (Anomaly anomaly : flags) {
-            getBackend().setDecision(anomaly, ReviewDecision.OPEN);
+            if (getBackend().getDecision(anomaly) == ReviewDecision.REVIEWED
+                    && getBackend().setDecision(anomaly,
+                    ReviewDecision.OPEN).isDone()) {
+                reopened++;
+            }
         }
-        getWindow().notify("Put " + Parts.plural(flags.size(), "item")
+        getWindow().notify("Put " + Parts.plural(reopened, "item")
                 + " back to check.");
         panel.refresh();
         refreshStatuses();

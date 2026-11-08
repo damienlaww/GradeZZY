@@ -67,22 +67,27 @@ public final class ActivityUndo {
             String action, String detail, Supplier<ActionResult> restore) {
         backend.recordActivity(action, detail);
         String key = keyOf(action, detail);
-        Supplier<ActionResult> once = () -> {
-            if (!RESTORES.containsKey(key)) {
-                return ActionResult.failed("This was already put back.");
-            }
-            ActionResult result = restore.get();
-            if (result == null) {
-                result = ActionResult.failed("It could not be put back.");
-            }
-            if (result.isDone()) {
-                RESTORES.remove(key);
-                backend.recordActivity(RESTORED, detail);
-            }
-            return result;
-        };
+        Supplier<ActionResult> once = () -> restoreOnce(backend, key,
+                detail, restore);
         RESTORES.put(key, once);
         return once;
+    }
+
+    // Puts a change back the first time only, and logs that it was.
+    private static ActionResult restoreOnce(DashboardBackend backend,
+            String key, String detail, Supplier<ActionResult> restore) {
+        if (!RESTORES.containsKey(key)) {
+            return ActionResult.failed("This was already put back.");
+        }
+        ActionResult result = restore.get();
+        if (result == null) {
+            result = ActionResult.failed("It could not be put back.");
+        }
+        if (result.isDone()) {
+            RESTORES.remove(key);
+            backend.recordActivity(RESTORED, detail);
+        }
+        return result;
     }
 
     /**

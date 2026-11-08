@@ -60,7 +60,7 @@ public final class SceneFinder {
      * parent are visible), the root first. A scroll pane is entered
      * through its content, so its scroll bars are skipped.
      *
-     * @param root where to start
+     * @param root where to start, or null for nothing
      * @return the nodes, depth first
      */
     public static List<Node> showing(Node root) {
@@ -73,12 +73,17 @@ public final class SceneFinder {
      * Returns every showing node of a type under a root.
      *
      * @param <T> the type
-     * @param root where to start
+     * @param root where to start, or null for nothing
      * @param type the class to look for
      * @return the nodes, depth first
      */
     public static <T> List<T> ofType(Node root, Class<T> type) {
         List<T> found = new ArrayList<>();
+        // A node that was not found holds nothing, so a check can look
+        // inside it without testing for null first
+        if (root == null) {
+            return found;
+        }
         for (Node node : showing(root)) {
             if (type.isInstance(node)) {
                 found.add(type.cast(node));

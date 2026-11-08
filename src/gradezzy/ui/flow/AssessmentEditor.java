@@ -11,8 +11,8 @@
  */
 package gradezzy.ui.flow;
 
-import java.io.File;
 import java.io.IOException;
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,7 +27,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
-import javafx.stage.FileChooser;
 
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Question;
@@ -38,6 +37,7 @@ import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.ImportState;
 import gradezzy.ui.backend.InputKind;
+import gradezzy.util.TextUtils;
 
 /**
  * Builds the sheet that creates or edits an assessment.
@@ -86,12 +86,12 @@ public final class AssessmentEditor {
     // The tester and starter folders
     private final TextField testers = new TextField();
     private final TextField starter = new TextField();
-    
+
 
     // Whether each folder can be used
     private final HBox testersStatus = Parts.row(0);
     private final HBox starterStatus = Parts.row(0);
-    
+
 
     // The lists that come with the folders
     private final TextField classFiles = new TextField();
@@ -229,7 +229,7 @@ public final class AssessmentEditor {
         problem.getStyleClass().add("field-problem");
         problem.setWrapText(true);
         show(problem, false);
-        
+
 
         if (inline) {
             // Inside a page: the page scrolls, and Revert reloads it
@@ -271,7 +271,7 @@ public final class AssessmentEditor {
         updateTotal();
         testers.setText(start.getTestersDirectory());
         starter.setText(start.getStarterDirectory());
-        
+
         classFiles.setText(joinList(start.getProvidedClassFiles()));
         dataFiles.setText(joinList(start.getTesterDataFiles()));
         placeholders.setText(joinList(start.getPlaceholderFolderNames()));
@@ -281,7 +281,7 @@ public final class AssessmentEditor {
         opening = true;
         checkFolder(testers, testersStatus, InputKind.TESTERS);
         checkFolder(starter, starterStatus, InputKind.STARTER);
-        
+
         opening = false;
         lastFilled.put(InputKind.TESTERS, testers.getText().trim());
         lastFilled.put(InputKind.STARTER, starter.getText().trim());
@@ -468,17 +468,6 @@ public final class AssessmentEditor {
             if (!samples.isEmpty()) {
                 chosen = samples.get(0);
             }
-        } else if (kind == InputKind.ROSTER) {
-            FileChooser chooser = new FileChooser();
-            chooser.setTitle("Choose the score sheet exported from eLearn");
-            chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
-                    "CSV files", "*.csv"));
-            Choosers.prepare(chooser);
-            File file = chooser.showOpenDialog(window.getWindow());
-            Choosers.remember(file);
-            if (file != null) {
-                chosen = file.toPath();
-            }
         } else {
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("Choose the " + kind.getTitle().toLowerCase()
@@ -579,7 +568,7 @@ public final class AssessmentEditor {
             return;
         }
         filledNote.setText("Filled in from the folder: "
-                + String.join(", ", added) + ". Check them below.");
+                + TextUtils.join(", ", added) + ". Check them below.");
         show(filledNote, true);
     }
 
@@ -661,7 +650,7 @@ public final class AssessmentEditor {
         }
         draft.setTestersDirectory(testers.getText().trim());
         draft.setStarterDirectory(starter.getText().trim());
-        
+
         draft.getProvidedClassFiles().addAll(splitList(
                 classFiles.getText()));
         draft.getTesterDataFiles().addAll(splitList(dataFiles.getText()));
@@ -690,10 +679,13 @@ public final class AssessmentEditor {
         }
         // A new assessment is the one graded from now on; it can be
         // switched back on Home or Set up
-        if (originalName == null) {
-            window.useAssessment(draft.getName());
+        if (originalName == null && window.useAssessment(draft.getName())) {
             window.notify("Saved " + draft.getName() + ". It is now the "
                     + "assessment in use.");
+        } else if (originalName == null) {
+            // useAssessment already said why it was not switched
+            window.notify("Saved " + draft.getName() + ". The assessment "
+                    + "in use did not change.");
         } else {
             window.notify(result.getMessage());
             window.assessmentChanged();

@@ -70,10 +70,8 @@ public final class GradingSettingsSheet {
         problem.setVisible(false);
         problem.setManaged(false);
 
-        Button more = Parts.secondary("All settings", () -> {
-            window.closeSheet();
-            window.showPage(Page.SETTINGS);
-        });
+        Button more = Parts.secondary("All settings",
+                () -> openAllSettings(window));
         Button cancel = Parts.secondary("Cancel", () -> window.closeSheet());
         Button save = Parts.primary("Save");
         save.setDisable(!editable);
@@ -103,6 +101,12 @@ public final class GradingSettingsSheet {
         }
         field.showChoicesAs(names);
         return field;
+    }
+
+    // Closes the sheet and opens the Settings page.
+    private static void openAllSettings(FlowWindow window) {
+        window.closeSheet();
+        window.showPage(Page.SETTINGS);
     }
 
     // Saves the changed settings, then closes the sheet.

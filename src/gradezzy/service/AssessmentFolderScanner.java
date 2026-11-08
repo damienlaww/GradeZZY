@@ -12,18 +12,19 @@
 package gradezzy.service;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.TreeSet;
-import java.util.stream.Stream;
 
 import gradezzy.model.Question;
 import gradezzy.testcase.TesterMarks;
+import gradezzy.util.FileUtils;
 
 /**
  * Finds data files, provided class files and starter folder names.
@@ -58,25 +59,26 @@ public final class AssessmentFolderScanner {
         if (testersFolder == null || !Files.isDirectory(testersFolder)) {
             return found;
         }
-        List<String> others = new ArrayList<>();
-        StringBuilder sources = new StringBuilder();
-        try (Stream<Path> files = Files.list(testersFolder)) {
-            for (Path file : (Iterable<Path>) files::iterator) {
-                String name = file.getFileName().toString();
-                String lower = name.toLowerCase(Locale.ROOT);
-                if (!Files.isRegularFile(file) || name.startsWith(".")) {
-                    continue;
-                }
-                if (lower.endsWith(JAVA)) {
-                    sources.append(read(file)).append('\n');
-                } else if (!lower.endsWith(CLASS)) {
-                    others.add(name);
-                }
-            }
-        } catch (IOException | UncheckedIOException exception) {
+        List<Path> files = null;
+        try {
+            files = listChildren(testersFolder, 1);
+        } catch (IOException exception) {
             return found;
         }
-        String allSource = sources.toString();
+        List<String> others = new ArrayList<>();
+        String allSource = "";
+        for (Path file : files) {
+            String name = file.getFileName().toString();
+            String lower = name.toLowerCase(Locale.ROOT);
+            if (!Files.isRegularFile(file) || name.startsWith(".")) {
+                continue;
+            }
+            if (lower.endsWith(JAVA)) {
+                allSource += read(file) + "\n";
+            } else if (!lower.endsWith(CLASS)) {
+                others.add(name);
+            }
+        }
         for (String name : others) {
             if (allSource.contains(name)) {
                 found.add(name);
@@ -106,21 +108,22 @@ public final class AssessmentFolderScanner {
         if (starterFolder == null || !Files.isDirectory(starterFolder)) {
             return new ArrayList<>(found);
         }
-        try (Stream<Path> files = Files.walk(starterFolder, MAX_DEPTH)) {
-            for (Path file : (Iterable<Path>) files::iterator) {
-                String name = file.getFileName().toString();
-                if (!Files.isRegularFile(file)
-                        || !name.toLowerCase(Locale.ROOT).endsWith(CLASS)) {
-                    continue;
-                }
-                String base = name.substring(0, name.length()
-                        - CLASS.length());
-                if (!Files.exists(file.resolveSibling(base + JAVA))) {
-                    found.add(name);
-                }
-            }
-        } catch (IOException | UncheckedIOException exception) {
+        List<Path> files = null;
+        try {
+            files = listChildren(starterFolder, MAX_DEPTH);
+        } catch (IOException exception) {
             return new ArrayList<>();
+        }
+        for (Path file : files) {
+            String name = file.getFileName().toString();
+            if (!Files.isRegularFile(file)
+                    || !name.toLowerCase(Locale.ROOT).endsWith(CLASS)) {
+                continue;
+            }
+            String base = name.substring(0, name.length() - CLASS.length());
+            if (!Files.exists(file.resolveSibling(base + JAVA))) {
+                found.add(name);
+            }
         }
         return new ArrayList<>(found);
     }
@@ -141,16 +144,18 @@ public final class AssessmentFolderScanner {
                 || starterFolder.getFileName() == null) {
             return found;
         }
-        List<Path> folders = new ArrayList<>();
-        try (Stream<Path> children = Files.list(starterFolder)) {
-            for (Path child : (Iterable<Path>) children::iterator) {
-                if (Files.isDirectory(child)
-                        && !child.getFileName().toString().startsWith(".")) {
-                    folders.add(child);
-                }
-            }
-        } catch (IOException | UncheckedIOException exception) {
+        List<Path> children = null;
+        try {
+            children = listChildren(starterFolder, 1);
+        } catch (IOException exception) {
             return found;
+        }
+        List<Path> folders = new ArrayList<>();
+        for (Path child : children) {
+            if (Files.isDirectory(child)
+                    && !child.getFileName().toString().startsWith(".")) {
+                folders.add(child);
+            }
         }
         if (folders.size() == 1 && !isQuestionFolder(
                 folders.get(0).getFileName().toString(), questionFolders)) {
@@ -182,48 +187,46 @@ public final class AssessmentFolderScanner {
             return found;
         }
         String ending = testerSuffix + JAVA;
-        TreeSet<String> ids = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-        try (Stream<Path> files = Files.list(testersFolder)) {
-            for (Path file : (Iterable<Path>) files::iterator) {
-                String name = file.getFileName().toString();
-                if (Files.isRegularFile(file) && name.endsWith(ending)
-                        && name.length() > ending.length()) {
-                    ids.add(name.substring(0, name.length()
-                            - ending.length()));
-                }
-            }
-        } catch (IOException | UncheckedIOException exception) {
+        List<Path> files = null;
+        try {
+            files = listChildren(testersFolder, 1);
+        } catch (IOException exception) {
             return found;
         }
-        for (String id : ids) {
-            double max = TesterMarks.UNKNOWN;
-            try {
-                max = TesterMarks.readMaxScore(testersFolder.resolve(id
-                        + ending));
-            } catch (IOException | UncheckedIOException exception) {
-                // The mark stays unknown and can be typed
+        TreeSet<String> ids = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (Path file : files) {
+            String name = file.getFileName().toString();
+            if (Files.isRegularFile(file) && name.endsWith(ending)
+                    && name.length() > ending.length()) {
+                ids.add(name.substring(0, name.length() - ending.length()));
             }
+        }
+        for (String id : ids) {
             found.add(new Question(id, folderOf(id, starterFolder),
-                    id + JAVA, max));
+                    id + JAVA, readMaxScore(testersFolder.resolve(id
+                    + ending))));
         }
         return found;
+    }
+
+    // Reads a tester's marks; one that cannot be read stays unknown, so
+    // the instructor types it.
+    private static double readMaxScore(Path tester) {
+        try {
+            return TesterMarks.readMaxScore(tester);
+        } catch (IOException exception) {
+            return TesterMarks.UNKNOWN;
+        }
     }
 
     // Finds the folder that holds a question's answer in the starter
     // folder, or guesses it from the id.
     private static String folderOf(String id, Path starterFolder) {
-        if (starterFolder != null && Files.isDirectory(starterFolder)) {
-            try (Stream<Path> files = Files.walk(starterFolder, MAX_DEPTH)) {
-                for (Path file : (Iterable<Path>) files::iterator) {
-                    Path parent = file.getParent();
-                    if (file.getFileName().toString().equalsIgnoreCase(
-                            id + JAVA) && parent != null
-                            && !parent.equals(starterFolder)) {
-                        return parent.getFileName().toString();
-                    }
-                }
-            } catch (IOException | UncheckedIOException exception) {
-                // Guess from the id instead
+        for (Path file : listOrEmpty(starterFolder)) {
+            Path parent = file.getParent();
+            if (file.getFileName().toString().equalsIgnoreCase(id + JAVA)
+                    && parent != null && !parent.equals(starterFolder)) {
+                return parent.getFileName().toString();
             }
         }
         String folder = id.replaceAll("[a-z]+$", "");
@@ -244,12 +247,49 @@ public final class AssessmentFolderScanner {
         return false;
     }
 
+    // Lists what a starter folder holds, up to MAX_DEPTH folders down;
+    // empty when there is no folder or it cannot be read, so the caller
+    // guesses instead.
+    private static List<Path> listOrEmpty(Path folder) {
+        if (folder == null || !Files.isDirectory(folder)) {
+            return new ArrayList<>();
+        }
+        try {
+            return listChildren(folder, MAX_DEPTH);
+        } catch (IOException exception) {
+            return new ArrayList<>();
+        }
+    }
+
+    // Lists the files and folders in a folder, then in its folders, down
+    // to the given depth: 1 lists only what the folder holds. Each
+    // folder is followed by what it holds. Links to folders are not
+    // followed.
+    private static List<Path> listChildren(Path folder, int depth)
+            throws IOException {
+        List<Path> found = new ArrayList<>();
+        DirectoryStream<Path> children = null;
+        try {
+            children = Files.newDirectoryStream(folder);
+            for (Path child : children) {
+                found.add(child);
+                if (depth > 1 && Files.isDirectory(child,
+                        LinkOption.NOFOLLOW_LINKS)) {
+                    found.addAll(listChildren(child, depth - 1));
+                }
+            }
+        } finally {
+            FileUtils.closeIfOpen(children);
+        }
+        return found;
+    }
+
     // Reads a source file, or returns "" when it cannot be read.
     private static String read(Path file) {
         try {
             return new String(Files.readAllBytes(file),
                     StandardCharsets.UTF_8);
-        } catch (IOException | UncheckedIOException exception) {
+        } catch (IOException exception) {
             return "";
         }
     }

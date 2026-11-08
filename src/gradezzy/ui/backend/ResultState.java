@@ -75,43 +75,6 @@ public enum ResultState {
     }
 
     /**
-     * Works out the state of one submission.
-     *
-     * @param submission the submission
-     * @param waitingForReview whether a flag or repair still waits for review
-     * @return the state to show
-     */
-    public static ResultState of(Submission submission,
-            boolean waitingForReview) {
-        SubmissionStatus status = submission.getStatus();
-
-        if (isNoSubmission(submission)) {
-            return NO_SUBMISSION;
-        }
-        if (status == SubmissionStatus.FAILED) {
-            return COULD_NOT_GRADE;
-        }
-        if (status != SubmissionStatus.GRADED
-                || submission.getQuestionResults().isEmpty()) {
-            return UNGRADED;
-        }
-        // Check the anomaly, not isCompiled: a missing file is uncompiled too
-        if (hasAnomaly(submission, AnomalyType.COMPILE_ERROR)) {
-            return COMPILE_ERROR;
-        }
-        if (anyTimedOut(submission)) {
-            return TIMED_OUT;
-        }
-        if (waitingForReview) {
-            return NEEDS_REVIEW;
-        }
-        if (submission.getTotalScore() == 0.0) {
-            return ZERO;
-        }
-        return COMPLETED;
-    }
-
-    /**
      * Works out a submission's state, asking the backend about reviews.
      *
      * @param submission the submission

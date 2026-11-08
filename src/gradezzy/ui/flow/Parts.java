@@ -158,8 +158,12 @@ public final class Parts {
     // The style class the window's root has in the dark theme
     private static final String DARK_CLASS = "dark";
 
-    // The folders of an absolute path, such as "/Users/me/Test Data/"
-    private static final String ABSOLUTE_FOLDERS = "(?:[A-Za-z]:)?[\\\\/]"
+    // The folders of an absolute path, such as "/Users/me/Test Data/". A
+    // path only starts at the start of the text or after a space, "=", a
+    // quote or "(", so the slashes inside "workspace/output/x.csv" are
+    // not taken as the start of a path.
+    private static final String ABSOLUTE_FOLDERS = "(?<![^\\s=\"'(])"
+            + "(?:[A-Za-z]:)?[\\\\/]"
             + "(?:(?:(?!\\.[A-Za-z0-9]{1,5}\\s)[^\\\\/])+[\\\\/])+";
 
     // Not used: every method is static.
@@ -588,10 +592,13 @@ public final class Parts {
 
     /**
      * Shortens every absolute file path in a line to its file name, so
-     * "/Users/me/Test Data/IS442.csv" reads "IS442.csv". A folder part
-     * runs from a slash to the next slash, so names with spaces are cut
-     * too; it stops at a file name such as "x.csv " so two paths on one
-     * line stay apart. Short relative names such as Q3/Q3.java are kept.
+     * "/Users/me/Test Data/IS442.csv" reads "IS442.csv". A path must
+     * start with a slash or a drive such as "C:\" at the start of the
+     * text or after a space, "=", a quote or "(". A folder part runs from
+     * a slash to the next slash, so names with spaces are cut too; it
+     * stops at a file name such as "x.csv " so two paths on one line stay
+     * apart. Relative paths such as Q3/Q3.java or workspace/output/x.csv
+     * are kept whole.
      *
      * @param text the line
      * @return the line with shorter paths

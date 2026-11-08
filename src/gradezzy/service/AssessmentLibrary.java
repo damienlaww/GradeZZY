@@ -150,7 +150,7 @@ public class AssessmentLibrary {
         }
         current.setStarterDirectory(config.getString(
                 ConfigKeys.STARTER_DIR));
-        
+
         current.getProvidedClassFiles().addAll(config.getList(
                 ConfigKeys.PROVIDED_CLASS_FILES));
         current.getTesterDataFiles().addAll(config.getList(
@@ -467,7 +467,7 @@ public class AssessmentLibrary {
                 assessment.getTestersDirectory().trim());
         values.put(ConfigKeys.STARTER_DIR,
                 assessment.getStarterDirectory().trim());
-        
+
         values.put(ConfigKeys.PROVIDED_CLASS_FILES,
                 joinList(assessment.getProvidedClassFiles()));
         values.put(ConfigKeys.TESTER_DATA_FILES,
@@ -538,7 +538,7 @@ public class AssessmentLibrary {
         }
         assessment.setStarterDirectory(values.getProperty(
                 ConfigKeys.STARTER_DIR, ""));
-        
+
         assessment.setModuleCode(values.getProperty(MODULE_PROPERTY, ""));
         assessment.getProvidedClassFiles().addAll(splitList(
                 values.getProperty(ConfigKeys.PROVIDED_CLASS_FILES, "")));

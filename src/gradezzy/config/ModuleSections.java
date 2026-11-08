@@ -11,9 +11,10 @@
 package gradezzy.config;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * The sections of one module only.
@@ -49,7 +50,10 @@ public final class ModuleSections {
             String moduleCode) {
         List<String> codes = new ArrayList<>();
         addCodes(codes, split(shared, ","));
-        List<String> own = find(read(byModule), moduleCode);
+        List<String> modules = new ArrayList<>();
+        Map<String, List<String>> sections = new HashMap<>();
+        read(byModule, modules, sections);
+        List<String> own = find(modules, sections, moduleCode);
         if (own != null) {
             addCodes(codes, own);
         }
@@ -105,14 +109,17 @@ public final class ModuleSections {
      */
     public static String add(String byModule, String moduleCode,
             String sectionCode) {
-        Map<String, List<String>> entries = read(byModule);
-        List<String> sections = find(entries, moduleCode);
-        if (sections == null) {
-            sections = new ArrayList<>();
-            entries.put(moduleCode.trim(), sections);
+        List<String> modules = new ArrayList<>();
+        Map<String, List<String>> sections = new HashMap<>();
+        read(byModule, modules, sections);
+        List<String> own = find(modules, sections, moduleCode);
+        if (own == null) {
+            own = new ArrayList<>();
+            modules.add(moduleCode.trim());
+            sections.put(moduleCode.trim(), own);
         }
-        sections.add(sectionCode.trim());
-        return write(entries);
+        own.add(sectionCode.trim());
+        return write(modules, sections);
     }
 
     /**
@@ -125,13 +132,25 @@ public final class ModuleSections {
      */
     public static String remove(String byModule, String moduleCode,
             String sectionCode) {
-        Map<String, List<String>> entries = read(byModule);
-        List<String> sections = find(entries, moduleCode);
-        if (sections != null) {
-            sections.removeIf(code -> code.equalsIgnoreCase(sectionCode));
+        List<String> modules = new ArrayList<>();
+        Map<String, List<String>> sections = new HashMap<>();
+        read(byModule, modules, sections);
+        List<String> own = find(modules, sections, moduleCode);
+        if (own != null) {
+            for (int index = own.size() - 1; index >= 0; index--) {
+                if (own.get(index).equalsIgnoreCase(sectionCode)) {
+                    own.remove(index);
+                }
+            }
         }
-        entries.values().removeIf(List::isEmpty);
-        return write(entries);
+        // A module left with no section of its own is not written
+        List<String> kept = new ArrayList<>();
+        for (String module : modules) {
+            if (!sections.get(module).isEmpty()) {
+                kept.add(module);
+            }
+        }
+        return write(kept, sections);
     }
 
     /**
@@ -143,9 +162,16 @@ public final class ModuleSections {
      * @return the new value
      */
     public static String removeModule(String byModule, String moduleCode) {
-        Map<String, List<String>> entries = read(byModule);
-        entries.keySet().removeIf(key -> key.equalsIgnoreCase(moduleCode));
-        return write(entries);
+        List<String> modules = new ArrayList<>();
+        Map<String, List<String>> sections = new HashMap<>();
+        read(byModule, modules, sections);
+        List<String> kept = new ArrayList<>();
+        for (String module : modules) {
+            if (!module.equalsIgnoreCase(moduleCode)) {
+                kept.add(module);
+            }
+        }
+        return write(kept, sections);
     }
 
     /**
@@ -158,11 +184,14 @@ public final class ModuleSections {
      */
     public static boolean isOwnSection(String byModule, String moduleCode,
             String sectionCode) {
-        List<String> sections = find(read(byModule), moduleCode);
-        if (sections == null) {
+        List<String> modules = new ArrayList<>();
+        Map<String, List<String>> sections = new HashMap<>();
+        read(byModule, modules, sections);
+        List<String> own = find(modules, sections, moduleCode);
+        if (own == null) {
             return false;
         }
-        for (String code : sections) {
+        for (String code : own) {
             if (code.equalsIgnoreCase(sectionCode)) {
                 return true;
             }
@@ -195,48 +224,64 @@ public final class ModuleSections {
         return "";
     }
 
-    // Reads the value into each module, as written, and its sections.
-    private static Map<String, List<String>> read(String value) {
-        Map<String, List<String>> entries = new LinkedHashMap<>();
+    // Reads the value into the modules, in the order written, and the
+    // sections of each module. A module written twice keeps its first
+    // place and its last sections.
+    private static void read(String value, List<String> modules,
+            Map<String, List<String>> sections) {
         if (value == null) {
-            return entries;
+            return;
         }
         for (String entry : split(value, ENTRY_SEPARATOR)) {
             String[] parts = entry.split(MODULE_SEPARATOR, -1);
             if (parts.length == 2 && !parts[0].trim().isEmpty()) {
-                entries.put(parts[0].trim(), split(parts[1],
-                        SECTION_SEPARATOR));
+                String module = parts[0].trim();
+                if (!sections.containsKey(module)) {
+                    modules.add(module);
+                }
+                sections.put(module, split(parts[1], SECTION_SEPARATOR));
             }
         }
-        return entries;
     }
 
     // Returns the sections of a module, ignoring case, or null.
-    private static List<String> find(Map<String, List<String>> entries,
-            String moduleCode) {
+    private static List<String> find(List<String> modules,
+            Map<String, List<String>> sections, String moduleCode) {
         if (moduleCode == null) {
             return null;
         }
-        for (Map.Entry<String, List<String>> entry : entries.entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(moduleCode.trim())) {
-                return entry.getValue();
+        for (String module : modules) {
+            if (module.equalsIgnoreCase(moduleCode.trim())) {
+                return sections.get(module);
             }
         }
         return null;
     }
 
     // Writes each module and its sections back into one value.
-    private static String write(Map<String, List<String>> entries) {
-        StringBuilder text = new StringBuilder();
-        for (Map.Entry<String, List<String>> entry : entries.entrySet()) {
-            if (text.length() > 0) {
-                text.append(ENTRY_SEPARATOR);
+    private static String write(List<String> modules,
+            Map<String, List<String>> sections) {
+        String text = "";
+        for (String module : modules) {
+            if (!text.isEmpty()) {
+                text += ENTRY_SEPARATOR;
             }
-            text.append(entry.getKey()).append(MODULE_SEPARATOR)
-                    .append(String.join(SECTION_SEPARATOR,
-                    entry.getValue()));
+            text += module + MODULE_SEPARATOR + joinSections(
+                    sections.get(module));
         }
-        return text.toString();
+        return text;
+    }
+
+    // Joins a module's sections with the section separator.
+    private static String joinSections(List<String> codes) {
+        String text = "";
+        for (String code : codes) {
+            if (!text.isEmpty()) {
+                text += SECTION_SEPARATOR;
+            }
+            text += code;
+        }
+        return text;
     }
 
     // Adds codes that are not listed yet, ignoring case.
@@ -260,8 +305,7 @@ public final class ModuleSections {
         if (value == null) {
             return parts;
         }
-        for (String part : value.split(java.util.regex.Pattern.quote(
-                separator))) {
+        for (String part : value.split(Pattern.quote(separator))) {
             if (!part.trim().isEmpty()) {
                 parts.add(part.trim());
             }

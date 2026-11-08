@@ -1869,11 +1869,6 @@
 }
 
 /* A path in Settings that is changed somewhere else */
-.text-field.linked-path {
-    -fx-background-color: -color-bg-subtle;
-    -fx-text-fill: -color-fg-muted;
-}
-
 .picker-list {
     -fx-background-color: transparent;
     -fx-padding: 4px 0;

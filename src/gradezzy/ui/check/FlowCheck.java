@@ -98,8 +98,11 @@ public class FlowCheck {
     // Walks through the screens with one backend, theme and size.
     private int check(DashboardBackend backend, String mode, boolean dark,
             double[] size) {
-        String tag = mode + "-" + (dark ? "dark" : "light") + "-"
-                + (int) size[0];
+        String theme = "light";
+        if (dark) {
+            theme = "dark";
+        }
+        String tag = mode + "-" + theme + "-" + (int) size[0];
         try {
             FlowWindow window = new FlowWindow(backend, dark);
             Scene scene = window.build(size[0], size[1]);
