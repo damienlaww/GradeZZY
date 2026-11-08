@@ -98,6 +98,10 @@ public class CompileStage implements GradingStage {
     // Stands for "the tester compiled, or could not be checked"
     private static final String NO_TESTER_ERROR = "";
 
+    // Times javac is run on one question before a slow compile is given
+    // up, because a busy computer can make one run miss the time limit
+    private static final int COMPILE_ATTEMPTS = 2;
+
     // The helper that runs javac
     private final SourceCompiler sourceCompiler;
 
@@ -365,7 +369,7 @@ public class CompileStage implements GradingStage {
      * @param testers every tester of the run
      * @param config the application settings
      * @return the result, marked compiled or not
-     * @throws GradingException if javac cannot be run or runs too long
+     * @throws GradingException if javac cannot be run or is too slow twice
      */
     private QuestionResult compileQuestion(Submission submission,
             Question question, TesterFile tester, Path folder,
@@ -374,6 +378,14 @@ public class CompileStage implements GradingStage {
         String testerSource = tester.getClassName() + JAVA_EXTENSION;
         ProcessResult compileResult = runCompiler(folder,
                 sourceFiles(question, testerSource));
+        // A slow compiler says nothing about the student's code: the
+        // computer may just be busy, so javac is run once more
+        int attempts = 1;
+        while (compileResult.isTimedOut() && attempts < COMPILE_ATTEMPTS) {
+            compileResult = runCompiler(folder,
+                    sourceFiles(question, testerSource));
+            attempts++;
+        }
         // The copy also holds the sources of testers that share the folder,
         // such as Q1bTester.java next to Q1aTester.java
         for (TesterFile anyTester : testers) {
@@ -381,14 +393,13 @@ public class CompileStage implements GradingStage {
                     anyTester.getClassName() + JAVA_EXTENSION));
         }
 
-        // A slow compiler says nothing about the student's code: the
-        // computer may just be busy, so no mark is taken and the
-        // submission is left for a retry
+        // Still too slow: no mark is taken and the submission is left
+        // for a retry
         if (compileResult.isTimedOut()) {
             throw new GradingException("javac did not finish "
-                    + question.getId() + " in time, probably because the "
-                    + "computer was busy. Nothing was marked wrong; retry "
-                    + "this submission.");
+                    + question.getId() + " in time, even when run again, "
+                    + "probably because the computer was busy. Nothing was "
+                    + "marked wrong; retry this submission.");
         }
         boolean compiled = compileResult.getExitCode() == SUCCESS_EXIT_CODE;
 

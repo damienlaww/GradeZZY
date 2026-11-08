@@ -5,12 +5,16 @@
  * one section, in paths.output.dir.by.section, such as
  * "CS102/G1=workspace/g1-exports;IS442=workspace/is442". A section's own
  * folder wins, then its module's, then paths.output.dir for everyone.
+ * It also picks a section's score sheet from paths.score.sheet.by.section,
+ * which is written the same way.
  *
  * Where it fits: The live export writes to the folder this picks, Export
  * shows it, and Settings lists, adds and removes the folders.
  */
 package gradezzy.config;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -183,6 +187,57 @@ public final class ExportFolders {
             return moduleCode.trim();
         }
         return moduleCode.trim() + SECTION_SEPARATOR + sectionCode.trim();
+    }
+
+    /**
+     * Returns the score sheet of a section: its own one in
+     * paths.score.sheet.by.section, which has the same form as the export
+     * folders, else paths.score.sheet.file for everyone. Grading, the
+     * Export warning and the CSV export all use this rule for a run that
+     * has no score sheet recorded, so they agree on the sheet.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param config the application settings
+     * @param moduleCode the module, or null
+     * @param sectionCode the section, or null for the sheet for everyone
+     * @return the score sheet's path
+     */
+    public static Path findScoreSheet(AppConfig config, String moduleCode,
+            String sectionCode) {
+        Path own = findOwnScoreSheet(config, moduleCode, sectionCode);
+        if (own != null) {
+            return own;
+        }
+        return Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE));
+    }
+
+    /**
+     * Returns the score sheet chosen for one section in
+     * paths.score.sheet.by.section, without falling back to the one for
+     * everyone.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param config the application settings
+     * @param moduleCode the module, or null
+     * @param sectionCode the section, or null
+     * @return the section's own score sheet, or null if it has none
+     */
+    public static Path findOwnScoreSheet(AppConfig config, String moduleCode,
+            String sectionCode) {
+        if (moduleCode == null || sectionCode == null
+                || !config.hasKey(ConfigKeys.SCORE_SHEET_BY_SECTION)) {
+            return null;
+        }
+
+        String own = exact(config.getString(
+                ConfigKeys.SCORE_SHEET_BY_SECTION),
+                keyOf(moduleCode, sectionCode));
+        if (own.isEmpty()) {
+            return null;
+        }
+        return Paths.get(own);
     }
 
     /**

@@ -73,12 +73,22 @@ public class Submission {
         this.originalPath = originalPath;
     }
 
-    /** Returns the upload rejection reason, or null for an accepted upload. */
+    /**
+     * Returns why the upload was rejected before grading, for example a
+     * file that is not a ZIP file.
+     *
+     * @return the rejection reason, or null for an accepted upload
+     */
     public String getIngestFailure() {
         return ingestFailure;
     }
 
-    /** Records why this upload cannot be graded. */
+    /**
+     * Records why this upload cannot be graded. The pipeline then marks
+     * the submission FAILED without running any stage.
+     *
+     * @param ingestFailure the rejection reason
+     */
     public void setIngestFailure(String ingestFailure) {
         this.ingestFailure = ingestFailure;
     }
@@ -211,6 +221,18 @@ public class Submission {
             return;
         }
         rejectedFixes.add(fixKey);
+    }
+
+    /**
+     * Takes back the undo of a fix, so it is applied again the next time
+     * the student is graded. A key not in the list is ignored.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param fixKey the key of the fix, from FixManager.findRejectedKey
+     */
+    public void unrejectFix(String fixKey) {
+        rejectedFixes.remove(fixKey);
     }
 
     /**

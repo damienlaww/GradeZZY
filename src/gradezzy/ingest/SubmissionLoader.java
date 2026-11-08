@@ -103,11 +103,14 @@ public class SubmissionLoader {
      * students listCandidates finds, and a bulk zip (see isBatchArchive),
      * chosen or found directly in a chosen folder, is unpacked into one
      * student per zip inside it. A chosen file that is not a zip is still
-     * one student, so extraction reports it without discarding the other
-     * students. When several files give one username, in any case, only
-     * one is graded: the newest download, which is the highest copy
-     * number such as " (2)", a file without one being the oldest; on a
-     * tie, the one whose username is already in lower case, as on the
+     * one student, listed as failed because it is not a ZIP file, without
+     * discarding the other students. When several files give one
+     * username, in any case, only one is graded: the newest download,
+     * which is the highest copy
+     * number such as " (2)", a file without one being the oldest; for two
+     * files of the same name in two chosen folders, such as a late batch
+     * chosen with the main one, the newer file, or the one chosen later;
+     * else the one whose username is already in lower case, as on the
      * roster, else the first chosen. Each file left out is named in a
      * DUPLICATE_SUBMISSION warning on the graded one. Uploads without a
      * username cannot be graded: the first is kept as a failed submission
@@ -555,7 +558,18 @@ public class SubmissionLoader {
         for (Path candidate : candidates) {
             String username = extractUsername(fileNameOf(candidate));
             if (!TextUtils.isBlank(username)) {
-                named.add(new Submission(username, section, candidate));
+                Submission submission = new Submission(username, section,
+                        candidate);
+                // A chosen file that is not a zip, such as a marking
+                // note, is listed so the instructor sees why it was not
+                // graded, but it is not read as a damaged zip
+                if (Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)
+                        && !isZipFile(candidate)) {
+                    reject(submission, fileNameOf(candidate) + " is not a "
+                            + "ZIP file or a folder, so it cannot be graded. "
+                            + "Choose the student's ZIP file or folder.");
+                }
+                named.add(submission);
             } else if (nameless == null) {
                 nameless = new Submission(username, section, candidate);
                 reject(nameless, "No username in " + candidate);
@@ -624,18 +638,54 @@ public class SubmissionLoader {
 
     // Says whether a file is graded in place of an earlier chosen file
     // with the same username: a higher copy number, because a student who
-    // uploads a fixed version gets it saved as "name (1).zip", else a
-    // username already in lower case, as on the roster.
+    // uploads a fixed version gets it saved as "name (1).zip"; for two
+    // files of the same name in two chosen folders, the newer one, or on
+    // a tie the one chosen later, as a late batch replaces an earlier
+    // result; else a username already in lower case, as on the roster.
     private boolean isPreferred(Submission candidate, Submission current) {
-        int candidateCopy = readCopyNumber(fileNameOf(
-                candidate.getOriginalPath()));
-        int currentCopy = readCopyNumber(fileNameOf(
-                current.getOriginalPath()));
+        Path candidatePath = candidate.getOriginalPath();
+        Path currentPath = current.getOriginalPath();
+        int candidateCopy = readCopyNumber(fileNameOf(candidatePath));
+        int currentCopy = readCopyNumber(fileNameOf(currentPath));
         if (candidateCopy != currentCopy) {
             return candidateCopy > currentCopy;
         }
+        if (isSameNameInTwoFolders(candidatePath, currentPath)) {
+            return readModifiedMillis(candidatePath)
+                    >= readModifiedMillis(currentPath);
+        }
         return isLowerCase(candidate.getUsername())
                 && !isLowerCase(current.getUsername());
+    }
+
+    // Says whether two different files share a name and were found in
+    // chosen folders, not inside a bulk zip.
+    private boolean isSameNameInTwoFolders(Path first, Path second) {
+        return fileNameOf(first).equals(fileNameOf(second))
+                && !isSameFile(first, second)
+                && !isInsideBatch(first) && !isInsideBatch(second);
+    }
+
+    // Says whether a file was unpacked from a bulk zip.
+    private boolean isInsideBatch(Path file) {
+        Path folder = file.getParent();
+        while (folder != null) {
+            if (fileNameOf(folder).startsWith(BATCH_FOLDER_PREFIX)) {
+                return true;
+            }
+            folder = folder.getParent();
+        }
+        return false;
+    }
+
+    // Reads when a file was last changed, or 0 when it cannot be read.
+    private long readModifiedMillis(Path file) {
+        try {
+            return Files.getLastModifiedTime(file,
+                    LinkOption.NOFOLLOW_LINKS).toMillis();
+        } catch (IOException exception) {
+            return 0;
+        }
     }
 
     // Says whether a username has no capital letter.
@@ -680,13 +730,8 @@ public class SubmissionLoader {
 
     // Names where a file was found: in its folder, or inside a bulk zip.
     private String describeFolder(Path file) {
-        Path folder = file.getParent();
-        while (folder != null) {
-            String name = fileNameOf(folder);
-            if (name.startsWith(BATCH_FOLDER_PREFIX)) {
-                return "inside the bulk zip";
-            }
-            folder = folder.getParent();
+        if (isInsideBatch(file)) {
+            return "inside the bulk zip";
         }
         return "in " + file.getParent();
     }

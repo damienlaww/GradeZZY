@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -22,10 +21,11 @@ import java.util.Locale;
 import java.util.Map;
 
 import gradezzy.config.AppConfig;
-import gradezzy.config.ConfigKeys;
+import gradezzy.config.ExportFolders;
 import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
@@ -283,10 +283,11 @@ public class ExportService {
                     + "without the settings.");
         }
 
+        // The same sheet the CSV export fills: the run's, else its
+        // section's own, else the one for everyone
         Path scoreSheetFile = gradingRun.getScoreSheetFile();
         if (scoreSheetFile == null) {
-            scoreSheetFile = Paths.get(config.getString(
-                    ConfigKeys.SCORE_SHEET_FILE));
+            scoreSheetFile = findSectionSheet(gradingRun);
         }
 
         List<Student> roster = null;
@@ -323,6 +324,17 @@ public class ExportService {
             }
         }
         return summary;
+    }
+
+    // The score sheet of a run's section, or the one for everyone, for a
+    // run saved before its score sheet was recorded.
+    private Path findSectionSheet(GradingRun gradingRun) {
+        Section section = gradingRun.getSection();
+        if (section == null) {
+            return ExportFolders.findScoreSheet(config, null, null);
+        }
+        return ExportFolders.findScoreSheet(config, section.getModuleCode(),
+                section.getSectionCode());
     }
 
     // Maps each username, in lower case, to its submission, as the CSV

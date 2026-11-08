@@ -42,6 +42,7 @@ import gradezzy.model.Assessment;
 import gradezzy.model.Question;
 import gradezzy.model.Student;
 import gradezzy.util.FileUtils;
+import gradezzy.util.TextUtils;
 
 /**
  * Checks a score sheet, tester folder or starter folder against the
@@ -82,6 +83,15 @@ public class ClassFileMatcher {
     private static final String JAVA_EXTENSION = ".java";
     private static final String CSV_EXTENSION = ".csv";
     private static final String ZIP_EXTENSION = ".zip";
+
+    // Starts a file saved again by Excel, which eLearn's own export lacks
+    private static final String BYTE_ORDER_MARK = "\uFEFF";
+
+    // Ends a line of a score sheet, once line endings are normalised
+    private static final String LINE_END = "\n";
+
+    // Index of a score sheet's first student row, after the header
+    private static final int FIRST_ROW = 1;
 
     // The method every program may declare, which says nothing about the
     // lab test
@@ -202,7 +212,12 @@ public class ClassFileMatcher {
         for (Path candidate : listCandidateFiles(sheet, uploads,
                 configured)) {
             int count = countOnSheetOrNone(candidate, wanted);
-            if (count > bestCount) {
+            // On a tie, eLearn's own export beats a copy saved again in
+            // Excel, so the CSV written later keeps eLearn's layout
+            boolean betterLayout = best != null && count == bestCount
+                    && keepsElearnLayout(candidate)
+                    && !keepsElearnLayout(best);
+            if (count > bestCount || betterLayout) {
                 best = candidate;
                 bestCount = count;
             }
@@ -213,6 +228,28 @@ public class ClassFileMatcher {
         return new ClassFileMatch(problem, best, ", "
                 + describeWhere(best, sheet, configured) + ", lists "
                 + describeShare(bestCount, total, noun) + ".");
+    }
+
+    // Says whether a score sheet is laid out as eLearn exports it: no
+    // byte order mark, and its first student row ends in the end of line
+    // marker, such as #.
+    private boolean keepsElearnLayout(Path sheet) {
+        String text;
+        try {
+            text = FileUtils.readText(sheet);
+        } catch (IOException exception) {
+            return false;
+        }
+        if (text.startsWith(BYTE_ORDER_MARK)) {
+            return false;
+        }
+
+        String[] lines = TextUtils.normaliseLineEndings(text).split(LINE_END);
+        if (lines.length <= FIRST_ROW) {
+            return false;
+        }
+        String marker = config.getString(ConfigKeys.CSV_END_OF_LINE_MARKER);
+        return lines[FIRST_ROW].trim().endsWith(marker);
     }
 
     // Counts the wanted usernames that are on a score sheet.

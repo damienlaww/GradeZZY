@@ -977,7 +977,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `paths.submissions.dir` | `samples/student-submission` | Folder graded by the console entry point. |
 | `paths.testers.dir` | `samples/Tester-Files` | Folder holding the tester files. |
 | `paths.score.sheet.file` | `samples/IS442-ScoreSheet.csv` | The roster and the template for the CSV export. |
-| `paths.score.sheet.by.section` | empty | The score sheet of single sections, such as `CS102/G1=Test Data/G1.csv`, separated by `;`. A section with none uses `paths.score.sheet.file`. Set in Settings; read through `config.ExportFolders`. |
+| `paths.score.sheet.by.section` | (empty) | Each section's own score sheet, such as `CS102/G1=Test Data/G1.csv`, set in Settings. A section with none uses `paths.score.sheet.file`. A run started with no score sheet chosen (the console) and a run saved without one (Export's warning and the CSV export) all use this rule (`config.ExportFolders.findScoreSheet`). |
 | `paths.starter.dir` | `samples/RenameToYourUsername` | Starter files, used to spot untouched answers when no starter folder is chosen on the Set up step, and by the similarity check. Set up warns when a chosen starter folder lacks some question files. |
 | `paths.working.dir` | `workspace/working` | Where working copies are created. |
 | `paths.output.dir` | `workspace/output` | Where exports are written. |
@@ -1001,12 +1001,12 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `fix.auto.apply.enabled` | `true` | Apply fixes automatically, or only report. |
 | `exec.javac.command` | `javac` | Command used to compile. |
 | `exec.java.command` | `java` | Command used to run a tester. |
-| `exec.compile.timeout.seconds` | `30` | Time limit for compiling one question folder. |
+| `exec.compile.timeout.seconds` | `30` | Time limit for compiling one question folder. A compile that misses it is run once more, because a busy computer can slow `javac`; after the second miss the student is left for Retry, with no mark taken. |
 | `exec.run.timeout.seconds` | `10` | Time limit for one tester run. |
 | `exec.thread.count` | `4` | Submissions graded at the same time. |
-| `exec.max.output.characters` | `100000` | Longest program output kept. In a tester run, student prints may use half of it, so the tester's own lines are never cut off. |
-| `exec.max.memory.mb` | `256` | Most memory, in MB, one tester run may use for its objects. `0` means no limit. Each run also gets a 2 MB thread stack and one CPU. |
-| `exec.max.hang.reruns` | `2` | Times a question's tester is run again, without the case that hung, so the cases after it are still marked. Each rerun can take the whole time limit. After the last one, the cases not yet run get no mark and the timeout flag asks the instructor to check them. |
+| `exec.max.output.characters` | `100000` | Longest program output kept. In a tester run, student prints may use half of it, so the tester's own lines are never cut off. When a tester is run again after a hang, the runs share this limit: the last run is kept whole and the earlier ones keep their ends. |
+| `exec.max.memory.mb` | `256` | Most memory, in MB, one tester run may use for its objects. `0` means no limit. Each run also gets a 2 MB thread stack and one CPU. A whole number of 0 or more; GradeZZY does not start with any other value. |
+| `exec.max.hang.reruns` | `2` | Times a question's tester is run again, without the case that hung, so the cases after it are still marked. Each rerun can take the whole time limit. After the last one, the cases not yet run get no mark and the timeout flag asks the instructor to check them. A whole number of 0 or more; GradeZZY does not start with any other value. |
 | `grading.tester.class.suffix` | `Tester` | `Q1a` becomes `Q1aTester`. |
 | `grading.pass.marker` | `Passed` | Line a tester prints for a passed test. |
 | `grading.fail.marker` | `Failed` | Start of the line for a failed test. |
@@ -1014,7 +1014,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `detection.untouched.enabled` | `true` | Flag untouched starter files. |
 | `detection.empty.enabled` | `true` | Flag empty answers. |
 | `detection.hardcoded.enabled` | `true` | Flag hard-coded answers. |
-| `plagiarism.enabled` | `false` | Run the similarity check after grading. For now only the window runs it; the console does not. |
+| `plagiarism.enabled` | `false` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
 | `export.formats` | `csv,json` | Formats offered by default. |
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
@@ -1026,7 +1026,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `database.file` | `workspace/gradezzy.db` | Location of the database file. |
 | `database.backup.keep.count` | `5` | Backups kept before the oldest is deleted. |
 | `audit.enabled` | `true` | Log instructor actions. |
-| `ui.theme` | `light` | `light` or `dark`. |
+| `ui.theme` | `dark` | `light` or `dark`. |
 | `ui.window.width`, `ui.window.height` | `1200`, `800` | Starting window size. |
 | `ui.animations.enabled` | `true` | Show subtle animations. |
 
@@ -1220,7 +1220,12 @@ implemented. `[x]` means it works now.
   memory). Undo grades the student again without that fix, so the marks
   match the files as submitted (kenneth.yeo.2024 in the e2e cohort goes
   from 20 to 16); the undone fix keys stay on `Submission`, so Retry and
-  Resume skip them too
+  Resume skip them too. `AnomalyService.reapplyFix` applies an undone
+  fix again and grades the student again with it ("Fix applied again.
+  Marks 16 to 20."); `canReapplyFix` says when it can, which is only in
+  the session that undid the fix, until the `rejected_fixes` column is
+  saved. The window's "Apply fix again" stays hidden until
+  `Capability.REAPPLY_FIX` is switched on
 - [x] Flag untouched starter files, empty answers and hard-coded answers
   (`detection` package)
 - [x] Set up checks that the score sheet, tester folder and starter
@@ -1288,7 +1293,9 @@ implemented. `[x]` means it works now.
   (`persistence.BackupManager`, `service.HistoryService`)
 - [x] Subtle animations (`ui`, `ui.animations.enabled`)
 - [x] Plagiarism detection (`plagiarism` package,
-  `service.PlagiarismService`; runs when `plagiarism.enabled` is true)
+  `service.PlagiarismService`; runs when `plagiarism.enabled` is true,
+  straight after grading, in the console and the window;
+  `PlagiarismService.listPairs` reads the pairs back from the flags)
 
 ## Before submission
 
