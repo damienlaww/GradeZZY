@@ -51,6 +51,15 @@ public enum Capability {
             CapabilityStatus.WORKS_NOW,
             "Nothing; it works for the last run of this session."),
 
+    /** Adds a late batch to the section's existing run. */
+    LATE_BATCH("Add a late batch to a run",
+            "Adds students to the section's existing run instead of "
+            + "starting a second run, replacing the result of a student "
+            + "graded before.", "Jing Yuan, Seth",
+            "GradingService.findNewestRun, addToRun",
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; Set up asks before grading."),
+
     /** Continues a saved run. */
     RESUME_RUN("Resume a cancelled run",
             "Finishes a cancelled run without grading finished students "

@@ -824,6 +824,8 @@ public class SetUpScreen extends FlowScreen {
         }
         latestClassChecks.remove(inspection.getKind());
         inspectionFailed(inspection);
+        // The tester check waits for every row, so it may start now
+        refreshClassFiles();
     }
 
     // Puts a checked class file in the batch and re-checks the testers.
@@ -1189,7 +1191,31 @@ public class SetUpScreen extends FlowScreen {
                 createDenominatorRow(assessment.getMaxTotal(),
                 denominator));
         getWindow().confirm("Are these questions and marks right?",
-                content, "Start grading", () -> getWindow().startGrading());
+                content, "Start grading", () -> startOrAddToRun());
+    }
+
+    // Starts grading, first asking whether the section's run takes it.
+    private void startOrAddToRun() {
+        GradingRun run = null;
+        if (getBackend().supports(Capability.LATE_BATCH)) {
+            run = getBackend().findRunToJoin(getState().getSection());
+        }
+        if (run == null) {
+            getWindow().startGrading();
+            return;
+        }
+        String when = "";
+        if (run.getStartedAt() != null) {
+            when = " on " + run.getStartedAt().format(WHEN);
+        }
+        String detail = getState().getSection().getLabel() + " was graded"
+                + when + " (" + Parts.plural(run.getSubmissions().size(),
+                "student") + "). A student graded before is graded again, "
+                + "and the new result replaces the old one.";
+        GradingRun joined = run;
+        getWindow().choose("Add these students to that run?", detail,
+                "Start a new run", () -> getWindow().startGrading(),
+                "Add to that run", () -> getWindow().addToRun(joined));
     }
 
     // One row per question with its folder, file and maximum mark, then
@@ -1264,7 +1290,8 @@ public class SetUpScreen extends FlowScreen {
     // Starts the tester folder check when the folders are new to it.
     private void checkTestersIfChanged() {
         Path testers = findUsableTesters();
-        if (testers == null) {
+        // Wait for every class file row, so the check starts only once
+        if (testers == null || !latestClassChecks.isEmpty()) {
             return;
         }
         Path starter = findUsableStarter();
@@ -1286,8 +1313,10 @@ public class SetUpScreen extends FlowScreen {
         check.setOnSucceeded(event -> testerCheckDone(check));
         check.setOnFailed(event -> testerCheckFailed(check));
         testerCheck = check;
+        // Not a daemon: when GradeZZY closes, Java waits for the check to
+        // end, so it deletes its temporary folder
         Thread worker = new Thread(check, "gradezzy-testers");
-        worker.setDaemon(true);
+        worker.setDaemon(false);
         worker.start();
     }
 

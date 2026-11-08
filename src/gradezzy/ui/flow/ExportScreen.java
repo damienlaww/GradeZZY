@@ -48,6 +48,7 @@ import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.ResultState;
+import gradezzy.ui.backend.RunRecord;
 import gradezzy.ui.backend.StatusCounts;
 import gradezzy.util.TextUtils;
 
@@ -152,6 +153,9 @@ public class ExportScreen extends FlowScreen {
 
     // What the score sheet will get, under its title
     private final VBox outcome = new VBox(Parts.GAP_SMALL);
+
+    // Says when another run of the section holds students this one lacks
+    private final HBox otherRunNote = Parts.row(Parts.GAP_SMALL);
 
     // The three counts of "What the score sheet will get"
     private final Label filledCount = new Label();
@@ -348,8 +352,10 @@ public class ExportScreen extends FlowScreen {
         HBox.setHgrow(offCell, Priority.ALWAYS);
         offCell.setMaxWidth(Double.MAX_VALUE);
         cells.getStyleClass().add("outcome-cells");
+        otherRunNote.setVisible(false);
+        otherRunNote.setManaged(false);
         outcome.getChildren().addAll(sectionLabel(
-                "What the score sheet will get"), cells);
+                "What the score sheet will get"), cells, otherRunNote);
         outcome.setVisible(false);
         outcome.setManaged(false);
         return outcome;
@@ -501,6 +507,7 @@ public class ExportScreen extends FlowScreen {
         offCell.setManaged(offSheet > 0);
         showOutcome(true);
         refreshWarning(run, filled, offSheet, missing.size());
+        refreshOtherRun(run, filled + failed + waiting + notTicked, missing);
 
         blankSummary = Parts.plural(filled, "mark") + " filled";
         if (blank == 0) {
@@ -513,6 +520,78 @@ public class ExportScreen extends FlowScreen {
             blankSummary = blankSummary + " " + offSheet + " not on the "
                     + "score sheet.";
         }
+    }
+
+    // Says when another run of this section has students this run lacks.
+    private void refreshOtherRun(GradingRun run, int inRun,
+            List<Student> missing) {
+        otherRunNote.getChildren().clear();
+        int more = 0;
+        if (!missing.isEmpty() && run.getSection() != null) {
+            more = countInOtherRun(run, missing);
+        }
+        boolean shown = more > 0;
+        otherRunNote.setVisible(shown);
+        otherRunNote.setManaged(shown);
+        if (!shown) {
+            return;
+        }
+        int onSheet = inRun + missing.size();
+        Label text = Parts.muted("This run has " + inRun + " of " + onSheet
+                + " students. Another " + run.getSection().getSectionCode()
+                + " run has " + more + " more.");
+        text.setWrapText(true);
+        text.setMinWidth(0);
+        otherRunNote.getChildren().addAll(Parts.pill(
+                "Not the whole section", Tone.WARN), text);
+    }
+
+    // Counts the missing students graded in the other run that has most.
+    private int countInOtherRun(GradingRun run, List<Student> missing) {
+        int most = 0;
+        for (RunRecord record : getBackend().listRuns()) {
+            GradingRun other = record.getRun();
+            if (isOtherRunOfSection(run, other)) {
+                int found = countIn(other, missing);
+                if (found > most) {
+                    most = found;
+                }
+            }
+        }
+        return most;
+    }
+
+    // Says whether a run is another run of the same module and section.
+    private boolean isOtherRunOfSection(GradingRun run, GradingRun other) {
+        if (other == null || other.getSection() == null
+                || other.getId().equals(run.getId())) {
+            return false;
+        }
+        return other.getSection().getModuleCode().equals(
+                run.getSection().getModuleCode())
+                && other.getSection().getSectionCode().equals(
+                run.getSection().getSectionCode());
+    }
+
+    // Counts the students with a submission in a run.
+    private int countIn(GradingRun other, List<Student> students) {
+        int count = 0;
+        for (Student student : students) {
+            if (hasSubmission(other, student.getUsername())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Says whether a run has a submission of a username.
+    private boolean hasSubmission(GradingRun other, String username) {
+        for (Submission submission : other.getSubmissions()) {
+            if (username.equalsIgnoreCase(submission.getUsername())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Shows or hides "What the score sheet will get" and the warning.
