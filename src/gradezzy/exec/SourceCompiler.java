@@ -10,6 +10,7 @@ package gradezzy.exec;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
@@ -69,7 +70,7 @@ public class SourceCompiler {
 
         List<String> command = new ArrayList<>();
         command.add(config.getString(ConfigKeys.JAVAC_COMMAND));
-        command.addAll(java.util.Arrays.asList(UTF8_OUTPUT_OPTIONS));
+        command.addAll(Arrays.asList(UTF8_OUTPUT_OPTIONS));
         command.add(CLASSPATH_OPTION);
         command.add(CURRENT_FOLDER);
         command.addAll(sourceFileNames);

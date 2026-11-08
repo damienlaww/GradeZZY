@@ -203,11 +203,16 @@ public final class AdjustMarkSheet {
                     window.getBackend(), ActivityUndo.MARK_CHANGED,
                     describe(change), () -> window.getBackend()
                     .undoAdjustment(run, change));
-            window.notify(saved.getMessage(), "Undo", () -> {
-                window.notify(undo.get().getMessage());
-                onSaved.run();
-            });
+            window.notify(saved.getMessage(), "Undo",
+                    () -> undoChange(window, undo, onSaved));
         }
+        onSaved.run();
+    }
+
+    // Takes a changed mark back and says how it went.
+    private static void undoChange(FlowWindow window,
+            Supplier<ActionResult> undo, Runnable onSaved) {
+        window.notify(undo.get().getMessage());
         onSaved.run();
     }
 

@@ -252,18 +252,42 @@ public class FlowWindow {
      * @param sectionCode the section, such as G2
      */
     public void openSetUp(String moduleCode, String sectionCode) {
+        if (!chooseSection(moduleCode, sectionCode)) {
+            notify("Wait until " + state.getSection().getLabel()
+                    + " has finished grading.");
+            show(Step.GRADE);
+            return;
+        }
+        show(Step.SET_UP);
+    }
+
+    /**
+     * Makes a section the one being set up, as Home's dropdowns do. Zip
+     * files chosen for another section are cleared, so they are not
+     * graded as this one. While a batch is being graded, its section
+     * stays: nothing changes and false is returned.
+     *
+     * @param moduleCode the module, such as CS102
+     * @param sectionCode the section, such as G2
+     * @return true when the section is now the one set up
+     */
+    public boolean chooseSection(String moduleCode, String sectionCode) {
         boolean otherSection = !sectionCode.equals(state.getSectionCode())
                 || !moduleCode.equals(state.getModuleCode());
-        if (otherSection && !state.isGrading()
-                && !state.getBatch().getItems(InputKind.SUBMISSION)
-                        .isEmpty()) {
+        if (!otherSection) {
+            return true;
+        }
+        if (state.isGrading()) {
+            return false;
+        }
+        if (!state.getBatch().getItems(InputKind.SUBMISSION).isEmpty()) {
             state.getBatch().clear(InputKind.SUBMISSION);
             notify("Cleared the zip files chosen for "
                     + state.getSection().getLabel() + ".");
         }
         state.setModuleCode(moduleCode);
         state.setSectionCode(sectionCode);
-        show(Step.SET_UP);
+        return true;
     }
 
     /**
@@ -537,8 +561,11 @@ public class FlowWindow {
         // The two buttons have the same shape; the one that goes ahead
         // is filled, in red when it deletes something
         Button ok = Parts.secondary(okText, () -> confirmed(onOk));
-        ok.getStyleClass().add(isDestructive(okText) ? "confirm-danger"
-                : "confirm-ok");
+        if (isDestructive(okText)) {
+            ok.getStyleClass().add("confirm-danger");
+        } else {
+            ok.getStyleClass().add("confirm-ok");
+        }
         HBox buttons = Parts.row(Parts.GAP,
                 new Node[] {Parts.grow(), cancel, ok});
         VBox body = new VBox(Parts.GAP, Parts.title(title), content,
@@ -735,6 +762,12 @@ public class FlowWindow {
         showNotice(message, actionText, action);
     }
 
+    // Hides the notice, then does what its link offered.
+    private void noticeActionChosen(Runnable action) {
+        notice.setVisible(false);
+        action.run();
+    }
+
     // Shows the notice, with a link when an action is given.
     private void showNotice(String message, String actionText,
             Runnable action) {
@@ -747,10 +780,7 @@ public class FlowWindow {
         } else {
             Hyperlink link = new Hyperlink(actionText);
             link.getStyleClass().add("notice-action");
-            link.setOnAction(event -> {
-                notice.setVisible(false);
-                action.run();
-            });
+            link.setOnAction(event -> noticeActionChosen(action));
             notice.setGraphic(link);
             notice.setContentDisplay(ContentDisplay.RIGHT);
             notice.setMouseTransparent(false);

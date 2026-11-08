@@ -46,6 +46,27 @@ public final class ReviewRules {
     }
 
     /**
+     * Says whether a flag may be marked as checked together with others
+     * by "Mark all as checked". A flag that means the student was not
+     * fully graded, is not on the score sheet or could not be read is
+     * left out: it changes what Export does, so it is checked one at a
+     * time.
+     *
+     * @param type the anomaly type
+     * @return true for a review aid such as an empty answer or similar
+     *         code, or a folder and file finding
+     */
+    public static boolean canCheckAll(AnomalyType type) {
+        return type != AnomalyType.COMPILE_ERROR
+                && type != AnomalyType.TIMEOUT
+                && type != AnomalyType.RUNTIME_ERROR
+                && type != AnomalyType.UNKNOWN_STUDENT
+                && type != AnomalyType.INVALID_ARCHIVE
+                && type != AnomalyType.DUPLICATE_SUBMISSION
+                && type != AnomalyType.INTERNAL_ERROR;
+    }
+
+    /**
      * Says whether an anomaly type is a validation finding.
      *
      * @param type the anomaly type

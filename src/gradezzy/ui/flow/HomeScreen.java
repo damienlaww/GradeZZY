@@ -294,8 +294,11 @@ public class HomeScreen extends FlowScreen {
         if (getBackend().supports(Capability.SETTINGS)) {
             sectionBox.getItems().add(NEW_SECTION);
         }
-        sectionBox.setValue(shownSection == null ? ALL_SECTIONS
-                : shownSection);
+        if (shownSection == null) {
+            sectionBox.setValue(ALL_SECTIONS);
+        } else {
+            sectionBox.setValue(shownSection);
+        }
 
         // Only the chosen module's assessments; a new module has none
         boolean ownOnly = ModuleSections.hasOwnOnly(getBackend().getSetting(
@@ -312,14 +315,25 @@ public class HomeScreen extends FlowScreen {
             assessmentBox.setValue(activeName());
         } else {
             assessmentBox.setValue(null);
-            assessmentBox.setPromptText(names.isEmpty() ? "None yet"
-                    : "Choose one");
+            if (names.isEmpty()) {
+                assessmentBox.setPromptText("None yet");
+            } else {
+                assessmentBox.setPromptText("Choose one");
+            }
         }
+        // The batch being graded keeps its module and section
+        moduleBox.setDisable(getState().isGrading());
+        sectionBox.setDisable(getState().isGrading());
         assessmentBox.setDisable(getState().isGrading());
-        contextDetail.setText(names.contains(activeName())
-                ? describeAssessmentSize() : names.isEmpty()
-                ? "No assessment for " + module + " yet. Add one to start."
-                : "Choose the assessment to grade for " + module + ".");
+        if (names.contains(activeName())) {
+            contextDetail.setText(describeAssessmentSize());
+        } else if (names.isEmpty()) {
+            contextDetail.setText("No assessment for " + module
+                    + " yet. Add one to start.");
+        } else {
+            contextDetail.setText("Choose the assessment to grade for "
+                    + module + ".");
+        }
         filling = false;
     }
 
@@ -334,7 +348,11 @@ public class HomeScreen extends FlowScreen {
             openAddModule();
             return;
         }
-        getState().setModuleCode(chosen);
+        if (!getWindow().chooseSection(chosen,
+                getState().getSectionCode())) {
+            undoPick();
+            return;
+        }
         shownSection = null;
         useModuleAssessment(chosen);
         refresh();
@@ -377,9 +395,12 @@ public class HomeScreen extends FlowScreen {
         }
         if (ALL_SECTIONS.equals(chosen)) {
             shownSection = null;
-        } else {
+        } else if (getWindow().chooseSection(getState().getModuleCode(),
+                chosen)) {
             shownSection = chosen;
-            getState().setSectionCode(chosen);
+        } else {
+            undoPick();
+            return;
         }
         refresh();
     }
@@ -872,10 +893,8 @@ public class HomeScreen extends FlowScreen {
                 && !isGradingNow(section)) {
             MenuItem delete = menuItem("Delete section...", Parts.CLOSE,
                     () -> CourseSheets.askDeleteSection(getWindow(),
-                    getState().getModuleCode(), section, () -> {
-                        shownSection = null;
-                        refresh();
-                    }));
+                    getState().getModuleCode(), section,
+                    () -> sectionAdded()));
             delete.getStyleClass().add("danger-item");
             // A line sets the delete apart from the other items
             if (more.getItems().size() > 1) {
@@ -916,12 +935,16 @@ public class HomeScreen extends FlowScreen {
     private void makeClickable(VBox card, Runnable action, String tip) {
         card.getStyleClass().add("clickable");
         Parts.tipNode(card, tip);
-        card.setOnMouseClicked(event -> {
-            if (!isInsideButton(event.getPickResult().getIntersectedNode(),
-                    card)) {
-                action.run();
-            }
-        });
+        card.setOnMouseClicked(event -> cardClicked(event.getPickResult()
+                .getIntersectedNode(), card, action));
+    }
+
+    // Opens what a card opens, unless the click was on one of its
+    // buttons.
+    private void cardClicked(Node clicked, VBox card, Runnable action) {
+        if (!isInsideButton(clicked, card)) {
+            action.run();
+        }
     }
 
     // Says whether a clicked node is a button, a menu or inside one.
@@ -941,14 +964,17 @@ public class HomeScreen extends FlowScreen {
     private void acceptDrops(VBox card, String section) {
         DragDropHandler drops = new DragDropHandler();
         drops.install(card);
-        drops.setOnDropped(() -> {
-            List<Path> paths = new ArrayList<>(drops.getDroppedPaths());
-            openSetUp(section);
-            FlowScreen screen = getWindow().getScreen(Step.SET_UP);
-            if (screen instanceof SetUpScreen && !paths.isEmpty()) {
-                ((SetUpScreen) screen).addFiles(paths);
-            }
-        });
+        drops.setOnDropped(() -> filesDropped(drops, section));
+    }
+
+    // Opens Set up for the section a zip file was dropped on, with it.
+    private void filesDropped(DragDropHandler drops, String section) {
+        List<Path> paths = new ArrayList<>(drops.getDroppedPaths());
+        openSetUp(section);
+        FlowScreen screen = getWindow().getScreen(Step.SET_UP);
+        if (screen instanceof SetUpScreen && !paths.isEmpty()) {
+            ((SetUpScreen) screen).addFiles(paths);
+        }
     }
 
     // Opens a run and goes straight to its Export step.
@@ -991,7 +1017,7 @@ public class HomeScreen extends FlowScreen {
             when.getStyleClass().add("small-text");
             when.setMinWidth(Label.USE_PREF_SIZE);
             Label what = new Label(entry.getAction() + ": "
-                    + Parts.shortenPaths(entry.getDetail()));
+                    + Parts.shortenPaths(entry.getShownDetail()));
             what.getStyleClass().add("small-text");
             what.setMinWidth(0);
             Parts.tip(what, entry.getAction() + ": " + entry.getDetail());
@@ -1047,8 +1073,12 @@ public class HomeScreen extends FlowScreen {
                     stats.getPassRate() * 100) + "% passed");
             figures.getStyleClass().add("small-text");
             figures.setMinWidth(Label.USE_PREF_SIZE);
-            StackPane bar = Parts.track(stats.getMean()
-                    / stats.getMaxTotal(), null);
+            // An assessment with no marks to earn shows an empty bar
+            double filled = 0.0;
+            if (stats.getMaxTotal() > 0.0) {
+                filled = stats.getMean() / stats.getMaxTotal();
+            }
+            StackPane bar = Parts.track(filled, null);
             HBox.setHgrow(bar, Priority.ALWAYS);
             HBox line = Parts.row(Parts.GAP, new Node[] {name, bar,
                 figures});
@@ -1073,7 +1103,7 @@ public class HomeScreen extends FlowScreen {
 
     // ---------------------------------------------------------- actions
 
-    
+
 
     // Switches the assessment in use.
     private void chooseAssessment(String chosen) {
@@ -1097,20 +1127,26 @@ public class HomeScreen extends FlowScreen {
 
     // Opens the sheet that adds a module, then shows it.
     private void openAddModule() {
-        CourseSheets.openAddModule(getWindow(), code -> {
-            getState().setModuleCode(code);
-            shownSection = null;
-            refresh();
-        });
+        CourseSheets.openAddModule(getWindow(), code -> moduleAdded(code));
+    }
+
+    // Shows a module just added, clearing zip files chosen for another.
+    private void moduleAdded(String code) {
+        getWindow().chooseSection(code, getState().getSectionCode());
+        shownSection = null;
+        refresh();
+    }
+
+    // Shows every section's card once a section was added or deleted.
+    private void sectionAdded() {
+        shownSection = null;
+        refresh();
     }
 
     // Opens the sheet that adds a section to this module or every module.
     private void openAddSection() {
         CourseSheets.openAddSection(getWindow(), getState().getModuleCode(),
-                code -> {
-            shownSection = null;
-            refresh();
-        });
+                code -> sectionAdded());
     }
 
     // ---------------------------------------------------------- reading

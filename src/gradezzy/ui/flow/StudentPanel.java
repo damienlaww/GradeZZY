@@ -670,14 +670,18 @@ public class StudentPanel extends ScrollPane {
             EventHandler<ActionEvent> action =
                     button.getOnAction();
             if (action != null) {
-                button.setOnAction(event -> {
-                    window.closeSheet();
-                    action.handle(event);
-                });
+                button.setOnAction(event -> closeThen(action, event));
             }
         }
         card.getStyleClass().add("sheet-issue");
         return card;
+    }
+
+    // Closes the sheet, then does what the button does in the panel.
+    private void closeThen(EventHandler<ActionEvent> action,
+            ActionEvent event) {
+        window.closeSheet();
+        action.handle(event);
     }
 
     // Lists every button inside a node.
@@ -825,14 +829,17 @@ public class StudentPanel extends ScrollPane {
             return;
         }
         boolean checked = backend.isZeroChecked(submission);
-        Label tag = checked ? Parts.pill("Checked", Tone.NEUTRAL)
-                : Parts.pill("Problem", Tone.BAD);
+        Label tag = Parts.pill("Problem", Tone.BAD);
+        String detailText = "Nothing was flagged that explains the 0. Look "
+                + "at the code, then mark it as checked or change a mark.";
+        if (checked) {
+            tag = Parts.pill("Checked", Tone.NEUTRAL);
+            detailText = "You looked at this 0. The student counts as "
+                    + "graded.";
+        }
         Label title = Parts.strong("Graded with 0 marks");
         title.setWrapText(true);
-        Label detail = Parts.muted(checked
-                ? "You looked at this 0. The student counts as graded."
-                : "Nothing was flagged that explains the 0. Look at the "
-                + "code, then mark it as checked or change a mark.");
+        Label detail = Parts.muted(detailText);
         detail.setWrapText(true);
         detail.getStyleClass().add("small-text");
         VBox card = new VBox(Parts.GAP_SMALL, tag,

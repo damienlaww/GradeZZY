@@ -7,7 +7,9 @@
  *
  * Where it fits: LiveBackend calls it from Review's Adjust sheet and the
  * Undo of a changed mark. The student's total, Statistics and Export all
- * read the question's score, so they use the new mark at once.
+ * read the question's score, so they use the new mark at once. The
+ * methods are synchronized, so a grading thread and the window can call
+ * them together.
  */
 package gradezzy.service;
 
@@ -45,6 +47,15 @@ public class ScoreAdjustmentService {
     private final Map<String, List<ScoreAdjustment>> byRun =
             new HashMap<>();
 
+    // The question result each change was made on or last checked
+    // against. Grading again makes new results, so a change whose result
+    // was replaced is outdated even when the new mark happens to match.
+    private final Map<ScoreAdjustment, QuestionResult> resultOf =
+            new HashMap<>();
+
+    // Why the last change could not be saved, or "" when it was
+    private String saveProblem = "";
+
     /**
      * Creates the service.
      *
@@ -69,8 +80,9 @@ public class ScoreAdjustmentService {
      * @throws IllegalArgumentException if the mark or reason is not valid,
      *         or the question has no result
      */
-    public ScoreAdjustment adjust(GradingRun run, Submission submission,
-            String questionId, double newScore, String reason) {
+    public synchronized ScoreAdjustment adjust(GradingRun run,
+            Submission submission, String questionId, double newScore,
+            String reason) {
         QuestionResult result = findResult(submission, questionId);
         if (result == null) {
             throw new IllegalArgumentException(questionId + " has no "
@@ -92,6 +104,7 @@ public class ScoreAdjustmentService {
                 newScore, reason.trim(), LocalDateTime.now());
         result.setScore(newScore);
         changesOf(run).add(change);
+        resultOf.put(change, result);
         save(run, submission, change, true);
         return change;
     }
@@ -106,7 +119,7 @@ public class ScoreAdjustmentService {
      * @throws IllegalArgumentException if the student or question is no
      *         longer in the run, or a later change of it comes first
      */
-    public void undo(GradingRun run, ScoreAdjustment change) {
+    public synchronized void undo(GradingRun run, ScoreAdjustment change) {
         Submission submission = findSubmission(run, change.getUsername());
         if (submission == null) {
             throw new IllegalArgumentException("The student is no longer "
@@ -139,6 +152,7 @@ public class ScoreAdjustmentService {
         }
         result.setScore(change.getPreviousScore());
         changes.remove(change);
+        resultOf.remove(change);
         save(run, submission, change, false);
     }
 
@@ -149,7 +163,8 @@ public class ScoreAdjustmentService {
      * @param username the student
      * @return the changes
      */
-    public List<ScoreAdjustment> list(GradingRun run, String username) {
+    public synchronized List<ScoreAdjustment> list(GradingRun run,
+            String username) {
         List<ScoreAdjustment> found = new ArrayList<>();
         if (run == null) {
             return found;
@@ -166,10 +181,43 @@ public class ScoreAdjustmentService {
         return found;
     }
 
+    /**
+     * Forgets every change read so far, so each run's changes are read
+     * from the store again. Called after a backup is put back, because
+     * the store then holds other changes.
+     */
+    public synchronized void forgetAll() {
+        byRun.clear();
+        resultOf.clear();
+    }
+
+    /**
+     * Says why the last change or undo could not be saved.
+     *
+     * @return the reason, or "" when it was saved or saving is off
+     */
+    public synchronized String getSaveProblem() {
+        return saveProblem;
+    }
+
+    /**
+     * Says whether changes are saved with the results, so they are kept
+     * after a restart.
+     *
+     * @return true when results are saved
+     */
+    public boolean isSaving() {
+        return repository != null
+                && config.getBoolean(ConfigKeys.DATABASE_ENABLED);
+    }
+
     // Returns a run's changes, reading them from the store the first
-    // time.
+    // time. If they cannot be read, only this session's changes show.
     private List<ScoreAdjustment> changesOf(GradingRun run) {
-        String id = run.getId() == null ? "" : run.getId();
+        String id = "";
+        if (run.getId() != null) {
+            id = run.getId();
+        }
         List<ScoreAdjustment> changes = byRun.get(id);
         if (changes == null) {
             changes = new ArrayList<>();
@@ -177,7 +225,7 @@ public class ScoreAdjustmentService {
                 try {
                     changes.addAll(repository.listAdjustments(id));
                 } catch (PersistenceException exception) {
-                    // Results are not saved; only this session's show
+                    saveProblem = exception.getMessage();
                 }
             }
             byRun.put(id, changes);
@@ -185,10 +233,11 @@ public class ScoreAdjustmentService {
         return changes;
     }
 
-    // Forgets a student's changes of a question whose mark is no longer
-    // the newest change's mark: the question was graded again, retried,
-    // or a backup was put back, so the changes no longer describe it and
-    // undoing one would put back a wrong mark.
+    // Forgets a student's changes of a question that was graded again,
+    // retried, or put back from a backup since its newest change: its
+    // result was replaced, or its mark is no longer the change's mark.
+    // The changes no longer describe it, and undoing one would put back
+    // a mark the files did not earn.
     private void dropOutdated(GradingRun run, Submission submission) {
         List<ScoreAdjustment> changes = changesOf(run);
         Map<String, ScoreAdjustment> newest = new HashMap<>();
@@ -197,36 +246,69 @@ public class ScoreAdjustmentService {
                 newest.put(change.getQuestionId(), change);
             }
         }
-        for (Map.Entry<String, ScoreAdjustment> entry : newest.entrySet()) {
-            QuestionResult result = findResult(submission, entry.getKey());
-            if (result != null && Math.abs(result.getScore()
-                    - entry.getValue().getNewScore()) < SAME_MARK) {
-                continue;
+        for (String questionId : newest.keySet()) {
+            ScoreAdjustment change = newest.get(questionId);
+            QuestionResult result = findResult(submission, questionId);
+            if (!isOutdated(change, result)) {
+                // A change read from the store is tied to the result it
+                // describes the first time it is checked
+                resultOf.put(change, result);
+            } else {
+                dropQuestion(run, submission.getUsername(), questionId);
             }
-            List<ScoreAdjustment> outdated = new ArrayList<>();
-            for (ScoreAdjustment change : changes) {
-                if (change.getUsername().equals(submission.getUsername())
-                        && change.getQuestionId().equals(entry.getKey())) {
-                    outdated.add(change);
-                }
+        }
+    }
+
+    // Says whether a question's newest change no longer describes its
+    // result.
+    private boolean isOutdated(ScoreAdjustment change,
+            QuestionResult result) {
+        if (result == null) {
+            return true;
+        }
+        QuestionResult madeOn = resultOf.get(change);
+        if (madeOn != null && madeOn != result) {
+            return true;
+        }
+        return Math.abs(result.getScore() - change.getNewScore())
+                >= SAME_MARK;
+    }
+
+    // Forgets every change of one question of a student, here and in the
+    // store.
+    private void dropQuestion(GradingRun run, String username,
+            String questionId) {
+        List<ScoreAdjustment> changes = changesOf(run);
+        List<ScoreAdjustment> outdated = new ArrayList<>();
+        for (ScoreAdjustment change : changes) {
+            if (change.getUsername().equals(username)
+                    && change.getQuestionId().equals(questionId)) {
+                outdated.add(change);
             }
-            changes.removeAll(outdated);
-            if (isSaving() && run.getId() != null) {
-                for (ScoreAdjustment change : outdated) {
-                    try {
-                        repository.deleteAdjustment(run.getId(), change);
-                    } catch (PersistenceException exception) {
-                        // Forgotten for this session; the store is broken
-                    }
-                }
+        }
+        changes.removeAll(outdated);
+        for (ScoreAdjustment change : outdated) {
+            resultOf.remove(change);
+        }
+        if (!isSaving() || run.getId() == null) {
+            return;
+        }
+        for (ScoreAdjustment change : outdated) {
+            try {
+                repository.deleteAdjustment(run.getId(), change);
+            } catch (PersistenceException exception) {
+                // Forgotten for this session; the store may list it again
+                saveProblem = exception.getMessage();
             }
         }
     }
 
     // Saves the student's marks and the change, or removes the change.
-    // When results are not saved, the change lasts until GradeZZY closes.
+    // When results are not saved, the change lasts until GradeZZY closes;
+    // when saving fails, getSaveProblem says why.
     private void save(GradingRun run, Submission submission,
             ScoreAdjustment change, boolean added) {
+        saveProblem = "";
         if (!isSaving() || run.getId() == null) {
             return;
         }
@@ -238,14 +320,8 @@ public class ScoreAdjustmentService {
                 repository.deleteAdjustment(run.getId(), change);
             }
         } catch (PersistenceException exception) {
-            // The mark is changed for this session; saving is off or broken
+            saveProblem = exception.getMessage();
         }
-    }
-
-    // Says whether results are saved.
-    private boolean isSaving() {
-        return repository != null
-                && config.getBoolean(ConfigKeys.DATABASE_ENABLED);
     }
 
     // Finds a student in a run.

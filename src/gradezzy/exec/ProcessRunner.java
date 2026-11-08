@@ -17,6 +17,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
@@ -225,19 +228,29 @@ public class ProcessRunner {
         process.destroyForcibly();
         // On Windows a stopping java.exe holds its working folder, so
         // wait a moment for it to end before the folder is reused
-        waitForExit(process.toHandle());
+        waitForExit(process.toHandle(), System.currentTimeMillis()
+                + EXIT_WAIT_MILLIS);
     }
 
-    // Waits briefly for a stopped process to end.
-    private static void waitForExit(ProcessHandle handle) {
+    // Waits until a stopped process has ended or the deadline, in
+    // milliseconds since 1970, has passed. Returns false when it is
+    // still stopping; the folder delete then tries again.
+    private static boolean waitForExit(ProcessHandle handle,
+            long deadline) {
+        long left = deadline - System.currentTimeMillis();
+        if (left <= 0) {
+            return !handle.isAlive();
+        }
         try {
-            handle.onExit().get(EXIT_WAIT_MILLIS,
-                    java.util.concurrent.TimeUnit.MILLISECONDS);
-        } catch (java.util.concurrent.TimeoutException
-                | java.util.concurrent.ExecutionException exception) {
-            // It is still stopping; the folder delete tries again
+            handle.onExit().get(left, TimeUnit.MILLISECONDS);
+            return true;
+        } catch (TimeoutException exception) {
+            return false;
+        } catch (ExecutionException exception) {
+            return false;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            return false;
         }
     }
 
@@ -297,11 +310,17 @@ public class ProcessRunner {
      * @param children the children seen while the process ran
      */
     private void stopChildren(List<ProcessHandle> children) {
+        List<ProcessHandle> stopped = new ArrayList<>();
         for (ProcessHandle child : children) {
             if (child.isAlive()) {
                 child.destroyForcibly();
-                waitForExit(child);
+                stopped.add(child);
             }
+        }
+        // All of them share one wait, so many children do not add up
+        long deadline = System.currentTimeMillis() + EXIT_WAIT_MILLIS;
+        for (ProcessHandle child : stopped) {
+            waitForExit(child, deadline);
         }
     }
 

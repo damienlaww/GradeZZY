@@ -1548,21 +1548,29 @@ public class GradingService {
                     + ConfigKeys.MODULE_CODES + ".");
         }
 
-        if (!isListed(ConfigKeys.SECTION_CODES, section.getSectionCode())
-                && !isModuleSection(section)) {
+        if (!isModuleSection(section)) {
             throw new GradingException("Section '"
-                    + section.getSectionCode() + "' is not in the setting "
-                    + ConfigKeys.SECTION_CODES + ".");
+                    + section.getSectionCode() + "' is not a section of "
+                    + section.getModuleCode() + " in the settings "
+                    + ConfigKeys.SECTION_CODES + " and "
+                    + ConfigKeys.MODULE_SECTION_CODES + ".");
         }
     }
 
-    // Says whether a section is one of its module's own sections.
+    // Says whether a section belongs to its module: one every module has,
+    // unless the module has only its own sections, or one of its own.
     private boolean isModuleSection(Section section) {
-        if (!config.hasKey(ConfigKeys.MODULE_SECTION_CODES)) {
-            return false;
+        String byModule = "";
+        if (config.hasKey(ConfigKeys.MODULE_SECTION_CODES)) {
+            byModule = config.getString(ConfigKeys.MODULE_SECTION_CODES);
         }
-        for (String code : ModuleSections.forModule("", config.getString(
-                ConfigKeys.MODULE_SECTION_CODES), section.getModuleCode())) {
+        String ownOnly = "";
+        if (config.hasKey(ConfigKeys.OWN_SECTIONS_ONLY_MODULES)) {
+            ownOnly = config.getString(ConfigKeys.OWN_SECTIONS_ONLY_MODULES);
+        }
+        for (String code : ModuleSections.forModule(config.getString(
+                ConfigKeys.SECTION_CODES), byModule, ownOnly,
+                section.getModuleCode())) {
             if (code.equalsIgnoreCase(section.getSectionCode())) {
                 return true;
             }

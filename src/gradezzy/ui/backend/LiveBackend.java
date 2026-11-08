@@ -5,7 +5,8 @@
  *
  * Where it fits: The default backend, used by "sh run.sh". Each method
  * calls one service or reads a setting, else returns Not connected yet.
- * Review decisions on flags are kept here, in memory, for one session.
+ * Review decisions on flags and checked 0s are kept here in memory, and
+ * saved through AnomalyService so they are read back after a restart.
  */
 package gradezzy.ui.backend;
 
@@ -53,10 +54,12 @@ import gradezzy.model.SubmissionStatus;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.report.ExportException;
 import gradezzy.report.ScoreFormatter;
+import gradezzy.service.AnomalyService;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.service.ClassFileMatcher;
+import gradezzy.service.ScoreAdjustmentService;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.service.UndoResult;
 import gradezzy.stats.StatisticsFilter;
@@ -134,7 +137,8 @@ public class LiveBackend implements DashboardBackend {
     // testers GradingService keeps for Retry; null until one finishes
     private GradingRun lastRunStarted = null;
 
-    // The review decisions of this session, by student and anomaly id
+    // The review decisions, by student and anomaly id: those made in this
+    // session and those read back with the saved runs
     private final Map<String, ReviewDecision> decisions =
             new ConcurrentHashMap<>();
 
@@ -173,7 +177,7 @@ public class LiveBackend implements DashboardBackend {
         return capability.isWired();
     }
 
-    
+
 
     /**
      * Returns the module codes listed in config.properties.
@@ -630,7 +634,8 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns the decision recorded in this session, or OPEN.
+     * Returns the decision made in this session or saved with the run,
+     * or OPEN.
      */
     @Override
     public ReviewDecision getDecision(Anomaly anomaly) {
@@ -639,8 +644,9 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Records the decision in memory until GradeZZY closes. No service
-     * saves review decisions, so they are not kept after a restart.
+     * Records the decision and saves it with AnomalyService.saveDecision,
+     * so it is kept after a restart. When it cannot be saved, it is kept
+     * until GradeZZY closes and the message says so.
      */
     @Override
     public ActionResult setDecision(Anomaly anomaly,
@@ -650,20 +656,72 @@ public class LiveBackend implements DashboardBackend {
         }
 
         ReviewDecision before = getDecision(anomaly);
+        String savedName = null;
         if (decision == ReviewDecision.OPEN) {
             decisions.remove(decisionKey(anomaly));
         } else {
             decisions.put(decisionKey(anomaly), decision);
+            savedName = decision.name();
         }
-        // Every decision is in the activity log, so it can be undone there
+        boolean saved = services.getAnomalyService().saveDecision(anomaly,
+                savedName);
+        // Every decision is in the activity log, so it can be undone
+        // there; the id tells it apart from the same flag in another run
         if (before != decision) {
             services.getAuditService().record(decision.getAuditAction(),
-                    anomaly.getUsername() + ": " + anomaly.getMessage());
+                    AuditEntry.withReference(anomaly.getUsername() + ": "
+                    + anomaly.getMessage(), anomaly.getId()));
         }
-        return ActionResult.done("Marked the flag for "
-                + anomaly.getUsername() + " as "
-                + decision.getLabel().toLowerCase() + ". No mark changed. "
-                + "This is kept until GradeZZY closes.");
+        String message = "Marked the flag for " + anomaly.getUsername()
+                + " as " + decision.getLabel().toLowerCase()
+                + ". No mark changed.";
+        if (!saved) {
+            message = message + " It could not be saved, so it is kept "
+                    + "only until GradeZZY closes.";
+        }
+        return ActionResult.done(message);
+    }
+
+    /**
+     * Marks a student's 0 as checked, or takes that back, and saves it
+     * with AnomalyService.saveZeroCheck so it is kept after a restart.
+     * The activity line names the run, so History's Undo finds the right
+     * student when a section was graded twice.
+     */
+    @Override
+    public ActionResult setZeroChecked(Submission submission,
+            boolean checked) {
+        if (submission == null) {
+            return ActionResult.failed("Choose a student first.");
+        }
+
+        GradingRun run = findRunHolding(submission);
+        boolean saved = services.getAnomalyService().saveZeroCheck(run,
+                submission, checked);
+        String runId = null;
+        if (run != null) {
+            runId = run.getId();
+        }
+        if (ZeroChecks.set(submission, checked)) {
+            String action = ReviewDecision.AUDIT_TAKEN_BACK;
+            if (checked) {
+                action = ReviewDecision.AUDIT_CHECKED;
+            }
+            recordActivity(action, AuditEntry.withReference(
+                    submission.getUsername() + ": " + ZERO_CHECK_WORDS,
+                    runId));
+        }
+        String message = "The 0 of " + submission.getUsername()
+                + " waits for a look again.";
+        if (checked) {
+            message = "Marked the 0 of " + submission.getUsername()
+                    + " as checked. No mark changed.";
+        }
+        if (!saved) {
+            message = message + " It could not be saved, so it is kept "
+                    + "only until GradeZZY closes.";
+        }
+        return ActionResult.done(message);
     }
 
     /**
@@ -958,8 +1016,9 @@ public class LiveBackend implements DashboardBackend {
         try {
             ScoreAdjustment change = services.getScoreAdjustmentService()
                     .adjust(run, submission, questionId, newScore, reason);
-            return ActionResult.done("Saved. " + questionId + " for "
-                    + submission.getUsername() + " changed from "
+            return ActionResult.done(adjustmentSaved("Saved.") + " "
+                    + questionId + " for " + submission.getUsername()
+                    + " changed from "
                     + ScoreFormatter.format(change.getPreviousScore())
                     + " to " + ScoreFormatter.format(newScore) + ".");
         } catch (IllegalArgumentException exception) {
@@ -980,13 +1039,30 @@ public class LiveBackend implements DashboardBackend {
         }
         try {
             services.getScoreAdjustmentService().undo(run, adjustment);
-            return ActionResult.done("Undone. " + adjustment.getQuestionId()
-                    + " for " + adjustment.getUsername() + " is "
+            return ActionResult.done(adjustmentSaved("Undone.") + " "
+                    + adjustment.getQuestionId() + " for "
+                    + adjustment.getUsername() + " is "
                     + ScoreFormatter.format(adjustment.getPreviousScore())
                     + " again.");
         } catch (IllegalArgumentException exception) {
             return ActionResult.failed(exception.getMessage());
         }
+    }
+
+    // Starts the message about a changed mark: the given word when it was
+    // saved, else that it lasts only until GradeZZY closes, and why.
+    private String adjustmentSaved(String savedWord) {
+        ScoreAdjustmentService adjustments =
+                services.getScoreAdjustmentService();
+        String problem = adjustments.getSaveProblem();
+        if (!adjustments.isSaving()) {
+            return "Changed for this session only; saving results is "
+                    + "switched off.";
+        } else if (!problem.isEmpty()) {
+            return "Not saved, so it lasts only until GradeZZY closes ("
+                    + problem + ").";
+        }
+        return savedWord;
     }
 
     /**
@@ -1093,8 +1169,11 @@ public class LiveBackend implements DashboardBackend {
                     + "before grading again.");
         }
 
-        // Forget every run so getRun reads the restored history.
+        // Forget every run and decision so getRun reads the restored
+        // history, with the decisions saved in it.
         runsBySection.clear();
+        decisions.clear();
+        services.getScoreAdjustmentService().forgetAll();
         forgetSavedRuns();
         if (Capability.RESTORE.getStatus() != CapabilityStatus.WORKS_NOW) {
             return ActionResult.notConnected(Capability.RESTORE);
@@ -1297,7 +1376,7 @@ public class LiveBackend implements DashboardBackend {
                 || key.equals(ConfigKeys.ASSESSMENT_NAME)
                 || key.equals(ConfigKeys.TESTERS_DIR)
                 || key.equals(ConfigKeys.STARTER_DIR)
-                
+
                 || key.equals(ConfigKeys.PROVIDED_CLASS_FILES)
                 || key.equals(ConfigKeys.TESTER_DATA_FILES)
                 || key.equals(ConfigKeys.PLACEHOLDER_FOLDER_NAMES);
@@ -1654,8 +1733,66 @@ public class LiveBackend implements DashboardBackend {
     private synchronized List<GradingRun> getSavedRuns() {
         if (savedRuns == null) {
             savedRuns = services.getHistoryService().listRuns();
+            for (GradingRun saved : savedRuns) {
+                readBackChecks(saved);
+            }
         }
         return savedRuns;
+    }
+
+    // Reads back the decisions and checked 0s saved with a run, onto the
+    // saved copy and this session's copy of it. A decision made in this
+    // session wins, because it may not have been saved.
+    private void readBackChecks(GradingRun saved) {
+        AnomalyService anomalyService = services.getAnomalyService();
+        Map<String, String> savedDecisions =
+                anomalyService.loadDecisions(saved);
+        List<String> checkedZeros = anomalyService.loadZeroChecks(saved);
+        GradingRun[] copies = {saved, findSessionRun(saved)};
+        for (GradingRun copy : copies) {
+            for (Submission submission : copy.getSubmissions()) {
+                if (checkedZeros.contains(submission.getUsername())) {
+                    ZeroChecks.set(submission, true);
+                }
+                for (Anomaly anomaly : submission.getAnomalies()) {
+                    ReviewDecision decision = decisionNamed(
+                            savedDecisions.get(anomaly.getId()));
+                    if (decision != null) {
+                        decisions.putIfAbsent(decisionKey(anomaly),
+                                decision);
+                    }
+                }
+            }
+        }
+    }
+
+    // Reads a saved decision name, or null for none or an unknown name.
+    private ReviewDecision decisionNamed(String name) {
+        if (name == null) {
+            return null;
+        }
+        try {
+            return ReviewDecision.valueOf(name);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    // Finds the run that holds a submission: a run of this session, else
+    // a saved run; null when none does.
+    private GradingRun findRunHolding(Submission submission) {
+        List<GradingRun> runs = new ArrayList<>(
+                services.getGradingService().getSessionRuns());
+        runs.addAll(runsBySection.values());
+        runs.addAll(getSavedRuns());
+        for (GradingRun run : runs) {
+            for (Submission held : run.getSubmissions()) {
+                if (held == submission) {
+                    return run;
+                }
+            }
+        }
+        return null;
     }
 
     // Forgets the saved runs, so the next call reads them again.

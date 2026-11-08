@@ -333,13 +333,7 @@ public class RunsScreen extends FlowScreen {
         }
         kinds.setMinWidth(HBox.USE_PREF_SIZE);
         kindGroup.selectedToggleProperty().addListener((observable,
-                before, after) -> {
-            if (after == null) {
-                before.setSelected(true);
-                return;
-            }
-            refreshActivity();
-        });
+                before, after) -> kindChosen(before, after));
         activityCount.getStyleClass().add("small-text");
         HBox tools = Parts.row(Parts.GAP, new Node[] {activitySearch,
             kinds, Parts.grow(), activityCount});
@@ -618,8 +612,8 @@ public class RunsScreen extends FlowScreen {
             before = getBackend().getRun(record.getRun().getSection());
         }
         ActionResult result = getBackend().restore(record);
-        String beforeId = before == null ? null : before.getId();
-        if (result.isDone() && beforeId != null) {
+        if (result.isDone() && before != null && before.getId() != null) {
+            String beforeId = before.getId();
             afterRestore(result, () -> undoRestore(beforeId));
         } else {
             afterRestore(result, null);
@@ -972,9 +966,13 @@ public class RunsScreen extends FlowScreen {
     // Returns what takes an activity entry back, or null when it cannot
     // be taken back or already was: a kept fix that is still kept, a
     // rejected or reapplied fix still in that state, or a flag decision
-    // that is still the flag's decision.
+    // that is still the flag's decision. A line with a reference names
+    // the flag (or, for a checked 0, the run) it is about, so the same
+    // words in another run do not match; an older line without one is
+    // matched by its words.
     private Runnable findUndo(AuditEntry entry, String student,
             String message) {
+        String reference = entry.getReference();
         if (getState().isGrading()) {
             return null;
         }
@@ -982,11 +980,7 @@ public class RunsScreen extends FlowScreen {
         Supplier<ActionResult> restore = ActivityUndo.find(
                 entry.getAction(), entry.getDetail());
         if (restore != null) {
-            return () -> {
-                ActionResult result = restore.get();
-                getWindow().notify(result.isDone() ? "Put back: "
-                        + entry.getDetail() + "." : result.getMessage());
-            };
+            return () -> putBack(restore, entry);
         }
         if (student.isEmpty()) {
             return null;
@@ -1003,21 +997,26 @@ public class RunsScreen extends FlowScreen {
         // The decision the log line made; Undo is offered only while it
         // is still the current one, so an older line cannot take back a
         // newer decision
-        ReviewDecision logged = ReviewDecision.AUDIT_LOOKS_FINE.equals(action)
-                ? ReviewDecision.REJECTED : ReviewDecision.REVIEWED;
+        ReviewDecision logged = ReviewDecision.REVIEWED;
+        if (ReviewDecision.AUDIT_LOOKS_FINE.equals(action)) {
+            logged = ReviewDecision.REJECTED;
+        }
         for (GradingRun run : runsToSearch()) {
+            boolean runNamed = reference.isEmpty()
+                    || reference.equals(run.getId());
             for (Submission submission : run.getSubmissions()) {
                 if (!submission.getUsername().equals(student)) {
                     continue;
                 }
                 if (decision && logged == ReviewDecision.REVIEWED
                         && DashboardBackend.ZERO_CHECK_WORDS.equals(message)
+                        && runNamed
                         && getBackend().isZeroChecked(submission)) {
                     return () -> getWindow().notify(getBackend()
                             .setZeroChecked(submission, false).getMessage());
                 }
                 for (Anomaly anomaly : submission.getAnomalies()) {
-                    if (!isAbout(message, anomaly, !decision)) {
+                    if (!isAbout(message, reference, anomaly, !decision)) {
                         continue;
                     }
                     if (fix && anomaly.getFixStatus() == FixStatus.APPROVED
@@ -1045,10 +1044,40 @@ public class RunsScreen extends FlowScreen {
         return null;
     }
 
-    // Says whether a log line's words are about an anomaly. A fix line
-    // may end with a space and the outcome.
-    private boolean isAbout(String message, Anomaly anomaly,
-            boolean fixLine) {
+    // Shows the kind of activity picked. Picking the chosen kind again
+    // would choose none, so it stays chosen.
+    private void kindChosen(Toggle before, Toggle after) {
+        if (after == null) {
+            before.setSelected(true);
+            return;
+        }
+        refreshActivity();
+    }
+
+    // Takes back one activity line, then redraws the log.
+    private void undoActivity(Runnable undo) {
+        undo.run();
+        refreshActivity();
+    }
+
+    // Puts back a delete from the activity log, and says how it went.
+    private void putBack(Supplier<ActionResult> restore, AuditEntry entry) {
+        ActionResult result = restore.get();
+        if (result.isDone()) {
+            getWindow().notify("Put back: " + entry.getDetail() + ".");
+        } else {
+            getWindow().notify(result.getMessage());
+        }
+    }
+
+    // Says whether a log line is about an anomaly: by its id when the
+    // line has a reference, else by its words. A fix line may end with a
+    // space and the outcome.
+    private boolean isAbout(String message, String reference,
+            Anomaly anomaly, boolean fixLine) {
+        if (!reference.isEmpty()) {
+            return reference.equals(anomaly.getId());
+        }
         String words = anomaly.getMessage();
         if (fixLine) {
             return message.equals(words)
@@ -1199,7 +1228,7 @@ public class RunsScreen extends FlowScreen {
     // Adds one entry to a day's table: the time, the action as a pill,
     // the student it is about, and the rest of the detail.
     private void addActivityRow(PlainTable table, AuditEntry entry) {
-        String detailText = entry.getDetail();
+        String detailText = entry.getShownDetail();
         String student = "";
         int colon = detailText.indexOf(": ");
         if (colon > 0 && colon < STUDENT_NAME_LIMIT
@@ -1211,15 +1240,16 @@ public class RunsScreen extends FlowScreen {
         detail.setMinWidth(0);
         detail.setTooltip(new Tooltip(entry.getDetail()));
         Label time = Parts.muted(entry.getTimestamp().format(TIME));
-        Label who = Parts.strong(student.isEmpty() ? "-" : student);
+        String whoText = student;
+        if (student.isEmpty()) {
+            whoText = "-";
+        }
+        Label who = Parts.strong(whoText);
         who.setMinWidth(0);
         Node undoCell = new Label("");
         Runnable undo = findUndo(entry, student, detailText);
         if (undo != null) {
-            Button button = Parts.small("Undo", () -> {
-                undo.run();
-                refreshActivity();
-            });
+            Button button = Parts.small("Undo", () -> undoActivity(undo));
             Parts.tip(button, "Take this back. No other change is undone.");
             undoCell = button;
         }

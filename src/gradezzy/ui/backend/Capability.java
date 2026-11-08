@@ -110,10 +110,10 @@ public enum Capability {
     FLAG_REVIEW("Mark flags reviewed or rejected",
             "Records that you looked at a flag, without changing any "
             + "mark.", "Jing Yuan",
-            "LiveBackend.setDecision, kept until GradeZZY closes",
+            "LiveBackend.setDecision, saved by "
+            + "AnomalyService.saveDecision",
             CapabilityStatus.WORKS_NOW,
-            "Nothing for one session. To keep decisions after a restart, "
-            + "a service that saves each decision with an audit entry."),
+            "Nothing; decisions are saved with the run."),
 
     /** Searches, filters and sorts students. */
     SEARCH("Search, filter and sort",

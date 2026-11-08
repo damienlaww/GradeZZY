@@ -322,15 +322,14 @@ public final class CodeSheet {
     private void showLineNumbers(String text) {
         int lines = text.split("\n", -1).length;
         int digits = String.valueOf(lines).length();
-        StringBuilder numbers = new StringBuilder();
+        String numbers = "";
         for (int line = 1; line <= lines; line++) {
-            numbers.append(String.format("%" + digits + "d", line));
-            numbers.append('\n');
+            numbers += String.format("%" + digits + "d", line) + "\n";
         }
         // One more line, so the numbers still reach the last line when
         // the code has a horizontal scroll bar
-        numbers.append(' ');
-        lineNumbers.setText(numbers.toString());
+        numbers += " ";
+        lineNumbers.setText(numbers);
         double width = digits * DIGIT_WIDTH + GUTTER_PADDING;
         lineNumbers.setMinWidth(width);
         lineNumbers.setPrefWidth(width);

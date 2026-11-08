@@ -321,7 +321,8 @@ public interface DashboardBackend {
 
     /**
      * Says whether the instructor checked a student graded with 0 marks
-     * that nothing flagged. Kept until GradeZZY closes.
+     * that nothing flagged. The live backend saves the check with the
+     * run; the demo keeps it until GradeZZY closes.
      *
      * @param submission the student
      * @return true once checked
@@ -343,14 +344,20 @@ public interface DashboardBackend {
         if (submission == null) {
             return ActionResult.failed("Choose a student first.");
         }
-        if (ZeroChecks.set(submission, checked)) {
-            recordActivity(checked ? ReviewDecision.AUDIT_CHECKED
-                    : ReviewDecision.AUDIT_TAKEN_BACK,
+        boolean changed = ZeroChecks.set(submission, checked);
+        if (changed && checked) {
+            recordActivity(ReviewDecision.AUDIT_CHECKED,
+                    submission.getUsername() + ": " + ZERO_CHECK_WORDS);
+        } else if (changed) {
+            recordActivity(ReviewDecision.AUDIT_TAKEN_BACK,
                     submission.getUsername() + ": " + ZERO_CHECK_WORDS);
         }
-        return ActionResult.done(checked ? "Marked the 0 of "
-                + submission.getUsername() + " as checked. No mark changed."
-                : "The 0 of " + submission.getUsername()
+        if (checked) {
+            return ActionResult.done("Marked the 0 of "
+                    + submission.getUsername() + " as checked. No mark "
+                    + "changed.");
+        }
+        return ActionResult.done("The 0 of " + submission.getUsername()
                 + " waits for a look again.");
     }
 
@@ -560,15 +567,16 @@ public interface DashboardBackend {
      * @return the score sheet's path, as written in the settings
      */
     default String getScoreSheet(Section section) {
-        String module = section == null ? null : section.getModuleCode();
-        String code = section == null ? null : section.getSectionCode();
-        if (code == null) {
+        if (section == null || section.getSectionCode() == null) {
             return getSetting(ConfigKeys.SCORE_SHEET_FILE);
         }
         String own = ExportFolders.exact(getSetting(
                 ConfigKeys.SCORE_SHEET_BY_SECTION), ExportFolders.keyOf(
-                module, code));
-        return own.isEmpty() ? getSetting(ConfigKeys.SCORE_SHEET_FILE) : own;
+                section.getModuleCode(), section.getSectionCode()));
+        if (own.isEmpty()) {
+            return getSetting(ConfigKeys.SCORE_SHEET_FILE);
+        }
+        return own;
     }
 
     /**
@@ -579,10 +587,13 @@ public interface DashboardBackend {
      * @return the folder
      */
     default String getExportFolder(Section section) {
-        String module = section == null ? null : section.getModuleCode();
-        String code = section == null ? null : section.getSectionCode();
-        return ExportFolders.resolve(getSetting(ConfigKeys.OUTPUT_DIR),
-                getSetting(ConfigKeys.OUTPUT_DIR_BY_SECTION), module, code);
+        String folder = getSetting(ConfigKeys.OUTPUT_DIR);
+        if (section == null) {
+            return folder;
+        }
+        return ExportFolders.resolve(folder, getSetting(
+                ConfigKeys.OUTPUT_DIR_BY_SECTION), section.getModuleCode(),
+                section.getSectionCode());
     }
 
     /**

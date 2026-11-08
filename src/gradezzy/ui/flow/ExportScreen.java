@@ -400,8 +400,10 @@ public class ExportScreen extends FlowScreen {
     // Returns the folder this run's section exports to.
     private String exportFolder() {
         GradingRun run = getState().getRun();
-        return getBackend().getExportFolder(run == null ? null
-                : run.getSection());
+        if (run == null) {
+            return getBackend().getExportFolder(null);
+        }
+        return getBackend().getExportFolder(run.getSection());
     }
 
     // Opens the export folder in Finder or File Explorer.

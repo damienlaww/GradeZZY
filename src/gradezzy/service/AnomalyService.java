@@ -12,14 +12,17 @@
 package gradezzy.service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import gradezzy.fix.FixException;
 import gradezzy.fix.FixManager;
 import gradezzy.fix.FixRecord;
 import gradezzy.grading.GradingException;
 import gradezzy.model.Anomaly;
+import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Submission;
@@ -603,7 +606,10 @@ public class AnomalyService {
         if (!outcome.isEmpty()) {
             detail = detail + " " + outcome;
         }
-        auditService.record(action, detail);
+        // The id tells this flag apart from one with the same words in
+        // another run
+        auditService.record(action, AuditEntry.withReference(detail,
+                anomaly.getId()));
     }
 
     // Saves the new status when the database is open. A failure keeps the
@@ -618,6 +624,89 @@ public class AnomalyService {
                     anomaly.getFixStatus());
         } catch (PersistenceException exception) {
             // The database is switched off or cannot be written
+        }
+    }
+
+    /**
+     * Saves the instructor's review decision on a flag, so it is kept
+     * after GradeZZY closes. A decision never changes a mark.
+     *
+     * @param anomaly the flag
+     * @param decision the decision name, or null when the flag is open
+     *        again
+     * @return true when the decision was saved, false when the database
+     *         is switched off or cannot be written
+     */
+    public boolean saveDecision(Anomaly anomaly, String decision) {
+        if (repository == null || anomaly == null) {
+            return false;
+        }
+        try {
+            repository.updateDecision(anomaly.getId(), decision);
+            return true;
+        } catch (PersistenceException exception) {
+            return false;
+        }
+    }
+
+    /**
+     * Loads the saved review decisions of a run.
+     *
+     * @param gradingRun the run
+     * @return the decision names by anomaly id; empty when there are none
+     *         or the database cannot be read
+     */
+    public Map<String, String> loadDecisions(GradingRun gradingRun) {
+        if (repository == null || gradingRun == null) {
+            return new HashMap<>();
+        }
+        try {
+            return repository.loadDecisions(gradingRun.getId());
+        } catch (PersistenceException exception) {
+            return new HashMap<>();
+        }
+    }
+
+    /**
+     * Saves that the instructor checked a student's 0 that nothing
+     * flagged, or takes that back. It never changes a mark.
+     *
+     * @param gradingRun the run the student is in
+     * @param submission the student
+     * @param checked true when the 0 was checked
+     * @return true when it was saved, false when the database is switched
+     *         off or cannot be written
+     */
+    public boolean saveZeroCheck(GradingRun gradingRun,
+            Submission submission, boolean checked) {
+        if (repository == null || gradingRun == null
+                || submission == null) {
+            return false;
+        }
+        try {
+            repository.updateZeroCheck(gradingRun.getId(),
+                    submission.getUsername(), checked);
+            return true;
+        } catch (PersistenceException exception) {
+            return false;
+        }
+    }
+
+    /**
+     * Lists the students of a run whose 0 the instructor checked.
+     *
+     * @param gradingRun the run
+     * @return the usernames; empty when there are none or the database
+     *         cannot be read
+     */
+    public List<String> loadZeroChecks(GradingRun gradingRun) {
+        if (repository == null || gradingRun == null) {
+            return new ArrayList<>();
+        }
+        try {
+            return repository.loadZeroChecks(gradingRun.getId());
+        } catch (PersistenceException exception) {
+            return new ArrayList<>();
         }
     }
 }

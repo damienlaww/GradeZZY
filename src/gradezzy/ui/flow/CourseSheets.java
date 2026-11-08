@@ -8,7 +8,10 @@
  */
 package gradezzy.ui.flow;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -22,6 +25,7 @@ import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.VBox;
 
 import gradezzy.config.ConfigKeys;
+import gradezzy.config.ExportFolders;
 import gradezzy.config.ModuleSections;
 import gradezzy.ui.backend.ActionResult;
 
@@ -71,8 +75,8 @@ public final class CourseSheets {
         add.setOnAction(event -> doAdd.run());
         code.setOnAction(event -> doAdd.run());
         VBox body = new VBox(Parts.GAP, Parts.title("Add a module"),
-                Parts.subtitle("A course code you teach. It gets the "
-                + "sections every module has, and you can add its own."),
+                Parts.subtitle("A course code you teach. It starts with no "
+                + "sections; add its own sections next."),
                 code, problem, Parts.row(Parts.GAP, new Node[] {
                 Parts.grow(), cancel, add}));
         body.setMaxWidth(Parts.TEXT_WIDTH);
@@ -108,14 +112,12 @@ public final class CourseSheets {
         changes.put(ConfigKeys.MODULE_CODES, value + code);
         // A new module starts empty: no sections every module has; its
         // own are added by the instructor
-        if (window.getBackend().validateSetting(
-                ConfigKeys.OWN_SECTIONS_ONLY_MODULES, "").isEmpty()) {
-            String ownOnly = window.getBackend().getSetting(
-                    ConfigKeys.OWN_SECTIONS_ONLY_MODULES).trim();
-            changes.put(ConfigKeys.OWN_SECTIONS_ONLY_MODULES,
-                    ownOnly.isEmpty() ? code : ownOnly + LIST_SEPARATOR
-                    + code);
+        String ownOnly = window.getBackend().getSetting(
+                ConfigKeys.OWN_SECTIONS_ONLY_MODULES).trim();
+        if (!ownOnly.isEmpty()) {
+            ownOnly += LIST_SEPARATOR;
         }
+        changes.put(ConfigKeys.OWN_SECTIONS_ONLY_MODULES, ownOnly + code);
         ActionResult result = window.getBackend().saveSettings(changes);
         if (!result.isDone()) {
             problem.setText(result.getMessage());
@@ -149,13 +151,6 @@ public final class CourseSheets {
         onlyHere.setToggleGroup(where);
         everywhere.setToggleGroup(where);
         onlyHere.setSelected(true);
-        // An older config.properties has no setting for one module's sections
-        boolean canOnlyHere = window.getBackend().validateSetting(
-                ConfigKeys.MODULE_SECTION_CODES, "").isEmpty();
-        onlyHere.setDisable(!canOnlyHere);
-        if (!canOnlyHere) {
-            everywhere.setSelected(true);
-        }
         // A module with only its own sections does not get the sections
         // every module has, so that choice would not show here
         if (ModuleSections.hasOwnOnly(window.getBackend().getSetting(
@@ -251,42 +246,80 @@ public final class CourseSheets {
      */
     public static void askDeleteSection(FlowWindow window, String module,
             String code, Runnable onChanged) {
+        String refused = whyNotDelete(window, module, code);
+        if (!refused.isEmpty()) {
+            window.notify(refused);
+            return;
+        }
         boolean own = ModuleSections.isOwnSection(window.getBackend()
                 .getSetting(ConfigKeys.MODULE_SECTION_CODES), module, code);
-        String detail = own ? code + " is removed from " + module + "."
-                : code + " is shared by every module, so it is removed from "
-                + "all of them.";
-        detail += " Results already graded for it are kept in History, and you "
-                + "can add it again later.";
+        String detail = code + " is shared by every module, so it is "
+                + "removed from all of them.";
+        if (own) {
+            detail = code + " is removed from " + module + ".";
+        }
+        detail += " Its score sheet and export folder are forgotten too. "
+                + "Results already graded for it are kept in History, and "
+                + "you can add it again later.";
         window.confirm("Delete section " + code + "?", detail,
                 "Delete section", () -> deleteSection(window, module, code,
                 own, onChanged));
     }
 
-    // Deletes a section, then offers Undo.
+    /**
+     * Says why a section cannot be deleted now: it is being graded, or
+     * it is the last section every module has, which the settings need.
+     *
+     * @param window the window
+     * @param module the module the section is shown for
+     * @param code the section
+     * @return the reason, or an empty text when it can be deleted
+     */
+    public static String whyNotDelete(FlowWindow window, String module,
+            String code) {
+        FlowState state = window.getState();
+        if (state.isGrading()
+                && code.equalsIgnoreCase(state.getSectionCode())) {
+            return "Wait until " + code + " has finished grading.";
+        }
+        boolean own = ModuleSections.isOwnSection(window.getBackend()
+                .getSetting(ConfigKeys.MODULE_SECTION_CODES), module, code);
+        if (!own && sharedWithout(window, code).isEmpty()) {
+            return code + " is the only section every module has, and "
+                    + "GradeZZY needs one. Add another first.";
+        }
+        return "";
+    }
+
+    // Deletes a section with its score sheets and export folders, then
+    // offers Undo.
     private static void deleteSection(FlowWindow window, String module,
             String code, boolean own, Runnable onChanged) {
         Map<String, String> changes = new HashMap<>();
-        Map<String, String> before = new HashMap<>();
         if (own) {
             String key = ConfigKeys.MODULE_SECTION_CODES;
-            before.put(key, window.getBackend().getSetting(key));
-            changes.put(key, ModuleSections.remove(before.get(key), module,
-                    code));
+            changes.put(key, ModuleSections.remove(window.getBackend()
+                    .getSetting(key), module, code));
         } else {
-            String key = ConfigKeys.SECTION_CODES;
-            before.put(key, window.getBackend().getSetting(key));
-            StringBuilder kept = new StringBuilder();
-            for (String shared : before.get(key).split(LIST_SEPARATOR)) {
-                if (!shared.trim().isEmpty()
-                        && !shared.trim().equalsIgnoreCase(code)) {
-                    if (kept.length() > 0) {
-                        kept.append(LIST_SEPARATOR);
-                    }
-                    kept.append(shared.trim());
-                }
+            changes.put(ConfigKeys.SECTION_CODES, sharedWithout(window,
+                    code));
+        }
+        String[] entryKeys = {ConfigKeys.SCORE_SHEET_BY_SECTION,
+            ConfigKeys.OUTPUT_DIR_BY_SECTION};
+        // What the section had, so Undo can put it back
+        List<String[]> sheets = sectionEntries(window, entryKeys[0], module,
+                code, own);
+        List<String[]> folders = sectionEntries(window, entryKeys[1],
+                module, code, own);
+        for (String key : entryKeys) {
+            String value = window.getBackend().getSetting(key);
+            if (own) {
+                value = ExportFolders.remove(value, ExportFolders.keyOf(
+                        module, code));
+            } else {
+                value = ExportFolders.removeSection(value, code);
             }
-            changes.put(key, kept.toString());
+            changes.put(key, value);
         }
         ActionResult result = window.getBackend().saveSettings(changes);
         if (!result.isDone()) {
@@ -294,25 +327,76 @@ public final class CourseSheets {
             return;
         }
         onChanged.run();
-        String detail = own ? code + " of " + module + " only"
-                : code + " of every module";
+        String detail = code + " of every module";
+        if (own) {
+            detail = code + " of " + module + " only";
+        }
         Supplier<ActionResult> restore = ActivityUndo.record(
                 window.getBackend(), ActivityUndo.SECTION_DELETED, detail,
-                () -> restoreSection(window, module, code, own));
-        window.notify("Deleted section " + code + ".", "Undo", () -> {
-            ActionResult back = restore.get();
-            if (!back.isDone()) {
-                window.notify(back.getMessage());
-            }
-            onChanged.run();
-        });
+                () -> restoreSection(window, module, code, own, sheets,
+                folders));
+        window.notify("Deleted section " + code + ".", "Undo",
+                () -> undoDelete(window, restore, onChanged));
     }
 
-    // Adds a deleted section back, without undoing other changes made
-    // since.
+    // Puts a deleted section back, saying so if it could not be.
+    private static void undoDelete(FlowWindow window,
+            Supplier<ActionResult> restore, Runnable onChanged) {
+        ActionResult back = restore.get();
+        if (!back.isDone()) {
+            window.notify(back.getMessage());
+        }
+        onChanged.run();
+    }
+
+    // The sections every module has, without one, as the setting holds
+    // them.
+    private static String sharedWithout(FlowWindow window, String code) {
+        String kept = "";
+        String value = window.getBackend().getSetting(
+                ConfigKeys.SECTION_CODES);
+        for (String shared : value.split(LIST_SEPARATOR)) {
+            if (!shared.trim().isEmpty()
+                    && !shared.trim().equalsIgnoreCase(code)) {
+                if (!kept.isEmpty()) {
+                    kept += LIST_SEPARATOR;
+                }
+                kept += shared.trim();
+            }
+        }
+        return kept;
+    }
+
+    // The entries of a "CS102/G1=..." setting that belong to a section:
+    // its module's alone, or every module's for a shared section.
+    private static List<String[]> sectionEntries(FlowWindow window,
+            String key, String module, String code, boolean own) {
+        List<String[]> found = new ArrayList<>();
+        String ending = ("/" + code).toLowerCase(Locale.ROOT);
+        for (String[] entry : ExportFolders.list(window.getBackend()
+                .getSetting(key))) {
+            String who = entry[0];
+            if (own && who.equalsIgnoreCase(ExportFolders.keyOf(module,
+                    code))) {
+                found.add(entry);
+            } else if (!own && who.toLowerCase(Locale.ROOT).endsWith(
+                    ending)) {
+                found.add(entry);
+            }
+        }
+        return found;
+    }
+
+    // Adds a deleted section back, with its score sheets and export
+    // folders, without undoing other changes made since.
     private static ActionResult restoreSection(FlowWindow window,
-            String module, String code, boolean own) {
+            String module, String code, boolean own, List<String[]> sheets,
+            List<String[]> folders) {
         Map<String, String> changes = new HashMap<>();
+        putEntriesBack(window, changes, ConfigKeys.SCORE_SHEET_BY_SECTION,
+                sheets);
+        putEntriesBack(window, changes, ConfigKeys.OUTPUT_DIR_BY_SECTION,
+                folders);
         if (own) {
             String key = ConfigKeys.MODULE_SECTION_CODES;
             String value = window.getBackend().getSetting(key);
@@ -326,14 +410,31 @@ public final class CourseSheets {
             for (String shared : value.split(LIST_SEPARATOR)) {
                 listed = listed || shared.trim().equalsIgnoreCase(code);
             }
-            if (!listed) {
-                changes.put(key, value.isEmpty() ? code
-                        : value + LIST_SEPARATOR + code);
+            if (!listed && value.isEmpty()) {
+                changes.put(key, code);
+            } else if (!listed) {
+                changes.put(key, value + LIST_SEPARATOR + code);
             }
         }
         if (changes.isEmpty()) {
             return ActionResult.done("Section " + code + " is listed.");
         }
         return window.getBackend().saveSettings(changes);
+    }
+
+    // Adds entries back to a "CS102/G1=..." setting, keeping any set
+    // since for the same module and section.
+    private static void putEntriesBack(FlowWindow window,
+            Map<String, String> changes, String key, List<String[]> entries) {
+        if (entries.isEmpty()) {
+            return;
+        }
+        String value = window.getBackend().getSetting(key);
+        for (String[] entry : entries) {
+            if (ExportFolders.exact(value, entry[0]).isEmpty()) {
+                value = ExportFolders.put(value, entry[0], entry[1]);
+            }
+        }
+        changes.put(key, value);
     }
 }
