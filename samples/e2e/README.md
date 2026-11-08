@@ -167,6 +167,15 @@ the Excel layout (byte order mark, no last `#` column).
   OrgDefinedId"). Grading must not start.
 - **Same folder twice**: add `upload-1-main` twice. Every student is
   graded once and each zip says "was chosen more than once".
+- **Both batches at once**: add `upload-1-main` and then
+  `upload-2-late`. Lakshmi's zip has the same name in both folders; the
+  one in `upload-2-late` is graded (20), because it is newer or, with the
+  same time, chosen later. Her row says "Two files are named ...".
+- **A file that is not a zip**: choose `upload-1-main/marking notes.txt`
+  on its own. It is listed as FAILED: "marking notes.txt is not a ZIP
+  file or a folder, so it cannot be graded."
+- **A score sheet with only its header row** is refused: "The roster has
+  a header but no student rows."
 - **Wrong folder**: choose `samples/e2e` itself as Submissions. The
   message should name `upload-1-main` as the folder to choose.
 - **Undo a fix**: Undo grades the student again without the fix.

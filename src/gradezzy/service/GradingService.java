@@ -107,7 +107,8 @@ public class GradingService {
     // Written in the audit log for a student who has no total
     private static final String NOT_GRADED = "not graded";
 
-    // The message when Undo or a late batch is tried during grading
+    // The message when grading, Undo or a late batch is tried during
+    // grading
     private static final String STILL_GRADING = "Grading is still "
             + "running. Try again when it has finished.";
 
@@ -241,7 +242,8 @@ public class GradingService {
      * @param listener the object told about progress
      * @return the finished run, holding every submission and its results
      * @throws GradingException if the batch cannot start at all, for
-     *         example when an argument is missing, the module or section
+     *         example when grading is still running, an argument is
+     *         missing, the module or section
      *         is not in the settings, or the score sheet, the uploads or
      *         the testers cannot be read
      */
@@ -265,7 +267,8 @@ public class GradingService {
      * @param scoreSheetFile the score sheet for this batch, or null for
      *        the section's one in the settings
      * @return the finished run, holding every submission and its results
-     * @throws GradingException if the batch cannot start at all
+     * @throws GradingException if grading is still running, or the
+     *         batch cannot start at all
      */
     public GradingRun startGrading(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener,
@@ -293,13 +296,14 @@ public class GradingService {
      * @param starterDirectory the starter folder for this batch, or null
      *        for the one in the settings
      * @return the finished run, holding every submission and its results
-     * @throws GradingException if the batch cannot start at all
+     * @throws GradingException if grading is still running, or the
+     *         batch cannot start at all
      */
     public GradingRun startGrading(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener,
             Path scoreSheetFile, Path starterDirectory)
             throws GradingException {
-        beginGrading();
+        beginOnlyGrading();
         try {
             return gradeBatch(inputPaths, section, testCaseSource, listener,
                     scoreSheetFile, starterDirectory);
@@ -594,9 +598,9 @@ public class GradingService {
      * @param gradingRun the run to retry
      * @param listener the object told about progress
      * @return the same run, with updated results
-     * @throws GradingException if there is no run, or if the run was not
-     *         the last one started in this session, so its testers are
-     *         not loaded
+     * @throws GradingException if there is no run, grading is still
+     *         running, or the run was not the last one started in this
+     *         session, so its testers are not loaded
      */
     public GradingRun retryFailed(GradingRun gradingRun,
             ProgressListener listener) throws GradingException {
@@ -628,11 +632,11 @@ public class GradingService {
             return gradingRun;
         }
 
-        auditService.record(GRADING_RETRIED, "Grading "
-                + retryRun.getSubmissions().size() + " submission(s) of "
-                + gradingRun.getId() + " again.");
-        beginGrading();
+        beginOnlyGrading();
         try {
+            auditService.record(GRADING_RETRIED, "Grading "
+                    + retryRun.getSubmissions().size() + " submission(s) of "
+                    + gradingRun.getId() + " again.");
             setCurrentRunId(gradingRun.getId());
             cancellationToken.reset();
             GradingPipeline pipeline = createPipeline(gradingRun);
@@ -668,9 +672,9 @@ public class GradingService {
      * @param runId the id of the saved run
      * @param listener the object told about progress
      * @return the resumed run, with every submission in it
-     * @throws GradingException if the id or listener is missing, the run
-     *         is not the last one and cannot be loaded, or its score
-     *         sheet or testers cannot be read
+     * @throws GradingException if the id or listener is missing, grading
+     *         is still running, the run is not the last one and cannot be
+     *         loaded, or its score sheet or testers cannot be read
      */
     public GradingRun resume(String runId, ProgressListener listener)
             throws GradingException {
@@ -721,11 +725,11 @@ public class GradingService {
             return gradingRun;
         }
 
-        auditService.record(GRADING_RESUMED, "Grading the "
-                + resumeRun.getSubmissions().size() + " unfinished "
-                + "submission(s) of " + gradingRun.getId() + ".");
-        beginGrading();
+        beginOnlyGrading();
         try {
+            auditService.record(GRADING_RESUMED, "Grading the "
+                    + resumeRun.getSubmissions().size() + " unfinished "
+                    + "submission(s) of " + gradingRun.getId() + ".");
             setCurrentRunId(gradingRun.getId());
             cancellationToken.reset();
             GradingPipeline pipeline = createPipeline(gradingRun);
@@ -912,7 +916,7 @@ public class GradingService {
 
     /**
      * Says whether a batch, a retry, a resume, an undo or a late batch is
-     * being graded now. Undo and a late batch are refused while it is.
+     * being graded now. Each of them is refused while another one is.
      *
      * <p>Tier: SHOULD.
      *
@@ -922,12 +926,9 @@ public class GradingService {
         return activeGradings > 0;
     }
 
-    // Counts one more grading that is running.
-    private synchronized void beginGrading() {
-        activeGradings++;
-    }
-
-    // Counts one more grading, but only if nothing else is graded now.
+    // Counts one more grading, but only if nothing else is graded now:
+    // the gradings share one cancel button, so a second one would reset
+    // a cancel meant for the first.
     private synchronized void beginOnlyGrading() throws GradingException {
         if (activeGradings > 0) {
             throw new GradingException(STILL_GRADING);

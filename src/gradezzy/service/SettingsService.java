@@ -182,6 +182,66 @@ public class SettingsService {
         ConfigKeys.OWN_SECTIONS_ONLY_MODULES
     };
 
+    // Settings every config.properties must hold; the newer ones in
+    // ADDABLE_KEYS may be missing. Each question also needs its folder
+    // and file settings.
+    private static final String[] REQUIRED_KEYS = {
+        ConfigKeys.MODULE_CODES,
+        ConfigKeys.SECTION_CODES,
+        ConfigKeys.SUBMISSIONS_DIR,
+        ConfigKeys.TESTERS_DIR,
+        ConfigKeys.SCORE_SHEET_FILE,
+        ConfigKeys.STARTER_DIR,
+        ConfigKeys.WORKING_DIR,
+        ConfigKeys.OUTPUT_DIR,
+        ConfigKeys.BACKUP_DIR,
+        ConfigKeys.ASSESSMENTS_DIR,
+        ConfigKeys.ZIP_NAME_PREFIX_PATTERN,
+        ConfigKeys.IGNORED_FILE_NAMES,
+        ConfigKeys.MAX_ZIP_SIZE_MB,
+        ConfigKeys.MAX_ZIP_ENTRIES,
+        ConfigKeys.ASSESSMENT_NAME,
+        ConfigKeys.QUESTION_IDS,
+        ConfigKeys.PLACEHOLDER_FOLDER_NAMES,
+        ConfigKeys.PROVIDED_CLASS_FILES,
+        ConfigKeys.TESTER_DATA_FILES,
+        ConfigKeys.HEADER_NAME_LABEL,
+        ConfigKeys.HEADER_EMAIL_LABEL,
+        ConfigKeys.HEADER_SCAN_LINES,
+        ConfigKeys.AUTO_FIX_ENABLED,
+        ConfigKeys.JAVAC_COMMAND,
+        ConfigKeys.JAVA_COMMAND,
+        ConfigKeys.COMPILE_TIMEOUT_SECONDS,
+        ConfigKeys.RUN_TIMEOUT_SECONDS,
+        ConfigKeys.THREAD_COUNT,
+        ConfigKeys.MAX_OUTPUT_CHARACTERS,
+        ConfigKeys.MAX_MEMORY_MB,
+        ConfigKeys.MAX_HANG_RERUNS,
+        ConfigKeys.TESTER_CLASS_SUFFIX,
+        ConfigKeys.PASS_MARKER,
+        ConfigKeys.FAIL_MARKER,
+        ConfigKeys.TEST_HEADER_MARKER,
+        ConfigKeys.DETECT_UNTOUCHED_ENABLED,
+        ConfigKeys.DETECT_EMPTY_ENABLED,
+        ConfigKeys.DETECT_HARD_CODED_ENABLED,
+        ConfigKeys.PLAGIARISM_ENABLED,
+        ConfigKeys.PLAGIARISM_THRESHOLD,
+        ConfigKeys.EXPORT_FORMATS,
+        ConfigKeys.CSV_LINE_ENDING,
+        ConfigKeys.CSV_ID_PREFIX,
+        ConfigKeys.CSV_END_OF_LINE_MARKER,
+        ConfigKeys.PASS_MARK_PERCENT,
+        ConfigKeys.MARK_BAND_WIDTH_PERCENT,
+        ConfigKeys.DATABASE_ENABLED,
+        ConfigKeys.DATABASE_FILE,
+        ConfigKeys.BACKUP_KEEP_COUNT,
+        ConfigKeys.AUDIT_ENABLED,
+        ConfigKeys.UI_THEME,
+        ConfigKeys.WINDOW_WIDTH,
+        ConfigKeys.WINDOW_HEIGHT,
+        ConfigKeys.ANIMATIONS_ENABLED
+    };
+
     // The audit log action this service records
     private static final String SETTINGS_SAVED = "Settings saved";
 
@@ -339,18 +399,26 @@ public class SettingsService {
     /**
      * Checks every setting in config.properties with validate, so a bad
      * value such as database.enabled=yes is found when the app starts,
-     * not when that setting is first read. The folders and the score
-     * sheet that must already exist are left out: they are chosen again
-     * for each batch on Set up, and a missing one is reported there.
+     * not when that setting is first read. A setting that is missing
+     * altogether, such as a deleted exec.run.timeout.seconds line, is
+     * found too. The folders and the score sheet that must already exist
+     * are not checked for existence: they are chosen again for each
+     * batch on Set up, and a missing one is reported there.
      *
      * <p>Tier: SHOULD.
      *
-     * @return one message for each bad setting, in alphabetical order of
-     *         the settings, or an empty list when all are valid
+     * @return one message for each missing setting, then one for each
+     *         bad setting in alphabetical order of the settings, or an
+     *         empty list when all are valid
      */
     public List<String> findProblems() {
         List<String> problems = new ArrayList<>();
 
+        for (String key : listRequiredKeys()) {
+            if (!config.hasKey(key)) {
+                problems.add("Missing setting '" + key + "'.");
+            }
+        }
         for (String key : config.getKeys()) {
             if (!contains(EXISTING_FOLDER_KEYS, key)
                     && !contains(EXISTING_FILE_KEYS, key)) {
@@ -361,6 +429,24 @@ public class SettingsService {
             }
         }
         return problems;
+    }
+
+    // Lists the settings that must be present: the fixed ones, then the
+    // folder and file of each question in assessment.question.ids.
+    private List<String> listRequiredKeys() {
+        List<String> keys = new ArrayList<>();
+        for (String key : REQUIRED_KEYS) {
+            keys.add(key);
+        }
+        if (!config.hasKey(ConfigKeys.QUESTION_IDS)) {
+            return keys;
+        }
+        for (String questionId : config.getList(ConfigKeys.QUESTION_IDS)) {
+            String start = ConfigKeys.QUESTION_PREFIX + questionId;
+            keys.add(start + ConfigKeys.QUESTION_FOLDER_SUFFIX);
+            keys.add(start + ConfigKeys.QUESTION_FILE_SUFFIX);
+        }
+        return keys;
     }
 
     /**
