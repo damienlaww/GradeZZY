@@ -69,7 +69,9 @@ public class ScoreStage implements GradingStage {
      *
      * <p>A question that has no tester at all gets an error flag on every
      * submission, because its zero marks are not the student's doing and
-     * would otherwise go into the export unnoticed.
+     * would otherwise go into the export unnoticed. A question worth 0,
+     * such as one with no typed test case, gets no flag: by design it has
+     * no tester and adds nothing to any total.
      *
      * @param submission the submission
      * @param context the context
@@ -86,7 +88,8 @@ public class ScoreStage implements GradingStage {
 
         for (Question question : assessment.getQuestions()) {
             if (TesterFile.findFor(context.getTesters(),
-                    question.getId()) == null) {
+                    question.getId()) == null
+                    && question.getMaxScore() > 0) {
                 flagMissingTester(submission, question, context);
             }
 

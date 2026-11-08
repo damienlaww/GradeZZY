@@ -1,11 +1,14 @@
 /*
  * File: PlagiarismService.java
  *
- * Purpose: Runs the similarity check on a finished run.
+ * Purpose: Runs the similarity check on a finished run, and reads the
+ * similar pairs back from the flags it added.
  *
- * Where it fits: Used by LiveBackend for the Similar code card on Export.
- * The run is saved after each check, so the flags are kept when the app
- * is closed.
+ * Where it fits: GradingService runs the check when a batch, retry,
+ * resume, regrade or late batch has been graded, for the console and the
+ * window alike. The Similar code card on Export reads the pairs with
+ * listPairs. The run is saved after each check, so the flags are kept
+ * when the app is closed.
  */
 package gradezzy.service;
 
@@ -39,6 +42,17 @@ public class PlagiarismService {
 
     // Separates the run, the two students and the question in an id
     private static final String ID_SEPARATOR = "/";
+
+    // How many parts follow the run in an id: the student, the other
+    // student and the question
+    private static final int ID_PARTS = 3;
+    private static final int STUDENT_PART = 0;
+    private static final int OTHER_STUDENT_PART = 1;
+    private static final int QUESTION_PART = 2;
+
+    // A flag's message starts "<question> is <percent>% similar to"
+    private static final String MESSAGE_MIDDLE = " is ";
+    private static final String PERCENT_SIGN = "%";
 
     // Turns a similarity from 0 to 1 into a percentage
     private static final int PERCENT = 100;
@@ -128,6 +142,97 @@ public class PlagiarismService {
         return pairs;
     }
 
+    /**
+     * Reads the similar pairs back from the Similar code flags of a run,
+     * without reading any file or checking again, so a saved run shows
+     * the pairs it was saved with. Both students of a pair hold a flag;
+     * each pair is listed once. The similarity is the percentage the
+     * flag shows, so it is rounded to a whole percent.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param gradingRun the grading run
+     * @return the pairs, most similar first, or an empty list when there
+     *         is no run or no flag
+     */
+    public List<SimilarityPair> listPairs(GradingRun gradingRun) {
+        List<SimilarityPair> pairs = new ArrayList<>();
+        if (gradingRun == null) {
+            return pairs;
+        }
+
+        String idStart = ID_PREFIX + gradingRun.getId() + ID_SEPARATOR;
+        List<String> pairKeys = new ArrayList<>();
+        for (Submission submission : gradingRun.getSubmissions()) {
+            for (Anomaly anomaly : submission.getAnomalies()) {
+                SimilarityPair pair = readFlag(anomaly, idStart);
+                if (pair != null && !pairKeys.contains(makePairKey(pair))) {
+                    pairKeys.add(makePairKey(pair));
+                    insertBySimilarity(pairs, pair);
+                }
+            }
+        }
+        return pairs;
+    }
+
+    // Reads the pair a Similar code flag of the run names, as flag wrote
+    // it, or returns null for any other anomaly.
+    private SimilarityPair readFlag(Anomaly anomaly, String idStart) {
+        if (anomaly.getType() != AnomalyType.SIMILAR_CODE
+                || !anomaly.getId().startsWith(idStart)) {
+            return null;
+        }
+
+        String[] parts = anomaly.getId().substring(idStart.length())
+                .split(ID_SEPARATOR);
+        if (parts.length != ID_PARTS) {
+            return null;
+        }
+
+        String questionId = parts[QUESTION_PART];
+        String message = anomaly.getMessage();
+        String start = questionId + MESSAGE_MIDDLE;
+        int end = message.indexOf(PERCENT_SIGN);
+        if (!message.startsWith(start) || end <= start.length()) {
+            return null;
+        }
+
+        try {
+            int percent = Integer.parseInt(message.substring(start.length(),
+                    end));
+            return new SimilarityPair(parts[STUDENT_PART],
+                    parts[OTHER_STUDENT_PART], questionId,
+                    (double) percent / PERCENT);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    // Names a pair the same way whichever student comes first.
+    private String makePairKey(SimilarityPair pair) {
+        String first = pair.getFirstUsername();
+        String second = pair.getSecondUsername();
+        if (first.compareTo(second) > 0) {
+            String earlier = second;
+            second = first;
+            first = earlier;
+        }
+        return pair.getQuestionId() + ID_SEPARATOR + first + ID_SEPARATOR
+                + second;
+    }
+
+    // Adds a pair after every pair at least as similar, so the list stays
+    // most similar first.
+    private void insertBySimilarity(List<SimilarityPair> pairs,
+            SimilarityPair pair) {
+        int place = 0;
+        while (place < pairs.size()
+                && pairs.get(place).getSimilarity() >= pair.getSimilarity()) {
+            place++;
+        }
+        pairs.add(place, pair);
+    }
+
     // Saves the run with its new flags when the database is switched on.
     // A failure keeps the flags in memory, so they still show until the
     // app is closed; GradingService already warns when a run cannot be
@@ -189,9 +294,10 @@ public class PlagiarismService {
                 + username + ID_SEPARATOR + otherUsername + ID_SEPARATOR
                 + pair.getQuestionId();
         long percent = Math.round(pair.getSimilarity() * PERCENT);
-        String message = pair.getQuestionId() + " is " + percent
-                + "% similar to " + otherUsername + ". This is a review "
-                + "aid, not a finding.";
+        // listPairs reads the question and percentage back from the start
+        String message = pair.getQuestionId() + MESSAGE_MIDDLE + percent
+                + PERCENT_SIGN + " similar to " + otherUsername + ". This is "
+                + "a review aid, not a finding.";
         Anomaly anomaly = new Anomaly(id, AnomalyType.SIMILAR_CODE,
                 Severity.INFO, username, message, SUGGESTED_ACTION);
 

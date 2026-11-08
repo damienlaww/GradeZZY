@@ -64,10 +64,11 @@ public class RosterReader {
     }
 
     /**
-     * Reads every student row of the score sheet.
+     * Reads every student row of the score sheet. A sheet with no
+     * student row is refused, like an empty file.
      *
      * @param scoreSheetFile the score sheet file
-     * @return the students in file order
+     * @return the students in file order, at least one
      * @throws IngestException if the operation fails
      */
     public List<Student> readRoster(
@@ -104,6 +105,12 @@ public class RosterReader {
                         fields.get(header.indexOf(LAST_NAME_COLUMN)),
                         fields.get(header.indexOf(FIRST_NAME_COLUMN)),
                         fields.get(header.indexOf(EMAIL_COLUMN))));
+            }
+            // A header with no student row would mark every upload as not
+            // on the roster and export an empty sheet
+            if (students.isEmpty()) {
+                throw new IllegalArgumentException("The roster has a header "
+                        + "but no student rows.");
             }
             return students;
         } catch (NoSuchFileException exception) {

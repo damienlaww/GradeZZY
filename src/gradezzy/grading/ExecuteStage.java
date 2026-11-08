@@ -74,6 +74,9 @@ public class ExecuteStage implements GradingStage {
     // Put between the logs of two runs of the same tester
     private static final String RUN_SEPARATOR = "\n\n";
 
+    // Ends the first line of a run's log, its label
+    private static final String LINE_END = "\n";
+
     // The helper that runs java
     private final TesterRunner testerRunner;
 
@@ -175,7 +178,8 @@ public class ExecuteStage implements GradingStage {
         } else {
             runLogs.add(labelRun(runLogs.size() + 1, stoppedCase,
                     parsed.getOutput()));
-            result.setOutput(TextUtils.join(RUN_SEPARATOR, runLogs));
+            result.setOutput(fitRunLogs(runLogs, context.getConfig().getInt(
+                    ConfigKeys.MAX_OUTPUT_CHARACTERS)));
         }
         for (TestCaseResult testCase : parsed.getTestCaseResults()) {
             if (skippedCases.contains(testCase.getTestNumber())) {
@@ -308,6 +312,53 @@ public class ExecuteStage implements GradingStage {
             label += ": stopped at the time limit in case " + stoppedCase;
         }
         return "--- " + label + " ---\n" + log;
+    }
+
+    /**
+     * Joins the logs of a question's runs so that, apart from the labels
+     * and the notes on what was cut, they keep to the output limit of one
+     * run. The last run holds the marks that count, so it is kept whole;
+     * the earlier runs share what is left and keep their ends, where the
+     * case hung.
+     *
+     * @param runLogs the labelled log of each run, in order
+     * @param maxCharacters the setting exec.max.output.characters
+     * @return the joined logs
+     */
+    private String fitRunLogs(List<String> runLogs, int maxCharacters) {
+        String lastLog = runLogs.get(runLogs.size() - 1);
+        int earlierRuns = runLogs.size() - 1;
+        int share = (maxCharacters - lastLog.length()) / earlierRuns;
+        if (share < 0) {
+            share = 0;
+        }
+
+        List<String> fitted = new ArrayList<>();
+        for (int index = 0; index < earlierRuns; index++) {
+            fitted.add(keepEnd(runLogs.get(index), share));
+        }
+        fitted.add(lastLog);
+        return TextUtils.join(RUN_SEPARATOR, fitted);
+    }
+
+    /**
+     * Shortens a labelled run log to its label and its last characters.
+     *
+     * @param log the labelled log
+     * @param limit the most characters kept after the label
+     * @return the log, with a note on how much was cut if it was shortened
+     */
+    private String keepEnd(String log, int limit) {
+        int labelEnd = log.indexOf(LINE_END) + 1;
+        String label = log.substring(0, labelEnd);
+        String body = log.substring(labelEnd);
+        if (body.length() <= limit) {
+            return log;
+        }
+
+        int cut = body.length() - limit;
+        return label + "[" + cut + " characters cut]" + LINE_END
+                + body.substring(cut);
     }
 
     /**

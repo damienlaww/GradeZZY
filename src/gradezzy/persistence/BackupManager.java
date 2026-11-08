@@ -82,8 +82,16 @@ public class BackupManager {
         }
 
         Path backupFolder = getBackupFolder();
+        LocalDateTime time = LocalDateTime.now();
         Path backupFile = backupFolder.resolve(BACKUP_PREFIX
-                + timestamp(LocalDateTime.now()) + BACKUP_EXTENSION);
+                + timestamp(time) + BACKUP_EXTENSION);
+        // Two backups in one millisecond would share a name, so the later
+        // one is named a millisecond on; the names still sort by age
+        while (Files.exists(backupFile)) {
+            time = time.plusNanos(NANOSECONDS_PER_MILLISECOND);
+            backupFile = backupFolder.resolve(BACKUP_PREFIX
+                    + timestamp(time) + BACKUP_EXTENSION);
+        }
         try {
             Files.createDirectories(backupFolder);
             Files.copy(databaseFile, backupFile);
