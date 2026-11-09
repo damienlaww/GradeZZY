@@ -260,7 +260,10 @@ public class ExecuteStage implements GradingStage {
      * code can set the tester's score field by reflection, and a tester
      * that expects an exception counts a skipped case as passed. Only
      * when no case printed a verdict at all, so nothing can check it, is
-     * the total kept as it is; reportUnrecognised flags that.
+     * the total kept as it is, and then only if the tester printed no
+     * case header or every one of them: student code that hides the
+     * tester's lines hides some headers too. reportUnrecognised flags
+     * a total kept this way.
      *
      * @param submission the submission, which gets a flag if the printed
      *        total is too high
@@ -285,7 +288,9 @@ public class ExecuteStage implements GradingStage {
         }
 
         double total = capAtMaximum(submission, question, printedTotal);
-        boolean nothingToCheck = !hasVerdict(result) && skippedCases.isEmpty();
+        boolean noVerdict = !hasVerdict(result) && skippedCases.isEmpty();
+        boolean nothingToCheck = noVerdict
+                && printedEveryHeaderOrNone(tester, result);
         boolean totalBelieved = nothingToCheck
                 || total <= earned + SCORE_TOLERANCE;
         if (totalBelieved) {
@@ -471,6 +476,26 @@ public class ExecuteStage implements GradingStage {
             }
         }
         return missing;
+    }
+
+    /**
+     * Says whether a run printed the header of no case, or of every case
+     * the tester has, as a tester that names its verdicts in other words
+     * does. A run that shows only some headers had its output hidden.
+     *
+     * @param tester the tester of the question
+     * @param result the question's result
+     * @return true if no header or every header was printed
+     */
+    private boolean printedEveryHeaderOrNone(TesterFile tester,
+            QuestionResult result) {
+        int caseCount = result.getTestCaseResults().size();
+        if (caseCount == 0) {
+            return true;
+        }
+
+        List<Double> caseMarks = readCaseMarks(tester);
+        return caseMarks != null && caseCount == caseMarks.size();
     }
 
     /**
