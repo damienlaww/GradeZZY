@@ -84,6 +84,16 @@ public final class CodeSheet {
     // A triangle pointing right: run
     private static final String RUN_ICON = "M8 5v14l11-7z";
 
+    // The fewest students an answer group needs for Previous and Next
+    private static final int MIN_STEPPED_GROUP = 2;
+
+    // How far Previous and Next move through the group
+    private static final int BACKWARD = -1;
+    private static final int FORWARD = 1;
+
+    // The students are counted from 1, one more than their index
+    private static final int FIRST_STUDENT_NUMBER = 1;
+
     // The window that shows the sheet
     private final FlowWindow window;
 
@@ -136,6 +146,9 @@ public final class CodeSheet {
     // The run of the tests still going whose result is wanted, or null
     private QuestionRerun running = null;
 
+    // The students of an answer group to step through, or none
+    private final List<Submission> group = new ArrayList<>();
+
     // Not used: create builds the sheet.
     private CodeSheet(FlowWindow window, Submission submission) {
         this.window = window;
@@ -184,6 +197,28 @@ public final class CodeSheet {
         return sheet.build(questionId);
     }
 
+    /**
+     * Builds the sheet for one student of an answer group, with Previous
+     * and Next to step through the group's students on the same
+     * question.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param window the window that shows it
+     * @param submission the student shown, one of the group
+     * @param questionId the question shown first, or null for the first
+     * @param issue the issue's card, or null for none
+     * @param group the students of the group, in order
+     * @return the sheet's content
+     */
+    public static Node create(FlowWindow window, Submission submission,
+            String questionId, Node issue, List<Submission> group) {
+        CodeSheet sheet = new CodeSheet(window, submission);
+        sheet.issue = issue;
+        sheet.group.addAll(group);
+        return sheet.build(questionId);
+    }
+
     // ------------------------------------------------------------ build
 
     // Builds the sheet and shows a question.
@@ -201,6 +236,11 @@ public final class CodeSheet {
                 subtitle);
         HBox top = Parts.row(Parts.GAP,
                 new Node[] {titles, Parts.grow(), close});
+        if (group.size() >= MIN_STEPPED_GROUP) {
+            // The stepper goes just before the close button
+            int closePlace = top.getChildren().size() - 1;
+            top.getChildren().add(closePlace, createStepper());
+        }
 
         // Each panel keeps a gap from the line between them, so the code
         // and the output read as two separate boxes
@@ -226,6 +266,51 @@ public final class CodeSheet {
                 -> fitToScene(body, after));
         selectFirst(questionId);
         return body;
+    }
+
+    // Builds Previous, "Student 2 of 3" and Next, which step through the
+    // students of an answer group on the question shown.
+    private HBox createStepper() {
+        int position = group.indexOf(submission);
+        int lastPosition = group.size() - 1;
+        int studentNumber = position + FIRST_STUDENT_NUMBER;
+        Button previous = Parts.small("Previous", () -> stepBackward());
+        Button next = Parts.small("Next", () -> stepForward());
+        previous.setDisable(position <= 0);
+        next.setDisable(position >= lastPosition);
+        Label where = Parts.muted("Student " + studentNumber + " of "
+                + group.size());
+        HBox stepper = Parts.row(Parts.GAP_SMALL,
+                new Node[] {previous, where, next});
+        stepper.setAlignment(Pos.CENTER);
+        return stepper;
+    }
+
+    // Shows the student before this one in the group.
+    private void stepBackward() {
+        step(BACKWARD);
+    }
+
+    // Shows the student after this one in the group.
+    private void stepForward() {
+        step(FORWARD);
+    }
+
+    // Shows the student before or after this one in the group.
+    private void step(int offset) {
+        int current = group.indexOf(submission);
+        int position = current + offset;
+        boolean inGroup = position >= 0 && position < group.size();
+        if (!inGroup) {
+            return;
+        }
+        String questionId = null;
+        if (shown != null) {
+            questionId = shown.getId();
+        }
+        Submission other = group.get(position);
+        Node sheet = create(window, other, questionId, null, group);
+        window.showSheet(sheet);
     }
 
     // Builds the list on the left: one button per question, with its

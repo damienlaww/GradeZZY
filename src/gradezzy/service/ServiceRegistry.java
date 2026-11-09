@@ -50,6 +50,9 @@ public class ServiceRegistry {
     // Changes marks by hand; set after construction
     private ScoreAdjustmentService scoreAdjustmentService = null;
 
+    // Keeps the names and checks of answer groups; set after construction
+    private AnswerGroupService answerGroupService = null;
+
     /**
      * Creates a new service registry.
      *
@@ -103,6 +106,35 @@ public class ServiceRegistry {
                     config);
         }
         return scoreAdjustmentService;
+    }
+
+    /**
+     * Gives the registry the service that keeps the names and checks of
+     * answer groups. It is set after construction because it needs the
+     * result store.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param service the service
+     */
+    public void setAnswerGroupService(AnswerGroupService service) {
+        answerGroupService = service;
+    }
+
+    /**
+     * Returns the service that keeps the names and checks of answer
+     * groups.
+     *
+     * <p>Tier: COULD.
+     *
+     * @return the service; one that keeps them for this session only
+     *         when none was set
+     */
+    public AnswerGroupService getAnswerGroupService() {
+        if (answerGroupService == null) {
+            answerGroupService = new AnswerGroupService(null, config);
+        }
+        return answerGroupService;
     }
 
     /**

@@ -252,6 +252,23 @@ public class ReviewScreen extends FlowScreen {
     // The details of the clicked student
     private final StudentPanel panel;
 
+    // The Students | Mistakes switch: the table, or the answer groups
+    private final ToggleButton studentsButton = new ToggleButton("Students");
+    private final ToggleButton mistakesButton = new ToggleButton("Mistakes");
+    private final HBox modeBar = new HBox(studentsButton, mistakesButton);
+
+    // The filters, search and the switch above the table
+    private final HBox tools = Parts.row(Parts.GAP);
+
+    // The filter buttons side by side
+    private HBox filterBar = null;
+
+    // Sums up the groups in place of the filters, in Mistakes
+    private final Label mistakesSummary = Parts.muted("");
+
+    // The answer groups, shown in place of the table in Mistakes
+    private final MistakesView mistakes;
+
     // Shown instead of the table when there is no run
     private final VBox empty = new VBox(Parts.GAP);
 
@@ -274,7 +291,11 @@ public class ReviewScreen extends FlowScreen {
         panel.setVisible(false);
         panel.setManaged(false);
 
+        AnswerGroupActions groupActions = new AnswerGroupActions(window,
+                () -> groupsChanged());
+        mistakes = new MistakesView(window, groupActions);
         createFilters();
+        createModeBar();
         createSearch();
         createTable();
         // The retry note has its own line above the table, as the shared
@@ -283,9 +304,9 @@ public class ReviewScreen extends FlowScreen {
         banner.setMinWidth(0);
         sharedBanner.getStyleClass().addAll("banner", "warn");
 
-        HBox tools = Parts.row(Parts.GAP,
-                new Node[] {createFilterBar(), Parts.grow()});
-        tools.getChildren().add(search);
+        filterBar = createFilterBar();
+        tools.getChildren().setAll(modeBar, filterBar, Parts.grow(), search);
+        tools.setAlignment(Pos.CENTER_LEFT);
         VBox.setMargin(tools, new Insets(Parts.GAP_TINY, 0, 0, 0));
 
         VBox header = new VBox(HEADING_GAP, Parts.heading(
@@ -355,7 +376,33 @@ public class ReviewScreen extends FlowScreen {
                 && !rows.contains(panel.getSubmission())) {
             closePanel();
         }
+        boolean grouping = getBackend().supports(Capability.ANSWER_GROUPS);
+        modeBar.setVisible(grouping);
+        modeBar.setManaged(grouping);
+        if (!grouping) {
+            studentsButton.setSelected(true);
+        }
         refreshStatuses();
+        refreshMistakes();
+    }
+
+    /**
+     * Shows the answer groups in place of the table. Used by the
+     * developer checks.
+     *
+     * <p>Tier: COULD.
+     */
+    public void showMistakes() {
+        mistakesButton.setSelected(true);
+    }
+
+    /**
+     * Shows the student table again. Used by the developer checks.
+     *
+     * <p>Tier: COULD.
+     */
+    public void showStudents() {
+        studentsButton.setSelected(true);
     }
 
     /**
@@ -548,6 +595,82 @@ public class ReviewScreen extends FlowScreen {
             before.setSelected(true);
         }
         applyFilter();
+    }
+
+    // Builds the Students | Mistakes switch.
+    private void createModeBar() {
+        ToggleGroup group = new ToggleGroup();
+        studentsButton.setToggleGroup(group);
+        mistakesButton.setToggleGroup(group);
+        studentsButton.setSelected(true);
+        studentsButton.getStyleClass().add("left-pill");
+        mistakesButton.getStyleClass().add("right-pill");
+        Parts.tip(studentsButton, "Every student, one row each.");
+        Parts.tip(mistakesButton, "The students who lost marks the same "
+                + "way on a question, so you decide each mistake once.");
+        modeBar.getStyleClass().add("segmented");
+        modeBar.setMinWidth(HBox.USE_PREF_SIZE);
+        group.selectedToggleProperty().addListener((observable, before,
+                after) -> modeClicked(before, after));
+    }
+
+    // Follows a click on Students or Mistakes; clicking the one that is
+    // on keeps it on.
+    private void modeClicked(Toggle before, Toggle after) {
+        if (after == null) {
+            before.setSelected(true);
+            return;
+        }
+        applyMode();
+    }
+
+    // Swaps the table and the answer groups, and the filters and the
+    // summary above them.
+    private void applyMode() {
+        int place = main.getChildren().indexOf(tableFrame);
+        if (place < 0) {
+            place = main.getChildren().indexOf(mistakes.getView());
+        }
+        // The hint about clicking and ticking students is for the table
+        boolean showGroups = mistakesButton.isSelected();
+        guide.setVisible(!showGroups);
+        guide.setManaged(!showGroups);
+        if (showGroups) {
+            showGroupsAt(place);
+            return;
+        }
+        showTableAt(place);
+    }
+
+    // Puts the answer groups and their summary in place of the table and
+    // the filters, at a place of the page.
+    private void showGroupsAt(int place) {
+        closePanel();
+        tools.getChildren().setAll(modeBar, mistakesSummary, Parts.grow());
+        main.getChildren().set(place, mistakes.getView());
+        VBox.setVgrow(mistakes.getView(), Priority.ALWAYS);
+        refreshMistakes();
+    }
+
+    // Puts the table and the filters back, at a place of the page.
+    private void showTableAt(int place) {
+        tools.getChildren().setAll(modeBar, filterBar, Parts.grow(), search);
+        main.getChildren().set(place, tableFrame);
+    }
+
+    // Shows the run's answer groups again when they are on screen.
+    private void refreshMistakes() {
+        if (!mistakesButton.isSelected()) {
+            return;
+        }
+        mistakes.show(getState().getRun());
+        mistakesSummary.setText(mistakes.getSummary());
+    }
+
+    // Redraws the marks, statuses and groups after a group action.
+    private void groupsChanged() {
+        refreshStatuses();
+        refreshMistakes();
     }
 
     // Puts the filter buttons side by side.

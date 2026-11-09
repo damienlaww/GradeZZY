@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import gradezzy.model.AnswerGroupNote;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
@@ -475,6 +476,51 @@ public class SqliteResultRepository implements ResultRepository {
         } catch (DateTimeParseException exception) {
             throw new PersistenceException("A changed mark has a time that "
                     + "cannot be read: " + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Saves the marker's name and check for one answer group, or removes
+     * them when the note holds neither.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param runId the run id
+     * @param note the note
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized void saveAnswerGroupNote(String runId,
+            AnswerGroupNote note) throws PersistenceException {
+        requireOpen();
+        try {
+            AnswerGroupNoteTable.writeNote(connection, runId, note);
+        } catch (SQLException exception) {
+            throw new PersistenceException("The name or check of the group "
+                    + "could not be saved: " + exception.getMessage(),
+                    exception);
+        }
+    }
+
+    /**
+     * Lists the saved answer group notes of a run.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param runId the run id
+     * @return the notes
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized List<AnswerGroupNote> listAnswerGroupNotes(
+            String runId) throws PersistenceException {
+        requireOpen();
+        try {
+            return AnswerGroupNoteTable.readNotes(connection, runId);
+        } catch (SQLException exception) {
+            throw new PersistenceException("The names of the mistakes "
+                    + "could not be read: " + exception.getMessage(),
+                    exception);
         }
     }
 

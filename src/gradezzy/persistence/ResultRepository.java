@@ -11,6 +11,7 @@ package gradezzy.persistence;
 import java.util.List;
 import java.util.Map;
 
+import gradezzy.model.AnswerGroupNote;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
@@ -153,6 +154,31 @@ public interface ResultRepository {
      * @throws PersistenceException if the operation fails
      */
     List<ScoreAdjustment> listAdjustments(String runId)
+            throws PersistenceException;
+
+    /**
+     * Saves the marker's name and check for one answer group, replacing
+     * the one saved before. A note with no name and no check removes it.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param runId the run id
+     * @param note the note, keyed by its question and pattern
+     * @throws PersistenceException if the operation fails
+     */
+    void saveAnswerGroupNote(String runId, AnswerGroupNote note)
+            throws PersistenceException;
+
+    /**
+     * Lists the saved answer group notes of a run.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param runId the run id
+     * @return the notes, in no particular order
+     * @throws PersistenceException if the operation fails
+     */
+    List<AnswerGroupNote> listAnswerGroupNotes(String runId)
             throws PersistenceException;
 
     /**

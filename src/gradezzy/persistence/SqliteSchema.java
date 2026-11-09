@@ -115,6 +115,15 @@ final class SqliteSchema {
                 + "run_id TEXT NOT NULL, "
                 + "username TEXT NOT NULL, "
                 + "PRIMARY KEY (run_id, username))",
+        // The marker's name and check for an answer group, kept apart
+        // from the submissions so grading again does not forget them
+        "CREATE TABLE IF NOT EXISTS answer_group_notes ("
+                + "run_id TEXT NOT NULL, "
+                + "question_id TEXT NOT NULL, "
+                + "pattern TEXT NOT NULL, "
+                + "label TEXT, "
+                + "checked_usernames TEXT, "
+                + "PRIMARY KEY (run_id, question_id, pattern))",
         "CREATE TABLE IF NOT EXISTS audit_entries ("
                 + "entry_id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + "logged_at TEXT, "

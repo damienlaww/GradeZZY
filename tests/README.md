@@ -12,3 +12,16 @@ The checks create and remove temporary uploads, rosters and working copies.
 They exercise ingestion through `GradingService` with a pipeline containing
 only extraction, plus UI batch eligibility and ZIP traversal protection.
 They do not compile or execute student code.
+
+Run the answer group checks the same way:
+
+```sh
+sh compile.sh
+mkdir -p /tmp/gradezzy-tests
+javac -cp classes -d /tmp/gradezzy-tests tests/AnswerGroupsTest.java
+java -cp "classes:lib/*:/tmp/gradezzy-tests" AnswerGroupsTest
+```
+
+They cover the code shape tokens, how answers are grouped and titled,
+saving names and checks (in memory and in a temporary SQLite file), and
+the common mistakes CSV and the JSON `mistake` field.

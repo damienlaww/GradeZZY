@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnswerGroup;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
@@ -44,6 +45,9 @@ public class JsonExporter implements Exporter {
     // The helper that formats JSON text
     private final JsonWriter jsonWriter;
 
+    // Where the answer groups come from, or null to leave them out
+    private AnswerGroupSource answerGroupSource = null;
+
     /**
      * Creates a new json exporter.
      *
@@ -51,6 +55,18 @@ public class JsonExporter implements Exporter {
      */
     public JsonExporter(JsonWriter jsonWriter) {
         this.jsonWriter = jsonWriter;
+    }
+
+    /**
+     * Gives the exporter the answer groups, so each question result
+     * names the mistake its student is grouped under.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param source where the groups come from, or null for none
+     */
+    public void setAnswerGroupSource(AnswerGroupSource source) {
+        answerGroupSource = source;
     }
 
     /**
@@ -104,9 +120,13 @@ public class JsonExporter implements Exporter {
 
     // The whole run: the top level of the file
     private String writeRun(GradingRun gradingRun) {
+        List<AnswerGroup> groups = new ArrayList<>();
+        if (answerGroupSource != null) {
+            groups = answerGroupSource.listGroups(gradingRun);
+        }
         List<String> submissions = new ArrayList<>();
         for (Submission submission : gradingRun.getSubmissions()) {
-            submissions.add(writeSubmission(submission));
+            submissions.add(writeSubmission(submission, groups));
         }
 
         JsonFields fields = new JsonFields();
@@ -164,11 +184,14 @@ public class JsonExporter implements Exporter {
     }
 
     // One student's submission with its results and anomalies
-    private String writeSubmission(Submission submission) {
+    private String writeSubmission(Submission submission,
+            List<AnswerGroup> groups) {
         List<String> questionResults = new ArrayList<>();
         for (QuestionResult questionResult
                 : submission.getQuestionResults()) {
-            questionResults.add(writeQuestionResult(questionResult));
+            AnswerGroup group = findGroup(groups, submission.getUsername(),
+                    questionResult);
+            questionResults.add(writeQuestionResult(questionResult, group));
         }
 
         List<String> anomalies = new ArrayList<>();
@@ -204,8 +227,10 @@ public class JsonExporter implements Exporter {
         return jsonWriter.writeObject(fields);
     }
 
-    // The score of one question and the result of each of its test cases
-    private String writeQuestionResult(QuestionResult questionResult) {
+    // The score of one question, the result of each of its test cases
+    // and the mistake its student is grouped under, if any
+    private String writeQuestionResult(QuestionResult questionResult,
+            AnswerGroup group) {
         List<String> testCases = new ArrayList<>();
         for (TestCaseResult testCaseResult
                 : questionResult.getTestCaseResults()) {
@@ -228,7 +253,38 @@ public class JsonExporter implements Exporter {
         fields.put("timedOut", String.valueOf(questionResult.isTimedOut()));
         fields.put("testCases", jsonWriter.writeArray(testCases));
         fields.put("output", text(questionResult.getOutput()));
+        fields.put("mistake", writeMistake(group));
         return jsonWriter.writeObject(fields);
+    }
+
+    // The mistake of an answer group; null when there is no group
+    private String writeMistake(AnswerGroup group) {
+        if (group == null) {
+            return JsonWriter.NULL;
+        }
+
+        JsonFields fields = new JsonFields();
+        fields.put("title", text(group.getTitle()));
+        fields.put("label", text(group.getLabel()));
+        return jsonWriter.writeObject(fields);
+    }
+
+    // Returns the group a student's answer to a question is in, or null
+    private AnswerGroup findGroup(List<AnswerGroup> groups, String username,
+            QuestionResult questionResult) {
+        Question question = questionResult.getQuestion();
+        if (question == null) {
+            return null;
+        }
+        for (AnswerGroup group : groups) {
+            boolean sameQuestion = group.getQuestionId().equals(
+                    question.getId());
+            boolean holdsStudent = group.getUsernames().contains(username);
+            if (sameQuestion && holdsStudent) {
+                return group;
+            }
+        }
+        return null;
     }
 
     // One test case of a tester run

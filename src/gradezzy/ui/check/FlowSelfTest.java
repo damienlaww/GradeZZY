@@ -42,6 +42,8 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.SavedAssessment;
+import gradezzy.model.TestCaseResult;
+import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
@@ -64,7 +66,9 @@ import gradezzy.ui.flow.GuidedTour;
 import gradezzy.ui.flow.MarkStats;
 import gradezzy.ui.flow.Page;
 import gradezzy.ui.flow.Parts;
+import gradezzy.ui.flow.StatisticsScreen;
 import gradezzy.ui.flow.Step;
+import gradezzy.ui.flow.ReviewScreen;
 import gradezzy.ui.flow.StudentPanel;
 import gradezzy.ui.flow.Students;
 
@@ -212,12 +216,14 @@ public class FlowSelfTest {
                 + "switch assessments", () -> flowHome());
         failed += runFlow(9, "Take the tour from Help, go back and on, "
                 + "end it with Done, Esc and Skip tour", () -> flowTour());
+        failed += runFlow(10, "Answer groups: name, change the mark, undo, "
+                + "check, compare", () -> flowAnswerGroups());
 
         if (failed == 0) {
-            System.out.println("All 9 flows passed.");
+            System.out.println("All 10 flows passed.");
             return 0;
         }
-        System.out.println(failed + " of 9 flows failed.");
+        System.out.println(failed + " of 10 flows failed.");
         return 1;
     }
 
@@ -930,6 +936,7 @@ public class FlowSelfTest {
         check(window.getCurrentPage() == Page.STATISTICS,
                 "the Statistics tab opened");
         checkFigures(run);
+        checkCommonMistakes();
 
         choose(DemoData.SAMPLE_SECTION, EMPTY_SECTION);
         check(SceneFinder.shows(root(), EMPTY_SECTION + " has not been "
@@ -955,12 +962,28 @@ public class FlowSelfTest {
                 && ticked.getText().endsWith("(" + TICKED_COUNT + ")"),
                 "Only the students I choose (2) is chosen");
 
+        CheckBox mistakesBox = null;
+        for (CheckBox box : SceneFinder.ofType(root(), CheckBox.class)) {
+            if (box.getText().startsWith("Also save the common mistakes")) {
+                mistakesBox = box;
+            }
+        }
+        check(mistakesBox != null, "Export offers the common mistakes");
+        if (mistakesBox != null) {
+            mistakesBox.setSelected(true);
+        }
         int filesBefore = outputFileCount();
         press(window.getActionBar().getPrimaryButton(), "Export score sheet");
         Node confirm = sheet();
         String question = "Export " + TICKED_COUNT + " students";
         check(confirm != null && SceneFinder.shows(confirm, question + "?"),
                 "Export asks \"" + question + "?\" first");
+        check(confirm != null && SceneFinder.shows(confirm,
+                "the common mistakes"), "the export question names the "
+                + "common mistakes");
+        if (mistakesBox != null) {
+            mistakesBox.setSelected(false);
+        }
         if (confirm != null) {
             press(SceneFinder.button(confirm, question), question);
         }
@@ -1339,6 +1362,268 @@ public class FlowSelfTest {
                 false, shortcut, false, shortcut);
         Event.fireEvent(root(), event);
         settle();
+    }
+
+    // Statistics lists the demo's Q3 group under Common mistakes, and
+    // hides the section when comparing sections.
+    private void checkCommonMistakes() {
+        check(SceneFinder.shows(root(), "Common mistakes"),
+                "Statistics shows Common mistakes");
+        Node row = rowOf("Failed tests 3 and 4", "plain-row");
+        check(row != null && SceneFinder.label(row, "Q3") != null
+                && SceneFinder.label(row, "2") != null,
+                "Common mistakes lists Q3, failed tests 3 and 4, 2 students");
+        StatisticsScreen statistics =
+                (StatisticsScreen) window.getPageScreen(Page.STATISTICS);
+        statistics.setCompare(true);
+        settle();
+        check(!SceneFinder.shows(root(), "Common mistakes"),
+                "Compare sections hides Common mistakes");
+        statistics.setCompare(false);
+        settle();
+    }
+
+    // ----------------------------------------------------------- flow 10
+
+    // The demo's Q3 group (learner.charlie and learner.echo failed tests
+    // 3 and 4): name it, change both marks and undo, a student who moves
+    // out of the group while the sheet is open, Undo after a later change
+    // by hand, Mark as checked (with a compile error), and Compare code.
+    private void flowAnswerGroups() {
+        window.showPage(Page.MARKING);
+        window.show(Step.REVIEW);
+        settle();
+        GradingRun run = window.getState().getRun();
+        ReviewScreen review = (ReviewScreen) window.getScreen(Step.REVIEW);
+        review.showMistakes();
+        settle();
+        Submission charlie = submissionOf(run, "learner.charlie");
+        Submission echo = submissionOf(run, "learner.echo");
+        Node row = rowOf("Failed tests 3 and 4", "plain-row");
+        check(row != null && SceneFinder.shows(row, Students.name(charlie))
+                && SceneFinder.shows(row, Students.name(echo)),
+                "Mistakes lists the Q3 group of learner.charlie and "
+                + "learner.echo");
+        if (row == null) {
+            return;
+        }
+
+        press(SceneFinder.button(row, "Name"), "Name");
+        ((TextField) sheet().lookup("#group-name")).setText(
+                "misses the last case");
+        press(SceneFinder.button(sheet(), "Save name"), "Save name");
+        row = rowOf("Failed tests 3 and 4", "plain-row");
+        check(row != null && SceneFinder.shows(row, "misses the last case"),
+                "the group shows its name");
+
+        changeGroupMark("3");
+        check(q3(charlie) == 3.0 && q3(echo) == 3.0, "both Q3 marks are 3 ("
+                + q3(charlie) + ", " + q3(echo) + ")");
+        check(noticeText().equals("Changed the mark of 2 students."),
+                "notice: " + noticeText());
+        press(noticeAction(), "Undo in the notice");
+        check(q3(charlie) == 2.0 && q3(echo) == 2.0,
+                "Undo put both Q3 marks back to 2");
+
+        // groupActionSkipsMovedStudent
+        QuestionResult echoQ3 = resultOf(echo, "Q3");
+        List<TestCaseResult> echoTests = new ArrayList<>(
+                echoQ3.getTestCaseResults());
+        press(SceneFinder.button(rowOf("Failed tests 3 and 4", "plain-row"),
+                "Change mark"), "Change mark");
+        fillMarkSheet("3");
+        echoQ3.getTestCaseResults().clear();
+        for (int number = 1; number <= 4; number++) {
+            echoQ3.addTestCaseResult(new TestCaseResult(number, true,
+                    "Passed"));
+        }
+        echoQ3.setScore(4.0);
+        press(SceneFinder.button(sheet(), "Change 2 marks"),
+                "Change 2 marks");
+        check(q3(charlie) == 3.0 && q3(echo) == 4.0, "only the student "
+                + "still in the group changed (" + q3(charlie) + ", "
+                + q3(echo) + ")");
+        press(noticeAction(), "Undo in the notice");
+        echoQ3.getTestCaseResults().clear();
+        for (TestCaseResult test : echoTests) {
+            echoQ3.addTestCaseResult(test);
+        }
+        echoQ3.setScore(2.0);
+        window.refreshScreen();
+        settle();
+        check(q3(charlie) == 2.0 && q3(echo) == 2.0, "marks are back to 2");
+
+        // undoSkipsLaterChange
+        changeGroupMark("3");
+        backend.adjustScore(run, charlie, "Q3", 1.0, "by hand");
+        press(noticeAction(), "Undo in the notice");
+        check(q3(charlie) == 1.0 && q3(echo) == 2.0, "Undo left the later "
+                + "change (" + q3(charlie) + ", " + q3(echo) + ")");
+        check(noticeText().equals("Put back 1 mark. 1 was changed again "
+                + "since and was left."), "notice: " + noticeText());
+        undoAllChanges(run, charlie);
+        check(q3(charlie) == 2.0, "charlie's Q3 is back to 2");
+
+        // Mark as checked while a student joins the group: the newcomer
+        // was not listed, so the group shows 1 new, not Checked
+        window.refreshScreen();
+        settle();
+        Submission alpha = submissionOf(run, "learner.alpha");
+        QuestionResult alphaQ3 = resultOf(alpha, "Q3");
+        List<TestCaseResult> alphaTests = new ArrayList<>(
+                alphaQ3.getTestCaseResults());
+        press(SceneFinder.button(rowOf("Failed tests 3 and 4", "plain-row"),
+                "Mark as checked"), "Mark as checked");
+        alphaQ3.getTestCaseResults().clear();
+        for (int number = 1; number <= 4; number++) {
+            alphaQ3.addTestCaseResult(new TestCaseResult(number, number <= 2,
+                    "case " + number));
+        }
+        press(SceneFinder.button(sheet(), "Mark 2 as checked"),
+                "Mark 2 as checked");
+        row = rowOf("Failed tests 3 and 4", "plain-row");
+        check(row != null && SceneFinder.texts(row, "pill").contains("1 new"),
+                "a student who joined before Confirm shows as 1 new (pills: "
+                + (row == null ? "none" : SceneFinder.texts(row, "pill")) + ")");
+        alphaQ3.getTestCaseResults().clear();
+        for (TestCaseResult test : alphaTests) {
+            alphaQ3.addTestCaseResult(test);
+        }
+        window.refreshScreen();
+        settle();
+        row = rowOf("Failed tests 3 and 4", "plain-row");
+        check(row != null && SceneFinder.texts(row, "pill").contains(
+                "Checked"), "the group shows Checked");
+        Anomaly compileError = null;
+        for (Anomaly anomaly : charlie.getAnomalies()) {
+            if (anomaly.getType() == AnomalyType.COMPILE_ERROR) {
+                compileError = anomaly;
+            }
+        }
+        Node compileRow = null;
+        for (Label label : SceneFinder.ofType(root(), Label.class)) {
+            Node candidate = SceneFinder.ancestor(label, "plain-row");
+            if ("Did not compile".equals(label.getText()) && candidate != null
+                    && SceneFinder.shows(candidate, Students.name(charlie))) {
+                compileRow = candidate;
+            }
+        }
+        check(compileRow != null && compileError != null,
+                "a Did not compile group lists learner.charlie");
+        if (compileRow != null && compileError != null) {
+            press(SceneFinder.button(compileRow, "Mark as checked"),
+                    "Mark as checked");
+            check(sheet() != null && SceneFinder.shows(sheet(),
+                    "items will show as checked"), "the confirm says the "
+                    + "question's items will show as checked");
+            press(SceneFinder.button(sheet(), "Mark 1 as checked"),
+                    "Mark 1 as checked");
+            check(backend.getDecision(compileError) == ReviewDecision.REVIEWED,
+                    "the compile error is checked inside the group");
+            press(noticeAction(), "Undo in the notice");
+            check(backend.getDecision(compileError) == ReviewDecision.OPEN,
+                    "Undo put the compile error back to check");
+            // Undo check on the row puts back the flags too
+            press(SceneFinder.button(compileRowOf(charlie), "Mark as checked"),
+                    "Mark as checked");
+            press(SceneFinder.button(sheet(), "Mark 1 as checked"),
+                    "Mark 1 as checked");
+            press(SceneFinder.button(compileRowOf(charlie), "Undo check"),
+                    "Undo check");
+            check(backend.getDecision(compileError) == ReviewDecision.OPEN,
+                    "Undo check on the row put the compile error back to "
+                    + "check");
+        }
+
+        // Compare code steps through the group
+        press(SceneFinder.button(rowOf("Failed tests 3 and 4", "plain-row"),
+                "Compare code"), "Compare code");
+        check(sheet() != null && SceneFinder.shows(sheet(), "Student 1 of 2"),
+                "the code sheet says Student 1 of 2");
+        press(SceneFinder.button(sheet(), "Next"), "Next");
+        check(sheet() != null && SceneFinder.shows(sheet(), "Student 2 of 2")
+                && SceneFinder.shows(sheet(), Students.name(echo)),
+                "Next shows learner.echo");
+        window.closeSheet();
+        review.showStudents();
+        settle();
+    }
+
+    // Returns the Did not compile group row that lists a student.
+    private Node compileRowOf(Submission submission) {
+        for (Label label : SceneFinder.ofType(root(), Label.class)) {
+            Node candidate = SceneFinder.ancestor(label, "plain-row");
+            if ("Did not compile".equals(label.getText()) && candidate != null
+                    && SceneFinder.shows(candidate,
+                    Students.name(submission))) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    // Opens the Q3 group's mark sheet and changes both marks.
+    private void changeGroupMark(String mark) {
+        press(SceneFinder.button(rowOf("Failed tests 3 and 4", "plain-row"),
+                "Change mark"), "Change mark");
+        fillMarkSheet(mark);
+        press(SceneFinder.button(sheet(), "Change 2 marks"),
+                "Change 2 marks");
+    }
+
+    // Types a mark and a reason into the open mark sheet.
+    private void fillMarkSheet(String mark) {
+        Node open = sheet();
+        check(open != null, "the mark sheet is open");
+        if (open == null) {
+            return;
+        }
+        ((TextField) open.lookup("#group-mark")).setText(mark);
+        ((TextField) open.lookup("#group-reason")).setText("same slip");
+    }
+
+    // Undoes every mark change of a student, newest first.
+    private void undoAllChanges(GradingRun run, Submission submission) {
+        List<ScoreAdjustment> changes = backend.listAdjustments(run,
+                submission);
+        while (!changes.isEmpty()) {
+            ScoreAdjustment newest = changes.get(0);
+            for (ScoreAdjustment change : changes) {
+                if (change.getSavedAt().isAfter(newest.getSavedAt())) {
+                    newest = change;
+                }
+            }
+            if (!backend.undoAdjustment(run, newest).isDone()) {
+                problems.add("could not undo " + newest.getReason());
+                return;
+            }
+            changes = backend.listAdjustments(run, submission);
+        }
+    }
+
+    // Returns a student of a run by username.
+    private Submission submissionOf(GradingRun run, String username) {
+        for (Submission submission : run.getSubmissions()) {
+            if (submission.getUsername().equals(username)) {
+                return submission;
+            }
+        }
+        throw new IllegalStateException("no " + username);
+    }
+
+    // Returns a student's result for a question.
+    private QuestionResult resultOf(Submission submission, String id) {
+        for (QuestionResult result : submission.getQuestionResults()) {
+            if (result.getQuestion().getId().equals(id)) {
+                return result;
+            }
+        }
+        throw new IllegalStateException("no " + id);
+    }
+
+    // Returns a student's Q3 mark.
+    private double q3(Submission submission) {
+        return resultOf(submission, "Q3").getScore();
     }
 
     // ----------------------------------------------------------- helpers
