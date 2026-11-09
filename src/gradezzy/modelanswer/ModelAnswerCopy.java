@@ -152,7 +152,7 @@ public final class ModelAnswerCopy {
 
     /**
      * Deletes a folder a check made. One that cannot be deleted stays in
-     * paths.working.dir, where the next check replaces it.
+     * paths.working.dir.
      *
      * <p>Tier: COULD.
      *

@@ -4,8 +4,8 @@
  * Purpose: One mark changed by hand, with the reason and the earlier mark.
  *
  * Where it fits: Created by ScoreAdjustmentService when a mark is
- * changed and by AdjustmentTable when saved changes are read back, and
- * listed in the student panel on Review.
+ * changed, by AdjustmentTable when saved changes are read back and by
+ * the demo, and listed in the student panel on Review.
  */
 package gradezzy.model;
 

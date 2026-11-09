@@ -120,7 +120,6 @@ public class PipelineFactory {
                 starterDirectory));
         pipeline.addStage(new DetectStage(createDetectors(
                 starterDirectory), createRosterChecks()));
-        // One runner, so the note about a missing sandbox prints once
         addRunStages(pipeline, processRunner, starterDirectory);
         pipeline.addStage(new ScoreStage(new ScoreCalculator()));
         pipeline.addStage(new PersistStage(repository));
@@ -162,6 +161,7 @@ public class PipelineFactory {
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
         SourceCompiler compiler = new SourceCompiler(config, processRunner);
+        // One runner, so the note about a missing sandbox prints once
         TesterRunner testerRunner = new TesterRunner(config, processRunner);
         pipeline.addStage(new CompileStage(compiler, starterDirectory));
         pipeline.addStage(new ExecuteStage(testerRunner,

@@ -3,9 +3,10 @@
  *
  * Purpose: Records instructor actions in the audit log.
  *
- * Where it fits: Called by other services when grading starts or is
- * cancelled, when a result is changed by hand, and when settings are
- * saved or the database is backed up.
+ * Where it fits: Called by the other services for each instructor
+ * action and grading event, such as starting, retrying, resuming or
+ * cancelling grading, changing a mark by hand, saving settings, and
+ * backing up or restoring the database.
  */
 package gradezzy.service;
 
