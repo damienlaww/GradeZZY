@@ -395,7 +395,7 @@ Detectors only add a flag. **They never change a mark.**
 |---|---|---|
 | `UntouchedStarterDetector` | `UNTOUCHED_STARTER` | A file equal to the starter file once the header comment, blank lines and line endings are ignored. If every file is untouched, one flag says the original resource folder was submitted. |
 | `EmptyAnswerDetector` | `EMPTY_ANSWER` | An answer method whose body, without comments and spaces, is still the starter's body. Every overload is checked. |
-| `HardCodedAnswerDetector` | `HARD_CODED_ANSWER` | A method with 3 or more `if` or `case` branches comparing a value with a fixed literal, such as `s.equals("cat")`. Common values (0, 1, -1), separators and numbers inside a calculation do not count. |
+| `HardCodedAnswerDetector` | `HARD_CODED_ANSWER` | A method with 2 or more `if` or `case` branches comparing a value with a fixed literal, such as `s.equals("cat")`. Common values (0, 1, -1), separators and numbers inside a calculation do not count. |
 | `CopiedHeaderDetector` | `COPIED_HEADER` | A file header whose `Email ID:` gives another username (one with a dot, so a student number does not count), or whose `Name:` is another student on the score sheet, first or last name first. One flag per student, naming the files and the other student. When the student is not on the score sheet but the header names someone who is, it says the zip name may be wrong. |
 
 The starter folder is the one chosen for the batch, or

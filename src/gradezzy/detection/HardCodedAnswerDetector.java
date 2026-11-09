@@ -29,8 +29,11 @@ public class HardCodedAnswerDetector implements Detector {
      */
     public static final String NAME = "Hard-coded answer";
 
-    // The fewest literal branches in one method that raise a flag
-    private static final int MIN_LITERAL_BRANCHES = 3;
+    // The fewest literal branches in one method that raise a flag. A
+    // starter's main often has only two examples, so two branches that
+    // pick them out are enough; no honest answer in samples/e2e or
+    // samples/lab-test-2 has two
+    private static final int MIN_LITERAL_BRANCHES = 2;
 
     // Values honest code compares with all the time, so they do not count
     private static final String[] COMMON_VALUES = {"0", "1", "-1"};

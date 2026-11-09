@@ -585,7 +585,7 @@ How the flags work (never a change of mark):
   comments and spaces, is still the starter's body. Every overload of the
   method is checked. A wholly unchanged file is left to the untouched
   check when that check is on.
-- `HardCodedAnswerDetector` flags an answer method with 3 or more `if` or
+- `HardCodedAnswerDetector` flags an answer method with 2 or more `if` or
   `case` branches that compare a value with a fixed literal, such as
   `s.equals("cat")` or `s.contains("cat")`. Common values (0, 1 and -1),
   separators with no letter or digit (such as `","` or `""`) and a
