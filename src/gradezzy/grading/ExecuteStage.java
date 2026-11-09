@@ -335,7 +335,7 @@ public class ExecuteStage implements GradingStage {
         } else if (stoppedCase != NO_CASE) {
             label += ": crashed in case " + stoppedCase;
         }
-        return "--- " + label + " ---\n" + log;
+        return "--- " + label + " ---" + LINE_END + log;
     }
 
     /**

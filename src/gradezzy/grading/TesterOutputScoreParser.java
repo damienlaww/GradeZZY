@@ -8,6 +8,9 @@
  */
 package gradezzy.grading;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.exec.ProcessResult;
@@ -69,8 +72,8 @@ public class TesterOutputScoreParser implements ScoreParser {
         String headerMarker = config.getString(ConfigKeys.TEST_HEADER_MARKER);
         String passMarker = config.getString(ConfigKeys.PASS_MARKER);
         String failMarker = config.getString(ConfigKeys.FAIL_MARKER);
-        int testNumber = 0;
-        String verdict = "";
+        // The verdict of each case in order, empty while it has none
+        List<String> verdicts = new ArrayList<>();
         String lastLine = "";
 
         // A test case runs from its header to the next header. Lines that
@@ -81,22 +84,16 @@ public class TesterOutputScoreParser implements ScoreParser {
             if (rawLine.startsWith(TesterRunner.STUDENT_LINE_PREFIX)) {
                 line = "";
             } else if (line.startsWith(headerMarker)) {
-                if (testNumber > 0) {
-                    addCase(result, testNumber, verdict, passMarker);
-                }
-                testNumber++;
-                verdict = "";
+                verdicts.add("");
             } else if (line.equals(passMarker)
                     || line.startsWith(failMarker)) {
                 // A verdict with no open case, as from a tester that
                 // prints no headers, is a case of its own
-                if (testNumber == 0 || !verdict.isEmpty()) {
-                    if (testNumber > 0) {
-                        addCase(result, testNumber, verdict, passMarker);
-                    }
-                    testNumber++;
+                if (verdicts.isEmpty()
+                        || !verdicts.get(verdicts.size() - 1).isEmpty()) {
+                    verdicts.add("");
                 }
-                verdict = line;
+                verdicts.set(verdicts.size() - 1, line);
             }
 
             if (!line.isEmpty()) {
@@ -104,8 +101,8 @@ public class TesterOutputScoreParser implements ScoreParser {
             }
         }
 
-        if (testNumber > 0) {
-            addCase(result, testNumber, verdict, passMarker);
+        for (int index = 0; index < verdicts.size(); index++) {
+            addCase(result, index + 1, verdicts.get(index), passMarker);
         }
 
         int passCount = countPasses(result);

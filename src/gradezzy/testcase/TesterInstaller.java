@@ -33,7 +33,10 @@ import gradezzy.model.Submission;
  */
 public class TesterInstaller {
 
+    // Start of the id of each anomaly this class reports
     private static final String ID_PREFIX = "tester-data-";
+
+    // What the instructor can do about a missing data file
     private static final String MISSING_DATA_ACTION =
             "Add the data file to the tester folder, then grade again.";
 

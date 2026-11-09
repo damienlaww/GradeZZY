@@ -48,8 +48,8 @@ public class HarnessWatchdog implements Runnable {
             try {
                 Thread.sleep(remaining);
             } catch (InterruptedException exception) {
-                // Student code interrupted the sleep: keep waiting
-                remaining = deadline - System.currentTimeMillis();
+                // Student code interrupted the sleep: ignored, as the
+                // line below works out the time left either way
             }
             remaining = deadline - System.currentTimeMillis();
         }
