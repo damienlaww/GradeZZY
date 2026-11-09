@@ -1,9 +1,10 @@
 /*
  * File: SimilaritySheet.java
  *
- * Purpose: A large sheet that shows the matching code of two students
- * side by side, with the files the check left out (starter, tester and
- * provided files), so the instructor can judge a similar pair.
+ * Purpose: A large sheet that shows the code of two students side by
+ * side, with the lines that are the same in red, and the files the check
+ * left out (starter, tester and provided files), so the instructor can
+ * judge a similar pair.
  *
  * Where it fits: Opened by "Compare" in the similar code card on Export,
  * only when the backend supports comparing a pair. Reads the pair
@@ -11,19 +12,19 @@
  */
 package gradezzy.ui.flow;
 
-import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.TextArea;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
 import gradezzy.model.GradingRun;
 import gradezzy.model.Submission;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.ui.backend.SimilarityDetail;
+import gradezzy.util.TextUtils;
 
 /**
  * Builds the sheet that compares a similar pair.
@@ -32,13 +33,17 @@ public final class SimilaritySheet {
 
     // The size of the sheet
     private static final double WIDTH = 880.0;
-    private static final double HEIGHT = 520.0;
+    private static final double HEIGHT = 600.0;
 
     // The size of the close icon
     private static final double CLOSE_SIZE = 16.0;
 
     // Percentages are shown as whole numbers
     private static final double PERCENT = 100.0;
+
+    // A pair shown as more than this percent similar has a red pill;
+    // at or below it, amber
+    private static final long RED_ABOVE_PERCENT = 75;
 
     // The separator between parts of a line
     private static final String DOT = " · ";
@@ -66,8 +71,7 @@ public final class SimilaritySheet {
         Label title = Parts.title(first + " and " + second + DOT
                 + pair.getQuestionId());
         Node grow = Parts.grow();
-        Label similar = Parts.pill(Math.round(pair.getSimilarity()
-                * PERCENT) + "% similar", Tone.WARN);
+        Label similar = similarityPill(pair);
         HBox top = Parts.row(Parts.GAP,
                 new Node[] {title, grow, similar, close});
 
@@ -84,14 +88,30 @@ public final class SimilaritySheet {
                     + "files to compare for this pair."));
             return body;
         }
-        HBox sides = new HBox(Parts.GAP,
-                side(first, detail.getFirstFile(),
-                detail.getFirstExcerpt()),
+        SimilarCode code = new SimilarCode(detail);
+        HBox names = new HBox(Parts.GAP,
+                side(first, detail.getFirstFile(), code.describeSide(true)),
                 side(second, detail.getSecondFile(),
-                detail.getSecondExcerpt()));
-        VBox.setVgrow(sides, Priority.ALWAYS);
-        body.getChildren().addAll(sides, leftOut(detail));
+                code.describeSide(false)));
+        body.getChildren().addAll(code.createLegend(), names,
+                code.getView(), leftOut(detail));
         return body;
+    }
+
+    /**
+     * Returns the pill that shows how similar a pair is, such as
+     * "84% similar": red above 75%, amber at 75% or below.
+     *
+     * @param pair the pair
+     * @return the pill
+     */
+    public static Label similarityPill(SimilarityPair pair) {
+        long percent = Math.round(pair.getSimilarity() * PERCENT);
+        Tone tone = Tone.WARN;
+        if (percent > RED_ABOVE_PERCENT) {
+            tone = Tone.BAD;
+        }
+        return Parts.pill(percent + "% similar", tone);
     }
 
     /**
@@ -114,38 +134,35 @@ public final class SimilaritySheet {
         return username;
     }
 
-    // Builds one side: the student, the file and the matching code.
-    private static VBox side(String name, String file, String excerpt) {
-        TextArea code = new TextArea(excerpt);
-        code.setEditable(false);
-        code.getStyleClass().add("code-area");
-        VBox.setVgrow(code, Priority.ALWAYS);
+    // Builds the heading of one side: the student, how many of their
+    // lines are the same, and the file.
+    private static VBox side(String name, String file, String count) {
+        Label countLabel = Parts.muted(count);
+        countLabel.getStyleClass().add("small-text");
+        HBox top = Parts.row(Parts.GAP, new Node[] {Parts.strong(name),
+                Parts.grow(), countLabel});
         Label fileLabel = Parts.muted(file);
         fileLabel.getStyleClass().add("small-text");
-        VBox box = new VBox(Parts.GAP_TINY, Parts.strong(name),
-                fileLabel, code);
+        VBox box = new VBox(Parts.GAP_TINY, top, fileLabel);
         box.setMinWidth(0);
         box.setPrefWidth(0);
         HBox.setHgrow(box, Priority.ALWAYS);
-        VBox.setMargin(code, new Insets(Parts.GAP_TINY, 0, 0, 0));
         return box;
     }
 
-    // Lists the files the check left out.
+    // Lists the files the check left out, on one line that wraps, so
+    // the code keeps as much room as it can.
     private static VBox leftOut(SimilarityDetail detail) {
-        VBox box = new VBox(Parts.GAP_TINY);
         Label title = Parts.strong("Left out of the comparison");
-        box.getChildren().add(title);
-        if (detail.getExcludedFiles().isEmpty()) {
-            box.getChildren().add(Parts.muted("The check listed no "
-                    + "starter or tester files for this pair."));
-            return box;
+        String files = "The check listed no starter or tester files for "
+                + "this pair.";
+        if (!detail.getExcludedFiles().isEmpty()) {
+            files = TextUtils.join(DOT, detail.getExcludedFiles());
         }
-        for (String file : detail.getExcludedFiles()) {
-            Label line = Parts.muted(file);
-            line.getStyleClass().add("small-text");
-            box.getChildren().add(line);
-        }
-        return box;
+        Label list = Parts.muted(files);
+        list.getStyleClass().add("small-text");
+        list.setWrapText(true);
+        list.setMinHeight(Region.USE_PREF_SIZE);
+        return new VBox(Parts.GAP_TINY, title, list);
     }
 }

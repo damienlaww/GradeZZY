@@ -128,8 +128,10 @@ Rules the code keeps:
   happens in a working copy under `workspace/working/`.
 - **Every setting is external.** `config.properties` is read through
   `AppConfig`, using the names in `ConfigKeys`. Nothing is hard-coded.
-- **Storage sits behind an interface.** Only `SqliteResultRepository`
-  contains SQL or imports `java.sql`.
+- **Storage sits behind an interface.** Only `persistence` contains SQL
+  or imports `java.sql`. `SqliteResultRepository` owns the connection
+  and every transaction; the package-private table classes beside it
+  hold the SQL.
 
 ### Packages
 
@@ -145,10 +147,10 @@ Rules the code keeps:
 | `testcase` | Where testers come from, their maximum marks, and the per-question folders. | `TestCaseSource`, `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TesterMarks`, `QuestionWorkspace`, `FolderSnapshot` |
 | `exec` | Runs `javac` and `java` as separate processes with limits. | `ProcessRunner`, `SourceCompiler`, `TesterRunner`, `TesterHarness`, `TrustedPrintStream`, `RunningProcesses`, `HarnessWatchdog` |
 | `grading` | The pipeline, its stages, scoring and parallel workers. | `GradingPipeline`, `GradingStage`, the nine `...Stage` classes, `ScoreParser`, `TesterOutputScoreParser`, `ScoreCalculator`, `GradingWorker`, `SubmissionHandout`, `CancellationToken`, `QuestionRerunner` |
-| `plagiarism` | Compares students' code. | `SimilarityDetector`, `TokenSimilarityDetector`, `SimilarityPair` |
+| `plagiarism` | Compares students' code. | `SimilarityDetector`, `TokenSimilarityDetector`, `SimilarityPair`, `LineComparison`, `LineKind` |
 | `report` | One class per export format. | `Exporter`, `CsvScoreSheetExporter`, `JsonExporter`, `JsonWriter`, `AnomalyReportExporter`, `StudentReportExporter`, `AuditLogExporter` |
 | `stats` | Statistics over runs. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
-| `persistence` | Saves, loads and backs up grading state. | `ResultRepository`, `SqliteResultRepository`, `BackupManager` |
+| `persistence` | Saves, loads and backs up grading state. | `ResultRepository`, `SqliteResultRepository`, `SqliteSchema`, `RunTables`, `SubmissionTables`, `ReviewTables`, `AdjustmentTable`, `AuditTable`, `JdbcSupport`, `BackupManager` |
 | `service` | Everything the console and the window call. | `GradingService`, `PipelineFactory`, `AnomalyService`, `ExportService`, `StatisticsService`, `HistoryService`, `PlagiarismService`, `ScoreAdjustmentService`, `SettingsService`, `AuditService`, `AssessmentFactory`, `AssessmentLibrary`, `ClassFileMatcher`, `ServiceRegistry` |
 | `util` | Shared helpers. | `FileUtils`, `TextUtils`, `InputValidator` |
 
@@ -635,6 +637,21 @@ is a basic check that points the instructor at pairs to read, not
 proof. It runs after grading when `plagiarism.enabled` is true, and the
 window's Export step can run it on demand.
 
+The window lists each pair with a pill such as "84% similar": red above
+75%, amber at 75% or below (the percent as shown, rounded).
+
+"Compare" on a similar pair opens both answer files side by side, in one
+box that scrolls as one. `LineComparison` marks each line, ignoring
+spaces: red when the same line is in the other student's file, grey with
+a "starter" tag when it is in the starter file (starter code is never
+red), and plain when it is the student's own. A line holding only
+brackets, such as `}`, takes the colour of the line above it. Each side
+shows how many of its own lines are the same, and "Next same part" and
+"Previous" jump between the red blocks of the first student's file. The
+lines only help the instructor read a pair; the percentage still comes
+from the trigrams above, so a renamed variable makes a line plain even
+though the score may stay high.
+
 ## Exports
 
 `ExportService` finds an `Exporter` by name and writes to the output
@@ -851,7 +868,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `detection.untouched.enabled` | `true` | Flag untouched starter files. |
 | `detection.empty.enabled` | `true` | Flag empty answers. |
 | `detection.hardcoded.enabled` | `true` | Flag hard-coded answers. |
-| `plagiarism.enabled` | `false` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
+| `plagiarism.enabled` | `true` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
 | `export.formats` | `csv,json` | Formats offered by default. |
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |

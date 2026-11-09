@@ -55,6 +55,7 @@ import gradezzy.ui.backend.ReviewRules;
 import gradezzy.ui.backend.RunCallback;
 import gradezzy.ui.backend.RunRecord;
 import gradezzy.ui.backend.SimilarityDetail;
+import gradezzy.util.TextUtils;
 
 /**
  * The backend used in demo mode.
@@ -69,6 +70,9 @@ public final class DemoBackend implements DashboardBackend {
 
     // The file of the sample similar pair
     private static final String SIMILAR_FILE = "Q2/Q2a.java";
+
+    // The text that ends a line of the sample code
+    private static final String LINE_END = "\n";
 
     // The first number given to a run started in demo mode
     private static final int FIRST_NEW_RUN = 25;
@@ -1269,18 +1273,55 @@ public final class DemoBackend implements DashboardBackend {
         excluded.add("Q2aTester.java (tester)");
         excluded.add("DataException.class (provided class)");
         excluded.add("personstester.txt, studentstester.txt (tester data)");
-        String excerpt = "for (int i = 0; i < items.length; i++) {\n"
-                + "    if (items[i].getScore() > best) {\n"
-                + "        best = items[i].getScore();\n"
-                + "    }\n"
-                + "}\n";
-        String renamed = "for (int k = 0; k < list.length; k++) {\n"
-                + "    if (list[k].getScore() > top) {\n"
-                + "        top = list[k].getScore();\n"
-                + "    }\n"
-                + "}\n";
+        String starter = joinLines(new String[] {
+                "import java.util.*;",
+                "",
+                "public class Q2a {",
+                "    public static double getHighest(Person[] items) {",
+                "        // Write your code here",
+                "        return 0;",
+                "    }",
+                "}"});
+        String excerpt = joinLines(new String[] {
+                "import java.util.*;",
+                "",
+                "public class Q2a {",
+                "    public static double getHighest(Person[] items) {",
+                "        double best = 0;",
+                "        // loop through every person",
+                "        for (int i = 0; i < items.length; i++) {",
+                "            if (items[i].getScore() > best) {",
+                "                best = items[i].getScore();",
+                "            }",
+                "        }",
+                "        System.out.println(\"done\");",
+                "        return best;",
+                "    }",
+                "}"});
+        String copied = joinLines(new String[] {
+                "import java.util.*;",
+                "",
+                "public class Q2a {",
+                "    public static double getHighest(Person[] items) {",
+                "        double best = 0;",
+                "        for (int i = 0; i < items.length; i++) {",
+                "            if (items[i].getScore() > best) {",
+                "                best = items[i].getScore();",
+                "            }",
+                "        }",
+                "        if (best < 0) {",
+                "            best = 0;",
+                "        }",
+                "        return best;",
+                "    }",
+                "}"});
         return new SimilarityDetail(pair, SIMILAR_FILE, SIMILAR_FILE,
-                excerpt, renamed, excluded);
+                excerpt, copied, starter, excluded);
+    }
+
+    // Joins lines of sample code, each ended by a line end.
+    private static String joinLines(String[] lines) {
+        return TextUtils.join(LINE_END, lines) + LINE_END;
     }
 
     /**

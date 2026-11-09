@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.geometry.Insets;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.StackPane;
@@ -292,6 +293,13 @@ public class FlowCheck {
                 Step.EXPORT);
         if (export.openSimilarPair(0)) {
             shoot(scene, tag, "5e-similar-code");
+            Button nextPart = SceneFinder.button(window.getRoot(),
+                    "Next same part");
+            if (nextPart != null) {
+                nextPart.fire();
+                nextPart.fire();
+                shoot(scene, tag, "5e-similar-code-next");
+            }
             window.closeSheet();
         }
         backend.saveSettings(java.util.Map.of(similarKey, "false"));

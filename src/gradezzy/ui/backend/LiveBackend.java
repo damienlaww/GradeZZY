@@ -1614,21 +1614,43 @@ public class LiveBackend implements DashboardBackend {
         }
 
         return new SimilarityDetail(pair, file, file, firstCode,
-                secondCode, listLeftOut(gradingRun, question));
+                secondCode, readStarterCode(gradingRun, question),
+                listLeftOut(gradingRun, question));
+    }
+
+    // Returns where a question's starter file is, whether or not it
+    // exists.
+    private Path findStarterFile(GradingRun gradingRun, Question question) {
+        Path starter = gradingRun.getStarterDirectory();
+        if (starter == null) {
+            starter = configuredPath(InputKind.STARTER);
+        }
+        return starter.resolve(question.getFolderName())
+                .resolve(question.getFileName());
+    }
+
+    // Reads a question's starter file, or returns "" when it is missing
+    // or cannot be read.
+    private String readStarterCode(GradingRun gradingRun,
+            Question question) {
+        Path starterFile = findStarterFile(gradingRun, question);
+        if (!Files.isRegularFile(starterFile)) {
+            return "";
+        }
+
+        try {
+            return FileUtils.readText(starterFile);
+        } catch (IOException exception) {
+            return "";
+        }
     }
 
     // Lists what the check leaves out of a question: the starter file's
     // code, and every other file in the question folder.
     private List<String> listLeftOut(GradingRun gradingRun,
             Question question) {
-        Path starter = gradingRun.getStarterDirectory();
-        if (starter == null) {
-            starter = configuredPath(InputKind.STARTER);
-        }
-
         List<String> leftOut = new ArrayList<>();
-        Path starterFile = starter.resolve(question.getFolderName())
-                .resolve(question.getFileName());
+        Path starterFile = findStarterFile(gradingRun, question);
         if (Files.isRegularFile(starterFile)) {
             leftOut.add(starterFile.toString() + " (starter code, taken "
                     + "out before comparing)");
