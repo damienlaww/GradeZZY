@@ -1066,8 +1066,7 @@ public class ExportScreen extends FlowScreen {
         Label question = Parts.muted(pair.getQuestionId());
         question.setMinWidth(Label.USE_PREF_SIZE);
         Node grow = Parts.grow();
-        Label similar = Parts.pill(Math.round(pair.getSimilarity()
-                * PERCENT) + "% similar", Tone.WARN);
+        Label similar = SimilaritySheet.similarityPill(pair);
         HBox row = Parts.row(Parts.GAP,
                 new Node[] {names, question, grow, similar});
         if (getBackend().supports(Capability.SIMILARITY_DETAIL)) {

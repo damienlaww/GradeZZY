@@ -597,6 +597,9 @@ is a basic check that points the instructor at pairs to read, not
 proof. It runs after grading when `plagiarism.enabled` is true, and the
 window's Export step can run it on demand.
 
+The window lists each pair with a pill such as "84% similar": red above
+75%, amber at 75% or below (the percent as shown, rounded).
+
 "Compare" on a similar pair opens both answer files side by side, in one
 box that scrolls as one. `LineComparison` marks each line, ignoring
 spaces: red when the same line is in the other student's file, grey with

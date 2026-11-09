@@ -35,6 +35,9 @@ public class LineComparison {
     // The text that ends a line
     private static final String NEW_LINE = "\n";
 
+    // What indexOf returns when a character is not found
+    private static final int NOT_FOUND = -1;
+
     // The first file's lines
     private final List<String> firstLines;
 
@@ -130,7 +133,9 @@ public class LineComparison {
         LineKind previous = LineKind.BLANK;
         for (int index = 0; index < kinds.size(); index++) {
             LineKind kind = kinds.get(index);
-            if (kind == LineKind.SAME && previous != LineKind.SAME) {
+            boolean startsPart = kind == LineKind.SAME
+                    && previous != LineKind.SAME;
+            if (startsPart) {
                 starts.add(index);
             }
             if (kind != LineKind.BLANK) {
@@ -209,7 +214,8 @@ public class LineComparison {
     // semicolons.
     private static boolean isBracketsOnly(String key) {
         for (int index = 0; index < key.length(); index++) {
-            if (BRACKET_CHARACTERS.indexOf(key.charAt(index)) < 0) {
+            char letter = key.charAt(index);
+            if (BRACKET_CHARACTERS.indexOf(letter) == NOT_FOUND) {
                 return false;
             }
         }

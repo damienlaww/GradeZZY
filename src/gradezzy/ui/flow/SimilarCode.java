@@ -48,6 +48,19 @@ public class SimilarCode {
     // No part has been jumped to yet
     private static final int NO_PART = -1;
 
+    // How far Previous and Next move, in parts
+    private static final int PART_STEP = 1;
+
+    // Line numbers start at 1 while list indexes start at 0
+    private static final int FIRST_LINE_NUMBER = 1;
+
+    // The style class of a line that is the same in both files, and of
+    // its key
+    private static final String SAME_STYLE = "same";
+
+    // The style class of a starter line, and of its key
+    private static final String STARTER_STYLE = "starter";
+
     // The comparison of the two files
     private final LineComparison comparison;
 
@@ -118,8 +131,8 @@ public class SimilarCode {
             count.setText("No lines are the same");
         }
         return Parts.row(Parts.GAP, new Node[] {
-                key("same", "Same line in both files"),
-                key("starter", "Starter code, not compared"),
+                key(SAME_STYLE, "Same line in both files"),
+                key(STARTER_STYLE, "Starter code, not compared"),
                 Parts.grow(), count, previous, next});
     }
 
@@ -148,10 +161,10 @@ public class SimilarCode {
      * Scrolls to the next part of the first file that is the same.
      */
     public void showNextPart() {
-        if (currentPart + 1 >= partStarts.size()) {
+        if (!hasNextPart()) {
             return;
         }
-        currentPart++;
+        currentPart += PART_STEP;
         scrollTo(partStarts.get(currentPart));
         updateButtons();
     }
@@ -163,7 +176,7 @@ public class SimilarCode {
         if (currentPart == NO_PART) {
             return;
         }
-        currentPart--;
+        currentPart -= PART_STEP;
         if (currentPart == NO_PART) {
             scroll.setVvalue(TOP);
         } else {
@@ -182,7 +195,8 @@ public class SimilarCode {
         box.setPrefWidth(0);
         HBox.setHgrow(box, Priority.ALWAYS);
         for (int index = 0; index < lines.size(); index++) {
-            HBox line = line(index + 1, lines.get(index), kinds.get(index));
+            int number = index + FIRST_LINE_NUMBER;
+            HBox line = line(number, lines.get(index), kinds.get(index));
             if (parts.contains(index)) {
                 partStarts.add(line);
             }
@@ -210,10 +224,10 @@ public class SimilarCode {
         HBox row = new HBox(numberLabel, codeLabel);
         row.getStyleClass().add("code-line");
         if (kind == LineKind.SAME) {
-            row.getStyleClass().add("same");
+            row.getStyleClass().add(SAME_STYLE);
         }
         if (kind == LineKind.STARTER) {
-            row.getStyleClass().add("starter");
+            row.getStyleClass().add(STARTER_STYLE);
             Label tag = new Label("starter");
             tag.getStyleClass().add("starter-tag");
             tag.setMinWidth(Region.USE_PREF_SIZE);
@@ -239,16 +253,24 @@ public class SimilarCode {
         if (contentHeight <= viewHeight) {
             return;
         }
-        Bounds bounds = content.sceneToLocal(line.localToScene(
-                line.getBoundsInLocal()));
-        double value = (bounds.getMinY() - Parts.GAP_SMALL)
-                / (contentHeight - viewHeight);
-        scroll.setVvalue(Math.max(TOP, Math.min(BOTTOM, value)));
+        Bounds inScene = line.localToScene(line.getBoundsInLocal());
+        Bounds inContent = content.sceneToLocal(inScene);
+        double lineTop = inContent.getMinY() - Parts.GAP_SMALL;
+        double scrollRange = contentHeight - viewHeight;
+        double value = lineTop / scrollRange;
+        double belowBottom = Math.min(BOTTOM, value);
+        scroll.setVvalue(Math.max(TOP, belowBottom));
+    }
+
+    // Says whether there is a part after the one last jumped to.
+    private boolean hasNextPart() {
+        int nextPart = currentPart + PART_STEP;
+        return nextPart < partStarts.size();
     }
 
     // Turns off a button when there is nowhere for it to go.
     private void updateButtons() {
         previous.setDisable(currentPart == NO_PART);
-        next.setDisable(currentPart + 1 >= partStarts.size());
+        next.setDisable(!hasNextPart());
     }
 }

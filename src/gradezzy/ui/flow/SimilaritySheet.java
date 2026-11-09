@@ -41,6 +41,10 @@ public final class SimilaritySheet {
     // Percentages are shown as whole numbers
     private static final double PERCENT = 100.0;
 
+    // A pair shown as more than this percent similar has a red pill;
+    // at or below it, amber
+    private static final long RED_ABOVE_PERCENT = 75;
+
     // The separator between parts of a line
     private static final String DOT = " · ";
 
@@ -67,8 +71,7 @@ public final class SimilaritySheet {
         Label title = Parts.title(first + " and " + second + DOT
                 + pair.getQuestionId());
         Node grow = Parts.grow();
-        Label similar = Parts.pill(Math.round(pair.getSimilarity()
-                * PERCENT) + "% similar", Tone.WARN);
+        Label similar = similarityPill(pair);
         HBox top = Parts.row(Parts.GAP,
                 new Node[] {title, grow, similar, close});
 
@@ -93,6 +96,22 @@ public final class SimilaritySheet {
         body.getChildren().addAll(code.createLegend(), names,
                 code.getView(), leftOut(detail));
         return body;
+    }
+
+    /**
+     * Returns the pill that shows how similar a pair is, such as
+     * "84% similar": red above 75%, amber at 75% or below.
+     *
+     * @param pair the pair
+     * @return the pill
+     */
+    public static Label similarityPill(SimilarityPair pair) {
+        long percent = Math.round(pair.getSimilarity() * PERCENT);
+        Tone tone = Tone.WARN;
+        if (percent > RED_ABOVE_PERCENT) {
+            tone = Tone.BAD;
+        }
+        return Parts.pill(percent + "% similar", tone);
     }
 
     /**
