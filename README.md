@@ -127,8 +127,10 @@ Rules the code keeps:
   happens in a working copy under `workspace/working/`.
 - **Every setting is external.** `config.properties` is read through
   `AppConfig`, using the names in `ConfigKeys`. Nothing is hard-coded.
-- **Storage sits behind an interface.** Only `SqliteResultRepository`
-  contains SQL or imports `java.sql`.
+- **Storage sits behind an interface.** Only `persistence` contains SQL
+  or imports `java.sql`. `SqliteResultRepository` owns the connection
+  and every transaction; the package-private table classes beside it
+  hold the SQL.
 
 ### Packages
 
@@ -147,7 +149,7 @@ Rules the code keeps:
 | `plagiarism` | Compares students' code. | `SimilarityDetector`, `TokenSimilarityDetector`, `SimilarityPair` |
 | `report` | One class per export format. | `Exporter`, `CsvScoreSheetExporter`, `JsonExporter`, `JsonWriter`, `AnomalyReportExporter`, `StudentReportExporter`, `AuditLogExporter` |
 | `stats` | Statistics over runs. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
-| `persistence` | Saves, loads and backs up grading state. | `ResultRepository`, `SqliteResultRepository`, `BackupManager` |
+| `persistence` | Saves, loads and backs up grading state. | `ResultRepository`, `SqliteResultRepository`, `SqliteSchema`, `RunTables`, `SubmissionTables`, `ReviewTables`, `AdjustmentTable`, `AuditTable`, `JdbcSupport`, `BackupManager` |
 | `service` | Everything the console and the window call. | `GradingService`, `PipelineFactory`, `AnomalyService`, `ExportService`, `StatisticsService`, `HistoryService`, `PlagiarismService`, `ScoreAdjustmentService`, `SettingsService`, `AuditService`, `AssessmentFactory`, `AssessmentLibrary`, `ClassFileMatcher`, `ServiceRegistry` |
 | `util` | Shared helpers. | `FileUtils`, `TextUtils`, `InputValidator` |
 

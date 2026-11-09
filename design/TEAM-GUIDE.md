@@ -811,9 +811,10 @@ Rules that matter here:
 - Decide with the team how totals are written (`12` or `12.0`) and how a
   student with no submission appears (blank or `0`). The provided file
   does not say; do not guess silently.
-- Only `SqliteResultRepository` may contain SQL or import `java.sql`.
-  Always use `PreparedStatement` with `?` placeholders, never text joined
-  into SQL.
+- Only `persistence` may contain SQL or import `java.sql`:
+  `SqliteResultRepository` owns the connection and the transactions, and
+  its package-private table classes hold the SQL. Always use
+  `PreparedStatement` with `?` placeholders, never text joined into SQL.
 - A failed save must not lose the grading results in memory.
 
 You are done when the exported CSV differs from
@@ -916,7 +917,7 @@ by this section.
 | Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |
 | `CharsetDecoder`, `CodingErrorAction`, `ByteBuffer` | `fix.EncodingFixer`, `report.CsvScoreSheetExporter` | Tells whether a Java file is valid UTF-8, which javac needs, and whether a score sheet is UTF-8 or Windows-1252, so the export is written the same way. | A decoder turns bytes into characters; set to `REPORT`, it throws instead of guessing when the bytes are not UTF-8. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. | Reads a file of `key=value` lines into a lookup table. |
-| JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence.SqliteResultRepository` only | Saves runs, review decisions, checked 0s and changed marks to SQLite so History can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
+| JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence` only: `SqliteResultRepository` and its table classes (`SqliteSchema`, `RunTables`, `SubmissionTables`, `ReviewTables`, `AdjustmentTable`, `AuditTable`, `JdbcSupport`) | Saves runs, review decisions, checked 0s and changed marks to SQLite so History can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
 | `Thread.sleep`, `InterruptedException` | `util.FileUtils` | Waits briefly before retrying a move or delete that Windows blocked, such as when antivirus holds a new file open. | Pauses for half a second, then tries again, up to five times. |
 | `Files.getFileStore`, `Files.setAttribute(path, "dos:readonly", false)` | `util.FileUtils` | A read-only file cannot be deleted on Windows, so the flag is cleared before a delete is tried again. Elsewhere a failed delete is reported at once. | Asks which kind of disk a file is on, and on a Windows disk switches off the file's read-only tick box. |
 | `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |
