@@ -1407,7 +1407,7 @@ public class GradingService {
                     + "switched off, so it cannot be resumed.");
         }
 
-        GradingRun savedRun;
+        GradingRun savedRun = null;
         try {
             savedRun = repository.loadRun(runId);
         } catch (PersistenceException exception) {

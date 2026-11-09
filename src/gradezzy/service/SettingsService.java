@@ -531,16 +531,13 @@ public class SettingsService {
 
     // Lists the changed settings with their new values, for the audit log.
     private String describeChanges() {
-        String detail = "";
+        List<String> pairs = new ArrayList<>();
 
         for (String key : changedKeys) {
-            if (!detail.isEmpty()) {
-                detail += ", ";
-            }
-            detail += key + KEY_VALUE_SEPARATOR + config.getString(key);
+            pairs.add(key + KEY_VALUE_SEPARATOR + config.getString(key));
         }
 
-        return "Changed " + detail + ".";
+        return "Changed " + TextUtils.join(", ", pairs) + ".";
     }
 
     // Writes a copy first, so a failure halfway leaves the original
@@ -656,8 +653,6 @@ public class SettingsService {
         }
     }
 
-    // Checks that a value names an existing folder or file. A relative
-    // path is taken from the folder the application was started in.
     // Checks a folder GradeZZY writes into. Working copies are made by
     // deleting and replacing a folder named after each student, so a
     // folder that holds the program, the uploads or other files could
@@ -667,8 +662,8 @@ public class SettingsService {
             return "'" + key + "' cannot be blank.";
         }
 
-        Path folder;
-        Path programFolder;
+        Path folder = null;
+        Path programFolder = null;
 
         try {
             folder = Paths.get(text).toAbsolutePath().normalize();
@@ -731,6 +726,8 @@ public class SettingsService {
         return names != null && names.length == 0;
     }
 
+    // Checks that a value names an existing folder or file. A relative
+    // path is taken from the folder the application was started in.
     private String checkPath(String key, String text, boolean folder) {
         String kind = "file";
 
@@ -750,9 +747,7 @@ public class SettingsService {
 
             if (folder && Files.isDirectory(path)) {
                 return "";
-            }
-
-            if (!folder && Files.isRegularFile(path)) {
+            } else if (!folder && Files.isRegularFile(path)) {
                 return "";
             }
 

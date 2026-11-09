@@ -93,6 +93,12 @@ public class ClassFileMatcher {
     // Index of a score sheet's first student row, after the header
     private static final int FIRST_ROW = 1;
 
+    // Length of "/*", which opens a block comment
+    private static final int COMMENT_START_LENGTH = 2;
+
+    // Length of an escape in a string or character, such as \t
+    private static final int ESCAPE_LENGTH = 2;
+
     // The method every program may declare, which says nothing about the
     // lab test
     private static final String MAIN_METHOD = "main";
@@ -234,7 +240,7 @@ public class ClassFileMatcher {
     // byte order mark, and its first student row ends in the end of line
     // marker, such as #.
     private boolean keepsElearnLayout(Path sheet) {
-        String text;
+        String text = null;
         try {
             text = FileUtils.readText(sheet);
         } catch (IOException exception) {
@@ -782,7 +788,8 @@ public class ClassFileMatcher {
             if (current == '/' && next == '/') {
                 index = skipPast(source, index, "\n");
             } else if (current == '/' && next == '*') {
-                index = skipPast(source, index + 2, "*/");
+                index = skipPast(source, index + COMMENT_START_LENGTH,
+                        "*/");
             } else if (current == '"' || current == '\'') {
                 index = skipQuoted(source, index);
             } else if (Character.isJavaIdentifierStart(current)) {
@@ -820,7 +827,7 @@ public class ClassFileMatcher {
         while (index < source.length()) {
             char current = source.charAt(index);
             if (current == '\\') {
-                index = index + 2;
+                index = index + ESCAPE_LENGTH;
             } else if (current == quote || current == '\n') {
                 return index + 1;
             } else {
@@ -1142,15 +1149,15 @@ public class ClassFileMatcher {
 
     // Joins words with commas and a last joining word, such as " or ".
     private String joinWords(List<String> words, String last) {
-        String joined = "";
-        for (int index = 0; index < words.size(); index++) {
-            if (index > 0 && index == words.size() - 1) {
-                joined = joined + last;
-            } else if (index > 0) {
-                joined = joined + ", ";
-            }
-            joined = joined + words.get(index);
+        if (words.size() <= 1) {
+            return TextUtils.join(", ", words);
         }
-        return joined;
+
+        int lastIndex = words.size() - 1;
+        List<String> leading = new ArrayList<>();
+        for (int index = 0; index < lastIndex; index++) {
+            leading.add(words.get(index));
+        }
+        return TextUtils.join(", ", leading) + last + words.get(lastIndex);
     }
 }

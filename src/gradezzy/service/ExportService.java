@@ -31,6 +31,7 @@ import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.report.ExportException;
 import gradezzy.report.Exporter;
+import gradezzy.util.TextUtils;
 
 /**
  * Keeps the available exporters and runs the chosen one.
@@ -400,15 +401,12 @@ public class ExportService {
 
     // Lists the registered format names, for an error message.
     private String listFormatNames() {
-        String names = "";
+        List<String> names = new ArrayList<>();
 
         for (Exporter exporter : exporters) {
-            if (names.length() > 0) {
-                names += ", ";
-            }
-            names += exporter.getFormatName();
+            names.add(exporter.getFormatName());
         }
 
-        return names;
+        return TextUtils.join(", ", names);
     }
 }

@@ -191,7 +191,7 @@ public class AppConfig {
      *         false
      */
     public boolean getBoolean(String key) {
-        String value = getString(key).trim();
+        String value = getString(key);
 
         if (value.equalsIgnoreCase(Boolean.TRUE.toString())) {
             return true;
