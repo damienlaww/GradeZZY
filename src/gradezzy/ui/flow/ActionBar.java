@@ -55,10 +55,11 @@ public class ActionBar extends HBox {
         shortcut.getStyleClass().addAll("small-text", "shortcut-hint");
         shortcut.setMinWidth(Label.USE_PREF_SIZE);
         Parts.tip(primaryButton, "Shortcut: " + Parts.shortcut("Enter"));
-        // The hint shows only while the blue button can be pressed
+        // The hint shows only while the blue button can be pressed, and
+        // leaves no gap between the buttons while hidden
         shortcut.visibleProperty().bind(primaryButton.visibleProperty()
                 .and(primaryButton.disabledProperty().not()));
-        shortcut.managedProperty().bind(primaryButton.managedProperty());
+        shortcut.managedProperty().bind(shortcut.visibleProperty());
         getChildren().addAll(backButton, status, Parts.grow(), secondary,
                 shortcut, primaryButton);
         reset();

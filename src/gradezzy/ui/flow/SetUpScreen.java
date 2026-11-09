@@ -14,12 +14,14 @@
 package gradezzy.ui.flow;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import javafx.geometry.HPos;
@@ -48,7 +50,9 @@ import gradezzy.config.ExportFolders;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.SavedAssessment;
+import gradezzy.model.Submission;
 import gradezzy.model.Question;
+import gradezzy.service.ChosenSubmissionsStore;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.ui.DragDropHandler;
 import gradezzy.ui.backend.ActionResult;
@@ -120,6 +124,37 @@ public class SetUpScreen extends FlowScreen {
 
     // The width of the Remove and Change links, so they line up
     private static final double ROW_LINK_WIDTH = 52.0;
+
+    // The width of a row's icon column, as set in flow.css .icon-column
+    private static final double ROW_ICON_COLUMN = 20.0;
+
+    // The space between a row and its opened file list
+    private static final double FILE_LIST_GAP = 8.0;
+
+    // The end of a zip file's name
+    private static final String ZIP_EXTENSION = ".zip";
+
+    // Where the chosen files are kept when the setting is missing
+    private static final String DEFAULT_CHOSEN_FILE =
+            "workspace/chosen-submissions.properties";
+
+    // Keeps the files chosen for each section between uses, or null
+    // until first needed
+    private ChosenSubmissionsStore chosenStore = null;
+
+    // The most submissions listed on the page; Show all opens the rest
+    private static final int MAX_FILE_ROWS = 5;
+
+    // The sheet that lists every chosen submission, made when first
+    // opened
+    private SubmissionsSheet allFilesSheet = null;
+
+    // The sections opened on Set up since GradeZZY started, so a
+    // section gets its last run's files back only on the first visit
+    private final List<String> visitedSections = new ArrayList<>();
+
+    // The submissions whose file list is open
+    private final List<Path> openFileLists = new ArrayList<>();
 
     // The share of the class row for Module and for Section
     private static final double CHOICE_PERCENT = 27.8;
@@ -598,6 +633,169 @@ public class SetUpScreen extends FlowScreen {
         addInspected(items);
     }
 
+    // ------------------------------------------- files kept between uses
+
+    // Returns the store of the files chosen for each section, or null in
+    // the demo, which keeps nothing.
+    private ChosenSubmissionsStore chosenStore() {
+        if (getBackend().isDemo()) {
+            return null;
+        }
+
+        if (chosenStore == null) {
+            String file = getBackend().getSetting(
+                    ConfigKeys.CHOSEN_SUBMISSIONS_FILE);
+            if (file.trim().isEmpty()) {
+                file = DEFAULT_CHOSEN_FILE;
+            }
+            chosenStore = new ChosenSubmissionsStore(Paths.get(file));
+            getState().setSavedPaths(chosenStore.load());
+        }
+
+        return chosenStore;
+    }
+
+    // Saves the files chosen for each section, so they are listed again
+    // after GradeZZY is reopened.
+    private void saveChosenFiles() {
+        ChosenSubmissionsStore store = chosenStore();
+        if (store != null) {
+            store.save(getState().listChosenPaths());
+        }
+    }
+
+    // Checks again the files saved for this section when GradeZZY was
+    // last closed, and lists the ones still there. They are added to the
+    // section they were chosen for, even if another is open by the time
+    // the check ends.
+    private void bringBackSavedFiles() {
+        if (chosenStore() == null || getState().isGrading()) {
+            return;
+        }
+
+        String key = getState().getSectionKey();
+        boolean firstVisit = !visitedSections.contains(key);
+        if (firstVisit) {
+            visitedSections.add(key);
+        }
+        boolean kept = getState().hasKeptFiles();
+
+        List<Path> paths = new ArrayList<>();
+        for (Path path : getState().takeSavedPaths()) {
+            if (Files.exists(path)) {
+                paths.add(path);
+            }
+        }
+        // A section graded before its files were kept gets the files of
+        // its last run, once, when it is first opened
+        boolean empty = getState().getBatch().getItems(
+                InputKind.SUBMISSION).isEmpty();
+        if (paths.isEmpty() && firstVisit && !kept && empty) {
+            paths = findLastRunUploads();
+        }
+        if (paths.isEmpty()) {
+            return;
+        }
+
+        String label = sectionLabel();
+        FileInspection inspection = new FileInspection(getBackend(), paths);
+        inspection.setOnSucceeded(event -> savedFilesChecked(inspection,
+                key, label));
+        inspection.setOnFailed(event -> inspectionFailed(inspection));
+        filesBeingChecked += inspection.getPathCount();
+
+        Thread worker = new Thread(inspection, "gradezzy-reopen");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    // Returns the uploads the section's last run graded that are still
+    // there. Copies GradeZZY unpacked from a zip of student zips are
+    // left out. When the uploads all sit in one folder that was chosen
+    // as a whole, which is so when some came from a zip of student zips
+    // in it or it holds no other zip files, that folder is returned as
+    // the one upload.
+    private List<Path> findLastRunUploads() {
+        List<Path> uploads = new ArrayList<>();
+        GradingRun run = getBackend().getRun(getState().getSection());
+        if (run == null) {
+            return uploads;
+        }
+
+        Path working = Paths.get(getBackend().getSetting(
+                ConfigKeys.WORKING_DIR)).toAbsolutePath().normalize();
+        boolean fromBulkZip = false;
+        for (Submission submission : run.getSubmissions()) {
+            Path original = submission.getOriginalPath();
+            boolean known = original != null;
+            if (known && original.toAbsolutePath().normalize()
+                    .startsWith(working)) {
+                fromBulkZip = true;
+            } else if (known && Files.exists(original)
+                    && !uploads.contains(original)) {
+                uploads.add(original);
+            }
+        }
+
+        Path folder = findSharedFolder(uploads);
+        if (folder != null && uploads.size() > 1
+                && (fromBulkZip || !holdsOtherZips(folder, uploads))) {
+            List<Path> whole = new ArrayList<>();
+            whole.add(folder);
+            return whole;
+        }
+
+        return uploads;
+    }
+
+    // Returns the folder every path is directly in, or null when they
+    // are in different folders or there are none.
+    private Path findSharedFolder(List<Path> paths) {
+        if (paths.isEmpty()) {
+            return null;
+        }
+
+        Path folder = paths.get(0).getParent();
+        for (Path path : paths) {
+            if (folder == null || !folder.equals(path.getParent())) {
+                return null;
+            }
+        }
+
+        return folder;
+    }
+
+    // Says whether a folder holds zip files other than the uploads, as a
+    // downloads folder would, so it was not chosen as a whole.
+    private boolean holdsOtherZips(Path folder, List<Path> uploads) {
+        File[] children = folder.toFile().listFiles();
+        if (children == null) {
+            return true;
+        }
+
+        for (File child : children) {
+            boolean zip = child.getName().toLowerCase(Locale.ROOT)
+                    .endsWith(ZIP_EXTENSION);
+            if (zip && !uploads.contains(child.toPath())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Lists the saved files once checked again.
+    private void savedFilesChecked(FileInspection inspection, String key,
+            String label) {
+        filesBeingChecked -= inspection.getPathCount();
+        List<ImportItem> items = inspection.getValue();
+        getState().addSubmissionsTo(key, items);
+        refresh();
+
+        getWindow().notify("Listed again the " + Parts.plural(items.size(),
+                "file") + " chosen for " + label + ".");
+    }
+
     // Starts checking files on a background thread.
     private void startInspection(List<Path> paths) {
         FileInspection inspection = new FileInspection(getBackend(), paths);
@@ -708,9 +906,9 @@ public class SetUpScreen extends FlowScreen {
                 "Remove all", () -> removeAllSubmissions());
     }
 
-    // Removes every zip file from the batch.
+    // Removes every zip file from the batch, for good.
     private void removeAllSubmissions() {
-        getState().getBatch().clear(InputKind.SUBMISSION);
+        getState().forgetSubmissions();
         refresh();
     }
 
@@ -929,7 +1127,9 @@ public class SetUpScreen extends FlowScreen {
         readMarksIfChanged();
         refreshAssessment();
         refreshEarlierRun();
+        bringBackSavedFiles();
         refreshFiles();
+        saveChosenFiles();
         refreshClassFiles();
         refreshSettings();
         refreshActions();
@@ -983,15 +1183,27 @@ public class SetUpScreen extends FlowScreen {
         ImportBatch batch = getState().getBatch();
         List<ImportItem> items = problemsFirst(batch);
         fileList.getChildren().clear();
-        for (int index = 0; index < items.size(); index++) {
-            HBox row = createFileRow(items.get(index));
+        // Problems come first, so they stay on the page; the rest are in
+        // the sheet that Show all opens
+        int shown = Math.min(items.size(), MAX_FILE_ROWS);
+        for (int index = 0; index < shown; index++) {
+            VBox row = createFileRow(items.get(index));
             row.getStyleClass().add("card-row");
             fileList.getChildren().add(row);
+        }
+
+        if (items.size() > shown) {
+            Hyperlink all = smallLink("Show all " + Parts.plural(
+                    items.size(), "file"), () -> showAllFiles());
+            HBox more = Parts.row(0, new Node[] {all});
+            more.getStyleClass().add("card-row");
+            fileList.getChildren().add(more);
         }
         markEnds(fileList);
         fileList.setVisible(!items.isEmpty());
         fileList.setManaged(!items.isEmpty());
         refreshDuplicateNote(batch);
+        refreshAllFilesSheet(items);
 
         fileSummary.getChildren().clear();
         if (items.isEmpty()) {
@@ -1011,6 +1223,55 @@ public class SetUpScreen extends FlowScreen {
         }
         fileSummary.getChildren().add(smallLink("Clear all",
                 () -> clearSubmissions()));
+    }
+
+    // Opens the sheet listing every chosen submission.
+    private void showAllFiles() {
+        if (allFilesSheet == null) {
+            allFilesSheet = new SubmissionsSheet(getWindow());
+        }
+
+        List<ImportItem> items = problemsFirst(getState().getBatch());
+        allFilesSheet.show(createAllFileRows(items), searchTextsOf(items));
+    }
+
+    // Shows the files again in the open sheet after one was added or
+    // removed, or closes it when none are left.
+    private void refreshAllFilesSheet(List<ImportItem> items) {
+        if (allFilesSheet == null || !allFilesSheet.isShowing()) {
+            return;
+        }
+
+        if (items.isEmpty()) {
+            getWindow().closeSheet();
+            return;
+        }
+
+        allFilesSheet.setRows(createAllFileRows(items),
+                searchTextsOf(items));
+    }
+
+    // Builds one row per file for the sheet.
+    private List<Node> createAllFileRows(List<ImportItem> items) {
+        List<Node> rows = new ArrayList<>();
+        for (ImportItem item : items) {
+            VBox row = createFileRow(item);
+            row.getStyleClass().add("card-row");
+            rows.add(row);
+        }
+
+        return rows;
+    }
+
+    // Returns the text each file is found by in the sheet's filter: its
+    // name and the usernames of the students in it.
+    private List<String> searchTextsOf(List<ImportItem> items) {
+        List<String> texts = new ArrayList<>();
+        for (ImportItem item : items) {
+            texts.add(item.getName() + " " + join(item.getStudents()));
+        }
+
+        return texts;
     }
 
     // Lists the zip files with the ones that cannot be used first, then
@@ -1052,8 +1313,9 @@ public class SetUpScreen extends FlowScreen {
         rows.get(rows.size() - 1).getStyleClass().add("last");
     }
 
-    // Builds one row of the zip file list.
-    private HBox createFileRow(ImportItem item) {
+    // Builds one row of the zip file list. An opened list of the files
+    // inside sits under the row, so the icon, status and Remove stay put.
+    private VBox createFileRow(ImportItem item) {
         ImportState state = getState().getBatch().getEffectiveState(item);
         Label name = Parts.strong(item.getName());
         name.setMinWidth(0);
@@ -1075,13 +1337,42 @@ public class SetUpScreen extends FlowScreen {
             message.setWrapText(true);
             text.getChildren().add(message);
         }
+        Node insideList = null;
+        if (!item.getFiles().isEmpty()) {
+            Path path = item.getPath();
+            ContainedFileList files = new ContainedFileList(item.getFiles(),
+                    openFileLists.contains(path),
+                    () -> toggleFileList(path));
+            text.getChildren().add(files.build());
+            insideList = files.getList();
+        }
+
         text.setMinWidth(0);
         HBox.setHgrow(text, Priority.ALWAYS);
         Node icon = iconColumn(Parts.FILE);
         Label status = Parts.pill(stateText(state), toneOf(state));
         Hyperlink remove = rowLink("Remove", () -> removeSubmission(item));
-        return Parts.row(Parts.GAP,
+        HBox main = Parts.row(Parts.GAP,
                 new Node[] {icon, text, status, remove});
+        VBox row = new VBox(main);
+        if (insideList != null) {
+            // Lines the list up with the text, past the icon column
+            VBox.setMargin(insideList, new Insets(FILE_LIST_GAP, 0, 0,
+                    ROW_ICON_COLUMN + Parts.GAP));
+            row.getChildren().add(insideList);
+        }
+
+        return row;
+    }
+
+    // Remembers whether a row's file list is open, so it stays that way
+    // when the rows are drawn again.
+    private void toggleFileList(Path path) {
+        if (openFileLists.contains(path)) {
+            openFileLists.remove(path);
+        } else {
+            openFileLists.add(path);
+        }
     }
 
     // Returns the note under a file: why it cannot be used, what to

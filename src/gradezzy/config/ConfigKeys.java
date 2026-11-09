@@ -96,6 +96,13 @@ public final class ConfigKeys {
     public static final String ASSESSMENTS_DIR = "paths.assessments.dir";
 
     /**
+     * File where the submissions chosen for each section are kept, so
+     * Set up lists them again after GradeZZY is reopened.
+     */
+    public static final String CHOSEN_SUBMISSIONS_FILE =
+            "paths.chosen.submissions.file";
+
+    /**
      * Pattern of the text in front of the username in a zip file name.
      */
     public static final String ZIP_NAME_PREFIX_PATTERN =
