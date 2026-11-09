@@ -37,6 +37,7 @@ import gradezzy.ui.demo.DemoBackend;
 import gradezzy.ui.demo.DemoData;
 import gradezzy.ui.flow.CodeSheet;
 import gradezzy.ui.flow.FlowWindow;
+import gradezzy.ui.flow.GuidedTour;
 import gradezzy.ui.flow.Page;
 import gradezzy.ui.flow.Parts;
 import gradezzy.ui.flow.ReviewScreen;
@@ -55,6 +56,9 @@ public class FlowCheck {
 
     // The space around the picture of a "?" explanation
     private static final double EXPLANATION_MARGIN = 16.0;
+
+    // The index of the tour's stop about the Review step
+    private static final int REVIEW_STOP = 9;
 
     // Every service
     private final ServiceRegistry services;
@@ -127,6 +131,7 @@ public class FlowCheck {
             FlowWindow window = new FlowWindow(backend, dark);
             Scene scene = window.build(size[0], size[1]);
             shoot(scene, tag, "0-home");
+            shootLockedStop(window, scene, tag);
             window.openAssessments();
             shoot(scene, tag, "0b-assessments");
             window.editAssessment(backend.getAssessment().getName());
@@ -193,6 +198,7 @@ public class FlowCheck {
             window.showHelp();
             shoot(scene, tag, "10-help");
             window.closeSheet();
+            shootTour(window, scene, tag);
             shootGrading(window, backend, scene, tag);
         } catch (RuntimeException exception) {
             System.out.println("FAILED: guided window (" + tag + "): "
@@ -469,6 +475,43 @@ public class FlowCheck {
             }
         }
         return null;
+    }
+
+    // Takes a picture of every stop of the guided tour, pressing Next
+    // after each, and checks that Done puts the window back.
+    private void shootTour(FlowWindow window, Scene scene, String tag)
+            throws IOException {
+        Page before = window.getCurrentPage();
+        window.startTour();
+        GuidedTour tour = window.getTour();
+        int stops = tour.getStopCount();
+        for (int stop = 0; stop < stops; stop++) {
+            scene.getRoot().applyCss();
+            scene.getRoot().layout();
+            tour.finishMoving();
+            shoot(scene, tag, String.format("11-tour-%02d", stop + 1));
+            tour.next();
+        }
+        if (tour.isOpen() || window.getCurrentPage() != before) {
+            throw new IllegalStateException("the tour did not end on "
+                    + "the tab it started from");
+        }
+    }
+
+    // Before any run is open, the Review stop of the tour points at the
+    // step in the row of steps; takes a picture of it.
+    private void shootLockedStop(FlowWindow window, Scene scene,
+            String tag) throws IOException {
+        window.startTour();
+        GuidedTour tour = window.getTour();
+        while (tour.isOpen() && tour.getIndex() < REVIEW_STOP) {
+            tour.next();
+        }
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+        tour.finishMoving();
+        shoot(scene, tag, "11-tour-locked");
+        tour.end();
     }
 
     // Lays out the scene and saves a picture of it when asked to.
