@@ -471,11 +471,16 @@ public class RandomInputChecker {
     }
 
     // Says whether two texts are decimal numbers close enough to be the
-    // same answer.
+    // same answer. An infinite expected answer must be matched exactly,
+    // since any margin around it would hold every number.
     private boolean areCloseNumbers(String expectedText, String actualText) {
         try {
             double expected = Double.parseDouble(expectedText);
             double actual = Double.parseDouble(actualText);
+            if (Double.isInfinite(expected)) {
+                return expected == actual;
+            }
+
             double scale = Math.max(SMALLEST_SCALE, Math.abs(expected));
             double margin = scale * RELATIVE_MARGIN;
             double difference = expected - actual;
