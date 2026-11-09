@@ -2470,3 +2470,19 @@
     -fx-text-fill: -color-fg-muted;
     -fx-padding: 0;
 }
+
+/* ------------------------------------------- files inside a submission */
+
+.contained-files-box {
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+}
+
+.contained-files {
+    -fx-padding: 4px 0;
+}
+
+.contained-file {
+    -fx-padding: 3px 10px;
+}

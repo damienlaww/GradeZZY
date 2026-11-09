@@ -69,6 +69,12 @@ public final class ConfigKeys {
     public static final String STARTER_DIR = "paths.starter.dir";
 
     /**
+     * Folder holding the model answers, laid out like the starter
+     * folder. Empty to skip the checks that use them.
+     */
+    public static final String MODEL_ANSWERS_DIR = "paths.model.answers.dir";
+
+    /**
      * Folder where working copies of submissions are created.
      */
     public static final String WORKING_DIR = "paths.working.dir";
@@ -94,6 +100,13 @@ public final class ConfigKeys {
      * Folder where saved assessments are kept, one file each.
      */
     public static final String ASSESSMENTS_DIR = "paths.assessments.dir";
+
+    /**
+     * File where the submissions chosen for each section are kept, so
+     * Set up lists them again after GradeZZY is reopened.
+     */
+    public static final String CHOSEN_SUBMISSIONS_FILE =
+            "paths.chosen.submissions.file";
 
     /**
      * Pattern of the text in front of the username in a zip file name.
@@ -232,6 +245,37 @@ public final class ConfigKeys {
             "grading.test.header.marker";
 
     /**
+     * Whether the console checks each tester with broken copies of the
+     * model answer before grading.
+     */
+    public static final String TESTER_STRENGTH_ENABLED =
+            "tester.strength.enabled";
+
+    /**
+     * The most broken copies made of each question's model answer.
+     */
+    public static final String TESTER_STRENGTH_MAX_COPIES =
+            "tester.strength.max.copies";
+
+    /**
+     * Time limit, in seconds, for the tester on one broken copy.
+     */
+    public static final String TESTER_STRENGTH_TIMEOUT_SECONDS =
+            "tester.strength.timeout.seconds";
+
+    /**
+     * Whether students' methods are called with random inputs after
+     * grading and compared with the model answer.
+     */
+    public static final String RANDOM_INPUTS_ENABLED =
+            "random.inputs.enabled";
+
+    /**
+     * How many inputs each method is called with.
+     */
+    public static final String RANDOM_INPUTS_COUNT = "random.inputs.count";
+
+    /**
      * Whether untouched starter files are flagged.
      */
     public static final String DETECT_UNTOUCHED_ENABLED =
@@ -258,6 +302,12 @@ public final class ConfigKeys {
      */
     public static final String PLAGIARISM_THRESHOLD =
             "plagiarism.similarity.threshold";
+
+    /**
+     * How answers are compared: winnowing (rename-proof fingerprints) or
+     * trigrams (runs of three tokens as written).
+     */
+    public static final String PLAGIARISM_ALGORITHM = "plagiarism.algorithm";
 
     /**
      * Comma separated export formats offered by default.

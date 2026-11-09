@@ -53,7 +53,6 @@ import gradezzy.service.ClassFileMatch;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.ImportItem;
-import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.RunRecord;
 import gradezzy.ui.backend.StatusCounts;
@@ -847,17 +846,17 @@ public class ExportScreen extends FlowScreen {
         List<CheckBox> boxes = new ArrayList<>();
         List<Submission> graded = new ArrayList<>();
         for (Submission submission : run.getSubmissions()) {
-            if (!ResultState.hasTotal(submission)) {
-                continue;
+            // Only students with a total can be exported
+            if (ResultState.hasTotal(submission)) {
+                CheckBox box = new CheckBox(Students.name(submission) + "  ·  "
+                        + Parts.mark(submission.getTotalScore()) + " / "
+                        + Parts.mark(run.getAssessment().getMaxTotal()));
+                box.setSelected(picked.contains(submission));
+                box.setAccessibleText("Export " + Students.name(submission));
+                boxes.add(box);
+                graded.add(submission);
+                list.getChildren().add(box);
             }
-            CheckBox box = new CheckBox(Students.name(submission) + "  ·  "
-                    + Parts.mark(submission.getTotalScore()) + " / "
-                    + Parts.mark(run.getAssessment().getMaxTotal()));
-            box.setSelected(picked.contains(submission));
-            box.setAccessibleText("Export " + Students.name(submission));
-            boxes.add(box);
-            graded.add(submission);
-            list.getChildren().add(box);
         }
         ScrollPane scroll = new ScrollPane(list);
         scroll.setFitToWidth(true);
@@ -1141,11 +1140,13 @@ public class ExportScreen extends FlowScreen {
                 () -> export());
     }
 
-    // Empties the batch and goes back to Set up.
+    // Empties the submissions list and goes back to Set up for the next
+    // section. The files just graded are kept for this section, so they
+    // come back when Set up is opened on it again.
     private void gradeAnother() {
         clearNote();
         getState().restart();
-        getState().getBatch().clear(InputKind.SUBMISSION);
+        getState().putAwaySubmissions();
         getWindow().show(Step.SET_UP);
     }
 

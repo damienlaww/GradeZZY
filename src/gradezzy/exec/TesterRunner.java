@@ -230,6 +230,26 @@ public class TesterRunner {
     public ProcessResult runTester(Path questionFolder,
             String testerClassName, List<Integer> skippedCases)
             throws ProcessExecutionException {
+        long timeoutSeconds = config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS);
+        return runTester(questionFolder, testerClassName, skippedCases,
+                timeoutSeconds);
+    }
+
+    /**
+     * Runs a tester with its own time limit, skipping some of its test
+     * cases. The tester strength check uses it to stop a broken copy of
+     * the model answer sooner than a student's answer is stopped.
+     *
+     * @param questionFolder the question folder
+     * @param testerClassName the tester class name
+     * @param skippedCases the test cases to skip, counted from 1
+     * @param timeoutSeconds the time limit, in seconds
+     * @return the tester output and timeout flag
+     * @throws ProcessExecutionException if the operation fails
+     */
+    public ProcessResult runTester(Path questionFolder,
+            String testerClassName, List<Integer> skippedCases,
+            long timeoutSeconds) throws ProcessExecutionException {
         if (testerClassName == null || testerClassName.isBlank()) {
             throw new ProcessExecutionException("No tester class to run.");
         }
@@ -265,7 +285,6 @@ public class TesterRunner {
         command.add(TesterHarness.class.getName());
         command.add(testerClassName);
         command.add(String.valueOf(studentLimit));
-        long timeoutSeconds = config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS);
         // The harness stops itself a little after this, in case GradeZZY
         // is gone by then
         command.add(String.valueOf(timeoutSeconds));

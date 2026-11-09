@@ -42,6 +42,9 @@ import gradezzy.grading.ValidateStage;
 import gradezzy.ingest.RosterReader;
 import gradezzy.ingest.WorkingCopyManager;
 import gradezzy.ingest.ZipExtractor;
+import gradezzy.modelanswer.ModelAnswerCopy;
+import gradezzy.modelanswer.RandomInputChecker;
+import gradezzy.modelanswer.RandomInputStage;
 import gradezzy.persistence.ResultRepository;
 import gradezzy.testcase.TesterInstaller;
 import gradezzy.validation.FileNameValidator;
@@ -119,10 +122,14 @@ public class PipelineFactory {
                 starterDirectory), createRosterChecks()));
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
-        pipeline.addStage(new CompileStage(new SourceCompiler(config,
-                processRunner), starterDirectory));
-        pipeline.addStage(new ExecuteStage(new TesterRunner(config,
-                processRunner), new TesterOutputScoreParser(config)));
+        SourceCompiler compiler = new SourceCompiler(config, processRunner);
+        // One runner, so the note about a missing sandbox prints once
+        TesterRunner testerRunner = new TesterRunner(config, processRunner);
+        pipeline.addStage(new CompileStage(compiler, starterDirectory));
+        pipeline.addStage(new ExecuteStage(testerRunner,
+                new TesterOutputScoreParser(config)));
+        addRandomInputStage(pipeline, compiler, testerRunner,
+                starterDirectory);
         pipeline.addStage(new ScoreStage(new ScoreCalculator()));
         pipeline.addStage(new PersistStage(repository));
 
@@ -152,12 +159,38 @@ public class PipelineFactory {
 
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
-        pipeline.addStage(new CompileStage(new SourceCompiler(config,
-                processRunner), starterDirectory));
-        pipeline.addStage(new ExecuteStage(new TesterRunner(config,
-                processRunner), new TesterOutputScoreParser(config)));
+        SourceCompiler compiler = new SourceCompiler(config, processRunner);
+        TesterRunner testerRunner = new TesterRunner(config, processRunner);
+        pipeline.addStage(new CompileStage(compiler, starterDirectory));
+        pipeline.addStage(new ExecuteStage(testerRunner,
+                new TesterOutputScoreParser(config)));
+        addRandomInputStage(pipeline, compiler, testerRunner,
+                starterDirectory);
 
         return pipeline;
+    }
+
+    // Adds the check that calls students' methods with random inputs,
+    // when random.inputs.enabled is true and there are model answers to
+    // compare with. Each pipeline gets new inputs, from a new seed.
+    private void addRandomInputStage(GradingPipeline pipeline,
+            SourceCompiler compiler, TesterRunner testerRunner,
+            Path chosenStarter) {
+        Path modelAnswers = ModelAnswerCopy.findFolder(config);
+        boolean enabled = config.getBoolean(ConfigKeys.RANDOM_INPUTS_ENABLED);
+        if (modelAnswers == null || !enabled) {
+            return;
+        }
+
+        Path starterDirectory = chosenStarter;
+        if (starterDirectory == null) {
+            starterDirectory = Paths.get(
+                    config.getString(ConfigKeys.STARTER_DIR));
+        }
+        long seed = System.nanoTime();
+        RandomInputChecker checker = new RandomInputChecker(config,
+                compiler, testerRunner, modelAnswers, starterDirectory, seed);
+        pipeline.addStage(new RandomInputStage(checker));
     }
 
     // To add a validator, write a class that extends AbstractValidator
