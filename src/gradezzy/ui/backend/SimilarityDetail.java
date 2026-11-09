@@ -33,6 +33,9 @@ public class SimilarityDetail {
     // A matching excerpt from the second file
     private final String secondExcerpt;
 
+    // The starter file's code, or "" when there is none
+    private final String starterCode;
+
     // The starter and tester files left out of the comparison
     private final List<String> excludedFiles = new ArrayList<>();
 
@@ -49,11 +52,32 @@ public class SimilarityDetail {
     public SimilarityDetail(SimilarityPair pair, String firstFile,
             String secondFile, String firstExcerpt, String secondExcerpt,
             List<String> excludedFiles) {
+        this(pair, firstFile, secondFile, firstExcerpt, secondExcerpt, "",
+                excludedFiles);
+    }
+
+    /**
+     * Creates the evidence for one pair, with the starter file's code so
+     * the starter lines can be told apart from the students' own.
+     *
+     * @param pair the pair being compared
+     * @param firstFile the first student's file
+     * @param secondFile the second student's file
+     * @param firstExcerpt a matching excerpt from the first file
+     * @param secondExcerpt a matching excerpt from the second file
+     * @param starterCode the starter file's code, or "" when there is
+     *        none
+     * @param excludedFiles the files left out of the comparison
+     */
+    public SimilarityDetail(SimilarityPair pair, String firstFile,
+            String secondFile, String firstExcerpt, String secondExcerpt,
+            String starterCode, List<String> excludedFiles) {
         this.pair = pair;
         this.firstFile = firstFile;
         this.secondFile = secondFile;
         this.firstExcerpt = firstExcerpt;
         this.secondExcerpt = secondExcerpt;
+        this.starterCode = starterCode;
         this.excludedFiles.addAll(excludedFiles);
     }
 
@@ -100,6 +124,15 @@ public class SimilarityDetail {
      */
     public String getSecondExcerpt() {
         return secondExcerpt;
+    }
+
+    /**
+     * Returns the starter file's code.
+     *
+     * @return the code, or "" when there is none
+     */
+    public String getStarterCode() {
+        return starterCode;
     }
 
     /**

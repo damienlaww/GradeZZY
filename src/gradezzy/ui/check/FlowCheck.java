@@ -276,6 +276,13 @@ public class FlowCheck {
                 Step.EXPORT);
         if (export.openSimilarPair(0)) {
             shoot(scene, tag, "5e-similar-code");
+            javafx.scene.control.Button nextPart = SceneFinder.button(
+                    window.getRoot(), "Next same part");
+            if (nextPart != null) {
+                nextPart.fire();
+                nextPart.fire();
+                shoot(scene, tag, "5e-similar-code-next");
+            }
             window.closeSheet();
         }
         backend.saveSettings(java.util.Map.of(similarKey, "false"));

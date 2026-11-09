@@ -1091,6 +1091,77 @@
     -fx-stroke-width: 0;
 }
 
+/* The Similar code sheet: both students' files in one box that
+   scrolls as one. A line that is in both files is red with a red bar on
+   its left; starter code is grey. */
+.similar-code {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 6px;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 6px;
+    -fx-padding: 8px 0;
+}
+
+.similar-code > .viewport {
+    -fx-background-color: transparent;
+}
+
+.similar-column-right {
+    -fx-border-color: transparent transparent transparent
+        -color-border-muted;
+}
+
+.code-line {
+    -fx-padding: 0 12px 0 9px;
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 0 3px;
+}
+
+.code-line.same {
+    -fx-background-color: -color-danger-subtle;
+    -fx-border-color: -color-danger-emphasis;
+}
+
+.line-number,
+.line-code {
+    -fx-font-family: "IBM Plex Mono";
+    -fx-font-size: 12px;
+}
+
+.line-number {
+    -fx-min-width: 28px;
+    -fx-pref-width: 28px;
+    -fx-alignment: top-right;
+    -fx-padding: 0 12px 0 0;
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.code-line.starter .line-code,
+.starter-tag {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.starter-tag {
+    -fx-font-size: 11px;
+    -fx-padding: 0 0 0 8px;
+}
+
+.legend-swatch {
+    -fx-min-width: 12px;
+    -fx-min-height: 12px;
+    -fx-max-width: 12px;
+    -fx-max-height: 12px;
+    -fx-background-radius: 3px;
+}
+
+.legend-swatch.same {
+    -fx-background-color: -color-danger-emphasis;
+}
+
+.legend-swatch.starter {
+    -fx-background-color: -color-fg-muted;
+}
+
 /* The questions on the left: each a row with a dot, the id, and the
    mark and tests in grey; the picked one is tinted. */
 .code-question {

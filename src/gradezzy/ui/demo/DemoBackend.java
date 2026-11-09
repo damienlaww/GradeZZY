@@ -1256,18 +1256,47 @@ public final class DemoBackend implements DashboardBackend {
         excluded.add("Q2aTester.java (tester)");
         excluded.add("DataException.class (provided class)");
         excluded.add("personstester.txt, studentstester.txt (tester data)");
-        String excerpt = "for (int i = 0; i < items.length; i++) {\n"
-                + "    if (items[i].getScore() > best) {\n"
-                + "        best = items[i].getScore();\n"
+        String starter = "import java.util.*;\n"
+                + "\n"
+                + "public class Q2a {\n"
+                + "    public static double getHighest(Person[] items) {\n"
+                + "        // Write your code here\n"
+                + "        return 0;\n"
                 + "    }\n"
                 + "}\n";
-        String renamed = "for (int k = 0; k < list.length; k++) {\n"
-                + "    if (list[k].getScore() > top) {\n"
-                + "        top = list[k].getScore();\n"
+        String excerpt = "import java.util.*;\n"
+                + "\n"
+                + "public class Q2a {\n"
+                + "    public static double getHighest(Person[] items) {\n"
+                + "        double best = 0;\n"
+                + "        // loop through every person\n"
+                + "        for (int i = 0; i < items.length; i++) {\n"
+                + "            if (items[i].getScore() > best) {\n"
+                + "                best = items[i].getScore();\n"
+                + "            }\n"
+                + "        }\n"
+                + "        System.out.println(\"done\");\n"
+                + "        return best;\n"
+                + "    }\n"
+                + "}\n";
+        String copied = "import java.util.*;\n"
+                + "\n"
+                + "public class Q2a {\n"
+                + "    public static double getHighest(Person[] items) {\n"
+                + "        double best = 0;\n"
+                + "        for (int i = 0; i < items.length; i++) {\n"
+                + "            if (items[i].getScore() > best) {\n"
+                + "                best = items[i].getScore();\n"
+                + "            }\n"
+                + "        }\n"
+                + "        if (best < 0) {\n"
+                + "            best = 0;\n"
+                + "        }\n"
+                + "        return best;\n"
                 + "    }\n"
                 + "}\n";
         return new SimilarityDetail(pair, SIMILAR_FILE, SIMILAR_FILE,
-                excerpt, renamed, excluded);
+                excerpt, copied, starter, excluded);
     }
 
     /**
