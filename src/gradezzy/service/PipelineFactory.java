@@ -16,9 +16,11 @@ import java.util.List;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.detection.CopiedHeaderDetector;
 import gradezzy.detection.Detector;
 import gradezzy.detection.EmptyAnswerDetector;
 import gradezzy.detection.HardCodedAnswerDetector;
+import gradezzy.detection.RosterCheck;
 import gradezzy.detection.UntouchedStarterDetector;
 import gradezzy.exec.ProcessRunner;
 import gradezzy.exec.SourceCompiler;
@@ -113,7 +115,7 @@ public class PipelineFactory {
         pipeline.addStage(new FixStage(fixManager,
                 createFileCheckRunner()));
         pipeline.addStage(new DetectStage(createDetectors(
-                starterDirectory)));
+                starterDirectory), createRosterChecks()));
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
         pipeline.addStage(new CompileStage(new SourceCompiler(config,
@@ -148,6 +150,14 @@ public class PipelineFactory {
         runner.addValidator(new HeaderNameValidator(config));
 
         return runner;
+    }
+
+    // Lists the checks that also read the run's roster. To add one,
+    // write a class that implements RosterCheck and add it here.
+    private List<RosterCheck> createRosterChecks() {
+        List<RosterCheck> rosterChecks = new ArrayList<>();
+        rosterChecks.add(new CopiedHeaderDetector(config));
+        return rosterChecks;
     }
 
     // Lists the detectors; a null starter means the one in the settings.

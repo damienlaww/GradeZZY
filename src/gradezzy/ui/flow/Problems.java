@@ -62,6 +62,8 @@ public final class Problems {
             return "Answer left empty";
         } else if (type == AnomalyType.HARD_CODED_ANSWER) {
             return "The answer may be hard-coded";
+        } else if (type == AnomalyType.COPIED_HEADER) {
+            return "The header names another student";
         } else if (type == AnomalyType.SIMILAR_CODE) {
             return "Very similar to another student's code";
         } else if (type == AnomalyType.DUPLICATE_SUBMISSION) {
@@ -145,6 +147,7 @@ public final class Problems {
         return type == AnomalyType.UNTOUCHED_STARTER
                 || type == AnomalyType.EMPTY_ANSWER
                 || type == AnomalyType.HARD_CODED_ANSWER
+                || type == AnomalyType.COPIED_HEADER
                 || type == AnomalyType.SIMILAR_CODE;
     }
 }

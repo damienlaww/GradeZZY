@@ -143,7 +143,7 @@ Rules the code keeps:
 | `ingest` | Turns uploads into submissions, unzips them safely, reads the roster. | `SubmissionLoader`, `ZipExtractor`, `WorkingCopyManager`, `RosterReader` |
 | `validation` | One class per structural check. | `Validator`, `AbstractValidator`, `StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`, `HeaderNameValidator`, `ValidationRunner` |
 | `fix` | One class per automatic correction, each with apply and undo. | `Fixer`, `AbstractFixer`, `EncodingFixer`, `FolderHierarchyFixer`, `FolderNameFixer`, `CaseNameFixer`, `MisplacedFileFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
-| `detection` | Flags suspicious answers. Never changes a mark. | `Detector`, `UntouchedStarterDetector`, `EmptyAnswerDetector`, `HardCodedAnswerDetector` |
+| `detection` | Flags suspicious answers. Never changes a mark. | `Detector`, `UntouchedStarterDetector`, `EmptyAnswerDetector`, `HardCodedAnswerDetector`, `RosterCheck`, `CopiedHeaderDetector` |
 | `testcase` | Where testers come from, their maximum marks, and the per-question folders. | `TestCaseSource`, `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TesterMarks`, `QuestionWorkspace`, `FolderSnapshot` |
 | `exec` | Runs `javac` and `java` as separate processes with limits. | `ProcessRunner`, `SourceCompiler`, `TesterRunner`, `TesterHarness`, `TrustedPrintStream`, `RunningProcesses`, `HarnessWatchdog` |
 | `grading` | The pipeline, its stages, scoring and parallel workers. | `GradingPipeline`, `GradingStage`, the nine `...Stage` classes, `ScoreParser`, `TesterOutputScoreParser`, `ScoreCalculator`, `GradingWorker`, `SubmissionHandout`, `CancellationToken`, `QuestionRerunner` |
@@ -219,6 +219,7 @@ classDiagram
     UntouchedStarterDetector ..|> Detector
     EmptyAnswerDetector ..|> Detector
     HardCodedAnswerDetector ..|> Detector
+    CopiedHeaderDetector ..|> RosterCheck
     CsvScoreSheetExporter ..|> Exporter
     JsonExporter ..|> Exporter
     AnomalyReportExporter ..|> Exporter
@@ -239,6 +240,7 @@ signatures.
 | `GradingStage` | `PipelineFactory.createPipeline` (order matters) |
 | `Validator` | `PipelineFactory.createValidationRunner` |
 | `Detector` | `PipelineFactory.createDetectors` (each one can be switched off) |
+| `RosterCheck` | `PipelineFactory.createRosterChecks` (a detector that also reads the score sheet) |
 | `Fixer` | `ApplicationContext.createFixManager` (run in the order added) |
 | `Exporter` | `ApplicationContext.createExportService` |
 | `TestCaseSource` | passed to `GradingService.startGrading` |
@@ -296,7 +298,7 @@ flowchart LR
 | 1 | `ExtractStage` | Unzips into a working copy and matches the student on the roster. | `INVALID_ARCHIVE`, `UNKNOWN_STUDENT` |
 | 2 | `ValidateStage` | Runs every validator. | `MISSING_WRAPPER_FOLDER`, `WRONG_FOLDER_NAME`, `MISSING_QUESTION_FOLDER`, `MISSING_FILE`, `WRONG_FILE_NAME`, `MISSING_HEADER_NAME` |
 | 3 | `FixStage` | Checks encodings, applies fixes, then validates again. | `WRONG_ENCODING` |
-| 4 | `DetectStage` | Runs every detector that is switched on. | `UNTOUCHED_STARTER`, `EMPTY_ANSWER`, `HARD_CODED_ANSWER` |
+| 4 | `DetectStage` | Runs every detector that is switched on, then each roster check, which also reads the run's score sheet. | `UNTOUCHED_STARTER`, `EMPTY_ANSWER`, `HARD_CODED_ANSWER`, `COPIED_HEADER` |
 | 5 | `InstallTestersStage` | Copies testers, data files and provided class files in. | `MISSING_FILE` |
 | 6 | `CompileStage` | Compiles each question in its own folder. | `COMPILE_ERROR` |
 | 7 | `ExecuteStage` | Runs each tester with limits and parses its output. | `TIMEOUT`, `RUNTIME_ERROR` |
@@ -394,6 +396,7 @@ Detectors only add a flag. **They never change a mark.**
 | `UntouchedStarterDetector` | `UNTOUCHED_STARTER` | A file equal to the starter file once the header comment, blank lines and line endings are ignored. If every file is untouched, one flag says the original resource folder was submitted. |
 | `EmptyAnswerDetector` | `EMPTY_ANSWER` | An answer method whose body, without comments and spaces, is still the starter's body. Every overload is checked. |
 | `HardCodedAnswerDetector` | `HARD_CODED_ANSWER` | A method with 3 or more `if` or `case` branches comparing a value with a fixed literal, such as `s.equals("cat")`. Common values (0, 1, -1), separators and numbers inside a calculation do not count. |
+| `CopiedHeaderDetector` | `COPIED_HEADER` | A file header whose `Email ID:` gives another username (one with a dot, so a student number does not count), or whose `Name:` is another student on the score sheet, first or last name first. One flag per student, naming the files and the other student. When the student is not on the score sheet but the header names someone who is, it says the zip name may be wrong. |
 
 The starter folder is the one chosen for the batch, or
 `paths.starter.dir`. A detector that fails adds a warning that it could
@@ -553,6 +556,7 @@ action and a fix status.
 | `UNTOUCHED_STARTER` | A file equals the starter file | `UntouchedStarterDetector` | Flag only |
 | `EMPTY_ANSWER` | A method still holds only the starter code | `EmptyAnswerDetector` | Flag only |
 | `HARD_CODED_ANSWER` | An answer looks hard-coded to sample cases | `HardCodedAnswerDetector` | Flag only |
+| `COPIED_HEADER` | A file header names another student | `CopiedHeaderDetector` | Flag only |
 | `SIMILAR_CODE` | Code very similar to another student's | `PlagiarismService` | Flag only |
 | `INTERNAL_ERROR` | GradeZZY itself failed on this student | `GradingPipeline` and the stages | No |
 
