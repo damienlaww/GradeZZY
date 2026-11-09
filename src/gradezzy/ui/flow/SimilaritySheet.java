@@ -78,7 +78,7 @@ public final class SimilaritySheet {
         body.getStyleClass().add("similar-sheet");
 
         SimilarityDetail detail = window.getBackend()
-                .getSimilarityDetail(pair);
+                .getSimilarityDetail(run, pair);
         if (detail == null) {
             body.getChildren().add(Parts.muted("The check returned no "
                     + "files to compare for this pair."));

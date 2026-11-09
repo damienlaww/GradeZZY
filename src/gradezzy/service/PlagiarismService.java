@@ -128,8 +128,10 @@ public class PlagiarismService {
             }
         }
 
+        // The starter folder chosen for the run, as grading uses it
         List<SimilarityPair> pairs = similarityDetector.findSimilar(
-                finished, gradingRun.getAssessment());
+                finished, gradingRun.getAssessment(),
+                gradingRun.getStarterDirectory());
 
         for (SimilarityPair pair : pairs) {
             flag(gradingRun, finished, earlierFlags,

@@ -1561,10 +1561,84 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns null, because no service describes one pair yet.
+     * Reads both students' answer files with readSourceFile, as the check
+     * compares the whole answer file of the question. Returns null when
+     * the run, a student or the question is gone, or neither file can be
+     * read.
      */
     @Override
-    public SimilarityDetail getSimilarityDetail(SimilarityPair pair) {
+    public SimilarityDetail getSimilarityDetail(GradingRun gradingRun,
+            SimilarityPair pair) {
+        if (gradingRun == null || pair == null) {
+            return null;
+        }
+
+        Question question = findQuestion(gradingRun.getAssessment(),
+                pair.getQuestionId());
+        Submission first = findSubmission(gradingRun,
+                pair.getFirstUsername());
+        Submission second = findSubmission(gradingRun,
+                pair.getSecondUsername());
+        if (question == null || first == null || second == null) {
+            return null;
+        }
+
+        String file = question.getFolderName() + FOLDER_SEPARATOR
+                + question.getFileName();
+        String firstCode = readSourceFile(first, file);
+        String secondCode = readSourceFile(second, file);
+        if (firstCode.isEmpty() && secondCode.isEmpty()) {
+            return null;
+        }
+
+        return new SimilarityDetail(pair, file, file, firstCode,
+                secondCode, listLeftOut(gradingRun, question));
+    }
+
+    // Lists what the check leaves out of a question: the starter file's
+    // code, and every other file in the question folder.
+    private List<String> listLeftOut(GradingRun gradingRun,
+            Question question) {
+        Path starter = gradingRun.getStarterDirectory();
+        if (starter == null) {
+            starter = configuredPath(InputKind.STARTER);
+        }
+
+        List<String> leftOut = new ArrayList<>();
+        Path starterFile = starter.resolve(question.getFolderName())
+                .resolve(question.getFileName());
+        if (Files.isRegularFile(starterFile)) {
+            leftOut.add(starterFile.toString() + " (starter code, taken "
+                    + "out before comparing)");
+        }
+        leftOut.add("Every other file in " + question.getFolderName()
+                + ", such as the tester (only " + question.getFileName()
+                + " is compared)");
+        return leftOut;
+    }
+
+    // Returns the question with an id, or null if there is none.
+    private Question findQuestion(Assessment runAssessment,
+            String questionId) {
+        if (runAssessment == null) {
+            return null;
+        }
+        for (Question question : runAssessment.getQuestions()) {
+            if (question.getId().equals(questionId)) {
+                return question;
+            }
+        }
+        return null;
+    }
+
+    // Returns the submission of a username in a run, or null.
+    private Submission findSubmission(GradingRun gradingRun,
+            String username) {
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (submission.getUsername().equals(username)) {
+                return submission;
+            }
+        }
         return null;
     }
 

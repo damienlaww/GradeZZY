@@ -226,10 +226,10 @@ public enum Capability {
 
     /** The compared files and excerpts of one similar pair. */
     SIMILARITY_DETAIL("Compare a similar pair",
-            "Shows the matching code of a pair side by side.", "Jun Sheng",
-            null, CapabilityStatus.PROPOSED,
-            "The compared files, matching excerpts and the excluded "
-            + "starter and tester files of one pair."),
+            "Shows the matching code of a pair side by side.",
+            "Jing Yuan, Jun Sheng", "LiveBackend.readSourceFile",
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; it shows both students' answer files."),
 
     /** Testers from a folder. */
     TESTER_FOLDER("Use a tester folder",
