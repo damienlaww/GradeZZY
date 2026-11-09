@@ -43,8 +43,12 @@ public class ExportService {
     // Joins the run id, module and section in an export file name
     private static final String NAME_SEPARATOR = "-";
 
-    // Stands in for a character that is not safe in a file name
+    // Stands in for a character that is not safe in a file name; it is
+    // itself safe and is kept
     private static final char SAFE_CHARACTER = '_';
+
+    // A dash is also safe in a file name and is kept
+    private static final char DASH = '-';
 
     // Added to the file name while an export is being written, so a
     // failed export never replaces the earlier file
@@ -56,10 +60,6 @@ public class ExportService {
 
     // Comes between a file name and its extension
     private static final String EXTENSION_DOT = ".";
-
-    // The characters besides letters and digits a file name keeps
-    private static final char KEPT_DASH = '-';
-    private static final char KEPT_UNDERSCORE = '_';
 
     // Comes between two format names in an error message
     private static final String LIST_SEPARATOR = ", ";
@@ -424,10 +424,10 @@ public class ExportService {
 
         for (int index = 0; index < text.length(); index++) {
             char current = text.charAt(index);
-            boolean kept = Character.isLetterOrDigit(current)
-                    || current == KEPT_DASH || current == KEPT_UNDERSCORE;
 
-            if (kept) {
+            boolean isSafe = Character.isLetterOrDigit(current)
+                    || current == DASH || current == SAFE_CHARACTER;
+            if (isSafe) {
                 safe += current;
             } else {
                 safe += SAFE_CHARACTER;

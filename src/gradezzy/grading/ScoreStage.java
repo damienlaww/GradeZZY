@@ -129,15 +129,6 @@ public class ScoreStage implements GradingStage {
 
     // Says whether the submission already has a result for a question.
     private boolean hasResult(Submission submission, Question question) {
-        for (QuestionResult questionResult
-                : submission.getQuestionResults()) {
-            Question graded = questionResult.getQuestion();
-
-            if (graded != null && graded.getId().equals(question.getId())) {
-                return true;
-            }
-        }
-
-        return false;
+        return submission.findResult(question.getId()) != null;
     }
 }

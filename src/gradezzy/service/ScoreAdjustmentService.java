@@ -32,9 +32,9 @@ import gradezzy.persistence.ResultRepository;
 import gradezzy.report.ScoreFormatter;
 
 /**
- * Marks changed by hand.
+ * Changes marks by hand, undoes those changes and keeps them saved.
  *
- * <p>Tier: SHOULD.
+ * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
 public class ScoreAdjustmentService {
 
@@ -87,7 +87,7 @@ public class ScoreAdjustmentService {
     public synchronized ScoreAdjustment adjust(GradingRun run,
             Submission submission, String questionId, double newScore,
             String reason) {
-        QuestionResult result = findResult(submission, questionId);
+        QuestionResult result = submission.findResult(questionId);
         if (result == null) {
             throw new IllegalArgumentException(questionId + " has no "
                     + "result to change. Grade the student first.");
@@ -131,7 +131,7 @@ public class ScoreAdjustmentService {
             throw new IllegalArgumentException("The student is no longer "
                     + "in this run.");
         }
-        QuestionResult result = findResult(submission,
+        QuestionResult result = submission.findResult(
                 change.getQuestionId());
         if (result == null) {
             throw new IllegalArgumentException("The question has no "
@@ -251,7 +251,7 @@ public class ScoreAdjustmentService {
         List<ScoreAdjustment> kept = new ArrayList<>();
         for (ScoreAdjustment change : handMarks) {
             String questionId = change.getQuestionId();
-            QuestionResult result = findResult(submission, questionId);
+            QuestionResult result = submission.findResult(questionId);
             // The old changes of the question describe the old result
             dropQuestion(run, submission.getUsername(), questionId);
             if (result != null) {
@@ -361,13 +361,13 @@ public class ScoreAdjustmentService {
         }
         for (String questionId : questionIds) {
             ScoreAdjustment change = newest.get(questionId);
-            QuestionResult result = findResult(submission, questionId);
-            if (isOutdated(change, result)) {
-                dropQuestion(run, submission.getUsername(), questionId);
-            } else {
+            QuestionResult result = submission.findResult(questionId);
+            if (!isOutdated(change, result)) {
                 // A change read from the store is tied to the result it
                 // describes the first time it is checked
                 resultOf.put(change, result);
+            } else {
+                dropQuestion(run, submission.getUsername(), questionId);
             }
         }
     }
@@ -441,19 +441,6 @@ public class ScoreAdjustmentService {
         for (Submission submission : run.getSubmissions()) {
             if (submission.getUsername().equals(username)) {
                 return submission;
-            }
-        }
-        return null;
-    }
-
-    // Finds a question's result of a student.
-    private QuestionResult findResult(Submission submission,
-            String questionId) {
-        for (QuestionResult result : submission.getQuestionResults()) {
-            boolean isQuestion = result.getQuestion() != null
-                    && result.getQuestion().getId().equals(questionId);
-            if (isQuestion) {
-                return result;
             }
         }
         return null;

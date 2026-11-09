@@ -6,8 +6,8 @@
  * hide copied code.
  *
  * Where it fits: Used by PlagiarismService when plagiarism.algorithm is
- * winnowing (the default). TokenSimilarityDetector is the first version,
- * kept so the two can be compared.
+ * winnowing. TokenSimilarityDetector (trigrams) is the first version
+ * and the default, kept so the two can be compared.
  */
 package gradezzy.plagiarism;
 

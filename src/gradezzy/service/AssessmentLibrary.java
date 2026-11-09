@@ -553,8 +553,8 @@ public class AssessmentLibrary {
         assessment.setName(required(values, ConfigKeys.ASSESSMENT_NAME));
         assessment.setTestersDirectory(values.getProperty(
                 ConfigKeys.TESTERS_DIR, ""));
-        String idList = required(values, ConfigKeys.QUESTION_IDS);
-        for (String id : splitList(idList)) {
+        for (String id : AppConfig.splitList(required(values,
+                ConfigKeys.QUESTION_IDS))) {
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
             String folder = required(values, prefix
                     + ConfigKeys.QUESTION_FOLDER_SUFFIX);
@@ -569,11 +569,11 @@ public class AssessmentLibrary {
                 ConfigKeys.STARTER_DIR, ""));
 
         assessment.setModuleCode(values.getProperty(MODULE_PROPERTY, ""));
-        assessment.getProvidedClassFiles().addAll(splitList(
+        assessment.getProvidedClassFiles().addAll(AppConfig.splitList(
                 values.getProperty(ConfigKeys.PROVIDED_CLASS_FILES, "")));
-        assessment.getTesterDataFiles().addAll(splitList(
+        assessment.getTesterDataFiles().addAll(AppConfig.splitList(
                 values.getProperty(ConfigKeys.TESTER_DATA_FILES, "")));
-        assessment.getPlaceholderFolderNames().addAll(splitList(
+        assessment.getPlaceholderFolderNames().addAll(AppConfig.splitList(
                 values.getProperty(ConfigKeys.PLACEHOLDER_FOLDER_NAMES,
                         "")));
         return assessment;
@@ -727,18 +727,6 @@ public class AssessmentLibrary {
         int previous = position - 1;
         String previousName = assessments.get(previous).getName();
         return previousName.compareToIgnoreCase(next.getName()) > 0;
-    }
-
-    // Splits a list value the same way AppConfig.getList does.
-    private List<String> splitList(String text) {
-        List<String> items = new ArrayList<>();
-        for (String part : text.split(LIST_SEPARATOR)) {
-            String item = part.trim();
-            if (!item.isEmpty()) {
-                items.add(item);
-            }
-        }
-        return items;
     }
 
     // Joins list items with commas.

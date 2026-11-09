@@ -22,7 +22,7 @@ public class QuestionStrength {
     // Turns a fraction into a percentage
     private static final int PERCENT = 100;
 
-    // Written after the share caught
+    // Follows a share printed as a percentage
     private static final String PERCENT_SIGN = "%";
 
     // The question, such as Q2b

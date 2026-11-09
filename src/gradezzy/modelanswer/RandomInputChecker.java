@@ -258,7 +258,7 @@ public class RandomInputChecker {
         } finally {
             // Only one question is prepared at a time, so the run's
             // folder holds nothing else and can go too
-            deleteQuietly(workFolder);
+            ModelAnswerCopy.deleteQuietly(workFolder);
             deleteIfEmpty(workFolder.getParent());
         }
         return checks;
@@ -282,7 +282,8 @@ public class RandomInputChecker {
         // Without the starter's file, the methods the question asks for
         // cannot be told from the model answer's own helpers, which the
         // students do not have, so the question is skipped
-        String starterSource = readStarter(question);
+        String starterSource = ModelAnswerCopy.readStarter(
+                starterDirectory, question, question.getFileName());
         if (starterSource.isEmpty()) {
             return;
         }
@@ -327,20 +328,6 @@ public class RandomInputChecker {
         String fileName = question.getFileName();
         int nameEnd = fileName.length() - JAVA_EXTENSION.length();
         return fileName.substring(0, nameEnd);
-    }
-
-    // Reads the starter's copy of a question's file, or "" when there is
-    // none.
-    private String readStarter(Question question) throws IOException {
-        if (starterDirectory == null) {
-            return "";
-        }
-        Path starterFile = starterDirectory.resolve(question.getFolderName())
-                .resolve(question.getFileName());
-        if (!Files.isRegularFile(starterFile)) {
-            return "";
-        }
-        return FileUtils.readText(starterFile);
     }
 
     // Writes, compiles and runs the input program in a folder, then
@@ -538,16 +525,6 @@ public class RandomInputChecker {
             return text;
         }
         return text.substring(0, MAX_SHOWN_LENGTH) + CUT_MARK;
-    }
-
-    // Deletes a folder this checker made. One that cannot be deleted
-    // stays in paths.working.dir.
-    private void deleteQuietly(Path folder) {
-        try {
-            FileUtils.deleteDirectory(folder);
-        } catch (IOException exception) {
-            System.err.println("Could not delete " + folder);
-        }
     }
 
     // Deletes a folder when nothing is left in it. A folder another run

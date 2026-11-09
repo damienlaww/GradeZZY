@@ -60,7 +60,8 @@ public class ConsoleMain {
     // Separates the names in the list of skipped files
     private static final String SKIPPED_SEPARATOR = ", ";
 
-    // Separates the codes and the marks in a printed list
+    // Separates the items of the other lists printed, such as the
+    // sections to choose from and the maximum marks
     private static final String LIST_SEPARATOR = ", ";
 
     // Position of the module when both the module and the section are
@@ -74,7 +75,7 @@ public class ConsoleMain {
     // Indent of each line under a heading in the summary
     private static final String LINE_INDENT = "  ";
 
-    // Printed after a similarity shown as a percentage
+    // Follows a similarity printed as a percentage
     private static final String PERCENT_SIGN = "%";
 
     // The oldest JDK GradeZZY runs on: the testers are started with
@@ -158,6 +159,12 @@ public class ConsoleMain {
             // For example a path setting holding a character that is not
             // allowed in a path
             fail("A setting is not valid: " + exception.getMessage());
+        } catch (RuntimeException exception) {
+            // Anything else: one line for the instructor instead of a
+            // stack trace
+            fail("An unexpected problem stopped grading: " + exception
+                    + ". Try again; if it happens again, check the "
+                    + "settings and the uploaded files.");
         }
     }
 

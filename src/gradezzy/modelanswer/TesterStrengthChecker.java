@@ -57,10 +57,6 @@ public class TesterStrengthChecker {
     // Exit code of javac when the files compiled
     private static final int COMPILED = 0;
 
-    // How far below the maximum a mark may be and still be full marks,
-    // since marks such as 0.5 are added as doubles
-    private static final double FULL_MARKS_MARGIN = 0.0001;
-
     // Splits compiler output into lines
     private static final String LINE_BREAK = "\\R";
 
@@ -134,7 +130,7 @@ public class TesterStrengthChecker {
             results.add(result);
         }
 
-        deleteQuietly(workRoot);
+        ModelAnswerCopy.deleteQuietly(workRoot);
         return results;
     }
 
@@ -229,7 +225,7 @@ public class TesterStrengthChecker {
                 testerClassName);
         double score = scoreParser.parse(question, run).getScore();
         result.setModelScore(score);
-        if (!isFullMarks(score, question)) {
+        if (!ModelAnswerCopy.isFullMarks(score, question)) {
             result.setProblem("The model answer itself gets " + score
                     + " of " + question.getMaxScore() + ", so check the "
                     + "tester and the model answer first.");
@@ -246,10 +242,10 @@ public class TesterStrengthChecker {
         List<Mutant> mutants = new ArrayList<>();
 
         for (String fileName : listAnswerFiles(question, answerFolder)) {
-            Path answerFile = answerFolder.resolve(fileName);
-            String source = FileUtils.readText(answerFile);
-            String starterSource = readStarter(starterDirectory, question,
-                    fileName);
+            String source = FileUtils.readText(answerFolder.resolve(
+                    fileName));
+            String starterSource = ModelAnswerCopy.readStarter(
+                    starterDirectory, question, fileName);
             mutants.addAll(mutantMaker.make(fileName, source,
                     starterSource));
         }
@@ -269,20 +265,6 @@ public class TesterStrengthChecker {
             }
         }
         return names;
-    }
-
-    // Reads the starter's copy of a file, or "" when there is none.
-    private String readStarter(Path starterDirectory, Question question,
-            String fileName) throws IOException {
-        if (starterDirectory == null) {
-            return "";
-        }
-        Path starterFile = starterDirectory.resolve(question.getFolderName())
-                .resolve(fileName);
-        if (!Files.isRegularFile(starterFile)) {
-            return "";
-        }
-        return FileUtils.readText(starterFile);
     }
 
     // Runs every copy of a batch on exec.thread.count threads and waits
@@ -336,7 +318,7 @@ public class TesterStrengthChecker {
         } catch (ProcessExecutionException exception) {
             mutant.setOutcome(MutantOutcome.NOT_RUN);
         } finally {
-            deleteQuietly(folder);
+            ModelAnswerCopy.deleteQuietly(folder);
         }
     }
 
@@ -365,17 +347,11 @@ public class TesterStrengthChecker {
         double score = scoreParser.parse(batch.getQuestion(), run)
                 .getScore();
         mutant.setScore(score);
-        if (isFullMarks(score, batch.getQuestion())) {
+        if (ModelAnswerCopy.isFullMarks(score, batch.getQuestion())) {
             mutant.setOutcome(MutantOutcome.SURVIVED);
         } else {
             mutant.setOutcome(MutantOutcome.CAUGHT);
         }
-    }
-
-    // Says whether a mark is the question's maximum.
-    private boolean isFullMarks(double score, Question question) {
-        double lowestFull = question.getMaxScore() - FULL_MARKS_MARGIN;
-        return score >= lowestFull;
     }
 
     // Returns the first line the compiler printed, for a problem.
@@ -385,15 +361,5 @@ public class TesterStrengthChecker {
             output = compiled.getStandardOutput().trim();
         }
         return output.split(LINE_BREAK)[FIRST_LINE];
-    }
-
-    // Deletes a folder the check made. One that cannot be deleted stays
-    // in paths.working.dir, where the next check replaces it.
-    private void deleteQuietly(Path folder) {
-        try {
-            FileUtils.deleteDirectory(folder);
-        } catch (IOException exception) {
-            System.err.println("Could not delete " + folder);
-        }
     }
 }

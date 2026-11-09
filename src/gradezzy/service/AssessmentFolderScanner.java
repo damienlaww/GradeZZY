@@ -31,7 +31,7 @@ import gradezzy.util.FileUtils;
 /**
  * Finds data files, provided class files and starter folder names.
  *
- * <p>Tier: SHOULD.
+ * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
 public final class AssessmentFolderScanner {
 
@@ -48,11 +48,15 @@ public final class AssessmentFolderScanner {
     // How deep to look for a folder's own files, not its subfolders'
     private static final int OWN_FILES_DEPTH = 1;
 
-    // A file or folder whose name starts with this is hidden
+    // The start of a hidden file or folder name, such as .DS_Store
     private static final String HIDDEN_PREFIX = ".";
 
-    // Comes after each tester's source when they are put together
+    // Ends each tester's source when they are read into one text
     private static final String LINE_END = "\n";
+
+    // A starter folder whose only folder is not a question folder is
+    // wrapped in one more folder
+    private static final int ONLY_FOLDER = 1;
 
     // The lower-case letters at the end of an id, such as the a of Q1a
     private static final String ID_LETTERS = "[a-z]+$";
@@ -153,7 +157,8 @@ public final class AssessmentFolderScanner {
         for (Path file : files) {
             String name = file.getFileName().toString();
             String lower = name.toLowerCase(Locale.ROOT);
-            if (!Files.isRegularFile(file) || name.startsWith(HIDDEN_PREFIX)) {
+            if (!Files.isRegularFile(file)
+                    || name.startsWith(HIDDEN_PREFIX)) {
                 continue;
             }
             if (lower.endsWith(JAVA)) {
@@ -239,15 +244,16 @@ public final class AssessmentFolderScanner {
         }
         List<Path> folders = new ArrayList<>();
         for (Path child : children) {
-            String childName = child.getFileName().toString();
-            boolean isShownFolder = Files.isDirectory(child)
-                    && !childName.startsWith(HIDDEN_PREFIX);
-            if (isShownFolder) {
+            boolean visibleFolder = Files.isDirectory(child)
+                    && !child.getFileName().toString()
+                    .startsWith(HIDDEN_PREFIX);
+            if (visibleFolder) {
                 folders.add(child);
             }
         }
-        boolean oneOtherFolder = folders.size() == 1 && !isQuestionFolder(
-                folders.get(0).getFileName().toString(), questionFolders);
+        boolean oneOtherFolder = folders.size() == ONLY_FOLDER
+                && !isQuestionFolder(folders.get(0).getFileName()
+                        .toString(), questionFolders);
         if (oneOtherFolder) {
             found.add(folders.get(0).getFileName().toString());
         } else {

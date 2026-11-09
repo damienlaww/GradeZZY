@@ -21,7 +21,7 @@ import gradezzy.util.TextUtils;
 /**
  * The sections of one module only.
  *
- * <p>Tier: COULD. Owner: Jing Yuan.
+ * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
 public final class ModuleSections {
 

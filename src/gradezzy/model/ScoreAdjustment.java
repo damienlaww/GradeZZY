@@ -3,9 +3,9 @@
  *
  * Purpose: One mark changed by hand, with the reason and the earlier mark.
  *
- * Where it fits: Created by ScoreAdjustmentService when
- * DashboardBackend.adjustScore changes a mark, and listed in the student
- * panel on Review.
+ * Where it fits: Created by ScoreAdjustmentService when a mark is
+ * changed, by AdjustmentTable when saved changes are read back and by
+ * the demo, and listed in the student panel on Review.
  */
 package gradezzy.model;
 
