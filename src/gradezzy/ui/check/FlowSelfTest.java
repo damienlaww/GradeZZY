@@ -1408,7 +1408,7 @@ public class FlowSelfTest {
             return;
         }
 
-        press(SceneFinder.button(row, "Name"), "Name");
+        press((Button) row.lookup(".rename-group"), "the pencil to name");
         ((TextField) sheet().lookup("#group-name")).setText(
                 "misses the last case");
         press(SceneFinder.button(sheet(), "Save name"), "Save name");

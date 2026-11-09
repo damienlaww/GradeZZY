@@ -18,9 +18,11 @@ import java.util.List;
 
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
 import gradezzy.model.AnswerGroup;
@@ -54,10 +56,13 @@ public class MistakesView {
     private static final double NARROW_VIEW = 1000.0;
 
     // The width of the column with the buttons
-    private static final double ACTIONS_WIDTH = 390.0;
+    private static final double ACTIONS_WIDTH = 340.0;
 
     // The gap between a title and the line under it
     private static final double LINE_GAP = 2.0;
+
+    // The size of the pencil beside a mistake's title
+    private static final double PENCIL_SIZE = 14.0;
 
     // The quotes around a mistake's name
     private static final String OPEN_QUOTE = "“";
@@ -234,18 +239,35 @@ public class MistakesView {
         return header;
     }
 
-    // Shows the group's title with its name, or "Not named yet", under it.
+    // Shows the group's title with a pencil to name the group, and its
+    // name, or "Not named yet", under it.
     private Node mistakeCell(AnswerGroup group) {
+        Label title = Parts.strong(group.getTitle());
+        title.setMinWidth(0);
+        HBox titleRow = Parts.row(Parts.GAP_TINY,
+                new Node[] {title, renameButton(group)});
         Label name = Parts.muted("Not named yet");
         if (!group.getLabel().isEmpty()) {
             name = new Label(OPEN_QUOTE + group.getLabel() + CLOSE_QUOTE);
         }
         name.getStyleClass().add("small-text");
         name.setWrapText(true);
-        VBox box = new VBox(LINE_GAP, Parts.strong(group.getTitle()), name);
+        VBox box = new VBox(LINE_GAP, titleRow, name);
         box.setAlignment(Pos.CENTER_LEFT);
         box.setMinWidth(0);
         return box;
+    }
+
+    // Builds the pencil button that opens the sheet to name the group.
+    private Button renameButton(AnswerGroup group) {
+        Button rename = new Button();
+        rename.setGraphic(Parts.icon(Parts.PENCIL, PENCIL_SIZE));
+        rename.getStyleClass().addAll("flat", "icon-button", "rename-group");
+        rename.setMinWidth(Region.USE_PREF_SIZE);
+        rename.setAccessibleText("Name this mistake");
+        rename.setOnAction(event -> actions.name(group));
+        Parts.tip(rename, "Name this mistake");
+        return rename;
     }
 
     // Shows the students by name, and which share the same code shape.
@@ -299,8 +321,6 @@ public class MistakesView {
     private Node actionsCell(AnswerGroup group) {
         DashboardBackend backend = window.getBackend();
         HBox row = Parts.row(Parts.GAP_SMALL);
-        row.getChildren().add(Parts.small("Name",
-                () -> actions.name(group)));
         if (backend.supports(Capability.SCORE_ADJUSTMENT)) {
             row.getChildren().add(Parts.small("Change mark",
                     () -> actions.changeMark(group)));
