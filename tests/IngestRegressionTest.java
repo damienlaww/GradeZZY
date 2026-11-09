@@ -10,6 +10,7 @@
  */
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -46,6 +47,9 @@ public class IngestRegressionTest {
 
     // The section every upload is graded for
     private static final Section SECTION = new Section("CS102", "G1");
+
+    // How much newer one of two same-named zips is made, in milliseconds
+    private static final long ONE_MINUTE_MILLIS = 60000;
 
     // The number of checks passed so far
     private static int checks = 0;
@@ -135,14 +139,21 @@ public class IngestRegressionTest {
             Path otherAlice = zip(Files.createDirectories(
                     root.resolve("other")).resolve("2023-2024-alice.zip"),
                     "Q1/Answer.java", "other");
+            // Both zips are written within the same moment, so the newer
+            // one is made a minute newer on purpose
+            long lowerTime = Files.getLastModifiedTime(lowerAlice)
+                    .toMillis();
+            long otherTime = lowerTime + ONE_MINUTE_MILLIS;
+            Files.setLastModifiedTime(otherAlice,
+                    FileTime.fromMillis(otherTime));
             List<Submission> sameNames = loader.loadSubmissions(
                     List.of(otherAlice, lowerAlice), SECTION);
             check(sameNames.size() == 1
                     && sameNames.get(0).getOriginalPath().equals(otherAlice)
                     && sameNames.get(0).getAnomalies().get(0).getMessage()
                     .startsWith("Two files are named"),
-                    "a tie keeps the first chosen and two same-named files "
-                    + "are told apart by folder");
+                    "of two same-named files in two folders the newer is "
+                    + "kept, and they are told apart by folder");
 
             Path namelessDir = Files.createDirectories(
                     root.resolve("nameless"));
