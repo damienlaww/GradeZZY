@@ -235,6 +235,22 @@ public class FlowCheck {
             }
             review.showNeedsReview();
             shoot(scene, tag, "5r-needs-review");
+            // Answer groups: the Mistakes view and one group's mark sheet
+            if (backend.supports(
+                    gradezzy.ui.backend.Capability.ANSWER_GROUPS)) {
+                review.showMistakes();
+                shoot(scene, tag, "5m-mistakes");
+                java.util.List<gradezzy.model.AnswerGroup> groups =
+                        backend.listAnswerGroups(reviewRun);
+                if (!groups.isEmpty() && backend.supports(
+                        gradezzy.ui.backend.Capability.SCORE_ADJUSTMENT)) {
+                    new gradezzy.ui.flow.AnswerGroupActions(window,
+                            () -> { }).changeMark(groups.get(0));
+                    shoot(scene, tag, "5m2-mistake-mark");
+                    window.closeSheet();
+                }
+                review.showStudents();
+            }
         }
 
         // marking1: the bottom of Set up, the typed test cases sheet,

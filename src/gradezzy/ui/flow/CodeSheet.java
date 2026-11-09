@@ -136,6 +136,9 @@ public final class CodeSheet {
     // The run of the tests still going whose result is wanted, or null
     private QuestionRerun running = null;
 
+    // The students of an answer group to step through, or none
+    private final List<Submission> group = new ArrayList<>();
+
     // Not used: create builds the sheet.
     private CodeSheet(FlowWindow window, Submission submission) {
         this.window = window;
@@ -184,6 +187,28 @@ public final class CodeSheet {
         return sheet.build(questionId);
     }
 
+    /**
+     * Builds the sheet for one student of an answer group, with Previous
+     * and Next to step through the group's students on the same
+     * question.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param window the window that shows it
+     * @param submission the student shown, one of the group
+     * @param questionId the question shown first, or null for the first
+     * @param issue the issue's card, or null for none
+     * @param group the students of the group, in order
+     * @return the sheet's content
+     */
+    public static Node create(FlowWindow window, Submission submission,
+            String questionId, Node issue, List<Submission> group) {
+        CodeSheet sheet = new CodeSheet(window, submission);
+        sheet.issue = issue;
+        sheet.group.addAll(group);
+        return sheet.build(questionId);
+    }
+
     // ------------------------------------------------------------ build
 
     // Builds the sheet and shows a question.
@@ -201,6 +226,10 @@ public final class CodeSheet {
                 subtitle);
         HBox top = Parts.row(Parts.GAP,
                 new Node[] {titles, Parts.grow(), close});
+        if (group.size() > 1) {
+            top.getChildren().add(top.getChildren().size() - 1,
+                    createStepper());
+        }
 
         // Each panel keeps a gap from the line between them, so the code
         // and the output read as two separate boxes
@@ -226,6 +255,36 @@ public final class CodeSheet {
                 -> fitToScene(body, after));
         selectFirst(questionId);
         return body;
+    }
+
+    // Builds Previous, "Student 2 of 3" and Next, which step through the
+    // students of an answer group on the question shown.
+    private HBox createStepper() {
+        int position = group.indexOf(submission);
+        Button previous = Parts.small("Previous", () -> step(-1));
+        Button next = Parts.small("Next", () -> step(1));
+        previous.setDisable(position <= 0);
+        next.setDisable(position >= group.size() - 1);
+        Label where = Parts.muted("Student " + (position + 1) + " of "
+                + group.size());
+        HBox stepper = Parts.row(Parts.GAP_SMALL,
+                new Node[] {previous, where, next});
+        stepper.setAlignment(Pos.CENTER);
+        return stepper;
+    }
+
+    // Shows the student before or after this one in the group.
+    private void step(int offset) {
+        int position = group.indexOf(submission) + offset;
+        if (position < 0 || position >= group.size()) {
+            return;
+        }
+        String questionId = null;
+        if (shown != null) {
+            questionId = shown.getId();
+        }
+        window.showSheet(create(window, group.get(position), questionId,
+                null, group));
     }
 
     // Builds the list on the left: one button per question, with its
