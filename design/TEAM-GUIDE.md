@@ -609,22 +609,24 @@ How the flags work (never a change of mark):
   (`detection.*.enabled`). If one fails, it adds a warning saying the
   check could not run; it never fails a submission.
 
-How the similarity check works: `TokenSimilarityDetector` splits each
-answer into tokens, ignoring spacing and comments, and collects every run
-of three tokens. It removes the starter file's runs, so the shared
-skeleton does not count, then compares two students with the Jaccard
-measure (shared runs divided by all runs). Pairs at or above
-`plagiarism.similarity.threshold` are reported. Renaming variables or
-reordering code lowers the score. A pair is only compared when both
-answers have at least 50 runs of their own beyond the starter
-(`MIN_OWN_TRIGRAMS`): short correct answers, such as most Q1b answers,
-look alike even when written separately. A copy of only a short answer
-is therefore not reported; a copy of a whole submission still is,
-through the longer questions. The starter's runs come from the folder
-passed to `findSimilar(submissions, assessment, starterDirectory)`, or
-from `paths.starter.dir` when it is null. `PlagiarismService.check` still
-calls the two-argument `findSimilar`, so until it passes the run's
-`getStarterDirectory()` the check uses `paths.starter.dir`.
+How the similarity check works: `plagiarism.algorithm` picks the
+detector in `ApplicationContext`. `WinnowingSimilarityDetector`
+(`plagiarism.algorithm=winnowing`) splits each answer into tokens, ignoring spacing and comments, turns
+every name into `ID` and every text literal into `STR`, so renaming
+changes nothing, and hashes every run of 5 such tokens. Winnowing
+(`Winnowing.selectFingerprints`) keeps the smallest hash of every 4 in a
+row as a fingerprint, so a shared run of 8 tokens is found wherever it
+is. Fingerprints that are also in the starter file are removed, and two
+students are compared with the Jaccard measure (shared fingerprints
+divided by all fingerprints). A pair is only compared when both answers
+have at least 25 fingerprints of their own (`MIN_OWN_FINGERPRINTS`):
+short correct answers look alike even when written separately. The
+first version and the default, `TokenSimilarityDetector`
+(`plagiarism.algorithm=trigrams`), compares runs of three tokens as written instead, with at least 50 of
+them (`MIN_OWN_TRIGRAMS`), so renaming variables lowers its score. Pairs
+at or above `plagiarism.similarity.threshold` are reported. The starter
+code comes from the run's starter folder, or from `paths.starter.dir`
+when there is none. README "Similar code check" compares the two.
 
 Checked on the six samples: chee.teo and jing.lim get a username folder;
 david's and fen.lai's folders are renamed; the blank headers (Q3 for
@@ -930,7 +932,7 @@ by this section.
 | `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.UndoFixJob`, `ui.flow.RegradeJob`, `ui.flow.SetUpScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.StudentPanel`, `ui.flow.RunsScreen`, `ui.flow.CodeSheet`, `ui.flow.HomeScreen`, `ui.flow.ScoreSheetSearch`, `ui.flow.ScoreSheetChange` | Grading (with the similar code check at the end of `GradingTask`), checking chosen files, the class files and the tester folder, reading the score sheet for students with no submission, grading a question again, grading one student, one question or the ticked students again, exports, backups, and undoing a fix or applying a rejected one again (each grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread, and the review decisions on flags. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
-| Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |
+| Parallel grading: `Thread`, `Runnable`, `synchronized`, `Thread.join` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream`, `modelanswer.TesterStrengthChecker`, `MutantWorker`, `MutantBatch`, `RandomInputChecker` | Grades `exec.thread.count` submissions at the same time, and runs that many broken copies of the model answer at once in the tester strength check. | Each `GradingWorker` takes the next submission from the `SubmissionHandout` (each `MutantWorker` the next copy from the `MutantBatch`); `synchronized` lets only one thread at a time touch shared data; `join` waits for a thread to finish. |
 | `CharsetDecoder`, `CodingErrorAction`, `ByteBuffer` | `fix.EncodingFixer`, `report.CsvScoreSheetExporter` | Tells whether a Java file is valid UTF-8, which javac needs, and whether a score sheet is UTF-8 or Windows-1252, so the export is written the same way. | A decoder turns bytes into characters; set to `REPORT`, it throws instead of guessing when the bytes are not UTF-8. |
 | `java.util.Properties` | `config.AppConfig` | Reads `config.properties`. | Reads a file of `key=value` lines into a lookup table. |
 | JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence` only: `SqliteResultRepository` and its table classes (`SqliteSchema`, `RunTables`, `SubmissionTables`, `ReviewTables`, `AdjustmentTable`, `AuditTable`, `JdbcSupport`) | Saves runs, review decisions, checked 0s and changed marks to SQLite so History can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
@@ -949,13 +951,13 @@ by this section.
 | `Runtime.halt`, the `jdk.lang.Process.launchMechanism` property | `exec.TesterHarness` | Ends the run without waiting for student threads, and stops student code starting other programs (macOS and Linux). | A hard stop for the tester's program, and a switch that blocks it from launching others. |
 | `java` options `--limit-modules`, `--illegal-native-access=deny`; `UUID` | `exec.TesterRunner` (`UUID` also for anomaly ids) | Student code gets only core Java and no native code; a new random token for every tester run. | Command-line options that shrink what student code can reach; a `UUID` is a random id nobody can guess. |
 | `java.util.zip` (`ZipFile`, `ZipEntry`, `Enumeration`, `CRC32`) | `ingest.ZipExtractor` | Unzips submissions safely. | Opens a zip and hands us its entries one at a time, like an `Iterator`. |
-| `java.util.regex.Pattern`, `matches`, `replaceFirst` | `service.SettingsService`, `ingest.SubmissionLoader`, `ingest.ZipExtractor.isSafeEntry` | The zip name setting is itself a pattern; unsafe Windows file names are a pattern too. | A pattern describes a family of strings, such as "2023-2024-" followed by a username. |
-| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
+| `java.util.regex.Pattern`, `matches`, `replaceFirst`, `replaceAll` | `service.SettingsService`, `ingest.SubmissionLoader`, `ingest.ZipExtractor.isSafeEntry`, `modelanswer.MutantMaker` | The zip name setting is itself a pattern; unsafe Windows file names are a pattern too; a number literal is "digits only", and spaces are "any run of whitespace". | A pattern describes a family of strings, such as "2023-2024-" followed by a username. |
+| `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream`, `modelanswer.TesterStrengthChecker`, `modelanswer.RandomInputChecker` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
 | `StandardCharsets.ISO_8859_1` | `testcase.TesterMarks` | Opens a tester file whatever encoding it was saved in, to read its `score +=` lines. | A way of turning bytes into characters that accepts every byte, so a tester saved in Windows-1252 still opens. |
 | `StandardCharsets.UTF_16LE`, `UTF_16BE` | `util.TextUtils` (used by `fix.EncodingFixer` and `validation.HeaderNameValidator`) | Reads a source file Notepad saved as "Unicode" (UTF-16), so it can be saved again as UTF-8 and compiled. | Names for the two byte orders of UTF-16; the first two bytes of the file (its byte order mark) say which one it is. |
 | `Collections.reverseOrder()` | `testcase.TesterMarks` | Sorts a tester's case marks from largest to smallest, to find the most a number of passed cases can be worth when its cases cannot be matched to its marks one for one. | `Collections.sort` as taught, given a comparator that puts the larger number first. |
 | `java.time` (`LocalDateTime`, `DateTimeFormatter`) | `model`, `persistence`, `report.AuditLogExporter`, `service`, `ui.demo` | Run and audit times. | The current date and time, and how to print it. |
-| `java.util.Random` | `ui.demo.DemoData` | Synthetic marks for `--demo`, always from the same seed. | Gives the same "random" numbers every time, so the demo looks the same. |
+| `java.util.Random` | `ui.demo.DemoData`, `modelanswer.InputMaker` | Synthetic marks for `--demo`, always from the same seed; random inputs for students' methods, from a new seed each grading run. | Gives a sequence of "random" numbers decided by its seed: the same seed gives the same demo every time, a new seed gives inputs no student could know. |
 
 `String.format` is used for numbers such as `%.1f`; it takes the same
 format codes as `printf` and returns the text instead of printing it.

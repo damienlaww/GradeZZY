@@ -52,6 +52,7 @@ import gradezzy.model.Severity;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
+import gradezzy.modelanswer.RandomInputStage;
 import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
 import gradezzy.report.ScoreFormatter;
@@ -1037,8 +1038,9 @@ public class GradingService {
         return message;
     }
 
-    // Swaps the problems the compiler and the tester gave a question for
-    // the ones the new run gave it. Every other problem stays.
+    // Swaps the problems the compiler, the tester and the random inputs
+    // check gave a question for the ones the new run gave it. Every other
+    // problem stays.
     private void replaceQuestionProblems(Submission submission,
             Submission copy, Question question, TesterFile tester) {
         List<Anomaly> earlier = new ArrayList<>();
@@ -1054,15 +1056,16 @@ public class GradingService {
     }
 
     // Says whether a problem came from compiling or running a question's
-    // tester: its id is one the tester, compile or execute steps give,
-    // or an earlier failed try of this question, and its words name the
-    // question or its tester.
+    // tester or its random inputs: its id is one the tester, compile,
+    // execute or random inputs steps give, or an earlier failed try of
+    // this question, and its words name the question or its tester.
     private boolean isQuestionRunProblem(Anomaly anomaly, Question question,
             TesterFile tester) {
         String id = anomaly.getId();
         boolean fromRun = id.startsWith(TesterInstaller.ID_PREFIX)
                 || id.startsWith(CompileStage.ID_PREFIX)
                 || id.startsWith(ExecuteStage.ID_PREFIX)
+                || id.startsWith(RandomInputStage.ID_PREFIX)
                 || id.startsWith(REGRADE_FAILED_ID_PREFIX);
         if (!fromRun) {
             return false;

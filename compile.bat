@@ -25,6 +25,7 @@ set CORE_SOURCES=%CORE_SOURCES% src\gradezzy\fix\*.java
 set CORE_SOURCES=%CORE_SOURCES% src\gradezzy\grading\*.java
 set CORE_SOURCES=%CORE_SOURCES% src\gradezzy\ingest\*.java
 set CORE_SOURCES=%CORE_SOURCES% src\gradezzy\model\*.java
+set CORE_SOURCES=%CORE_SOURCES% src\gradezzy\modelanswer\*.java
 set CORE_SOURCES=%CORE_SOURCES% src\gradezzy\persistence\*.java
 set CORE_SOURCES=%CORE_SOURCES% src\gradezzy\plagiarism\*.java
 set CORE_SOURCES=%CORE_SOURCES% src\gradezzy\report\*.java

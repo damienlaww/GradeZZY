@@ -18,10 +18,11 @@ teammate's part and the coding rules are in `design/TEAM-GUIDE.md`.
 - [What the backend does](#what-the-backend-does)
 - [Architecture](#architecture)
 - [One grading run, start to finish](#one-grading-run-start-to-finish)
-- [The nine pipeline stages](#the-nine-pipeline-stages)
+- [The ten pipeline stages](#the-ten-pipeline-stages)
 - [Grading several submissions at once](#grading-several-submissions-at-once)
 - [Problems the backend reports](#problems-the-backend-reports)
 - [After grading: review, corrections and late work](#after-grading-review-corrections-and-late-work)
+- [Checks with the model answer](#checks-with-the-model-answer)
 - [Answer groups: common mistakes](#answer-groups-common-mistakes)
 - [Similar code check](#similar-code-check)
 - [Exports](#exports)
@@ -45,6 +46,7 @@ sh compile.sh core       # compile only the backend, with no JavaFX
 sh run.sh console        # grade paths.submissions.dir from the terminal
 sh run.sh console G2     # the same, for section G2
 sh run.sh console CS102 G2   # the same, for module CS102, section G2
+sh run.sh console --testers  # only check how strong each tester is
 sh run.sh                # open the window
 sh clean.sh              # empty classes/ and remove workspace/
 ```
@@ -74,6 +76,10 @@ On top of that, the backend also:
 - finds pairs of students with very similar code;
 - reads each question's maximum mark from its tester file;
 - generates tester files from test cases typed into the app;
+- checks how strong each tester is, by running it on broken copies of
+  the model answer;
+- calls students' methods with random inputs and edge cases and flags
+  answers that differ from the model answer's;
 - checks that the score sheet, testers and starter files belong with
   the uploads, and suggests a better file nearby when they do not;
 - saves every run to SQLite, so a run can be resumed, retried and
@@ -104,7 +110,7 @@ flowchart TD
         OS["AnomalyService, ExportService,<br/>StatisticsService, HistoryService,<br/>PlagiarismService, ScoreAdjustmentService,<br/>SettingsService, AuditService,<br/>AssessmentLibrary, ClassFileMatcher"]
     end
     GS --> PF["PipelineFactory"]
-    PF --> GP["grading.GradingPipeline<br/>nine GradingStage objects"]
+    PF --> GP["grading.GradingPipeline<br/>ten GradingStage objects"]
     GP --> ST["ingest, validation, fix, detection,<br/>testcase, exec, grading"]
     OS --> RP["report, stats, plagiarism"]
     GP --> PS["persistence.ResultRepository"]
@@ -140,6 +146,7 @@ Rules the code keeps:
 | `app` | Entry point and wiring. | `ConsoleMain`, `ApplicationContext`, `ConsoleProgressListener` |
 | `config` | Loads and checks `config.properties`; per-module sections and export folders. | `AppConfig`, `ConfigKeys`, `ModuleSections`, `ExportFolders` |
 | `model` | Plain data with no logic. | `Submission`, `Student`, `Section`, `Assessment`, `Question`, `QuestionResult`, `TestCaseResult`, `Anomaly`, `GradingRun`, `AuditEntry`, `ScoreAdjustment`, `SavedAssessment`, enums `AnomalyType`, `Severity`, `FixStatus`, `SubmissionStatus` |
+| `modelanswer` | Checks that compare with the model answer: tester strength and random inputs. | `ModelAnswerCopy`, `MutantMaker`, `Mutant`, `MutantOutcome`, `TesterStrengthChecker`, `MutantBatch`, `MutantWorker`, `QuestionStrength`, `SignatureReader`, `MethodSignature`, `InputMaker`, `InputDriver`, `CallResult`, `MethodCheck`, `RandomInputChecker`, `RandomInputStage` |
 | `ingest` | Turns uploads into submissions, unzips them safely, reads the roster. | `SubmissionLoader`, `ZipExtractor`, `WorkingCopyManager`, `RosterReader` |
 | `validation` | One class per structural check. | `Validator`, `AbstractValidator`, `StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`, `HeaderNameValidator`, `ValidationRunner` |
 | `fix` | One class per automatic correction, each with apply and undo. | `Fixer`, `AbstractFixer`, `EncodingFixer`, `FolderHierarchyFixer`, `FolderNameFixer`, `CaseNameFixer`, `MisplacedFileFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
@@ -147,7 +154,7 @@ Rules the code keeps:
 | `testcase` | Where testers come from, their maximum marks, and the per-question folders. | `TestCaseSource`, `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TesterMarks`, `QuestionWorkspace`, `FolderSnapshot` |
 | `exec` | Runs `javac` and `java` as separate processes with limits. | `ProcessRunner`, `SourceCompiler`, `TesterRunner`, `TesterHarness`, `TrustedPrintStream`, `JdkCommand`, `RunningProcesses`, `HarnessWatchdog` |
 | `grading` | The pipeline, its stages, scoring and parallel workers. | `GradingPipeline`, `GradingStage`, the nine `...Stage` classes, `ScoreParser`, `TesterOutputScoreParser`, `ScoreCalculator`, `GradingWorker`, `SubmissionHandout`, `CancellationToken`, `QuestionRerunner` |
-| `plagiarism` | Compares students' code. | `SimilarityDetector`, `TokenSimilarityDetector`, `SimilarityPair`, `LineComparison`, `LineKind` |
+| `plagiarism` | Compares students' code. | `SimilarityDetector`, `WinnowingSimilarityDetector`, `TokenSimilarityDetector`, `Winnowing`, `Fingerprint`, `JavaTokenizer`, `JavaToken`, `SimilarityPair`, `LineComparison`, `LineKind` |
 | `report` | One class per export format. | `Exporter`, `CsvScoreSheetExporter`, `JsonExporter`, `JsonWriter`, `AnomalyReportExporter`, `StudentReportExporter`, `AuditLogExporter` |
 | `stats` | Statistics over runs. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves, loads and backs up grading state. | `ResultRepository`, `SqliteResultRepository`, `SqliteSchema`, `RunTables`, `SubmissionTables`, `ReviewTables`, `AdjustmentTable`, `AuditTable`, `JdbcSupport`, `BackupManager` |
@@ -229,6 +236,7 @@ classDiagram
     UploadedTesterSource ..|> TestCaseSource
     TypedTestCaseSource ..|> TestCaseSource
     TesterOutputScoreParser ..|> ScoreParser
+    WinnowingSimilarityDetector ..|> SimilarityDetector
     TokenSimilarityDetector ..|> SimilarityDetector
     SqliteResultRepository ..|> ResultRepository
 ```
@@ -268,7 +276,7 @@ sequenceDiagram
     GS->>GP: run(submissions, context)
     GP->>W: start exec.thread.count workers
     loop each submission
-        W->>W: the nine stages, in order
+        W->>W: the ten stages, in order
         W-->>C: progress events
     end
     GP-->>GS: graded run
@@ -284,13 +292,13 @@ module or section is not in the settings, the score sheet, uploads or
 testers cannot be read, or a tester's maximum mark cannot be counted.
 A problem with one student never stops it.
 
-## The nine pipeline stages
+## The ten pipeline stages
 
 ```mermaid
 flowchart LR
     A["1 Extract"] --> B["2 Validate"] --> C["3 Fix"] --> D["4 Detect"]
     D --> E["5 Install testers"] --> F["6 Compile"] --> G["7 Execute"]
-    G --> H["8 Score"] --> I["9 Persist"]
+    G --> R["8 Random inputs"] --> H["9 Score"] --> I["10 Persist"]
     X{{"Stage throws"}} -.-> Y["INTERNAL_ERROR on this student,<br/>status FAILED, next student"]
 ```
 
@@ -303,8 +311,9 @@ flowchart LR
 | 5 | `InstallTestersStage` | Copies testers, data files and provided class files in. | `MISSING_FILE` |
 | 6 | `CompileStage` | Compiles each question in its own folder. | `COMPILE_ERROR` |
 | 7 | `ExecuteStage` | Runs each tester with limits and parses its output. | `TIMEOUT`, `RUNTIME_ERROR` |
-| 8 | `ScoreStage` | Caps each question at its maximum and adds up the total. | |
-| 9 | `PersistStage` | Saves the student's result to SQLite. | |
+| 8 | `RandomInputStage` | Calls the student's methods with random inputs and compares with the model answer. Added only when `random.inputs.enabled` is true and `paths.model.answers.dir` is set. | `DIFFERENT_FROM_MODEL_ANSWER` |
+| 9 | `ScoreStage` | Caps each question at its maximum and adds up the total. | |
+| 10 | `PersistStage` | Saves the student's result to SQLite. | |
 
 A `CancellationToken` is checked between stages, so Cancel stops each
 student at its next step and the run can be resumed later.
@@ -652,6 +661,7 @@ action and a fix status.
 | `HARD_CODED_ANSWER` | An answer looks hard-coded to sample cases | `HardCodedAnswerDetector` | Flag only |
 | `COPIED_HEADER` | A file header names another student | `CopiedHeaderDetector` | Flag only |
 | `SIMILAR_CODE` | Code very similar to another student's | `PlagiarismService` | Flag only |
+| `DIFFERENT_FROM_MODEL_ANSWER` | Some random inputs give a different answer from the model answer's | `RandomInputStage` | Flag only |
 | `INTERNAL_ERROR` | GradeZZY itself failed on this student | `GradingPipeline` and the stages | No |
 
 For example, on the six provided samples the console reports:
@@ -683,6 +693,131 @@ For example, on the six provided samples the console reports:
 | Resume | `GradingService.resume` | Loads a saved run, with its own score sheet, tester and starter folders, and grades what is left. |
 | Late batch | `GradingService.findNewestRun`, `addToRun` | Adds students to the section's earlier run. A student graded before is graded again and the old total is kept in the audit log. Refused when the tester folder or score sheet is not the run's. |
 | Change score sheet | `GradingService.changeScoreSheet` | Matches the students to another sheet and saves the run, without grading again. |
+
+## Checks with the model answer
+
+Two checks use the model answers in `paths.model.answers.dir`, a folder
+laid out like the starter folder (`Q1/Q1.java`, `Q3/GoldMember.java` and
+so on). With the setting empty, neither runs. Both compile and run with
+the same `javac`, sandbox and limits as grading, in folders of their own
+under `paths.working.dir` that are deleted afterwards, and neither
+changes a mark.
+
+### Tester strength: breaking the model answer on purpose
+
+A weak tester gives wrong marks to a whole class. Before grading, the
+console (`tester.strength.enabled`, or `run.sh console --testers` on
+its own) makes broken copies of each question's model answer and runs
+the tester on each:
+
+1. `MutantMaker` splits the model answer into tokens with
+   `JavaTokenizer.tokenize` and applies standard mutation rules: `<` and
+   `<=` swapped (and the same for `>`), `==` and `!=`, `&&` and `||`, `+`
+   and `-`, `*` and `/`, `++` and `--`, `true` and `false`, a whole
+   number made one larger, an `if` condition reversed, and a statement
+   removed (a `return`, `break`, assignment, `count++` or method call).
+2. Only lines the student had to write are changed. A line that is also
+   in the starter file, and the `main` method, which testers never call,
+   are left alone. The `<` and `>` of types such as `ArrayList<Integer>`
+   are not comparisons and are skipped. When there are more places than
+   `tester.strength.max.copies`, copies are taken evenly from the whole
+   answer.
+3. `TesterStrengthChecker` first runs the tester on the model answer
+   itself. If that is not full marks, the question is reported and no
+   copy is made, since the tester or the model answer needs a look
+   first.
+4. Each copy is compiled with the tester and run with
+   `tester.strength.timeout.seconds`, on `exec.thread.count` threads
+   (`MutantWorker`, `MutantBatch`). A copy that does not compile is left
+   out. A copy that loses marks, or runs past the limit, is caught. A
+   copy that still gets full marks survives. The summary says how many
+   were caught only by the time limit, since a slow or busy computer can
+   stop a copy that would have survived.
+5. The result per question is the mutation score: the share of copies
+   caught. Every surviving copy is listed with its line and change, and
+   the report is saved as `tester-strength.txt` in the section's export
+   folder.
+
+On Lab Test 3 (`samples/lab-test-3`) it takes about 20 seconds with 4
+threads and finds, for example:
+
+```text
+Q5: the tester gave full marks to 3 of 19 broken copies (caught 84%).
+    - Q5.java line 10 "return countDigit(-number, digit);": "-" changed to "+"
+```
+
+That copy never ends for a negative number, and still gets full marks:
+the tester has no negative case.
+
+| | |
+|---|---|
+| Advantage | It measures what a tester actually checks, not only which lines it runs. A gap is shown as a concrete wrong answer the tester accepts. |
+| Disadvantage | It is slow: one compile and one run per copy. Some changes do not change what the code does (removing `sc.close()`, `>` made `>=` where the two values are never equal), so they survive without showing a real gap, and the score looks lower than it is. These have to be read and dismissed by hand. |
+
+### Random inputs: comparing with the model answer
+
+Fixed test cases miss bugs, and a student who hard-codes the cases of
+the question gets them right. After the testers run,
+`RandomInputStage` calls each student's methods with inputs that are
+new every run:
+
+1. `SignatureReader` finds the methods of the model answer that can be
+   called with made-up inputs: static, not private, named in the
+   starter file (so helpers of the model answer are left out; a question
+   with no starter file is not checked), with
+   parameters that are numbers, text, `char`, `boolean`, or arrays and
+   `ArrayList`s of these, and a result that prints the same way every
+   time. A parameter whose name contains "file" is left out, since
+   random text names no real file, and so are objects of the
+   assessment's own classes. On Lab Test 3 that is Q1 `compress(String)`
+   and Q5 `countDigit(long, int)`; Q2 to Q4 read files or take provided
+   objects, so they are not checked.
+2. `InputMaker` makes `random.inputs.count` different inputs: edge cases
+   first (0, 1, -1, the largest and smallest `int` and `long`, empty
+   text, `null`, empty arrays and lists), then random values, from a
+   seed that is new for each run.
+3. `InputDriver` writes a small program that calls the method once per
+   input inside `try`/`catch` and prints each result, or the exception's
+   class, on its own line. It is run through `TesterRunner` as if it
+   were a tester, so it gets the sandbox and limits, and only its own
+   lines are trusted: anything the student's method prints is ignored.
+4. `RandomInputChecker` runs the program on the model answer once per
+   question and run, and then in each student's compiled question
+   folder. An input on which the model answer throws is outside the
+   question and is left out. Decimal (`double`) results that differ
+   only in their last digits count as the same; every other result must
+   match exactly. A student run stopped at the time
+   limit is compared on the calls it finished, since the limit is for
+   the whole run and cannot be blamed on one input.
+5. Any difference becomes a `DIFFERENT_FROM_MODEL_ANSWER` flag naming
+   how many inputs differ and the first two, such as
+   `countDigit(-4809L, 4) returned 0 where the model answer returns 1`.
+   When the tester gave that question full marks, the flag is a warning
+   and says so; otherwise it is information.
+6. Every Java class the program uses is written in full, such as
+   `java.lang.System`, so a student class called `System` or `Arrays`
+   cannot take its place. If the program compiles with the model answer
+   but not in a student's folder, the flag says the method could not be
+   called there, rather than staying silent.
+
+On Lab Test 3, 11 students lose marks on Q1 or Q5. It flags 10 of them
+(a missing last run, a `NullPointerException` on `null`, a forgotten
+absolute value, a `StackOverflowError` for negatives, `countDigit(0, 0)`,
+untouched starters, a crash while the class loads) and none of the
+correct answers. The eleventh, qasim.ali, loops forever on the very
+first input, so the run stops at the time limit before any call
+finishes; the tester already reports that as a `TIMEOUT`. The marks are
+the same with it on and off. Grading the 45
+students took 85 seconds with both checks on and 41 with both off.
+
+This is the brief's "automatic or parameterised generation of tester
+files" taken further: the inputs are generated, and the model answer is
+the expected output, so no expected value is typed by hand.
+
+| | |
+|---|---|
+| Advantage | Finds bugs the fixed cases miss, with the exact input, and a hard-coded answer cannot know inputs that are made when grading starts. |
+| Disadvantage | Only methods with simple parameter types can be called; methods that read files or take the assessment's own objects are skipped. A difference on an input the question rules out (such as `null` when the paper says text is never null) is still flagged, which is why it is a flag the instructor judges, not a mark. |
 
 ## Answer groups: common mistakes
 
@@ -725,41 +860,103 @@ group. Statistics shows the largest groups under "Common mistakes".
 
 ## Similar code check
 
-`TokenSimilarityDetector` compares every pair of students, one question
-at a time:
+The check compares every pair of students, one question at a time,
+reading the question's answer file and its other source files (such as
+`GoldMember.java` next to `Q3.java`). `plagiarism.algorithm` picks one
+of two `SimilarityDetector` classes, both kept so they can be compared.
 
-1. Each answer is split into tokens, ignoring spacing and comments.
-2. Every run of three tokens (a trigram) is collected.
-3. The starter file's trigrams are removed, so the shared skeleton does
-   not count.
-4. Two answers are compared with the Jaccard measure: shared trigrams
-   divided by all trigrams.
-5. Pairs at or above `plagiarism.similarity.threshold` (0.80) get a
-   `SIMILAR_CODE` flag on both students.
+**Rename-proof winnowing (`winnowing`):
+`WinnowingSimilarityDetector`.** It uses the winnowing fingerprint
+algorithm of Schleimer, Wilkerson and Aiken (2003), the one MOSS uses.
 
-A pair is compared only when both answers have at least 50 trigrams of
-their own, because short correct answers look alike even when written
-separately. Renaming variables or reordering code lowers the score; this
-is a basic check that points the instructor at pairs to read, not
-proof. It runs after grading when `plagiarism.enabled` is true, and the
-window's Export step can run it on demand.
+1. Each file is split into tokens, ignoring spacing and comments
+   (`JavaTokenizer.tokenize`).
+2. Every name that is not a Java keyword becomes `ID` and every string
+   or char literal `STR` (`JavaTokenizer.shapeToken`). Numbers and
+   operators stay. `total += price` and `sum += cost` are now the same
+   tokens, so renaming changes nothing.
+3. Every run of 5 such tokens in a row (a k-gram,
+   `Winnowing.KGRAM_LENGTH`) is hashed with `String.hashCode`.
+4. Winnowing: in every 4 hashes in a row (`Winnowing.WINDOW_SIZE`) the
+   smallest is kept as a fingerprint, the rightmost one on a tie, and a
+   position kept by several windows is kept once. Two files that share
+   a run of at least 4 + 5 - 1 = 8 tokens always share a fingerprint,
+   wherever the run is in each file, so moving a method does not hide
+   it.
+5. Fingerprints that are also k-grams of the starter file are removed,
+   so the shared skeleton does not count.
+6. Two answers are compared with the Jaccard measure: shared
+   fingerprints divided by all fingerprints of either answer. Pairs at or
+   above `plagiarism.similarity.threshold` (0.80) get a `SIMILAR_CODE`
+   flag on both students.
+
+A pair is compared only when both answers have at least 25 fingerprints
+of their own (`MIN_OWN_FINGERPRINTS`), because short correct answers
+look alike even when written separately.
+
+**Token trigrams (`trigrams`, the first version and the default):
+`TokenSimilarityDetector`.** It collects every run of three tokens as
+written, names and all, removes the starter file's runs and compares
+with the Jaccard measure. A pair is compared only when both answers
+have at least 50 trigrams of their own.
+
+### Comparing the two algorithms
+
+| | Token trigrams | Rename-proof winnowing |
+|---|---|---|
+| Renamed variables or methods | Lower the score: each renamed name changes every trigram it is in. Renaming every local of a copied answer took it from 1.00 to between 0.20 and 0.49 on all but one question. | No effect: names are all `ID`. The same renamed copies stay at 1.00. |
+| Methods moved | Almost no effect (0.98 to 1.00): a set of trigrams has no order, and only the few trigrams across each join change. | Small effect (0.78 to 0.95): each join changes the k-grams across it, and a k-gram is longer than a trigram. A shared run of 8 tokens or more is always found. |
+| Honest answers written the same way | Kept apart when the students chose different names. | Look alike: two answers with the same plan but different names score up to 1.00. The 25-fingerprint minimum and the starter removal leave out the short answers where this is most common, but long answers with the same structure are still flagged. |
+| What a high score means | The same code, names and all. | The same structure. The instructor must read the pair to tell a copy from a common way of writing the answer. |
+| Cost | One set of trigrams per answer. | Fewer values kept per answer (about one fingerprint for every 2 to 3 tokens), plus the hashing. Both are fast at class size. |
+
+Both are review aids that point the instructor at pairs to read, not
+proof. The check runs after grading when `plagiarism.enabled` is true,
+and the window's Export step can run it on demand.
+
+Measured on the team's test sets, with the default threshold 0.80:
+
+- A 45-student, six-question test set kept outside git: both
+  algorithms flag all 14 expected pairs and none of the 3 "must not"
+  pairs. Trigrams flag nothing else. Winnowing also flags 267 other
+  pairs, because the test set's honest students were made from a few
+  model answers with the names changed, which is exactly what
+  rename-proof matching is built to see through.
+- The 42-student E2E set (`samples/e2e`): trigrams flag 6 of the 8
+  copied pairs long enough to compare, missing Kelvin's Q2b with Jun Wei
+  and with Nicole (he renamed two variables: 0.73). Winnowing flags all
+  8 (1.00). Both also flag Marcus and Priya's Q2b, an honest pair the
+  test set expects to be dismissed. Winnowing also flags 633 other
+  pairs of honest students made the same way as above.
+- The six Lab Test 1 samples: neither flags a pair.
+
+So winnowing finds renamed copies the first version misses, but it
+cannot tell a renamed copy from honest answers that share one
+structure: on a test set built by renaming a few model answers, it
+flags every such pair. That is why trigrams stay the default. Choose
+winnowing ("How code is compared" in Settings, or
+`plagiarism.algorithm=winnowing`) to look for renamed copies, and expect
+to dismiss more pairs.
 
 The window lists each pair with a pill such as "84% similar": red above
 75%, amber at 75% or below (the percent as shown, rounded).
 
 "Compare" on a similar pair, in the Similar code card on Export or on a
 Similar code flag in the student panel, opens both answer files side by
-side, in one box that scrolls as one. `LineComparison` marks each line,
-ignoring spaces: red when the same line is in the other student's file,
-grey with a "starter" tag when it is in the starter file (starter code
-is never red), and plain when it is the student's own. A line holding
-only brackets, such as `}`, takes the colour of the line above it. Each
-side shows how many of its own lines are the same, and "Next same part"
-and "Previous" jump between the red blocks of the first student's file.
-The lines only help the instructor read a pair; the percentage still
-comes from the trigrams above, so a renamed variable makes a line plain
-even though the score may stay high. `PlagiarismService.readPair` is the
-one place that reads the pair back from a flag.
+side, in one box that scrolls as one. `LineComparison` marks each line:
+red when the other student's file holds the same line (ignoring spaces)
+or when every token on the line is inside a k-gram of rename-proof
+tokens that the other file also has, so a line whose only change is a
+renamed variable is red too. A k-gram written word for word in the
+starter file does not count. A line in the starter file is grey with a
+"starter" tag (starter code is never red), and any other line is plain:
+the student's own. A line holding only brackets, such as `}`, takes the
+colour of the line above it. Each side shows how many of its own lines
+are the same, and "Next same part" and "Previous" jump between the red
+blocks of the first student's file. The lines only help the instructor
+read a pair; the percentage comes from the algorithm chosen above.
+`PlagiarismService.readPair` is the one place that reads the pair back
+from a flag.
 
 ## Exports
 
@@ -950,6 +1147,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `paths.score.sheet.file` | `samples/IS442-ScoreSheet.csv` | The roster and the template for the CSV export. |
 | `paths.score.sheet.by.section` | (empty) | Each section's own score sheet, such as `CS102/G1=Test Data/G1.csv`, set in Settings. A section with none uses `paths.score.sheet.file`. A run started with no score sheet chosen (the console) and a run saved without one (Export's warning and the CSV export) all use this rule (`config.ExportFolders.findScoreSheet`). |
 | `paths.starter.dir` | `samples/RenameToYourUsername` | Starter files, used to spot untouched answers when no starter folder is chosen on the Set up step, and by the similarity check. Set up warns when a chosen starter folder lacks some question files. |
+| `paths.model.answers.dir` | empty | Model answers, laid out like the starter folder. Empty switches off the tester strength and random inputs checks. Checked when used, not at start-up. |
 | `paths.working.dir` | `workspace/working` | Where working copies are created. |
 | `paths.output.dir` | `workspace/output` | Where exports are written. |
 | `paths.output.dir.by.section` | empty | Export folders of single modules or sections, such as `CS102/G1=workspace/g1-exports;IS442=workspace/is442`. A section's own folder wins over its module's, then `paths.output.dir`. Deleting a module or section removes its entries here and in `paths.score.sheet.by.section`. |
@@ -986,8 +1184,14 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `detection.untouched.enabled` | `true` | Flag untouched starter files. |
 | `detection.empty.enabled` | `true` | Flag empty answers. |
 | `detection.hardcoded.enabled` | `true` | Flag hard-coded answers. |
+| `tester.strength.enabled` | `true` | The console checks each tester with broken copies of the model answer before grading. |
+| `tester.strength.max.copies` | `40` | The most broken copies per question. |
+| `tester.strength.timeout.seconds` | `5` | Time limit for the tester on one broken copy; a copy that runs longer counts as caught. |
+| `random.inputs.enabled` | `true` | Call students' methods with random inputs after the tests and flag answers that differ from the model answer. |
+| `random.inputs.count` | `200` | Inputs per method. |
 | `plagiarism.enabled` | `true` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
+| `plagiarism.algorithm` | `trigrams` | How answers are compared: `winnowing` (rename-proof fingerprints, `WinnowingSimilarityDetector`) or `trigrams` (the first version, `TokenSimilarityDetector`). See "Similar code check". |
 | `export.formats` | `csv,json` | Formats offered by default. |
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
 | `export.csv.id.prefix` | `#` | Character in front of the id and username. |

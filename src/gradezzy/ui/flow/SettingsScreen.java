@@ -104,6 +104,14 @@ public class SettingsScreen extends FlowScreen {
     private static final String[] LINE_ENDING_NAMES = {
         "CRLF (as eLearn gives it)", "LF (macOS and Linux)"};
 
+    // The values plagiarism.algorithm accepts
+    private static final String[] ALGORITHMS = {"winnowing", "trigrams"};
+
+    // The names shown for the values of plagiarism.algorithm, in the
+    // same order
+    private static final String[] ALGORITHM_NAMES = {"Rename-proof",
+        "Exact tokens (first version)"};
+
     // The export formats that can be offered, and their names
     private static final String[] FORMATS = {"csv,json", "csv", "json"};
     private static final String[] FORMAT_NAMES = {"CSV and JSON",
@@ -134,6 +142,10 @@ public class SettingsScreen extends FlowScreen {
         "5000", "10000"};
     private static final String[] HEADER_LINES = {"5", "10", "15", "20",
         "30"};
+    private static final String[] COPY_COUNTS = {"20", "40", "80"};
+    private static final String[] COPY_SECONDS = {"2", "5", "10"};
+    private static final String[] INPUT_COUNTS = {"50", "100", "200",
+        "500"};
 
     // The most students graded at once the list offers, before the
     // number of processors decides
@@ -460,6 +472,9 @@ public class SettingsScreen extends FlowScreen {
         startGroup("Running code");
         addRunningRows();
 
+        startGroup("Model answers");
+        addModelAnswerRows();
+
         startGroup("Similar code");
         addSimilarRows();
 
@@ -527,6 +542,30 @@ public class SettingsScreen extends FlowScreen {
                 " characters"));
     }
 
+    // Adds the model answers folder and the checks that use it to the
+    // group being built.
+    private void addModelAnswerRows() {
+        folder(ConfigKeys.MODEL_ANSWERS_DIR, "Model answers folder",
+                "Laid out like the starter folder. Leave it empty to skip "
+                + "the checks below.");
+        toggle(ConfigKeys.TESTER_STRENGTH_ENABLED,
+                "Check testers before grading",
+                "In the console, each tester is run on broken copies of "
+                + "the model answer. A copy with full marks shows a gap.");
+        listed(ConfigKeys.TESTER_STRENGTH_MAX_COPIES,
+                "Broken copies per question",
+                "More finds more gaps, but takes longer.", COPY_COUNTS, "");
+        listed(ConfigKeys.TESTER_STRENGTH_TIMEOUT_SECONDS,
+                "Time limit per broken copy",
+                "A copy that runs longer counts as caught.", COPY_SECONDS,
+                " seconds");
+        toggle(ConfigKeys.RANDOM_INPUTS_ENABLED, "Try random inputs",
+                "After the tests, answers that differ from the model "
+                + "answer are flagged. Marks never change.");
+        listed(ConfigKeys.RANDOM_INPUTS_COUNT, "Random inputs per method",
+                "", INPUT_COUNTS, "");
+    }
+
     // Adds the similar code check to the group being built.
     private void addSimilarRows() {
         toggle(ConfigKeys.PLAGIARISM_ENABLED, "Look for similar code",
@@ -534,6 +573,10 @@ public class SettingsScreen extends FlowScreen {
         choice(ConfigKeys.PLAGIARISM_THRESHOLD, "Similarity that counts",
                 "How alike two answers must be to be flagged.",
                 SIMILARITIES).showChoicesAs(similarityNames());
+        choice(ConfigKeys.PLAGIARISM_ALGORITHM, "How code is compared",
+                "Rename-proof also matches renamed names and moved "
+                + "methods, and honest answers with the same structure.",
+                ALGORITHMS).showChoicesAs(ALGORITHM_NAMES);
     }
 
     // Adds the pass mark and the band width to the group being built.

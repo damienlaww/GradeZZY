@@ -6,8 +6,11 @@
  * text literal replaced, so renaming variables does not change it.
  *
  * Where it fits: TokenSimilarityDetector builds its trigrams from the
- * tokens; AnswerGrouper compares shapes to tell the marker which
- * students in an answer group wrote the same code.
+ * tokens; Winnowing builds its rename-proof k-grams from shapeToken;
+ * AnswerGrouper compares shapes to tell the marker which students in an
+ * answer group wrote the same code. tokenize also keeps each token's
+ * position and line, for the tester strength check and for the lines
+ * LineComparison marks.
  */
 package gradezzy.plagiarism;
 
@@ -66,6 +69,9 @@ public final class JavaTokenizer {
     // How far a piece of one character reaches past its start
     private static final int ONE_CHARACTER = 1;
 
+    // The number of the first line of a file
+    private static final int FIRST_LINE = 1;
+
     // The words a shape keeps: Java's reserved words and literals
     private static final Set<String> KEYWORDS = new HashSet<>(Arrays.asList(
             new String[] {"abstract", "assert", "boolean", "break", "byte",
@@ -93,20 +99,52 @@ public final class JavaTokenizer {
      */
     public static List<String> split(String source) {
         List<String> tokens = new ArrayList<>();
+        for (JavaToken token : tokenize(source)) {
+            tokens.add(token.getText());
+        }
+        return tokens;
+    }
+
+    /**
+     * Splits source code into tokens, skipping spaces and comments, and
+     * keeps where each token is: its start in the text and its line.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param source the source code
+     * @return the tokens in order
+     */
+    public static List<JavaToken> tokenize(String source) {
+        List<JavaToken> tokens = new ArrayList<>();
         int start = 0;
+        int line = FIRST_LINE;
 
         while (start < source.length()) {
             int end = findPieceEnd(source, start);
             String piece = source.substring(start, end);
 
             if (isToken(piece)) {
-                tokens.add(piece);
+                tokens.add(new JavaToken(piece, start, line));
             }
 
+            line = line + countLineBreaks(piece);
             start = end;
         }
 
         return tokens;
+    }
+
+    // Counts the line breaks in a piece of source, such as a comment
+    // that runs over several lines.
+    private static int countLineBreaks(String piece) {
+        int count = 0;
+        int found = piece.indexOf(NEW_LINE);
+        while (found >= 0) {
+            count++;
+            int next = found + NEW_LINE.length();
+            found = piece.indexOf(NEW_LINE, next);
+        }
+        return count;
     }
 
     /**
@@ -128,8 +166,17 @@ public final class JavaTokenizer {
         return TextUtils.join(SHAPE_SEPARATOR, shape);
     }
 
-    // Returns what a token becomes in a shape.
-    private static String shapeToken(String token) {
+    /**
+     * Returns what one token becomes in a shape: ID for a name that is
+     * not a Java keyword, STR for a string or char literal, and the
+     * token itself for anything else.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param token the token
+     * @return the token as it is in a shape
+     */
+    public static String shapeToken(String token) {
         char first = token.charAt(0);
         if (isQuote(first)) {
             return TEXT_TOKEN;
