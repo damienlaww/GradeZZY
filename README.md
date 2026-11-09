@@ -1262,8 +1262,8 @@ implemented. `[x]` means it works now.
   and `addToRun`): a new student is added, a student graded before is
   graded again and the new result replaces the old one, with the old
   total kept in the audit log. It is refused when the tester folder or
-  score sheet is not the run's. The question on Set up is still to come
-  (`ui.flow.SetUpScreen`)
+  score sheet is not the run's. Set up asks whether to add the students
+  to that run (`ui.flow.SetUpScreen`)
 - [x] Light and dark theme switch (`ui.ThemeManager`, `ui.theme`)
 - [x] Settings page backed by `config.properties`
   (`service.SettingsService`, `ui.flow.SettingsScreen`)

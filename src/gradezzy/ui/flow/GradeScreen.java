@@ -295,6 +295,23 @@ public class GradeScreen extends FlowScreen
     }
 
     /**
+     * Grades the batch on Set up into the section's existing run, so
+     * Review and Export show the whole section.
+     *
+     * @param run the run the batch joins
+     */
+    public void startAdding(GradingRun run) {
+        prepare(getState().getSection().getLabel());
+        total = getState().getBatch().countStudents();
+        updateCount();
+        getState().setGrading(true);
+        getState().setSkippedFiles(
+                getState().getBatch().getUnusableSubmissions());
+        getBackend().addToRun(run, getState().getBatch(), this, this);
+        refreshActions();
+    }
+
+    /**
      * Grades the submissions of a run that were not graded yet, or also
      * the ones that failed.
      *
@@ -580,6 +597,8 @@ public class GradeScreen extends FlowScreen
         getState().setGrading(false);
         getState().setRun(gradingRun);
         getState().attachSkippedFiles(gradingRun);
+        // A late batch adds students, so who has no submission changes
+        getState().forgetMissingStudents();
         end();
         if (gradingRun != null) {
             for (Submission submission : gradingRun.getSubmissions()) {
@@ -613,6 +632,8 @@ public class GradeScreen extends FlowScreen
     @Override
     public void onFailed(String message) {
         getState().setGrading(false);
+        // No run ended, so the skipped files belong to none
+        getState().attachSkippedFiles(null);
         failure = message;
         end();
         heading.setText("Grading could not run");
