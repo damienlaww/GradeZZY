@@ -165,7 +165,16 @@ public class CaseNameFixer extends AbstractFixer {
         if (folderName == null) {
             return null;
         }
-        return findIgnoringCase(listFolders(contentRoot), folderName);
+
+        // A folder already named right, such as Q1 holding Q1, is not a
+        // case problem
+        Path folder = findIgnoringCase(listFolders(contentRoot), folderName);
+        boolean namedRight = folder != null
+                && folder.getFileName().toString().equals(folderName);
+        if (namedRight) {
+            return null;
+        }
+        return folder;
     }
 
     // Finds the anomaly's misnamed file while the right name is not there.

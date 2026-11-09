@@ -44,6 +44,12 @@ public class HeaderNameValidator extends AbstractValidator {
     // Separates the folder and the file in a message
     private static final String FOLDER_SEPARATOR = "/";
 
+    // The colon that ends a header label such as Name:
+    private static final String LABEL_END = ":";
+
+    // Returned by findValueStart when a line does not hold the label
+    private static final int NOT_FOUND = -1;
+
     // The application settings, or null when none were given
     private final AppConfig config;
 
@@ -187,14 +193,60 @@ public class HeaderNameValidator extends AbstractValidator {
     // or null when no line holds the label.
     private String findValueAfter(List<String> header, String label) {
         for (String line : header) {
-            int position = line.indexOf(label);
+            int valueStart = findValueStart(line, label);
 
-            if (position >= 0) {
-                int valueStart = position + label.length();
+            if (valueStart >= 0) {
                 return line.substring(valueStart).trim();
             }
         }
 
         return null;
+    }
+
+    /**
+     * Finds where the value after a header label starts in a line. A label
+     * that ends with a colon, such as Name:, also matches with spaces or
+     * tabs before the colon, as in Name : Ping Lee.
+     *
+     * @param line the line to search
+     * @param label the label, such as Name:
+     * @return the position just after the label, or -1 if the line does
+     *         not hold it
+     */
+    public static int findValueStart(String line, String label) {
+        if (!label.endsWith(LABEL_END)) {
+            int position = line.indexOf(label);
+            if (position < 0) {
+                return NOT_FOUND;
+            }
+            return position + label.length();
+        }
+
+        int wordEnd = label.length() - LABEL_END.length();
+        String word = label.substring(0, wordEnd);
+        int position = line.indexOf(word);
+        while (position >= 0) {
+            int colon = skipSpaces(line, position + word.length());
+            if (line.startsWith(LABEL_END, colon)) {
+                return colon + LABEL_END.length();
+            }
+            int nextSearch = position + 1;
+            position = line.indexOf(word, nextSearch);
+        }
+        return NOT_FOUND;
+    }
+
+    // Returns the position of the first character that is not blank, such
+    // as a space or a tab, from the given position on.
+    private static int skipSpaces(String line, int position) {
+        int current = position;
+        boolean blank = current < line.length()
+                && Character.isWhitespace(line.charAt(current));
+        while (blank) {
+            current++;
+            blank = current < line.length()
+                    && Character.isWhitespace(line.charAt(current));
+        }
+        return current;
     }
 }

@@ -16,6 +16,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -32,6 +33,7 @@ import gradezzy.model.Severity;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
+import gradezzy.util.AnswerFolderRule;
 import gradezzy.util.FileUtils;
 import gradezzy.util.TextUtils;
 
@@ -122,6 +124,8 @@ public class SubmissionLoader {
      * number such as " (2)", a file without one being the oldest; for two
      * files of the same name in two chosen folders, such as a late batch
      * chosen with the main one, the newer file, or the one chosen later;
+     * for two zips of the same name in different folders of bulk zips,
+     * the one the bulk zip records as newer, else the first by path;
      * else the one whose username is already in lower case, as on the
      * roster, else the first chosen. Each file left out is named in a
      * DUPLICATE_SUBMISSION warning on the graded one. Uploads without a
@@ -156,7 +160,8 @@ public class SubmissionLoader {
      * without unpacking anything. A folder that holds a question folder is
      * one student. Any other folder gives each visible zip directly inside
      * it and each sub-folder that looks unzipped by hand: one that holds a
-     * question folder, directly or inside its only visible sub-folder.
+     * question folder, directly or inside its only visible sub-folder, or
+     * at the end of a chain of folders that each hold only one folder.
      * A sub-folder with a starter folder name, such as
      * RenameToYourUsername, is skipped. A chosen file is one student; for
      * a bulk zip that is the zip itself, and listBatchEntries names the
@@ -499,8 +504,9 @@ public class SubmissionLoader {
     }
 
     // Says whether a folder looks unzipped by hand: it holds a question
-    // folder, directly or inside its only visible sub-folder. A folder
-    // that cannot be read does not.
+    // folder, directly or inside its only visible sub-folder, or at the
+    // end of a chain of folders that each hold only one folder, as in
+    // s06/s06/s06/Q1. A folder that cannot be read does not.
     private boolean looksLikeSubmission(Path path) {
         if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
             return false;
@@ -510,7 +516,8 @@ public class SubmissionLoader {
         }
         try {
             Path wrapper = findOnlySubfolder(path);
-            return wrapper != null && hasQuestionFolder(wrapper);
+            return wrapper != null && AnswerFolderRule.findChainEnd(wrapper,
+                    listQuestionFolders()) != null;
         } catch (IOException exception) {
             return false;
         }
@@ -743,6 +750,12 @@ public class SubmissionLoader {
             return readModifiedMillis(candidatePath)
                     >= readModifiedMillis(currentPath);
         }
+        if (isSameNameInBatch(candidatePath, currentPath)) {
+            // The bulk zip's time for each zip, set when it was unpacked;
+            // on a tie the first by path is kept
+            return readModifiedMillis(candidatePath)
+                    > readModifiedMillis(currentPath);
+        }
         return isLowerCase(fileNameOf(candidatePath))
                 && !isLowerCase(fileNameOf(currentPath));
     }
@@ -755,16 +768,17 @@ public class SubmissionLoader {
                 && !isInsideBatch(first) && !isInsideBatch(second);
     }
 
+    // Says whether two different files share a name and were both
+    // unpacked from bulk zips, in different folders.
+    private boolean isSameNameInBatch(Path first, Path second) {
+        return fileNameOf(first).equals(fileNameOf(second))
+                && !isSameFile(first, second)
+                && isInsideBatch(first) && isInsideBatch(second);
+    }
+
     // Says whether a file was unpacked from a bulk zip.
     private boolean isInsideBatch(Path file) {
-        Path folder = file.getParent();
-        while (folder != null) {
-            if (fileNameOf(folder).startsWith(BATCH_FOLDER_PREFIX)) {
-                return true;
-            }
-            folder = folder.getParent();
-        }
-        return false;
+        return findBatchFolder(file) != null;
     }
 
     // Reads when a file was last changed, or 0 when it cannot be read.
@@ -832,12 +846,37 @@ public class SubmissionLoader {
         }
     }
 
-    // Names where a file was found: in its folder, or inside a bulk zip.
+    // Names where a file was found: in its folder, or where inside a
+    // bulk zip, as its path there.
     private String describeFolder(Path file) {
-        if (isInsideBatch(file)) {
-            return "inside the bulk zip";
+        Path batchFolder = findBatchFolder(file);
+        if (batchFolder == null) {
+            return "in " + file.getParent();
         }
-        return "in " + file.getParent();
+
+        Path folderInBatch = batchFolder.relativize(file.getParent());
+        if (folderInBatch.toString().isEmpty()) {
+            return "at the top of the bulk zip";
+        }
+        List<String> parts = new ArrayList<>();
+        for (Path part : folderInBatch) {
+            parts.add(part.toString());
+        }
+        return "in the folder " + TextUtils.join(ENTRY_SEPARATOR, parts)
+                + " of the bulk zip";
+    }
+
+    // Returns the folder a bulk zip was unpacked into that holds a file,
+    // or null when the file was not unpacked from a bulk zip.
+    private Path findBatchFolder(Path file) {
+        Path folder = file.getParent();
+        while (folder != null) {
+            if (fileNameOf(folder).startsWith(BATCH_FOLDER_PREFIX)) {
+                return folder;
+            }
+            folder = folder.getParent();
+        }
+        return null;
     }
 
     // Each batch gets its own directory so original inner ZIPs survive
@@ -857,6 +896,7 @@ public class SubmissionLoader {
             List<Path> innerZips = new ArrayList<>();
             collectBatchZips(batch, innerZips);
             Collections.sort(innerZips);
+            copyZipTimes(extractor.readFileTimes(input), batch, innerZips);
             candidates.addAll(innerZips);
         } catch (IOException exception) {
             deleteFailedBatch(batch, exception);
@@ -864,6 +904,24 @@ public class SubmissionLoader {
         } catch (IngestException exception) {
             deleteFailedBatch(batch, exception);
             throw exception;
+        }
+    }
+
+    // Gives each student zip unpacked from a bulk zip the time the bulk
+    // zip records for it, so the newer of two zips with one name is
+    // graded. A zip with no recorded time keeps the time it was unpacked.
+    private void copyZipTimes(Map<String, Long> times, Path batch,
+            List<Path> innerZips) throws IOException {
+        for (Path innerZip : innerZips) {
+            List<String> parts = new ArrayList<>();
+            for (Path part : batch.relativize(innerZip)) {
+                parts.add(part.toString());
+            }
+            Long time = times.get(TextUtils.join(ENTRY_SEPARATOR, parts));
+            if (time != null) {
+                Files.setLastModifiedTime(innerZip,
+                        FileTime.fromMillis(time));
+            }
         }
     }
 
@@ -989,13 +1047,15 @@ public class SubmissionLoader {
         return !fileName.replaceFirst(prefix, "").equals(fileName);
     }
 
-    // Removes a .zip ending, in any case, from a name.
+    // Removes every .zip ending, in any case, from a name, so a file
+    // saved as name.zip.zip gives the same name as name.zip.
     private String removeZipExtension(String name) {
-        if (!hasZipExtension(name)) {
-            return name;
+        String withoutEnding = name;
+        while (hasZipExtension(withoutEnding)) {
+            int nameEnd = withoutEnding.length() - ZIP_EXTENSION.length();
+            withoutEnding = withoutEnding.substring(0, nameEnd);
         }
-        int nameEnd = name.length() - ZIP_EXTENSION.length();
-        return name.substring(0, nameEnd);
+        return withoutEnding;
     }
 
     // Returns the last part of a path as text.

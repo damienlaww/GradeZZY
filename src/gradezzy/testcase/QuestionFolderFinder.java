@@ -20,6 +20,7 @@ import java.util.List;
 import gradezzy.model.Assessment;
 import gradezzy.model.Question;
 import gradezzy.model.Submission;
+import gradezzy.util.AnswerFolderRule;
 import gradezzy.util.FileUtils;
 
 /**
@@ -53,11 +54,10 @@ public class QuestionFolderFinder {
     }
 
     /**
-     * Finds the folder that holds the question folders: the top of the
-     * working copy when the username folder is missing, the folder named
-     * after the username, the only folder there is, or else the only
-     * folder that holds a question folder (so an extra IDE folder such as
-     * bin is ignored). This is the same rule as AbstractFixer's.
+     * Finds the folder that holds the question folders by the rule the
+     * checks and the fixes share (AnswerFolderRule): null when several
+     * folders hold question folders, so such a student is never graded
+     * from a guess.
      *
      * @param submission the submission
      * @param assessment the assessment
@@ -66,61 +66,20 @@ public class QuestionFolderFinder {
      */
     private static Path findContentRoot(Submission submission,
             Assessment assessment) throws IOException {
-        Path workingCopy = submission.getWorkingCopyPath();
-        boolean noWorkingCopy = workingCopy == null
-                || !Files.isDirectory(workingCopy, LinkOption.NOFOLLOW_LINKS);
-        if (noWorkingCopy) {
-            return null;
-        }
-
-        List<Path> topFolders = listFolders(workingCopy);
-        Path usernameFolder = findByName(topFolders, submission.getUsername());
-
-        if (holdsQuestionFolder(topFolders, assessment)) {
-            return workingCopy;
-        } else if (usernameFolder != null) {
-            return usernameFolder;
-        } else if (topFolders.size() == 1) {
-            return topFolders.get(0);
-        }
-        return findOnlyHolder(topFolders, assessment);
+        return AnswerFolderRule.findContentRoot(
+                submission.getWorkingCopyPath(), submission.getUsername(),
+                listFolderNames(assessment));
     }
 
-    // Returns the only folder that holds a question folder, or null.
-    private static Path findOnlyHolder(List<Path> folders,
-            Assessment assessment) throws IOException {
-        List<Path> holders = new ArrayList<>();
-        for (Path folder : folders) {
-            if (holdsQuestionFolder(listFolders(folder), assessment)) {
-                holders.add(folder);
-            }
-        }
-
-        if (holders.size() != 1) {
-            return null;
-        }
-        return holders.get(0);
-    }
-
-    /**
-     * Says whether any of the folders is named like a question folder,
-     * ignoring case, as the validators do.
-     *
-     * @param folders the folders to search
-     * @param assessment the assessment
-     * @return true if one of them is a question folder
-     */
-    private static boolean holdsQuestionFolder(List<Path> folders,
-            Assessment assessment) {
+    // Lists the question folder names, each once, in question order.
+    private static List<String> listFolderNames(Assessment assessment) {
+        List<String> folderNames = new ArrayList<>();
         for (Question question : assessment.getQuestions()) {
-            for (Path folder : folders) {
-                String folderName = folder.getFileName().toString();
-                if (folderName.equalsIgnoreCase(question.getFolderName())) {
-                    return true;
-                }
+            if (!folderNames.contains(question.getFolderName())) {
+                folderNames.add(question.getFolderName());
             }
         }
-        return false;
+        return folderNames;
     }
 
     /**

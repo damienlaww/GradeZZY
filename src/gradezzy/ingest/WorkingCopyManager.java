@@ -91,7 +91,8 @@ public class WorkingCopyManager {
      * its path and returns it. A failed unpack keeps the previous copy.
      * A zip that holds nothing but one zip, as when a student zips their
      * zip, is unpacked one level further. Each file left out because its
-     * name cannot be saved is named in a warning on the submission.
+     * name cannot be saved is named in a warning on the submission, and so
+     * is each name unpacked without the spaces or dots at its end.
      *
      * @param submission the submission
      * @return the path of the new working copy
@@ -103,6 +104,7 @@ public class WorkingCopyManager {
             Submission submission) throws IngestException {
         Path staging = null;
         List<String> skippedNames = new ArrayList<>();
+        List<String> renamedNames = new ArrayList<>();
         try {
             Path target = workingPath(submission);
             Path original = submission.getOriginalPath().toRealPath();
@@ -116,8 +118,9 @@ public class WorkingCopyManager {
                 FileUtils.copyDirectory(original, staging);
                 removeIgnoredFiles(staging);
             } else {
-                zipExtractor.extract(original, staging, skippedNames);
-                unpackOnlyInnerZip(staging, skippedNames);
+                zipExtractor.extract(original, staging, skippedNames,
+                        renamedNames);
+                unpackOnlyInnerZip(staging, skippedNames, renamedNames);
             }
 
             // Build first, so a corrupt retry keeps the previous copy.
@@ -125,6 +128,7 @@ public class WorkingCopyManager {
             FileUtils.moveWithRetry(staging, target);
             submission.setWorkingCopyPath(target);
             warnSkipped(submission, skippedNames);
+            warnRenamed(submission, renamedNames);
             return target;
         } catch (InvalidArchiveException exception) {
             // Already one plain sentence about the zip, so it is kept
@@ -252,8 +256,8 @@ public class WorkingCopyManager {
     // A student who zips their zip sends a zip that holds one zip and
     // nothing else. That inner zip is unpacked in its place, with the
     // same limits, and only one level deep.
-    private void unpackOnlyInnerZip(Path folder, List<String> skippedNames)
-            throws IOException, IngestException {
+    private void unpackOnlyInnerZip(Path folder, List<String> skippedNames,
+            List<String> renamedNames) throws IOException, IngestException {
         Path innerZip = findOnlyZip(folder);
         if (innerZip == null) {
             return;
@@ -263,7 +267,7 @@ public class WorkingCopyManager {
         try {
             Path destination = holder.resolve(innerZip.getFileName());
             Path moved = Files.move(innerZip, destination);
-            zipExtractor.extract(moved, folder, skippedNames);
+            zipExtractor.extract(moved, folder, skippedNames, renamedNames);
         } finally {
             FileUtils.deleteDirectory(holder);
         }
@@ -309,6 +313,25 @@ public class WorkingCopyManager {
                 "Left out of the zip file, because the name cannot be "
                 + "saved on this computer: " + names + ".",
                 "Check that no answer file is missing."));
+    }
+
+    // Names, in one warning, the folders and files of the zip unpacked
+    // under a shorter name, because a name that ends with a space or a
+    // dot cannot be saved on Windows.
+    private void warnRenamed(Submission submission,
+            List<String> renamedNames) {
+        if (renamedNames.isEmpty()) {
+            return;
+        }
+        String id = ANOMALY_ID_PREFIX + UUID.randomUUID();
+        String names = TextUtils.join(NAME_SEPARATOR, renamedNames);
+        submission.addAnomaly(new Anomaly(id, AnomalyType.INVALID_ARCHIVE,
+                Severity.WARNING, submission.getUsername(),
+                "Unpacked under a shorter name, because a name that ends "
+                + "with a space or a dot cannot be saved on Windows: "
+                + names + ".",
+                "Nothing to do: the files were graded under the shorter "
+                + "name."));
     }
 
     // Copies each provided class file the starter folder holds into the

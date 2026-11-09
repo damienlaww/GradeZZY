@@ -110,8 +110,10 @@ public class ClassFileMatcher {
     private static final String MAC_FOLDER = "__MACOSX";
     private static final String HIDDEN_PREFIX = ".";
 
-    // Separator between the folders of a zip entry name
+    // Separator between the folders of a zip entry name, and the one some
+    // Windows tools write instead
     private static final String ENTRY_SEPARATOR = "/";
+    private static final String WINDOWS_SEPARATOR = "\\";
 
     // Ends a sentence of a problem
     private static final String SENTENCE_END = ".";
@@ -745,9 +747,12 @@ public class ClassFileMatcher {
             Enumeration<? extends ZipEntry> entries = zip.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
-                Question question = findQuestion(lastPart(entry.getName()));
+                // Some Windows tools write \ between the folders
+                String entryName = entry.getName().replace(
+                        WINDOWS_SEPARATOR, ENTRY_SEPARATOR);
+                Question question = findQuestion(lastPart(entryName));
                 boolean wanted = !entry.isDirectory() && question != null
-                        && !isIgnoredEntry(entry.getName())
+                        && !isIgnoredEntry(entryName)
                         && !sources.containsKey(question.getId());
                 if (wanted) {
                     sources.put(question.getId(), readEntry(zip, entry));

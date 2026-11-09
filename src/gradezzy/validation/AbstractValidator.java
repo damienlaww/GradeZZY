@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import gradezzy.model.Anomaly;
@@ -24,6 +25,7 @@ import gradezzy.model.Assessment;
 import gradezzy.model.Question;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
+import gradezzy.util.AnswerFolderRule;
 import gradezzy.util.FileUtils;
 
 /**
@@ -39,6 +41,12 @@ public abstract class AbstractValidator implements Validator {
     // The start of a hidden name, such as .idea, which is never a folder
     // of the submission itself
     private static final String HIDDEN_PREFIX = ".";
+
+    // Starts the ending of a file name, such as .java
+    private static final String ENDING_START = ".";
+
+    // The copy number a browser adds to a second download, such as (1)
+    private static final String COPY_NUMBER = "\\(\\d+\\)";
 
     // The suggested actions, one for each type a validator reports
     private static final String WRAPPER_ACTION =
@@ -123,72 +131,69 @@ public abstract class AbstractValidator implements Validator {
     }
 
     /**
-     * Finds the folder that should hold the question folders. Checks run
-     * before any fix, so this is wherever they really are: the top of the
-     * working copy when the username folder is missing, the folder named
-     * after the username, the only folder there is, or the only folder
-     * that holds question folders (RenameToYourUsername next to an IDE
-     * folder such as bin).
+     * Finds the folder that should hold the question folders, by the rule
+     * grading uses too (AnswerFolderRule). Checks run before any fix, so
+     * this is wherever they really are: the top of the working copy when
+     * the username folder is missing, or the one folder that holds them,
+     * directly or through extra folders. With no such folder it is the
+     * folder named after the username, else the only folder there is.
      *
      * @param submission the submission
      * @param assessment the assessment
-     * @return the folder, or null if there is no single candidate
+     * @return the folder, or null if there is none or several folders
+     *         hold question folders
      * @throws IOException if the working copy cannot be listed
      */
     protected Path findContentRoot(Submission submission,
             Assessment assessment) throws IOException {
-        Path workingCopy = submission.getWorkingCopyPath();
-        boolean noFolder = workingCopy == null
-                || !Files.isDirectory(workingCopy, LinkOption.NOFOLLOW_LINKS);
-
-        if (noFolder) {
-            return null;
-        }
-
-        List<Path> topFolders = listFolders(workingCopy);
-        Path usernameFolder = findExact(topFolders,
-                submission.getUsername());
-
-        if (holdsQuestionFolder(topFolders, assessment)) {
-            return workingCopy;
-        } else if (usernameFolder != null) {
-            return usernameFolder;
-        } else if (topFolders.size() == 1) {
-            return topFolders.get(0);
-        }
-
-        return findOnlyHolder(topFolders, assessment);
+        return AnswerFolderRule.findContentRoot(
+                submission.getWorkingCopyPath(), submission.getUsername(),
+                getQuestionFolderNames(assessment));
     }
 
     /**
-     * Returns the folders that hold at least one question folder.
+     * Says whether a file name is a wanted name with a browser's copy
+     * number before its ending, in any case, such as Q1a (1).java for
+     * Q1a.java.
      *
-     * @param folders the folders to search
-     * @param assessment the assessment
-     * @return the folders that hold a question folder, maybe none
-     * @throws IOException if a folder cannot be listed
+     * @param fileName the file name found
+     * @param wantedName the required name
+     * @return true if it is the wanted name with a copy number added
      */
-    protected List<Path> findHolders(List<Path> folders,
-            Assessment assessment) throws IOException {
-        List<Path> holders = new ArrayList<>();
-
-        for (Path folder : folders) {
-            if (holdsQuestionFolder(listFolders(folder), assessment)) {
-                holders.add(folder);
-            }
+    protected boolean isCopyNumbered(String fileName, String wantedName) {
+        String name = fileName.toLowerCase(Locale.ROOT);
+        String wanted = wantedName.toLowerCase(Locale.ROOT);
+        int endingStart = wanted.lastIndexOf(ENDING_START);
+        if (endingStart < 0) {
+            endingStart = wanted.length();
         }
-        return holders;
+
+        String start = wanted.substring(0, endingStart);
+        String ending = wanted.substring(endingStart);
+        int middleEnd = name.length() - ending.length();
+        boolean framed = name.startsWith(start) && name.endsWith(ending)
+                && middleEnd > start.length();
+        if (!framed) {
+            return false;
+        }
+
+        String middle = name.substring(start.length(), middleEnd).trim();
+        return middle.matches(COPY_NUMBER);
     }
 
-    // Returns the only folder that holds a question folder, or null.
-    private Path findOnlyHolder(List<Path> folders, Assessment assessment)
-            throws IOException {
-        List<Path> holders = findHolders(folders, assessment);
-
-        if (holders.size() != 1) {
-            return null;
-        }
-        return holders.get(0);
+    /**
+     * Finds the question folder dragged into its own folder, such as
+     * Q1/Q1, which the student meant as the question folder.
+     *
+     * @param questionFolder the question folder found, or null
+     * @param folderName the question folder name
+     * @return the inner folder, or null when the folder is not like that
+     * @throws IOException if the folder cannot be listed
+     */
+    protected Path findNestedQuestionFolder(Path questionFolder,
+            String folderName) throws IOException {
+        return AnswerFolderRule.findNestedQuestionFolder(questionFolder,
+                folderName);
     }
 
     /**
@@ -318,26 +323,6 @@ public abstract class AbstractValidator implements Validator {
     protected Path findQuestionFolder(Path contentRoot,
             Question question) throws IOException {
         return findExact(listFolders(contentRoot), question.getFolderName());
-    }
-
-    /**
-     * Says whether any of the folders is a question folder, ignoring case.
-     * At the top of the working copy this means the student zipped the
-     * question folders directly.
-     *
-     * @param folders the folders to search
-     * @param assessment the assessment
-     * @return true if one of them is named like a question folder
-     */
-    protected boolean holdsQuestionFolder(List<Path> folders,
-            Assessment assessment) {
-        for (String folderName : getQuestionFolderNames(assessment)) {
-            if (findIgnoringCase(folders, folderName) != null) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     // Chooses what the instructor can do about each type of problem.

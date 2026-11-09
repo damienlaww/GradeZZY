@@ -2,7 +2,8 @@
  * File: IngestRegressionTest.java
  *
  * Purpose: Regression checks for ingestion: nested and bulk zips,
- * duplicate uploads, unsafe entries, rosters and the Set up batch.
+ * duplicate uploads, unsafe entries, rosters, the Set up batch, the
+ * folder chosen for grading and the folder fixes.
  *
  * Where it fits: Run by hand after compiling, as tests/README.md says.
  * It grades with a pipeline that only unpacks, so no student code runs.
@@ -24,7 +25,16 @@ import gradezzy.report.CsvScoreSheetExporter;
 import gradezzy.service.*;
 import gradezzy.testcase.*;
 import gradezzy.ui.backend.*;
+import gradezzy.fix.FixManager;
+import gradezzy.fix.FixRecord;
+import gradezzy.fix.FolderHierarchyFixer;
+import gradezzy.fix.FolderNameFixer;
+import gradezzy.util.AnswerFolderRule;
 import gradezzy.util.FileUtils;
+import gradezzy.validation.FileNameValidator;
+import gradezzy.validation.HeaderNameValidator;
+import gradezzy.validation.RequiredFilesValidator;
+import gradezzy.validation.StructureValidator;
 
 /**
  * Runs the ingestion regression checks and prints how many passed.
@@ -426,11 +436,219 @@ public class IngestRegressionTest {
             check(ui.isReady() && ui.getSubmissionPaths().size() == 2,
                     "UI allows grading and passes duplicate to per-file "
                     + "reporting");
+            checkAnswerFolders(root.resolve("answer-folders"), config);
+            checkInputFixes(root.resolve("input-fixes"), config, loader);
             System.out.println("Passed " + checks
                     + " ingestion regression checks.");
         } finally {
             FileUtils.deleteDirectory(root);
         }
+    }
+
+    // Checks the rule that picks the folder to grade, and the folder
+    // fixes for chains of folders and a question folder inside itself.
+    private static void checkAnswerFolders(Path root, AppConfig config)
+            throws Exception {
+        List<String> names = List.of("Q1", "Q2", "Q3");
+        Path two = root.resolve("two");
+        write(two.resolve("u/Q1/Q1a.java"), "class Q1a {}");
+        write(two.resolve("u (2)/Q1/Q1a.java"), "class Q1a {}");
+        check(AnswerFolderRule.findContentRoot(two, "u", names) == null
+                && AnswerFolderRule.findAnswerHolders(two, names).size()
+                == 2, "two answer folders give no folder to grade");
+        Path junk = root.resolve("junk");
+        write(junk.resolve("Q1/notes.txt"), "notes");
+        write(junk.resolve("u/Q1/Q1a.java"), "class Q1a {}");
+        check(AnswerFolderRule.findContentRoot(junk, "u", names)
+                .equals(junk.resolve("u")),
+                "a top-level question folder without Java does not count");
+        Path ide = root.resolve("ide");
+        write(ide.resolve("u/src/Q1/Q1a.java"), "class Q1a {}");
+        write(ide.resolve("u/out/production/u/Q1/Q1a.class"), "x");
+        check(AnswerFolderRule.findExtraFolder(ide.resolve("u"), names)
+                .equals(ide.resolve("u/src")),
+                "IDE output beside src is not a second answer");
+        Path nested = root.resolve("nested");
+        write(nested.resolve("Q1/Q1/Q1a.java"), "class Q1a {}");
+        write(nested.resolve("Q1/Shape.class"), "x");
+        check(AnswerFolderRule.findNestedQuestionFolder(
+                nested.resolve("Q1"), "Q1").equals(
+                nested.resolve("Q1/Q1")),
+                "a question folder inside itself is found");
+
+        Assessment assessment = new AssessmentFactory(config).create();
+        Path chain = root.resolve("chain");
+        for (String file : List.of("Q1/Q1a.java", "Q1/Q1b.java",
+                "Q2/Q2a.java", "Q2/Q2b.java", "Q3/Q3.java")) {
+            write(chain.resolve("Users/jy/Desktop/u/" + file), "class X {}");
+        }
+        Submission deep = new Submission("u", SECTION, chain);
+        deep.setWorkingCopyPath(chain);
+        for (Anomaly found : new StructureValidator().validate(deep,
+                assessment)) {
+            deep.addAnomaly(found);
+        }
+        FixManager fixes = new FixManager();
+        fixes.addFixer(new FolderHierarchyFixer(config));
+        fixes.addFixer(new FolderNameFixer(config));
+        List<FixRecord> applied = fixes.applyAll(deep);
+        check(applied.size() == 2
+                && Files.exists(chain.resolve("u/Q3/Q3.java"))
+                && !Files.exists(chain.resolve("Users")),
+                "question folders three levels down are moved up and the "
+                + "top folder renamed");
+        fixes.undo(applied.get(1));
+        fixes.undo(applied.get(0));
+        check(Files.exists(chain.resolve("Users/jy/Desktop/u/Q3/Q3.java"))
+                && !Files.exists(chain.resolve("u")),
+                "undo puts the chain of folders back");
+
+        Path inside = root.resolve("inside");
+        write(inside.resolve("u/Q1/Q1/Q1a.java"), "class Q1a {}");
+        write(inside.resolve("u/Q1/Q1/Q1b.java"), "class Q1b {}");
+        write(inside.resolve("u/Q2/Q2a.java"), "class Q2a {}");
+        write(inside.resolve("u/Q2/Q2b.java"), "class Q2b {}");
+        write(inside.resolve("u/Q3/Q3.java"), "class Q3 {}");
+        Submission dragged = new Submission("u", SECTION, inside);
+        dragged.setWorkingCopyPath(inside);
+        for (Anomaly found : new StructureValidator().validate(dragged,
+                assessment)) {
+            dragged.addAnomaly(found);
+        }
+        check(new RequiredFilesValidator().validate(dragged, assessment)
+                .isEmpty(), "Q1/Q1 is not also reported as missing files");
+        FixManager insideFixes = new FixManager();
+        insideFixes.addFixer(new FolderHierarchyFixer(config));
+        List<FixRecord> moved = insideFixes.applyAll(dragged);
+        check(moved.size() == 1
+                && Files.exists(inside.resolve("u/Q1/Q1a.java")),
+                "a question folder inside itself is moved up");
+        insideFixes.undo(moved.get(0));
+        check(Files.exists(inside.resolve("u/Q1/Q1/Q1b.java")),
+                "undo puts the question folder back inside itself");
+    }
+
+    // Checks the fixes for names with spaces at the end, Excel rows,
+    // spaces around roster values, prefilled marks, .zip.zip, bulk zip
+    // times, copy-numbered files and header labels.
+    private static void checkInputFixes(Path root, AppConfig config,
+            SubmissionLoader loader) throws Exception {
+        Files.createDirectories(root);
+        ZipExtractor extractor = new ZipExtractor(config);
+        Path spaces = root.resolve("spaces.zip");
+        try (ZipOutputStream out = new ZipOutputStream(
+                Files.newOutputStream(spaces))) {
+            for (String name : List.of("w /Q1 /A.java", "w /Q2/B.java.")) {
+                out.putNextEntry(new ZipEntry(name));
+                out.closeEntry();
+            }
+        }
+        List<String> renamed = new java.util.ArrayList<>();
+        Path spacesTarget = extractor.extract(spaces,
+                root.resolve("spaces-target"), new java.util.ArrayList<>(),
+                renamed);
+        check(Files.exists(spacesTarget.resolve("w/Q1/A.java"))
+                && Files.exists(spacesTarget.resolve("w/Q2/B.java"))
+                && renamed.contains("\"w \" as \"w\""),
+                "a space or dot at the end of a name is dropped and named");
+        Path trimClash = root.resolve("trim-clash.zip");
+        try (ZipOutputStream out = new ZipOutputStream(
+                Files.newOutputStream(trimClash))) {
+            for (String name : List.of("w/Q1/A.java", "w/Q1 /A.java")) {
+                out.putNextEntry(new ZipEntry(name));
+                out.closeEntry();
+            }
+        }
+        try {
+            extractor.extract(trimClash, root.resolve("trim-clash-target"));
+            throw new AssertionError("a clash after trimming accepted");
+        } catch (InvalidArchiveException expected) {
+            checks++;
+        }
+
+        Path sheet = root.resolve("excel.csv");
+        Files.writeString(sheet, "OrgDefinedId,Username,Last Name,"
+                + "First Name,Email,Calculated Final Grade Numerator\n"
+                + "#1,#bob ,B,Bob,bob@example.com,\n"
+                + "#2,# carl,C,Carl,carl@example.com,12.5\n"
+                + ",,,,,\n,,,,,\n");
+        List<Student> students = new RosterReader(config).readRoster(sheet);
+        check(students.size() == 2
+                && students.get(0).getUsername().equals("bob")
+                && students.get(1).getUsername().equals("carl"),
+                "empty Excel rows are skipped and roster values trimmed");
+        GradingRun run = new GradingRun("RUN-trim",
+                new AssessmentFactory(config).create(), SECTION,
+                LocalDateTime.now());
+        Submission bob = new Submission("bob", SECTION, sheet);
+        bob.setStatus(SubmissionStatus.GRADED);
+        run.addSubmission(bob);
+        run.setScoreSheetFile(sheet);
+        Path csv = root.resolve("trim-export.csv");
+        new CsvScoreSheetExporter(config, sheet).export(run, csv);
+        String exported = Files.readString(csv);
+        check(exported.contains("#bob ,B,Bob,bob@example.com,0")
+                && exported.contains("# carl,C,Carl,carl@example.com,12.5"),
+                "export matches a trimmed username and keeps a mark "
+                + "already in the sheet");
+
+        check(loader.extractUsername("2023-2024-dan.zip.zip").equals("dan"),
+                "a name ending .zip.zip gives the username");
+
+        Path older = zip(root.resolve("older.zip"), "dan/Q1/Q1a.java",
+                "old");
+        Path newer = zip(root.resolve("newer.zip"), "dan/Q1/Q1a.java",
+                "new");
+        Path bulk = root.resolve("bulk download.zip");
+        try (ZipOutputStream out = new ZipOutputStream(
+                Files.newOutputStream(bulk))) {
+            ZipEntry first = new ZipEntry("a/2023-2024-dan.zip");
+            first.setTime(1700000000000L);
+            out.putNextEntry(first);
+            out.write(Files.readAllBytes(older));
+            out.closeEntry();
+            ZipEntry second = new ZipEntry("b/2023-2024-dan.zip");
+            second.setTime(1700090000000L);
+            out.putNextEntry(second);
+            out.write(Files.readAllBytes(newer));
+            out.closeEntry();
+        }
+        List<Submission> fromBulk = loader.loadSubmissions(List.of(bulk),
+                SECTION);
+        Submission dan = fromBulk.get(0);
+        check(fromBulk.size() == 1
+                && dan.getOriginalPath().getParent().getFileName()
+                .toString().equals("b")
+                && dan.getAnomalies().get(0).getMessage().contains(
+                "in the folder a of the bulk zip"),
+                "the newer of two same-named zips in a bulk zip is graded "
+                + "and the message names both folders");
+
+        Assessment assessment = new AssessmentFactory(config).create();
+        Path copied = root.resolve("copied");
+        write(copied.resolve("u/Q1/Q1a (1).java"), "class Q1a {}");
+        write(copied.resolve("u/Q1/Q1b.java"), "class Q1b {}");
+        Submission browser = new Submission("u", SECTION, copied);
+        browser.setWorkingCopyPath(copied);
+        List<Anomaly> names = new FileNameValidator().validate(browser,
+                assessment);
+        check(names.size() == 1 && names.get(0).getMessage().equals(
+                "Q1/Q1a (1).java should be named Q1/Q1a.java.")
+                && new RequiredFilesValidator().validate(browser, assessment)
+                .stream().noneMatch(anomaly -> anomaly.getMessage()
+                .startsWith("Q1/Q1a.java")),
+                "a browser copy name is a wrong name, not a missing file");
+        check(HeaderNameValidator.findValueStart(" * Name : Ann", "Name:")
+                == " * Name :".length()
+                && HeaderNameValidator.findValueStart(" * Email ID :",
+                "Email ID:") == " * Email ID :".length(),
+                "a header label with a space before the colon is read");
+    }
+
+    // Writes a text file, making its folders first.
+    private static void write(Path file, String text) throws Exception {
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, text);
     }
 
     // Writes a zip holding one entry with the given text.

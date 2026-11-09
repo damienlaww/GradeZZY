@@ -88,9 +88,6 @@ public class CsvScoreSheetExporter implements Exporter {
     private static final int FIELD_START = 0;
     private static final int FIELD_END = 1;
 
-    // Written when a student has no graded submission
-    private static final String NO_SCORE = "";
-
     // The application settings
     private final AppConfig config;
 
@@ -135,9 +132,10 @@ public class CsvScoreSheetExporter implements Exporter {
      *
      * <p>Every row and value of the template is kept as it is, quotes
      * included, apart from the numerator, which receives the student's
-     * total. A student without a graded submission is left blank so the
-     * instructor notices. The file is written in the encoding the template
-     * was saved in.
+     * total. The row of a student without a graded submission in this run
+     * keeps what the template held: blank in the sheet from eLearn, so the
+     * instructor notices, or a mark entered before. The file is written in
+     * the encoding the template was saved in.
      *
      * @param gradingRun the grading run
      * @param outputFile the output file
@@ -319,8 +317,10 @@ public class CsvScoreSheetExporter implements Exporter {
 
     // Returns the record with the numerator filled in. Only the text of
     // the numerator field changes; every other character, quotes
-    // included, is copied as it is. A blank record, or one too short to
-    // hold both columns, is kept exactly as it was.
+    // included, is copied as it is. The username is matched without the
+    // spaces around it. A blank record, one too short to hold both
+    // columns, or one whose student has no graded submission in this run
+    // is kept exactly as it was, so a mark already in the sheet stays.
     private String fillRow(String record, int recordNumber,
             int usernameIndex, int numeratorIndex,
             Map<String, Submission> submissionsByUsername)
@@ -339,12 +339,17 @@ public class CsvScoreSheetExporter implements Exporter {
         String usernameText = record.substring(usernameField[FIELD_START],
                 usernameField[FIELD_END]);
         List<String> usernameValues = splitLine(usernameText, recordNumber);
-        String username = removeIdPrefix(usernameValues.get(0));
+        String username = removeIdPrefix(usernameValues.get(0).trim())
+                .trim();
         String key = username.toLowerCase(Locale.ROOT);
         Submission submission = submissionsByUsername.get(key);
+        if (!isGraded(submission)) {
+            // No mark from this run: what the sheet held stays as it was
+            return record;
+        }
 
         return record.substring(0, numeratorField[FIELD_START])
-                + formatScore(submission)
+                + ScoreFormatter.format(submission.getTotalScore())
                 + record.substring(numeratorField[FIELD_END]);
     }
 
@@ -395,16 +400,12 @@ public class CsvScoreSheetExporter implements Exporter {
         return value;
     }
 
-    // Writes 12 for a whole total and 10.5 otherwise. Only a graded
-    // submission gets a number; anything else stays blank.
-    private String formatScore(Submission submission) {
-        boolean notGraded = submission == null
-                || submission.getStatus() != SubmissionStatus.GRADED;
-        if (notGraded) {
-            return NO_SCORE;
-        }
-
-        return ScoreFormatter.format(submission.getTotalScore());
+    // Says whether a row's student has a graded submission in this run.
+    // Only then is a mark written, as 12 for a whole total and 10.5
+    // otherwise.
+    private boolean isGraded(Submission submission) {
+        return submission != null
+                && submission.getStatus() == SubmissionStatus.GRADED;
     }
 
     // Reads the line ending setting: CRLF as provided, or LF

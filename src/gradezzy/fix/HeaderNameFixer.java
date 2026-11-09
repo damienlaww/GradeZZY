@@ -23,6 +23,7 @@ import gradezzy.model.AnomalyType;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.util.TextUtils;
+import gradezzy.validation.HeaderNameValidator;
 
 /**
  * Writes the student's name and email into a blank file header.
@@ -267,17 +268,18 @@ public class HeaderNameFixer extends AbstractFixer {
         return !TextUtils.isBlank(value);
     }
 
-    // Returns where the value after the label starts, or -1 if none.
+    // Returns where the value after the label starts, or -1 if none. The
+    // label matches as the validator reads it, so Name : counts too.
     private int findValueStart(String text, String label) {
         int scanLines = config.getInt(ConfigKeys.HEADER_SCAN_LINES);
         int lineStart = 0;
         for (int lineNumber = 0; lineNumber < scanLines
                 && lineStart < text.length(); lineNumber++) {
             int lineEnd = findLineEnd(text, lineStart);
-            int labelPosition = text.substring(lineStart, lineEnd)
-                    .indexOf(label);
-            if (labelPosition >= 0) {
-                return lineStart + labelPosition + label.length();
+            String line = text.substring(lineStart, lineEnd);
+            int valueStart = HeaderNameValidator.findValueStart(line, label);
+            if (valueStart >= 0) {
+                return lineStart + valueStart;
             }
             lineStart = lineEnd + 1;
         }
