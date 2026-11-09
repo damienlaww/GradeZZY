@@ -451,8 +451,9 @@ public class SettingsScreen extends FlowScreen {
                 "How alike two answers must be to be flagged.",
                 SIMILARITIES).showChoicesAs(similarityNames());
         choice(ConfigKeys.PLAGIARISM_ALGORITHM, "How code is compared",
-                "Rename-proof still matches renamed names and moved "
-                + "methods.", ALGORITHMS).showChoicesAs(ALGORITHM_NAMES);
+                "Rename-proof also matches renamed names and moved "
+                + "methods, and honest answers with the same structure.",
+                ALGORITHMS).showChoicesAs(ALGORITHM_NAMES);
 
         startGroup("Statistics");
         listed(ConfigKeys.PASS_MARK_PERCENT, "Pass mark",

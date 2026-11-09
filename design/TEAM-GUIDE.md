@@ -600,8 +600,8 @@ How the flags work (never a change of mark):
   check could not run; it never fails a submission.
 
 How the similarity check works: `plagiarism.algorithm` picks the
-detector in `ApplicationContext`. The default, `WinnowingSimilarityDetector`,
-splits each answer into tokens, ignoring spacing and comments, turns
+detector in `ApplicationContext`. `WinnowingSimilarityDetector`
+(`plagiarism.algorithm=winnowing`) splits each answer into tokens, ignoring spacing and comments, turns
 every name into `ID` and every text literal into `STR`, so renaming
 changes nothing, and hashes every run of 5 such tokens. Winnowing
 (`Winnowing.selectFingerprints`) keeps the smallest hash of every 4 in a
@@ -611,8 +611,8 @@ students are compared with the Jaccard measure (shared fingerprints
 divided by all fingerprints). A pair is only compared when both answers
 have at least 25 fingerprints of their own (`MIN_OWN_FINGERPRINTS`):
 short correct answers look alike even when written separately. The
-first version, `TokenSimilarityDetector` (`plagiarism.algorithm=trigrams`),
-compares runs of three tokens as written instead, with at least 50 of
+first version and the default, `TokenSimilarityDetector`
+(`plagiarism.algorithm=trigrams`), compares runs of three tokens as written instead, with at least 50 of
 them (`MIN_OWN_TRIGRAMS`), so renaming variables lowers its score. Pairs
 at or above `plagiarism.similarity.threshold` are reported. The starter
 code comes from the run's starter folder, or from `paths.starter.dir`

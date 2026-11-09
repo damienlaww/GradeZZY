@@ -654,7 +654,7 @@ reading the question's answer file and its other source files (such as
 `GoldMember.java` next to `Q3.java`). `plagiarism.algorithm` picks one
 of two `SimilarityDetector` classes, both kept so they can be compared.
 
-**Rename-proof winnowing (`winnowing`, the default):
+**Rename-proof winnowing (`winnowing`):
 `WinnowingSimilarityDetector`.** It uses the winnowing fingerprint
 algorithm of Schleimer, Wilkerson and Aiken (2003), the one MOSS uses.
 
@@ -683,7 +683,7 @@ A pair is compared only when both answers have at least 25 fingerprints
 of their own (`MIN_OWN_FINGERPRINTS`), because short correct answers
 look alike even when written separately.
 
-**Token trigrams (`trigrams`, the first version):
+**Token trigrams (`trigrams`, the first version and the default):
 `TokenSimilarityDetector`.** It collects every run of three tokens as
 written, names and all, removes the starter file's runs and compares
 with the Jaccard measure. A pair is compared only when both answers
@@ -722,8 +722,10 @@ Measured on the team's test sets, with the default threshold 0.80:
 So winnowing finds renamed copies the first version misses, but it
 cannot tell a renamed copy from honest answers that share one
 structure: on a test set built by renaming a few model answers, it
-flags every such pair. Set `plagiarism.algorithm=trigrams` to go back to
-the first version.
+flags every such pair. That is why trigrams stay the default. Choose
+winnowing ("How code is compared" in Settings, or
+`plagiarism.algorithm=winnowing`) to look for renamed copies, and expect
+to dismiss more pairs.
 
 The window lists each pair with a pill such as "84% similar": red above
 75%, amber at 75% or below (the percent as shown, rounded).
@@ -971,7 +973,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `detection.hardcoded.enabled` | `true` | Flag hard-coded answers. |
 | `plagiarism.enabled` | `true` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
-| `plagiarism.algorithm` | `winnowing` | How answers are compared: `winnowing` (rename-proof fingerprints, `WinnowingSimilarityDetector`) or `trigrams` (the first version, `TokenSimilarityDetector`). See "Similar code check". |
+| `plagiarism.algorithm` | `trigrams` | How answers are compared: `winnowing` (rename-proof fingerprints, `WinnowingSimilarityDetector`) or `trigrams` (the first version, `TokenSimilarityDetector`). See "Similar code check". |
 | `export.formats` | `csv,json` | Formats offered by default. |
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
 | `export.csv.id.prefix` | `#` | Character in front of the id and username. |
