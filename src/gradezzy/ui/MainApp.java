@@ -165,6 +165,7 @@ public class MainApp extends Application {
         stage.setScene(scene);
         stage.setOnCloseRequest(event -> window.closeRequested(event));
         stage.show();
+        window.offerTourOnce();
     }
 
     // Ends the application with the outcome of the window test.

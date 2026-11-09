@@ -1,7 +1,7 @@
 /*
  * File: FlowSelfTest.java
  *
- * Purpose: Runs seven everyday tasks through the window with the demo
+ * Purpose: Runs nine everyday tasks through the window with the demo
  * data and prints PASS or FAIL for each.
  *
  * Where it fits: Run by "sh run.sh --selftest". Needs no screen. It
@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import javafx.event.Event;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -30,6 +31,8 @@ import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Anomaly;
@@ -57,6 +60,7 @@ import gradezzy.ui.backend.StatusCounts;
 import gradezzy.ui.demo.DemoBackend;
 import gradezzy.ui.demo.DemoData;
 import gradezzy.ui.flow.FlowWindow;
+import gradezzy.ui.flow.GuidedTour;
 import gradezzy.ui.flow.MarkStats;
 import gradezzy.ui.flow.Page;
 import gradezzy.ui.flow.Parts;
@@ -72,6 +76,9 @@ public class FlowSelfTest {
     // The size of the off-screen window
     private static final double WIDTH = 1200.0;
     private static final double HEIGHT = 800.0;
+
+    // The index of the tour's stop about the Review step
+    private static final int REVIEW_STOP = 9;
 
     // Steps in one submission: start, eight more stages, then finish
     private static final int STEPS_PER_SUBMISSION = 10;
@@ -175,7 +182,7 @@ public class FlowSelfTest {
     }
 
     /**
-     * Runs the seven flows and prints PASS or FAIL for each.
+     * Runs the nine flows and prints PASS or FAIL for each.
      *
      * @return 0 when every flow passed, 1 otherwise
      */
@@ -203,12 +210,14 @@ public class FlowSelfTest {
                 () -> flowTheme());
         failed += runFlow(8, "Home shows each section; save, use and "
                 + "switch assessments", () -> flowHome());
+        failed += runFlow(9, "Take the tour from Help, go back and on, "
+                + "end it with Done, Esc and Skip tour", () -> flowTour());
 
         if (failed == 0) {
-            System.out.println("All 8 flows passed.");
+            System.out.println("All 9 flows passed.");
             return 0;
         }
-        System.out.println(failed + " of 8 flows failed.");
+        System.out.println(failed + " of 9 flows failed.");
         return 1;
     }
 
@@ -1225,6 +1234,111 @@ public class FlowSelfTest {
                 gradezzy.ui.flow.ActivityUndo.SECTION_DELETED, section
                 + " of every module") == null,
                 "a delete is put back only once");
+    }
+
+    // ------------------------------------------------------------ flow 9
+
+    // Help's Take the tour starts the tour on Home. Every stop after the
+    // welcome lights up a part of the window. Done, Esc and Skip tour put
+    // back the tab it started from, and shortcuts do not reach the
+    // window behind the tour. Before any run is open, a step's stop
+    // points at the row of steps instead.
+    private void flowTour() {
+        window.showPage(Page.STATISTICS);
+        settle();
+        window.showHelp();
+        settle();
+        press(SceneFinder.button(sheet(), "Take the tour"),
+                "Take the tour");
+        GuidedTour tour = window.getTour();
+        check(tour != null && tour.isOpen(), "Take the tour opens the "
+                + "tour");
+        if (tour == null || !tour.isOpen()) {
+            return;
+        }
+        check(!window.isSheetOpen(), "the Help sheet closes");
+        check(window.getCurrentPage() == Page.HOME, "the tour starts on "
+                + "Home");
+
+        int stops = tour.getStopCount();
+        for (int stop = 0; stop < stops; stop++) {
+            String count = (stop + 1) + " of " + stops;
+            check(count.equals(SceneFinder.text(root(), "tour-count")),
+                    "the card says " + count);
+            if (stop > 0) {
+                check(tour.getTarget() != null, "stop " + (stop + 1)
+                        + " lights up a part of the window");
+            }
+            String button = "Next";
+            if (stop == stops - 1) {
+                button = "Done";
+            }
+            press(tourButton(button), button);
+        }
+        check(!tour.isOpen(), "Done ends the tour");
+        check(window.getCurrentPage() == Page.STATISTICS, "Done goes "
+                + "back to Statistics");
+        check(scene.lookup(".tour-card") == null, "the tour is gone after "
+                + "Done");
+
+        window.startTour();
+        settle();
+        press(tourButton("Next"), "Next");
+        press(tourButton("Next"), "Next");
+        press(tourButton("Back"), "Back");
+        check(tour.getIndex() == 1, "Back goes to the stop before");
+        pressKey(KeyCode.RIGHT, false);
+        check(tour.getIndex() == 2, "the right arrow goes on");
+        pressKey(KeyCode.LEFT, false);
+        check(tour.getIndex() == 1, "the left arrow goes back");
+        pressKey(KeyCode.DIGIT4, true);
+        check(tour.isOpen() && tour.getIndex() == 1
+                && window.getCurrentPage() == Page.HOME, "a step "
+                + "shortcut is held back while the tour is on screen");
+        pressKey(KeyCode.ESCAPE, false);
+        check(!tour.isOpen(), "Esc ends the tour");
+        check(window.getCurrentPage() == Page.STATISTICS, "Esc goes back "
+                + "to Statistics");
+
+        window.startTour();
+        settle();
+        press(SceneFinder.link(scene.lookup(".tour-card"), "Skip tour"),
+                "Skip tour");
+        check(!tour.isOpen(), "Skip tour ends the tour");
+
+        FlowWindow fresh = new FlowWindow(backend, false);
+        Scene freshScene = fresh.build(WIDTH, HEIGHT);
+        fresh.startTour();
+        GuidedTour freshTour = fresh.getTour();
+        while (freshTour.isOpen() && freshTour.getIndex() < REVIEW_STOP) {
+            freshTour.next();
+        }
+        SceneFinder.settle(freshScene);
+        Node lit = freshTour.getTarget();
+        check(lit != null && lit.getStyleClass().contains("step-item"),
+                "before any run is open, the Review stop lights up the "
+                + "step in the row of steps");
+        check(SceneFinder.text(freshScene.getRoot(), "tour-text")
+                .contains("This step opens"), "the card says when the "
+                + "step opens");
+        freshTour.end();
+    }
+
+    // Returns a button of the tour's card, or null.
+    private Button tourButton(String text) {
+        Node card = scene.lookup(".tour-card");
+        if (card == null) {
+            return null;
+        }
+        return SceneFinder.button(card, text);
+    }
+
+    // Presses a key, with Cmd or Ctrl when asked, as the keyboard would.
+    private void pressKey(KeyCode code, boolean shortcut) {
+        KeyEvent event = new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code,
+                false, shortcut, false, shortcut);
+        Event.fireEvent(root(), event);
+        settle();
     }
 
     // ----------------------------------------------------------- helpers
