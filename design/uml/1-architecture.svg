@@ -1,0 +1,287 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="990" viewBox="0 0 1760 990" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="dep" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L10,6 L0,12" fill="none" stroke="#24292f" stroke-width="1.5"/>
+    </marker>
+    <marker id="real" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L14,8 L0,16 Z" fill="#ffffff" stroke="#24292f" stroke-width="1.5"/>
+    </marker>
+    <style>
+      .tab { stroke: #57606a; stroke-width: 1.5; }
+      .pkg { stroke: #57606a; stroke-width: 1.5; }
+      .cls { fill: #ffffff; stroke: #24292f; stroke-width: 1.3; }
+      .pname { font-size: 15px; font-weight: 700; fill: #24292f; }
+      .cname { font-size: 13px; fill: #24292f; }
+      .iname { font-size: 13px; font-style: italic; fill: #24292f; }
+      .stereo { font-size: 11px; fill: #57606a; }
+      .small { font-size: 12px; fill: #24292f; }
+      .ital { font-size: 12px; font-style: italic; fill: #24292f; }
+      .note { font-size: 12px; font-style: italic; fill: #57606a; }
+      .dep { fill: none; stroke: #24292f; stroke-width: 1.5; stroke-dasharray: 7 5; }
+      .ui { fill: #eef4ff; }
+      .svc { fill: #edf9f0; }
+      .grd { fill: #fff5e6; }
+      .hlp { fill: #f6f8fa; }
+      .base { fill: #f4f0ff; }
+    </style>
+  </defs>
+
+  <rect width="1760" height="990" fill="#ffffff"/>
+
+  <!-- Title and legend -->
+  <text x="40" y="42" font-size="24" font-weight="700" fill="#24292f">GradeZZY system architecture</text>
+  <text x="40" y="66" class="note">UML package diagram. Each layer only uses the layers below it.</text>
+  <line x1="1290" y1="40" x2="1350" y2="40" class="dep" marker-end="url(#dep)"/>
+  <text x="1362" y="44" class="small">uses (depends on)</text>
+  <line x1="1290" y1="64" x2="1350" y2="64" class="dep" marker-end="url(#real)"/>
+  <text x="1362" y="68" class="small">implements</text>
+  <text x="1500" y="44" class="ital">italic = interface or</text>
+  <text x="1500" y="62" class="ital">abstract class</text>
+
+  <!-- Layer 1: ui -->
+  <rect x="40" y="90" width="70" height="22" class="tab ui"/>
+  <text x="52" y="106" class="pname">ui</text>
+  <rect x="40" y="112" width="1180" height="148" class="pkg ui"/>
+  <text x="122" y="106" class="note">JavaFX window: the only package that imports JavaFX</text>
+
+  <rect x="60" y="160" width="150" height="30" class="cls"/>
+  <text x="135" y="180" class="cname" text-anchor="middle">MainApp</text>
+  <text x="60" y="214" class="small">GradingTask</text>
+  <text x="60" y="232" class="small">ThemeManager</text>
+
+  <rect x="230" y="128" width="64" height="20" class="tab hlp"/>
+  <text x="240" y="143" class="small" font-weight="700">flow</text>
+  <rect x="230" y="148" width="560" height="102" class="pkg hlp"/>
+  <rect x="246" y="160" width="130" height="30" class="cls"/>
+  <text x="311" y="180" class="cname" text-anchor="middle">FlowWindow</text>
+  <rect x="396" y="160" width="150" height="30" class="cls"/>
+  <text x="471" y="180" class="iname" text-anchor="middle">FlowScreen</text>
+  <text x="566" y="173" class="small">4 steps: Set up, Grade,</text>
+  <text x="566" y="189" class="small">Review, Export</text>
+  <text x="246" y="214" class="small">8 screens extend FlowScreen: SetUpScreen, GradeScreen, ReviewScreen,</text>
+  <text x="246" y="232" class="small">ExportScreen, HomeScreen, RunsScreen, StatisticsScreen, SettingsScreen</text>
+
+  <rect x="810" y="128" width="84" height="20" class="tab hlp"/>
+  <text x="820" y="143" class="small" font-weight="700">backend</text>
+  <rect x="810" y="148" width="230" height="102" class="pkg hlp"/>
+  <rect x="825" y="156" width="200" height="38" class="cls"/>
+  <text x="925" y="170" class="stereo" text-anchor="middle">«interface»</text>
+  <text x="925" y="187" class="iname" text-anchor="middle">DashboardBackend</text>
+  <rect x="825" y="214" width="200" height="28" class="cls"/>
+  <text x="925" y="233" class="cname" text-anchor="middle">LiveBackend</text>
+  <line x1="925" y1="214" x2="925" y2="194" class="dep" marker-end="url(#real)"/>
+
+  <rect x="1060" y="128" width="64" height="20" class="tab hlp"/>
+  <text x="1070" y="143" class="small" font-weight="700">demo</text>
+  <rect x="1060" y="148" width="148" height="102" class="pkg hlp"/>
+  <rect x="1070" y="160" width="128" height="30" class="cls"/>
+  <text x="1134" y="180" class="cname" text-anchor="middle">DemoBackend</text>
+  <line x1="1070" y1="175" x2="1025" y2="175" class="dep" marker-end="url(#real)"/>
+  <text x="1070" y="214" class="small">Sample data,</text>
+  <text x="1070" y="232" class="small">no grading</text>
+
+  <!-- Layer 1: app -->
+  <rect x="1260" y="90" width="70" height="22" class="tab ui"/>
+  <text x="1272" y="106" class="pname">app</text>
+  <rect x="1260" y="112" width="460" height="148" class="pkg ui"/>
+  <rect x="1280" y="160" width="150" height="30" class="cls"/>
+  <text x="1355" y="180" class="cname" text-anchor="middle">ConsoleMain</text>
+  <rect x="1450" y="160" width="250" height="30" class="cls"/>
+  <text x="1575" y="180" class="cname" text-anchor="middle">ApplicationContext</text>
+  <text x="1280" y="214" class="small">Console entry point. ApplicationContext builds every</text>
+  <text x="1280" y="232" class="small">service, stage, fixer and the database once at start.</text>
+
+  <line x1="1220" y1="186" x2="1258" y2="186" class="dep" marker-end="url(#dep)"/>
+
+  <!-- ui and app use service -->
+  <line x1="630" y1="260" x2="630" y2="318" class="dep" marker-end="url(#dep)"/>
+  <line x1="1490" y1="260" x2="1490" y2="318" class="dep" marker-end="url(#dep)"/>
+
+  <!-- Layer 2: service -->
+  <rect x="40" y="298" width="90" height="22" class="tab svc"/>
+  <text x="52" y="314" class="pname">service</text>
+  <rect x="40" y="320" width="1680" height="104" class="pkg svc"/>
+  <rect x="58" y="340" width="172" height="30" class="cls"/>
+  <text x="144" y="360" class="cname" text-anchor="middle">ServiceRegistry</text>
+  <rect x="240" y="340" width="172" height="30" class="cls"/>
+  <text x="326" y="360" class="cname" text-anchor="middle">GradingService</text>
+  <rect x="422" y="340" width="172" height="30" class="cls"/>
+  <text x="508" y="360" class="cname" text-anchor="middle">PipelineFactory</text>
+  <rect x="604" y="340" width="172" height="30" class="cls"/>
+  <text x="690" y="360" class="cname" text-anchor="middle">AnomalyService</text>
+  <rect x="786" y="340" width="172" height="30" class="cls"/>
+  <text x="872" y="360" class="cname" text-anchor="middle">ExportService</text>
+  <rect x="968" y="340" width="172" height="30" class="cls"/>
+  <text x="1054" y="360" class="cname" text-anchor="middle">PlagiarismService</text>
+  <rect x="1150" y="340" width="172" height="30" class="cls"/>
+  <text x="1236" y="360" class="cname" text-anchor="middle">StatisticsService</text>
+  <rect x="1332" y="340" width="172" height="30" class="cls"/>
+  <text x="1418" y="360" class="cname" text-anchor="middle">HistoryService</text>
+  <rect x="1514" y="340" width="188" height="30" class="cls"/>
+  <text x="1608" y="360" class="cname" text-anchor="middle">ScoreAdjustmentService</text>
+  <text x="58" y="400" class="small">One service per job the window or console asks for. Also AuditService, SettingsService, SearchService and AssessmentLibrary.</text>
+
+  <!-- service uses grading, report, plagiarism, stats -->
+  <line x1="600" y1="424" x2="600" y2="486" class="dep" marker-end="url(#dep)"/>
+  <line x1="1294" y1="424" x2="1294" y2="676" class="dep" marker-end="url(#dep)"/>
+  <line x1="1462" y1="424" x2="1462" y2="676" class="dep" marker-end="url(#dep)"/>
+  <line x1="1630" y1="424" x2="1630" y2="676" class="dep" marker-end="url(#dep)"/>
+  <text x="1306" y="520" class="note">service also calls</text>
+  <text x="1306" y="537" class="note">the packages below</text>
+  <text x="1306" y="554" class="note">directly</text>
+
+  <!-- Layer 3: grading -->
+  <rect x="40" y="466" width="90" height="22" class="tab grd"/>
+  <text x="52" y="482" class="pname">grading</text>
+  <rect x="40" y="488" width="1170" height="128" class="pkg grd"/>
+  <rect x="58" y="510" width="170" height="30" class="cls"/>
+  <text x="143" y="530" class="cname" text-anchor="middle">GradingPipeline</text>
+  <rect x="248" y="506" width="170" height="38" class="cls"/>
+  <text x="333" y="520" class="stereo" text-anchor="middle">«interface»</text>
+  <text x="333" y="537" class="iname" text-anchor="middle">GradingStage</text>
+  <line x1="228" y1="525" x2="246" y2="525" stroke="#24292f" stroke-width="1.5"/>
+  <text x="58" y="566" class="small">Runs the nine stages in order</text>
+  <text x="58" y="584" class="small">for every submission, on</text>
+  <text x="58" y="602" class="small">exec.thread.count threads</text>
+
+  <rect x="440" y="506" width="145" height="28" class="cls"/>
+  <text x="512" y="525" class="cname" text-anchor="middle">1 ExtractStage</text>
+  <rect x="592" y="506" width="145" height="28" class="cls"/>
+  <text x="664" y="525" class="cname" text-anchor="middle">2 ValidateStage</text>
+  <rect x="744" y="506" width="145" height="28" class="cls"/>
+  <text x="816" y="525" class="cname" text-anchor="middle">3 FixStage</text>
+  <rect x="896" y="506" width="145" height="28" class="cls"/>
+  <text x="968" y="525" class="cname" text-anchor="middle">4 DetectStage</text>
+  <rect x="1048" y="506" width="150" height="28" class="cls"/>
+  <text x="1123" y="525" class="cname" text-anchor="middle">5 InstallTestersStage</text>
+  <rect x="440" y="546" width="145" height="28" class="cls"/>
+  <text x="512" y="565" class="cname" text-anchor="middle">6 CompileStage</text>
+  <rect x="592" y="546" width="145" height="28" class="cls"/>
+  <text x="664" y="565" class="cname" text-anchor="middle">7 ExecuteStage</text>
+  <rect x="744" y="546" width="145" height="28" class="cls"/>
+  <text x="816" y="565" class="cname" text-anchor="middle">8 ScoreStage</text>
+  <rect x="896" y="546" width="145" height="28" class="cls"/>
+  <text x="968" y="565" class="cname" text-anchor="middle">9 PersistStage</text>
+  <text x="440" y="602" class="small">Each stage implements GradingStage. A stage records an Anomaly for a student's mistake and goes on.</text>
+
+  <!-- grading uses the stage helper packages -->
+  <line x1="118" y1="616" x2="118" y2="676" class="dep" marker-end="url(#dep)"/>
+  <line x1="286" y1="616" x2="286" y2="676" class="dep" marker-end="url(#dep)"/>
+  <line x1="454" y1="616" x2="454" y2="676" class="dep" marker-end="url(#dep)"/>
+  <line x1="622" y1="616" x2="622" y2="676" class="dep" marker-end="url(#dep)"/>
+  <line x1="790" y1="616" x2="790" y2="676" class="dep" marker-end="url(#dep)"/>
+  <line x1="958" y1="616" x2="958" y2="676" class="dep" marker-end="url(#dep)"/>
+  <line x1="1126" y1="616" x2="1126" y2="676" class="dep" marker-end="url(#dep)"/>
+
+  <!-- Layer 4: helper packages -->
+  <g>
+    <rect x="40" y="656" width="76" height="20" class="tab hlp"/>
+    <text x="50" y="671" class="small" font-weight="700">ingest</text>
+    <rect x="40" y="676" width="156" height="124" class="pkg hlp"/>
+    <text x="50" y="698" class="small">ZipExtractor</text>
+    <text x="50" y="716" class="small">WorkingCopyManager</text>
+    <text x="50" y="734" class="small">RosterReader</text>
+    <text x="50" y="752" class="small">SubmissionLoader</text>
+  </g>
+  <g>
+    <rect x="208" y="656" width="90" height="20" class="tab hlp"/>
+    <text x="218" y="671" class="small" font-weight="700">validation</text>
+    <rect x="208" y="676" width="156" height="124" class="pkg hlp"/>
+    <text x="218" y="698" class="ital">Validator</text>
+    <text x="218" y="716" class="ital">AbstractValidator</text>
+    <text x="218" y="734" class="small">ValidationRunner</text>
+    <text x="218" y="752" class="small">4 validators</text>
+  </g>
+  <g>
+    <rect x="376" y="656" width="50" height="20" class="tab hlp"/>
+    <text x="386" y="671" class="small" font-weight="700">fix</text>
+    <rect x="376" y="676" width="156" height="124" class="pkg hlp"/>
+    <text x="386" y="698" class="ital">Fixer</text>
+    <text x="386" y="716" class="ital">AbstractFixer</text>
+    <text x="386" y="734" class="small">FixManager</text>
+    <text x="386" y="752" class="small">5 fixers</text>
+  </g>
+  <g>
+    <rect x="544" y="656" width="84" height="20" class="tab hlp"/>
+    <text x="554" y="671" class="small" font-weight="700">detection</text>
+    <rect x="544" y="676" width="156" height="124" class="pkg hlp"/>
+    <text x="554" y="698" class="ital">Detector</text>
+    <text x="554" y="716" class="small">3 detectors: untouched,</text>
+    <text x="554" y="734" class="small">empty and hard-coded</text>
+    <text x="554" y="752" class="small">answers</text>
+  </g>
+  <g>
+    <rect x="712" y="656" width="76" height="20" class="tab hlp"/>
+    <text x="722" y="671" class="small" font-weight="700">testcase</text>
+    <rect x="712" y="676" width="156" height="124" class="pkg hlp"/>
+    <text x="722" y="698" class="ital">TestCaseSource</text>
+    <text x="722" y="716" class="small">TesterInstaller</text>
+    <text x="722" y="734" class="small">TesterGenerator</text>
+    <text x="722" y="752" class="small">QuestionFolderFinder</text>
+  </g>
+  <g>
+    <rect x="880" y="656" width="54" height="20" class="tab hlp"/>
+    <text x="890" y="671" class="small" font-weight="700">exec</text>
+    <rect x="880" y="676" width="156" height="124" class="pkg hlp"/>
+    <text x="890" y="698" class="small">ProcessRunner</text>
+    <text x="890" y="716" class="small">SourceCompiler</text>
+    <text x="890" y="734" class="small">TesterRunner</text>
+    <text x="890" y="752" class="small">Time limit on javac</text>
+    <text x="890" y="770" class="small">and java</text>
+  </g>
+  <g>
+    <rect x="1048" y="656" width="96" height="20" class="tab hlp"/>
+    <text x="1058" y="671" class="small" font-weight="700">persistence</text>
+    <rect x="1048" y="676" width="156" height="124" class="pkg hlp"/>
+    <text x="1058" y="698" class="ital">ResultRepository</text>
+    <text x="1058" y="716" class="small">SqliteResultRepository</text>
+    <text x="1058" y="734" class="small">BackupManager</text>
+  </g>
+  <g>
+    <rect x="1216" y="656" width="64" height="20" class="tab hlp"/>
+    <text x="1226" y="671" class="small" font-weight="700">report</text>
+    <rect x="1216" y="676" width="156" height="124" class="pkg hlp"/>
+    <text x="1226" y="698" class="ital">Exporter</text>
+    <text x="1226" y="716" class="small">CsvScoreSheetExporter</text>
+    <text x="1226" y="734" class="small">JsonExporter</text>
+    <text x="1226" y="752" class="small">3 report exporters</text>
+  </g>
+  <g>
+    <rect x="1384" y="656" width="88" height="20" class="tab hlp"/>
+    <text x="1394" y="671" class="small" font-weight="700">plagiarism</text>
+    <rect x="1384" y="676" width="156" height="124" class="pkg hlp"/>
+    <text x="1394" y="698" class="ital">SimilarityDetector</text>
+    <text x="1394" y="716" class="small">TokenSimilarityDetector</text>
+  </g>
+  <g>
+    <rect x="1552" y="656" width="54" height="20" class="tab hlp"/>
+    <text x="1562" y="671" class="small" font-weight="700">stats</text>
+    <rect x="1552" y="676" width="156" height="124" class="pkg hlp"/>
+    <text x="1562" y="698" class="small">StatisticsCalculator</text>
+    <text x="1562" y="716" class="small">StatisticsSummary</text>
+    <text x="1562" y="734" class="small">StatisticsFilter</text>
+  </g>
+
+  <!-- Uses between helper packages -->
+  <path d="M 640 800 C 660 830, 760 830, 780 804" class="dep" marker-end="url(#dep)"/>
+  <path d="M 1270 800 C 1240 830, 1160 830, 1140 804" class="dep" marker-end="url(#dep)"/>
+  <path d="M 1440 800 C 1400 860, 860 860, 810 804" class="dep" marker-end="url(#dep)"/>
+
+  <!-- Layer 5: model, config, util -->
+  <text x="134" y="874" class="note">The packages above all build on model, config and util.</text>
+  <line x1="118" y1="800" x2="118" y2="902" class="dep" marker-end="url(#dep)"/>
+  <rect x="40" y="884" width="70" height="20" class="tab base"/>
+  <text x="50" y="899" class="small" font-weight="700">model</text>
+  <rect x="40" y="904" width="900" height="66" class="pkg base"/>
+  <text x="54" y="928" class="small">Entity classes: GradingRun, Submission, Student, Section, Assessment, Question, QuestionResult,</text>
+  <text x="54" y="948" class="small">TestCaseResult, Anomaly, ScoreAdjustment, AuditEntry; enums AnomalyType, SubmissionStatus, FixStatus</text>
+  <rect x="960" y="884" width="70" height="20" class="tab base"/>
+  <text x="970" y="899" class="small" font-weight="700">config</text>
+  <rect x="960" y="904" width="400" height="66" class="pkg base"/>
+  <text x="974" y="928" class="small">AppConfig reads config.properties.</text>
+  <text x="974" y="948" class="small">ConfigKeys names every setting; no hard-coded values.</text>
+  <rect x="1380" y="884" width="54" height="20" class="tab base"/>
+  <text x="1390" y="899" class="small" font-weight="700">util</text>
+  <rect x="1380" y="904" width="340" height="66" class="pkg base"/>
+  <text x="1394" y="928" class="small">FileUtils, TextUtils, InputValidator</text>
+</svg>
