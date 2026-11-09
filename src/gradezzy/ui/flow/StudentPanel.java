@@ -598,7 +598,7 @@ public class StudentPanel extends ScrollPane {
                     Parts.small("Reject fix",
                     () -> rejectRepair(backend, repair), Tone.BAD));
         } else if (status == FixStatus.UNDONE
-                && UndoFixJob.canApplyAgain(backend)) {
+                && UndoFixJob.canApplyAgain(backend, anomaly)) {
             Button again = Parts.small("Apply fix again",
                     () -> reapplyRepair(backend, repair));
             Parts.tip(again, "Grades the student again with this fix.");
@@ -736,7 +736,7 @@ public class StudentPanel extends ScrollPane {
         }
         FixStatus status = anomaly.getFixStatus();
         return status == FixStatus.APPLIED || (status == FixStatus.UNDONE
-                && UndoFixJob.canApplyAgain(backend));
+                && UndoFixJob.canApplyAgain(backend, anomaly));
     }
 
     // Says, in place of the buttons, that a fix is being undone or

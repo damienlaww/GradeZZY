@@ -58,7 +58,8 @@ public final class HelpSheet {
             + "tested."},
         {" 3  Review", "Approve or undo fixes, check flags and change "
             + "marks."},
-        {" 4  Export", "The score sheet as provided, and a JSON file."},
+        {" 4  Export", "The score sheet as provided, plus a JSON file "
+            + "and reports if you tick them."},
         {"Statistics", "Average, spread, pass rate and each question."},
         {"History", "Earlier runs, backups and the activity log."},
         {"Settings", "Everything in config.properties."},

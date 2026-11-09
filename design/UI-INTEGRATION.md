@@ -12,7 +12,7 @@ where your work appears and what each screen expects from it.
 | `sh run.sh` | `run.bat` | The real application, calling the real services. |
 | `sh run.sh --demo` | `run.bat --demo` | The same window with synthetic data. Never reads, grades or saves real files. |
 | `sh run.sh --check` | `run.bat --check` | Opens every tab, step and sheet with the live and demo backends, in both themes, at 1200x800 and 960x640, then exits. |
-| `sh run.sh --selftest` | `run.bat --selftest` | Runs the seven demo flows without a window and prints PASS or FAIL for each. |
+| `sh run.sh --selftest` | `run.bat --selftest` | Runs the eight demo flows without a window and prints PASS or FAIL for each. |
 | `sh run.sh --snapshot [folder]` | same | The same walk as `--check`, saving a PNG of every state. Default folder: `workspace/ui-snapshots` (ignored by git). |
 | `sh run.sh --windowtest [folder]` | `run.bat --windowtest [folder]` | Opens the real window and drives it with operating-system mouse and keyboard input: every tab, step, sheet and shortcut. Prints PASS or FAIL per check and saves pictures to `workspace/ui-window-test`. Needs a desktop; leave the mouse and keyboard alone while it runs. |
 
@@ -80,6 +80,7 @@ today.
 | Approve and undo repairs | Lets you accept or undo each automatic repair of a working copy. Undo grades the student again without the repair; `undoFix` returns an `UndoResult` with the marks before and after ("Fix undone. Marks 20 to 16."). It runs the testers, so call it off the window's thread. | Review (student panel) | `approveRepair`, `rejectRepair` | `AnomalyService.approveFix, undoFix` | Jing Yuan, Jun Sheng | Works now | None; undo needs the run graded in this session. |
 | Original and proposed repair values | Shows what each repair changed, before and after, side by side. | Review (student panel) | `listRepairs` | `AnomalyService.findFixRecord`, `FixRecord.getValueBefore, getValueAfter` | Jun Sheng | Works now | None; a fix made before GradeZZY was last opened shows no Before and After. |
 | Undo a repair decision | Takes back an approve or undo decision on a repair. | Review (student panel) | `undoRepairDecision` | None yet | Jing Yuan, Jun Sheng | Proposed | A method that returns an approved or undone fix to Applied. |
+| Apply a rejected repair again | Puts a rejected repair back and grades the student with it again ("Fix applied again. Marks 16 to 20."). | Review (student panel), History (Activity) | `canReapplyRepair`, `reapplyRepair` | `AnomalyService.canReapplyFix`, `reapplyFix` | Jing Yuan, Jun Sheng | Works now | None; it works for a repair rejected since GradeZZY was opened, or in a run resumed since. The rejected repairs are saved with the run (`submissions.rejected_fixes`). |
 | Mark flags reviewed or rejected | Records that you looked at a flag, without changing any mark. | Review (student panel) | `getDecision`, `setDecision` | `LiveBackend` keeps the decisions in memory | Jing Yuan | Works now (kept until GradeZZY closes) | To keep decisions after a restart: store them per anomaly, with an audit entry. |
 | Search, filter and sort | Finds students by name and orders the results table. | Review, Export | `search` | `SearchService.search` | Jing Yuan | Works now | None |
 | Show working-copy files | Shows a student's files, so you can read the code behind a mark. | Review (code and test output) | `getFileTree`, `readSourceFile` | `FileTreeBuilder, FileUtils.readText` | Damien | Works now | None |
@@ -93,18 +94,18 @@ today.
 | Restore a backup | Puts the saved results back to a backup file you choose. | Runs (Backups) | `restoreBackup` (a backup file chosen in live mode) | `HistoryService.restore` | Jing Yuan, Huxley | Works now | None; restore when no run is being graded. |
 | Restore preview | Shows which run each backup holds and saves a recovery snapshot first, so a restore can be undone. | Runs (Backups) | `restore` (a run from the list) | None yet | Jing Yuan, Huxley | Proposed | A list of backup files with the run each holds, and a restore of one run that saves a recovery snapshot first. |
 | Audit log | Keeps a dated record of every action, so changes can be checked later. | Runs (Activity) | `listAuditEntries`, `recordAudit` | `AuditService.record, listEntries` | Jing Yuan, Huxley | Works now | None |
-| Export the audit log | Saves the audit log as a file to keep or share. | Runs (Activity) | none | None yet | Jing Yuan, Huxley | Proposed | Register AuditLogExporter in ApplicationContext and add an export method for the audit log. |
+| Export the audit log | Saves the audit log as a file to keep or share. | Export ("Also save the activity log") | `export` (format "Audit log") | `ExportService.export` with `AuditLogExporter` | Jing Yuan, Huxley | Works now | None |
 | Settings | Lets you check and change the settings from the app instead of a text file. | Settings | `getSetting`, `validateSetting`, `saveSettings` | `SettingsService` | Jing Yuan | Works now | None |
 | Similarity review | Lists pairs of submissions with very similar code for you to review. | Export (Similar code) | `listSimilarPairs`, `isSimilarityEnabled` | `PlagiarismService.check` | Jing Yuan, Jun Sheng | Works now | None; runs when plagiarism.enabled is true. |
 | Compare a similar pair | Shows the matching code of a pair side by side. | Export (Similar code) | `getSimilarityDetail` | None yet | Jun Sheng | Proposed | The compared files, matching excerpts and the excluded starter and tester files of one pair. |
 | Use a tester folder | Grades with the tester files you already have in a folder. | Set up (Class files) | `startGrading` (tester folder in the batch) | `UploadedTesterSource` | Zach | Works now | None |
-| Typed test cases | Builds testers from test cases you type in the app. | Set up (type test cases) | `startGrading` (typed cases in the batch) | `TypedTestCaseSource, TesterGenerator` | Zach | Waiting | TypedTestCaseSource.prepareTesters and TesterGenerator. |
+| Typed test cases | Builds testers from test cases you type in the app. | Set up (type test cases) | `startGrading` (typed cases in the batch) | `TypedTestCaseSource, TesterGenerator` | Zach | Works now | None; each typed case is worth 1 mark. |
 | Retry one question | Runs one question's tester again without touching other marks. | Review (student panel) | `retryQuestion` | None yet | Jing Yuan, Zach | Proposed | Run the tester of one question again and replace only that question's result. |
 | Retry one submission | Grades one student's submission again from the start. | Review (student panel) | `retrySubmission` | None yet | Jing Yuan | Proposed | Grade one chosen submission again, even when it did not fail. |
 | Adjust a mark by hand | Lets you change a mark by hand with a reason, and undo it. | Review (student panel), History › Activity | `adjustScore`, `undoAdjustment`, `listAdjustments` | `ScoreAdjustmentService.adjust`, `undo`, `list` | Jing Yuan, Huxley | Works now | Nothing; each change is saved with the run (table `score_adjustments`) and logged as Mark changed. |
 | More than one module | Lets you grade more than one module in the same app. | Set up, Statistics | `getModuleCodes` | `AppConfig` (`app.module.codes`), `AssessmentFactory.create` | Jing Yuan | Works now | None. Saved runs keep the module through `Section` once Huxley's repository saves runs. |
 | Time taken per question | Shows how long each question's tester took to run. | Review (student panel) | none | None yet | Zach | Proposed | Record how long each tester ran in QuestionResult. |
-| Export one student's report | Saves one student's marks and evidence as a report. | Review (student panel) | `export` (one student) | None yet | Jing Yuan, Huxley | Proposed | Register StudentReportExporter and add an export method for one submission. |
+| Export one student's report | Saves one student's marks and evidence as a report. | Export ("Also save a report on each student", with "Only the students I choose" for one student) | `export` (format "Student report") | `ExportService.export` with `StudentReportExporter` | Jing Yuan, Huxley | Works now | None |
 
 ## Contract requests
 
@@ -122,8 +123,6 @@ what they need. Each one is hidden in live mode until the service exists.
 | Restore preview | Jing Yuan, Huxley | A list of backup files with the run each holds, and a restore of one run that saves a recovery snapshot first. Restoring a whole backup file is already wired to `HistoryService.restore`. |
 | Form checks | Seth | Two checks for `InputValidator`: a mark that may be a decimal between 0 and a maximum (Adjust Score), and a Java method name (typed test cases). Until they exist the screens check these themselves. |
 | Similar pair detail | Jun Sheng | The compared files, matching excerpts and the excluded starter and tester files of one pair. |
-| Audit log export | Jing Yuan, Huxley | Register `AuditLogExporter` and add an export method for the audit log. |
-| Student report export | Jing Yuan, Huxley | Register `StudentReportExporter` and add an export method for one submission. |
 | Time per question | Zach | Record how long each tester ran in `QuestionResult`. |
 
 ## Where a backend method does more than one call

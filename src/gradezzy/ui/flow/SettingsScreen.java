@@ -433,7 +433,7 @@ public class SettingsScreen extends FlowScreen {
         listed(ConfigKeys.RUN_TIMEOUT_SECONDS, "Time limit per test run",
                 "A tester that runs longer is stopped.", RUN_SECONDS,
                 " seconds");
-        listed(ConfigKeys.COMPILE_TIMEOUT_SECONDS, "Time limit to compile",
+        listed(ConfigKeys.COMPILE_TIMEOUT_SECONDS, "Compile time limit",
                 "For one question folder.", COMPILE_SECONDS, " seconds");
         String[] threads = threadChoices();
         choice(ConfigKeys.THREAD_COUNT, "Students graded at once",

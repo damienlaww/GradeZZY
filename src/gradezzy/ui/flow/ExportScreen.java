@@ -3,7 +3,8 @@
  *
  * Purpose: Step 4. Shows the results at a glance (a small bell curve,
  * the average, median, pass rate and highest mark), exports the score
- * sheet and the JSON file, and lists similar code when that check is on.
+ * sheet, the JSON file and the reports, and lists similar code when
+ * that check is on.
  *
  * Where it fits: Replaces the old Statistics and Similarity Review
  * screens and the export buttons of Results. The figures come from
@@ -17,6 +18,7 @@ package gradezzy.ui.flow;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import javafx.concurrent.Worker;
@@ -42,6 +44,10 @@ import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.plagiarism.SimilarityPair;
+import gradezzy.report.AnomalyReportExporter;
+import gradezzy.report.AuditLogExporter;
+import gradezzy.report.JsonExporter;
+import gradezzy.report.StudentReportExporter;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
@@ -120,6 +126,18 @@ public class ExportScreen extends FlowScreen {
     // Also write the JSON file
     private final CheckBox json = new CheckBox(
             "Also save a JSON file with every question and test");
+
+    // Also write one CSV row per problem found in each submission
+    private final CheckBox problemReport = new CheckBox(
+            "Also save a list of the problems found");
+
+    // Also write one text file with a report on each student
+    private final CheckBox studentReport = new CheckBox(
+            "Also save a report on each student");
+
+    // Also write the activity log
+    private final CheckBox activityLog = new CheckBox(
+            "Also save the activity log");
 
     // Where the files are saved
     private final Label savedTo = Parts.muted("");
@@ -301,7 +319,7 @@ public class ExportScreen extends FlowScreen {
         tickedReason.getStyleClass().addAll("small-text", "choice-reason");
         tickedRow.getChildren().addAll(tickedOnly, tickedReason);
         VBox choices = new VBox(Parts.GAP_SMALL + 2, everyone, tickedRow,
-                json);
+                json, problemReport, studentReport, activityLog);
         choices.getStyleClass().add("export-choices");
 
         Label about = Parts.muted("Your score sheet with each student's "
@@ -1138,10 +1156,7 @@ public class ExportScreen extends FlowScreen {
         String detail = "The marks of " + who + " are filled into a copy "
                 + "of the score sheet for " + run.getSection().getLabel()
                 + ", saved in " + exportFolder() + ".";
-        if (json.isSelected()) {
-            detail += " A JSON file with every question and test is saved "
-                    + "beside it.";
-        }
+        detail += describeOtherFiles();
         int open = countNeedingReview(scope);
         if (open > 0) {
             detail += " Still needing a look: "
@@ -1151,6 +1166,59 @@ public class ExportScreen extends FlowScreen {
         String students = Parts.plural(count, "student");
         getWindow().confirm("Export " + students + "?", detail,
                 "Export " + students, () -> exportNow(scope));
+    }
+
+    // Lists the format names of the files chosen besides the CSV, in the
+    // order they are written.
+    private List<String> listOtherFormats() {
+        List<String> formats = new ArrayList<>();
+        if (json.isSelected()) {
+            formats.add(JsonExporter.FORMAT_NAME);
+        }
+        if (problemReport.isSelected()) {
+            formats.add(AnomalyReportExporter.FORMAT_NAME);
+        }
+        if (studentReport.isSelected()) {
+            formats.add(StudentReportExporter.FORMAT_NAME);
+        }
+        if (activityLog.isSelected()) {
+            formats.add(AuditLogExporter.FORMAT_NAME);
+        }
+        return formats;
+    }
+
+    // Says which files are saved beside the score sheet, for the export
+    // question, or "" when none is chosen.
+    private String describeOtherFiles() {
+        List<String> files = new ArrayList<>();
+        if (json.isSelected()) {
+            files.add("a JSON file with every question and test");
+        }
+        if (problemReport.isSelected()) {
+            files.add("a list of the problems found");
+        }
+        if (studentReport.isSelected()) {
+            files.add("a report on each student");
+        }
+        if (activityLog.isSelected()) {
+            files.add("the activity log");
+        }
+        if (files.isEmpty()) {
+            return "";
+        }
+
+        String text = files.get(0);
+        for (int index = 1; index < files.size(); index++) {
+            if (index == files.size() - 1) {
+                text += " and ";
+            } else {
+                text += ", ";
+            }
+            text += files.get(index);
+        }
+        String first = text.substring(0, 1).toUpperCase(Locale.ROOT);
+        return " " + first + text.substring(1) + " "
+                + isOrAre(files.size()) + " saved beside it.";
     }
 
     // Names up to three students, then says how many more.
@@ -1185,15 +1253,15 @@ public class ExportScreen extends FlowScreen {
         return "are";
     }
 
-    // Writes the CSV and, if chosen, the JSON file. Live mode writes on a
-    // background thread; the demo writes no file.
+    // Writes the CSV and, if chosen, the JSON file and the reports. Live
+    // mode writes on a background thread; the demo writes no file.
     private void exportNow(List<Submission> scope) {
         GradingRun run = getState().getRun();
         if (run == null || exporting || changingSheet) {
             return;
         }
         ExportJob job = new ExportJob(getBackend(), run, scope,
-                json.isSelected());
+                listOtherFormats());
         // Only an export of every student marks the run as exported
         boolean wholeRun = scope.size() == run.getSubmissions().size();
         if (getBackend().isDemo()) {

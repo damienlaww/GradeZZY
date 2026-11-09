@@ -916,8 +916,12 @@ public final class DemoBackend implements DashboardBackend {
         String preview;
         if ("json".equalsIgnoreCase(formatName)) {
             preview = DemoExports.toJson(gradingRun, scope);
-        } else {
+        } else if ("csv".equalsIgnoreCase(formatName)) {
             preview = DemoExports.toCsv(gradingRun, scope);
+        } else {
+            // The reports have no preview; live mode writes them
+            return ActionResult.done("Demo mode writes no " + formatName
+                    + " file.");
         }
         return ActionResult.preview("Previewed " + formatName.toUpperCase()
                 + " for " + scope.size() + " student"
