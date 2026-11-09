@@ -14,6 +14,7 @@
  */
 package gradezzy.service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +61,24 @@ public class AnswerGroupService implements AnswerGroupSource {
 
     // Why the last decision could not be saved or read, or ""
     private String saveProblem = "";
+
+    // The runs whose saved notes could not be read yet. Their notes are
+    // read again before each use, and nothing is saved for them until a
+    // read works, so a failed read never overwrites saved decisions.
+    private final List<String> unreadRuns = new ArrayList<>();
+
+    // Says a decision is kept only until GradeZZY closes
+    private static final String SESSION_ONLY = " For this session only; "
+            + "saving results is switched off.";
+
+    // Starts the reason a decision was not saved
+    private static final String NOT_SAVED = " It could not be saved, so "
+            + "it lasts until GradeZZY closes: ";
+
+    // Says why nothing is saved for a run whose notes were not read
+    private static final String NOT_READ = "The saved names and checks of "
+            + "this run could not be read, so this change lasts until "
+            + "GradeZZY closes. ";
 
     /**
      * Creates the service.
@@ -140,6 +159,23 @@ public class AnswerGroupService implements AnswerGroupSource {
         if (checked) {
             students = group.getUsernames();
         }
+        setChecked(run, group, students);
+    }
+
+    /**
+     * Marks a group as checked for the students the marker saw. A student
+     * now in the group who is not among them counts as new since the
+     * check.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param run the run the group belongs to
+     * @param group the group
+     * @param students the students checked; null or empty takes the
+     *        check back
+     */
+    public synchronized void setChecked(GradingRun run, AnswerGroup group,
+            List<String> students) {
         AnswerGroupNote before = noteOf(run, group);
         AnswerGroupNote after = new AnswerGroupNote(group.getQuestionId(),
                 group.getPattern(), before.getLabel(), students);
@@ -159,6 +195,37 @@ public class AnswerGroupService implements AnswerGroupSource {
     }
 
     /**
+     * Says, after a decision, whether it was saved, as a sentence to add
+     * to the notice.
+     *
+     * <p>Tier: COULD.
+     *
+     * @return "" when it was saved; else a sentence starting with a
+     *         space saying it lasts only until GradeZZY closes, and why
+     */
+    public synchronized String describeSaving() {
+        if (!isSaving()) {
+            return SESSION_ONLY;
+        }
+        if (saveProblem.isEmpty()) {
+            return "";
+        }
+        return NOT_SAVED + saveProblem;
+    }
+
+    /**
+     * Forgets every note read or made, so the next use reads the store
+     * again, as after a backup is restored.
+     *
+     * <p>Tier: COULD.
+     */
+    public synchronized void forgetAll() {
+        byRun.clear();
+        unreadRuns.clear();
+        saveProblem = "";
+    }
+
+    /**
      * Says whether decisions are saved with the run.
      *
      * <p>Tier: COULD.
@@ -172,32 +239,44 @@ public class AnswerGroupService implements AnswerGroupSource {
         return config.getBoolean(ConfigKeys.DATABASE_ENABLED);
     }
 
-    // Returns a run's notes, reading them from the store the first time.
-    // If they cannot be read, only this session's notes show.
+    // Returns a run's notes, reading them from the store the first time,
+    // and again each time while a read has failed. If they cannot be
+    // read, only this session's notes show and the reason is kept.
     private Map<String, AnswerGroupNote> notesOf(GradingRun run) {
         String id = runIdOf(run);
         Map<String, AnswerGroupNote> notes = byRun.get(id);
-        if (notes != null) {
+        boolean known = notes != null;
+        if (known && !unreadRuns.contains(id)) {
             return notes;
         }
-        notes = new HashMap<>();
+        if (!known) {
+            notes = new HashMap<>();
+            byRun.put(id, notes);
+        }
         if (canSave(id)) {
             readNotes(id, notes);
         }
-        byRun.put(id, notes);
         return notes;
     }
 
-    // Reads a run's saved notes into the map, by group key. If they
-    // cannot be read, the reason becomes the save problem.
+    // Reads a run's saved notes under this session's notes, which win.
+    // If they cannot be read, the run stays unread and the reason
+    // becomes the save problem.
     private void readNotes(String id, Map<String, AnswerGroupNote> notes) {
         try {
             List<AnswerGroupNote> saved = repository.listAnswerGroupNotes(id);
             for (AnswerGroupNote note : saved) {
-                notes.put(keyOf(note), note);
+                String key = keyOf(note);
+                if (!notes.containsKey(key)) {
+                    notes.put(key, note);
+                }
             }
+            unreadRuns.remove(id);
         } catch (PersistenceException exception) {
             saveProblem = exception.getMessage();
+            if (!unreadRuns.contains(id)) {
+                unreadRuns.add(id);
+            }
         }
     }
 
@@ -228,11 +307,16 @@ public class AnswerGroupService implements AnswerGroupSource {
         } else {
             notes.put(keyOf(note), note);
         }
-        saveProblem = "";
         String id = runIdOf(run);
         if (!canSave(id)) {
+            saveProblem = "";
             return;
         }
+        if (unreadRuns.contains(id)) {
+            saveProblem = NOT_READ + saveProblem;
+            return;
+        }
+        saveProblem = "";
         try {
             repository.saveAnswerGroupNote(id, note);
         } catch (PersistenceException exception) {

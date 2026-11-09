@@ -583,12 +583,36 @@ public interface DashboardBackend {
      */
     default ActionResult setAnswerGroupChecked(GradingRun run,
             AnswerGroup group, boolean checked) {
+        List<String> students = null;
+        if (checked && group != null) {
+            students = group.getUsernames();
+        }
+        return setAnswerGroupChecked(run, group, students);
+    }
+
+    /**
+     * Marks an answer group as checked for the students the marker saw,
+     * or takes the check back, and logs it in the activity log. A
+     * student now in the group who is not among them shows as new. It
+     * changes no mark and no flag.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param run the run the group belongs to
+     * @param group the group
+     * @param students the students checked; null or empty takes the
+     *        check back
+     * @return what happened
+     */
+    default ActionResult setAnswerGroupChecked(GradingRun run,
+            AnswerGroup group, List<String> students) {
         boolean chosen = run != null && group != null;
         if (!chosen) {
             return ActionResult.failed("Choose a group first.");
         }
+        boolean checked = students != null && !students.isEmpty();
         AnswerGroupService service = getAnswerGroupService();
-        service.setChecked(run, group, checked);
+        service.setChecked(run, group, students);
         String where = group.getQuestionId() + GROUP_WORD_SEPARATOR
                 + group.getTitle();
         String message = "Marked the group as checked.";
@@ -611,11 +635,24 @@ public interface DashboardBackend {
      *         space
      */
     default String unsavedNote(AnswerGroupService service) {
-        if (service.getSaveProblem().isEmpty()) {
+        // The demo saves nothing, and says so on its own
+        if (isDemo()) {
             return "";
         }
-        return " It could not be saved, so it lasts until GradeZZY "
-                + "closes: " + service.getSaveProblem();
+        return service.describeSaving();
+    }
+
+    /**
+     * Says, after marks were changed by hand, whether they were saved,
+     * as a sentence to add to a notice about several changes.
+     *
+     * <p>Tier: COULD.
+     *
+     * @return "" when they were saved; else a sentence starting with a
+     *         space
+     */
+    default String describeMarkSaving() {
+        return "";
     }
 
     /**

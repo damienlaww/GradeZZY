@@ -150,13 +150,27 @@ public final class AnswerGrouper {
         if (result.isTimedOut()) {
             return TIMEOUT_PREFIX + tests;
         }
-        if (hasFlag(submission, question, AnomalyType.RUNTIME_ERROR)) {
+        boolean failedOne = tests.indexOf(FAILED) >= 0;
+        if (isCrash(submission, question, result, failedOne)) {
             return CRASH_PREFIX + tests;
         }
-        if (tests.indexOf(FAILED) < 0) {
+        if (!failedOne) {
             return null;
         }
         return tests;
+    }
+
+    // Says whether an answer crashed and lost marks: a runtime error flag
+    // about the question with a failed test or less than full marks. A
+    // runtime flag on a full answer (such as a total that does not match
+    // the cases) is not a mistake of the student's.
+    private static boolean isCrash(Submission submission, Question question,
+            QuestionResult result, boolean failedOne) {
+        if (!hasFlag(submission, question, AnomalyType.RUNTIME_ERROR)) {
+            return false;
+        }
+        boolean lostMarks = result.getScore() < question.getMaxScore();
+        return failedOne || lostMarks;
     }
 
     /**
@@ -304,6 +318,10 @@ public final class AnswerGrouper {
     private static String gradedPattern(Submission submission,
             Question question) {
         if (submission.getStatus() != SubmissionStatus.GRADED) {
+            return null;
+        }
+        // A student not on the score sheet gets no mark, so is left out
+        if (hasType(submission, AnomalyType.UNKNOWN_STUDENT)) {
             return null;
         }
         QuestionResult result = findResult(submission, question);
@@ -458,6 +476,16 @@ public final class AnswerGrouper {
             }
         }
         return numbers;
+    }
+
+    // Says whether a student has a flag of a type, about any question.
+    private static boolean hasType(Submission submission, AnomalyType type) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            if (anomaly.getType() == type) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Says whether a student has a flag of a type about a question.

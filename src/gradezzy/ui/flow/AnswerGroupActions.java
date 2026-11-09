@@ -14,7 +14,9 @@
 package gradezzy.ui.flow;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -104,6 +106,11 @@ public class AnswerGroupActions {
 
     // Called after a group changes, so the view and table redraw
     private final Runnable onChanged;
+
+    // The items each group's check settled this session, by group key,
+    // so Undo check on the row puts them back too
+    private final Map<String, List<Anomaly>> decidedByGroup =
+            new HashMap<>();
 
     /**
      * Creates the actions for one Review screen.
@@ -275,9 +282,13 @@ public class AnswerGroupActions {
         }
         window.closeSheet();
         int leftCount = listed.size() - still.size();
+        String saving = "";
+        if (!changed.isEmpty()) {
+            saving = window.getBackend().describeMarkSaving();
+        }
         String message = "Changed the mark of "
                 + Parts.plural(changed.size(), "student") + "."
-                + leftOut(leftCount) + firstProblem;
+                + leftOut(leftCount) + firstProblem + saving;
         if (changed.isEmpty()) {
             window.notify(message);
         } else {
@@ -351,10 +362,12 @@ public class AnswerGroupActions {
             return;
         }
         if (group.isChecked()) {
-            ActionResult result = window.getBackend().setAnswerGroupChecked(
-                    run, group, false);
-            window.notify(result.getMessage());
-            onChanged.run();
+            // Takes back the tick and the items the check settled
+            List<Anomaly> decided = decidedByGroup.remove(group.getKey());
+            if (decided == null) {
+                decided = new ArrayList<>();
+            }
+            undoCheck(run, group, decided);
             return;
         }
         List<String> listed = new ArrayList<>(group.getUsernames());
@@ -372,10 +385,11 @@ public class AnswerGroupActions {
         Label about = Parts.muted(describe(group) + ". The group is marked "
                 + "as checked. No mark changes, and you can undo it:");
         if (countOpenItems(run, listed, question) > 0) {
-            about.setText(describe(group) + ". These " + question.getId()
-                    + " items are marked as checked, compile errors "
-                    + "included. Their rows will show as checked. No mark "
-                    + "changes, and you can undo it:");
+            about.setText(describe(group) + ". Their open "
+                    + question.getId() + " items, compile errors "
+                    + "included, are marked as checked, so those items "
+                    + "will show as checked. No mark changes, and you can "
+                    + "undo it:");
         }
         content.getChildren().add(wrapped(about));
         for (String username : listed) {
@@ -415,8 +429,17 @@ public class AnswerGroupActions {
                 }
             }
         }
+        if (still.isEmpty()) {
+            window.notify("Nothing was checked: every listed student "
+                    + "left the group since the sheet opened.");
+            onChanged.run();
+            return;
+        }
+        // Only the students the sheet listed count as checked; one who
+        // joined since shows as new
         ActionResult result = backend.setAnswerGroupChecked(run, current,
-                true);
+                still);
+        decidedByGroup.put(current.getKey(), decided);
         int leftCount = listed.size() - still.size();
         String message = result.getMessage() + leftOut(leftCount);
         window.notify(message, "Undo",
@@ -428,6 +451,7 @@ public class AnswerGroupActions {
     private void undoCheck(GradingRun run, AnswerGroup group,
             List<Anomaly> decided) {
         DashboardBackend backend = window.getBackend();
+        decidedByGroup.remove(group.getKey());
         for (Anomaly anomaly : decided) {
             if (backend.getDecision(anomaly) == ReviewDecision.REVIEWED) {
                 backend.setDecision(anomaly, ReviewDecision.OPEN);

@@ -27,6 +27,7 @@ public class AnswerGroupsTest {
         grouping();
         notes();
         exports();
+        reviewFixes();
         System.out.println("AnswerGroupsTest: " + checks + " checks passed");
     }
 
@@ -352,6 +353,76 @@ public class AnswerGroupsTest {
             if (!inString && c == wanted) count++;
         }
         return count;
+    }
+
+    // ------------------------------------------------- final review fixes
+
+    private static void reviewFixes() throws Exception {
+        // I1: a check keeps only the students the sheet listed
+        GradingRun run = twoStudentRun();
+        AnswerGroupService session = new AnswerGroupService(null,
+                config(false, Path.of("unused.db")));
+        run.addSubmission(student(run.getAssessment(), "cat", "Q2b", "PPFPF"));
+        AnswerGroup grown = session.listGroups(run).get(0);
+        session.setChecked(run, grown, Arrays.asList("amy", "ben"));
+        AnswerGroup after = session.listGroups(run).get(0);
+        check(!after.isChecked() && after.countNewSinceChecked() == 1,
+                "I1: a student who joined before Confirm is not counted as checked");
+
+        // I2: with saving off, say the decision lasts for this session only
+        check(session.describeSaving().equals(" For this session only; saving "
+                + "results is switched off."), "I2: session-only note: "
+                + session.describeSaving());
+
+        // I3: a failed read is retried and never overwrites saved data
+        Path file = Files.createTempFile("answer-groups-read-", ".db");
+        AppConfig saving = config(true, file);
+        SqliteResultRepository repository = new SqliteResultRepository(file.toString());
+        repository.open();
+        GradingRun saved = twoStudentRun();
+        AnswerGroupService first = new AnswerGroupService(repository, saving);
+        first.setLabel(saved, first.listGroups(saved).get(0), "off by one");
+        first.setChecked(saved, first.listGroups(saved).get(0), true);
+        check(first.describeSaving().isEmpty(), "I2: nothing to say when saved");
+        repository.close();
+        AnswerGroupService second = new AnswerGroupService(repository, saving);
+        AnswerGroup unread = second.listGroups(saved).get(0);
+        check(unread.getLabel().isEmpty() && !second.getSaveProblem().isEmpty(),
+                "I3: a failed read is reported");
+        repository.open();
+        second.setLabel(saved, second.listGroups(saved).get(0), "renamed");
+        AnswerGroup reread = new AnswerGroupService(repository, saving)
+                .listGroups(saved).get(0);
+        check(reread.getLabel().equals("renamed") && reread.isChecked(),
+                "I3: the saved tick survives a failed read and a rename: "
+                + reread.getLabel() + " " + reread.isChecked());
+
+        // I4: forgetAll reads the store again, as after a restore
+        AnswerGroupService cached = new AnswerGroupService(repository, saving);
+        cached.listGroups(saved);
+        new AnswerGroupService(repository, saving).setLabel(saved,
+                cached.listGroups(saved).get(0), "from the backup");
+        cached.forgetAll();
+        check(cached.listGroups(saved).get(0).getLabel().equals("from the backup"),
+                "I4: forgetAll drops the cached names");
+        repository.close();
+        Files.deleteIfExists(file);
+
+        // M2: a full answer with a runtime flag is not a mistake
+        Assessment a = assessment();
+        Submission full = student(a, "full", "Q1a", "PPP");
+        flag(full, AnomalyType.RUNTIME_ERROR, "Q1a printed a total of 9.0, but only 3 of 3 cases passed.");
+        result(full, "Q1a").setScore(3.0);
+        check(AnswerGrouper.patternOf(full, result(full, "Q1a")) == null,
+                "M2: full marks with a runtime flag is not grouped");
+
+        // M5: a student not on the score sheet is left out
+        GradingRun withVisitor = twoStudentRun();
+        Submission visitor = student(withVisitor.getAssessment(), "visitor", "Q2b", "PPFPF");
+        flag(visitor, AnomalyType.UNKNOWN_STUDENT, "visitor was not on the score sheet.");
+        withVisitor.addSubmission(visitor);
+        check(!AnswerGrouper.group(withVisitor).get(0).getUsernames().contains("visitor"),
+                "M5: a student not on the score sheet is not grouped");
     }
 
     static void writeAnswer(Path root, String username, String code) throws Exception {

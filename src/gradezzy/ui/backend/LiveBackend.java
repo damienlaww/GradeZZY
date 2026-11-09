@@ -111,6 +111,9 @@ public class LiveBackend implements DashboardBackend {
     // Every service of the application
     private final ServiceRegistry services;
 
+    // Comes between two sentences of a notice
+    private static final String SENTENCE_GAP = " ";
+
     // The application settings
     private final AppConfig config;
 
@@ -1116,6 +1119,19 @@ public class LiveBackend implements DashboardBackend {
         }
     }
 
+    /**
+     * Says whether the marks changed by hand were saved, from
+     * ScoreAdjustmentService.
+     */
+    @Override
+    public String describeMarkSaving() {
+        String said = adjustmentSaved("");
+        if (said.isEmpty()) {
+            return "";
+        }
+        return SENTENCE_GAP + said;
+    }
+
     // Starts the message about a changed mark: the given word when it was
     // saved, else that it lasts only until GradeZZY closes, and why.
     private String adjustmentSaved(String savedWord) {
@@ -1230,6 +1246,7 @@ public class LiveBackend implements DashboardBackend {
         } catch (RuntimeException exception) {
             // A restore that failed half way may still have changed them
             forgetSavedRuns();
+            services.getAnswerGroupService().forgetAll();
             return ActionResult.failed("The restore of "
                     + backupFile.getFileName() + " did not finish ("
                     + exception.getMessage() + "). Check the History tab "
@@ -1241,6 +1258,7 @@ public class LiveBackend implements DashboardBackend {
         runsBySection.clear();
         decisions.clear();
         services.getScoreAdjustmentService().forgetAll();
+        services.getAnswerGroupService().forgetAll();
         forgetSavedRuns();
         if (Capability.RESTORE.getStatus() != CapabilityStatus.WORKS_NOW) {
             return ActionResult.notConnected(Capability.RESTORE);

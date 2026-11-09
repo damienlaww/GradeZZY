@@ -1464,13 +1464,33 @@ public class FlowSelfTest {
         undoAllChanges(run, charlie);
         check(q3(charlie) == 2.0, "charlie's Q3 is back to 2");
 
-        // Mark as checked, then a compile error group
+        // Mark as checked while a student joins the group: the newcomer
+        // was not listed, so the group shows 1 new, not Checked
         window.refreshScreen();
         settle();
+        Submission alpha = submissionOf(run, "learner.alpha");
+        QuestionResult alphaQ3 = resultOf(alpha, "Q3");
+        List<TestCaseResult> alphaTests = new ArrayList<>(
+                alphaQ3.getTestCaseResults());
         press(SceneFinder.button(rowOf("Failed tests 3 and 4", "plain-row"),
                 "Mark as checked"), "Mark as checked");
+        alphaQ3.getTestCaseResults().clear();
+        for (int number = 1; number <= 4; number++) {
+            alphaQ3.addTestCaseResult(new TestCaseResult(number, number <= 2,
+                    "case " + number));
+        }
         press(SceneFinder.button(sheet(), "Mark 2 as checked"),
                 "Mark 2 as checked");
+        row = rowOf("Failed tests 3 and 4", "plain-row");
+        check(row != null && SceneFinder.texts(row, "pill").contains("1 new"),
+                "a student who joined before Confirm shows as 1 new (pills: "
+                + (row == null ? "none" : SceneFinder.texts(row, "pill")) + ")");
+        alphaQ3.getTestCaseResults().clear();
+        for (TestCaseResult test : alphaTests) {
+            alphaQ3.addTestCaseResult(test);
+        }
+        window.refreshScreen();
+        settle();
         row = rowOf("Failed tests 3 and 4", "plain-row");
         check(row != null && SceneFinder.texts(row, "pill").contains(
                 "Checked"), "the group shows Checked");
@@ -1494,8 +1514,8 @@ public class FlowSelfTest {
             press(SceneFinder.button(compileRow, "Mark as checked"),
                     "Mark as checked");
             check(sheet() != null && SceneFinder.shows(sheet(),
-                    "Their rows will show as checked"), "the confirm says "
-                    + "the rows will show as checked");
+                    "items will show as checked"), "the confirm says the "
+                    + "question's items will show as checked");
             press(SceneFinder.button(sheet(), "Mark 1 as checked"),
                     "Mark 1 as checked");
             check(backend.getDecision(compileError) == ReviewDecision.REVIEWED,
@@ -1503,6 +1523,16 @@ public class FlowSelfTest {
             press(noticeAction(), "Undo in the notice");
             check(backend.getDecision(compileError) == ReviewDecision.OPEN,
                     "Undo put the compile error back to check");
+            // Undo check on the row puts back the flags too
+            press(SceneFinder.button(compileRowOf(charlie), "Mark as checked"),
+                    "Mark as checked");
+            press(SceneFinder.button(sheet(), "Mark 1 as checked"),
+                    "Mark 1 as checked");
+            press(SceneFinder.button(compileRowOf(charlie), "Undo check"),
+                    "Undo check");
+            check(backend.getDecision(compileError) == ReviewDecision.OPEN,
+                    "Undo check on the row put the compile error back to "
+                    + "check");
         }
 
         // Compare code steps through the group
@@ -1517,6 +1547,19 @@ public class FlowSelfTest {
         window.closeSheet();
         review.showStudents();
         settle();
+    }
+
+    // Returns the Did not compile group row that lists a student.
+    private Node compileRowOf(Submission submission) {
+        for (Label label : SceneFinder.ofType(root(), Label.class)) {
+            Node candidate = SceneFinder.ancestor(label, "plain-row");
+            if ("Did not compile".equals(label.getText()) && candidate != null
+                    && SceneFinder.shows(candidate,
+                    Students.name(submission))) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     // Opens the Q3 group's mark sheet and changes both marks.
