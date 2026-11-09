@@ -36,6 +36,7 @@ import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.model.TestCaseResult;
 import gradezzy.plagiarism.SimilarityPair;
+import gradezzy.service.AnswerGroupService;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.service.ServiceRegistry;
@@ -104,6 +105,9 @@ public final class DemoBackend implements DashboardBackend {
     // The application settings, read but never written
     private final AppConfig config;
 
+    // Keeps answer group names and checks until the demo closes
+    private final AnswerGroupService answerGroups;
+
     // The assessment in use, built from the configuration and changed
     // when another sample assessment is chosen
     private Assessment assessment;
@@ -162,6 +166,7 @@ public final class DemoBackend implements DashboardBackend {
     public DemoBackend(ServiceRegistry services) {
         this.services = services;
         this.config = services.getConfig();
+        this.answerGroups = new AnswerGroupService(null, config);
         this.assessment = new AssessmentFactory(config).create();
 
         Section section = sampleSection();
@@ -1020,6 +1025,14 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public void recordActivity(String action, String detail) {
         recordAudit(action, detail);
+    }
+
+    /**
+     * Returns the demo's own answer group service, which saves nothing.
+     */
+    @Override
+    public AnswerGroupService getAnswerGroupService() {
+        return answerGroups;
     }
 
     /**

@@ -206,8 +206,9 @@ public final class AnswerGrouper {
 
     /**
      * Says whether a flag is about a question: it names the question's id
-     * or file, or it names only the question's folder (such as "The Q2
-     * folder is missing"), which is about every question in that folder.
+     * or file, or it names the question's folder and no other question
+     * (such as "The Q2 folder is missing"), which is about every question
+     * in that folder.
      *
      * <p>Tier: COULD.
      *
@@ -218,16 +219,12 @@ public final class AnswerGrouper {
      */
     public static boolean isAbout(Anomaly anomaly, Submission submission,
             Question question) {
-        String found = questionOf(anomaly, submission);
-        if (found == null) {
-            return false;
-        }
-        if (found.equals(question.getId())) {
+        String text = textOf(anomaly);
+        if (namesQuestion(text, question)) {
             return true;
         }
-        String text = textOf(anomaly);
         return namesWord(text, question.getFolderName())
-                && !namesAnyQuestion(text, submission);
+                && !namesOtherQuestion(text, submission, question);
     }
 
     // Groups the answers of one question by pattern, in the run's order.
@@ -406,13 +403,19 @@ public final class AnswerGrouper {
         return false;
     }
 
-    // Says whether a text names any question's id or file name.
-    private static boolean namesAnyQuestion(String text,
-            Submission submission) {
+    // Says whether a text names a question's id or file name.
+    private static boolean namesQuestion(String text, Question question) {
+        return namesWord(text, question.getId())
+                || namesWord(text, question.getFileName());
+    }
+
+    // Says whether a text names another question than the one given.
+    private static boolean namesOtherQuestion(String text,
+            Submission submission, Question question) {
         for (QuestionResult result : submission.getQuestionResults()) {
-            Question question = result.getQuestion();
-            if (question != null && (namesWord(text, question.getId())
-                    || namesWord(text, question.getFileName()))) {
+            Question other = result.getQuestion();
+            if (other != null && !other.getId().equals(question.getId())
+                    && namesQuestion(text, other)) {
                 return true;
             }
         }

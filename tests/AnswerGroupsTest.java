@@ -136,6 +136,23 @@ public class AnswerGroupsTest {
         check("COMPILE".equals(AnswerGrouper.patternOf(fixedBroken,
                 result(fixedBroken, "Q3"))), "a fixed folder that did not compile is COMPILE");
 
+        Submission noFolder = student(a, "noFolder", "Q1a", "");
+        result(noFolder, "Q1a").setCompiled(false);
+        result(noFolder, "Q1b").setCompiled(false);
+        result(noFolder, "Q1b").getTestCaseResults().clear();
+        flag(noFolder, AnomalyType.MISSING_QUESTION_FOLDER,
+                "The Q1 folder is missing. Keep Q1a and Q1b at 0.");
+        check("MISSING".equals(AnswerGrouper.patternOf(noFolder, result(noFolder, "Q1a")))
+                && "MISSING".equals(AnswerGrouper.patternOf(noFolder,
+                result(noFolder, "Q1b"))),
+                "a missing folder naming both its questions is about both");
+        Submission otherFile = student(a, "otherFile", "Q1a", "");
+        result(otherFile, "Q1a").setCompiled(false);
+        flag(otherFile, AnomalyType.MISSING_FILE, "Q1/Q1b.java is missing.");
+        check("COMPILE".equals(AnswerGrouper.patternOf(otherFile,
+                result(otherFile, "Q1a"))),
+                "a missing Q1b.java is not about Q1a in the same folder");
+
         Submission compile = student(a, "compile", "Q1b", "");
         result(compile, "Q1b").setCompiled(false);
         check("COMPILE".equals(AnswerGrouper.patternOf(compile,

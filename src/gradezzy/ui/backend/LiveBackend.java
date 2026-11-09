@@ -53,6 +53,7 @@ import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.report.ExportException;
 import gradezzy.report.ScoreFormatter;
 import gradezzy.service.AnomalyService;
+import gradezzy.service.AnswerGroupService;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.ClassFileMatch;
@@ -1453,6 +1454,15 @@ public class LiveBackend implements DashboardBackend {
     @Override
     public void recordActivity(String action, String detail) {
         services.getAuditService().record(action, detail);
+    }
+
+    /**
+     * Returns the service that saves answer group names and checks with
+     * the run.
+     */
+    @Override
+    public AnswerGroupService getAnswerGroupService() {
+        return services.getAnswerGroupService();
     }
 
     /**

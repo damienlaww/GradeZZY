@@ -280,6 +280,13 @@ public enum Capability {
             null, CapabilityStatus.PROPOSED,
             "Record how long each tester ran in QuestionResult."),
 
+    /** Groups the students who lost marks the same way. */
+    ANSWER_GROUPS("Answer groups",
+            "Groups the students who lost marks the same way, to mark "
+            + "each mistake once.", "Jing Yuan",
+            "AnswerGroupService.listGroups", CapabilityStatus.WORKS_NOW,
+            "Nothing; names and checks are saved with the run."),
+
     /** A report for one student. */
     STUDENT_REPORT_EXPORT("Export one student's report",
             "Saves one student's marks and evidence as a report.",
