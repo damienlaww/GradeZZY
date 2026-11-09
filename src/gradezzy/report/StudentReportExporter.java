@@ -124,17 +124,7 @@ public class StudentReportExporter implements Exporter {
             throw new ExportException(
                     "Nothing to export: the grading run or file is missing.");
         }
-        String report = "";
-        if (TextUtils.isBlank(username)) {
-            report = writeEveryReport(gradingRun);
-        } else {
-            Submission submission = findSubmission(gradingRun);
-            if (submission == null) {
-                throw new ExportException("There is no submission for "
-                        + username + " in run " + gradingRun.getId() + ".");
-            }
-            report = writeReport(gradingRun, submission);
-        }
+        String report = writeChosenReport(gradingRun);
 
         try {
             FileUtils.writeText(outputFile, report);
@@ -143,6 +133,21 @@ public class StudentReportExporter implements Exporter {
                     + "to " + outputFile + ". Check that the folder exists "
                     + "and is not read-only.", exception);
         }
+    }
+
+    // The report of the chosen student, or of everyone if none is chosen
+    private String writeChosenReport(GradingRun gradingRun)
+            throws ExportException {
+        if (TextUtils.isBlank(username)) {
+            return writeEveryReport(gradingRun);
+        }
+
+        Submission submission = findSubmission(gradingRun);
+        if (submission == null) {
+            throw new ExportException("There is no submission for "
+                    + username + " in run " + gradingRun.getId() + ".");
+        }
+        return writeReport(gradingRun, submission);
     }
 
     // The reports of every student in the run, in run order, with a line

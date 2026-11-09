@@ -186,21 +186,50 @@ public class StatisticsCalculator {
         // Counting bands with a whole number avoids adding up rounding
         // errors, for example when the width is 33.3
         int bandCount = (int) Math.ceil(FULL_PERCENT / bandWidth);
-        for (int bandIndex = 0; bandIndex < bandCount; bandIndex++) {
+        if (bandCount < 1) {
+            return bands;
+        }
+
+        int lastIndex = bandCount - 1;
+        for (int bandIndex = 0; bandIndex < lastIndex; bandIndex++) {
             double lower = bandIndex * bandWidth;
             double upper = Math.min(lower + bandWidth, FULL_PERCENT);
-            boolean lastBand = bandIndex == bandCount - 1;
-            int studentCount = 0;
-            for (double score : scores) {
-                double percent = toPercent(score, maxScore);
-                if (percent >= lower
-                        && (percent < upper || lastBand && percent <= upper)) {
-                    studentCount++;
-                }
-            }
+            int studentCount = countBelow(scores, maxScore, lower, upper);
             bands.add(new MarkBand(lower, upper, studentCount));
         }
+
+        // The last band also holds the full mark
+        double lastLower = lastIndex * bandWidth;
+        double lastUpper = Math.min(lastLower + bandWidth, FULL_PERCENT);
+        int lastCount = countUpTo(scores, maxScore, lastLower, lastUpper);
+        bands.add(new MarkBand(lastLower, lastUpper, lastCount));
         return bands;
+    }
+
+    // Counts the scores from lower up to, but not including, upper
+    private int countBelow(List<Double> scores, double maxScore,
+            double lower, double upper) {
+        int studentCount = 0;
+        for (double score : scores) {
+            double percent = toPercent(score, maxScore);
+            if (percent >= lower && percent < upper) {
+                studentCount++;
+            }
+        }
+        return studentCount;
+    }
+
+    // Counts the scores from lower up to and including upper
+    private int countUpTo(List<Double> scores, double maxScore,
+            double lower, double upper) {
+        int studentCount = 0;
+        for (double score : scores) {
+            double percent = toPercent(score, maxScore);
+            if (percent >= lower && percent <= upper) {
+                studentCount++;
+            }
+        }
+        return studentCount;
     }
 
     // Keeps the runs that match the filter, then only the newest run of
