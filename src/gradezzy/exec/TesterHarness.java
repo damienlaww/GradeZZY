@@ -66,6 +66,12 @@ public final class TesterHarness {
     // Milliseconds in a second
     private static final long MILLIS_PER_SECOND = 1000;
 
+    // Positions of the arguments TesterRunner passes, in order
+    private static final int TESTER_ARGUMENT = 0;
+    private static final int STUDENT_LIMIT_ARGUMENT = 1;
+    private static final int TIME_LIMIT_ARGUMENT = 2;
+    private static final int HEADER_MARKER_ARGUMENT = 3;
+
     // Where the numbers of the test cases to skip start in the arguments
     private static final int FIRST_SKIPPED_ARGUMENT = 4;
 
@@ -87,7 +93,7 @@ public final class TesterHarness {
             throws IOException, ReflectiveOperationException {
         // Started before any student code, and a daemon, so it never
         // keeps the program alive by itself
-        long limitSeconds = Long.parseLong(args[2]);
+        long limitSeconds = Long.parseLong(args[TIME_LIMIT_ARGUMENT]);
         Thread watchdog = new Thread(new HarnessWatchdog(
                 (limitSeconds + GRACE_SECONDS) * MILLIS_PER_SECOND));
         watchdog.setDaemon(true);
@@ -96,11 +102,11 @@ public final class TesterHarness {
         String token = new String(System.in.readAllBytes(),
                 StandardCharsets.UTF_8).trim();
         blockNewPrograms();
-        long studentLimit = Long.parseLong(args[1]);
+        long studentLimit = Long.parseLong(args[STUDENT_LIMIT_ARGUMENT]);
 
         // Loaded without running its static code, so the student's static
         // code runs later, after the marking stream is in place
-        Class<?> tester = Class.forName(args[0], false,
+        Class<?> tester = Class.forName(args[TESTER_ARGUMENT], false,
                 TesterHarness.class.getClassLoader());
         List<Integer> skippedCases = new ArrayList<>();
         for (int index = FIRST_SKIPPED_ARGUMENT; index < args.length;
@@ -109,7 +115,7 @@ public final class TesterHarness {
         }
         TrustedPrintStream trusted = new TrustedPrintStream(System.out,
                 token, Thread.currentThread(), tester, studentLimit,
-                args[FIRST_SKIPPED_ARGUMENT - 1], skippedCases);
+                args[HEADER_MARKER_ARGUMENT], skippedCases);
         System.setOut(trusted);
 
         Method testerMain = tester.getMethod("main", String[].class);
