@@ -232,7 +232,7 @@ feature's status from `WAITING` to `WORKS_NOW` in
 and `sh run.sh --selftest`. `design/UI-INTEGRATION.md` lists which screen
 shows each service method.
 
-Owners and TODO counts (3 left). The split is a starting point;
+Owners and TODO counts (0 left). The split is a starting point;
 the team can swap areas. The next section explains each person's work in
 detail.
 
@@ -241,7 +241,7 @@ detail.
 | Damien | `FileUtils`, `TextUtils`, `ingest`, one stage | 0 |
 | Seth | `validation`, `InputValidator`, one stage; looks after `ui` | 0 |
 | Jun Sheng | `fix`, `detection`, `plagiarism`, two stages | 0 |
-| Zach | `exec`, `testcase`, three stages, the score parser | 3 |
+| Zach | `exec`, `testcase`, three stages, the score parser | 0 |
 | Jing Yuan | `app`, `config`, `model`, `service`, scoring | 0 |
 | Huxley | `report`, `stats`, `persistence`, one stage | 0 |
 
@@ -720,8 +720,9 @@ byte; the totals and the original zips are unchanged.
 
 **Packages:** `exec`, `testcase`, plus `InstallTestersStage`,
 `CompileStage`, `ExecuteStage` and `TesterOutputScoreParser` in
-`grading`. 14 TODOs. This is where "safely terminate programs that exceed
-the time limit" lives, which the brief lists as a core requirement.
+`grading`. **Done: 0 TODOs.** This is where "safely terminate programs
+that exceed the time limit" lives, which the brief lists as a core
+requirement.
 
 What to build, in order:
 
