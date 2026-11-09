@@ -296,6 +296,10 @@ public class StudentReportExporter implements Exporter {
                     + anomaly.getType() + ": "
                     + firstLine(anomaly.getMessage())
                     + " (fix: " + anomaly.getFixStatus() + ")" + NEW_LINE;
+            if (!TextUtils.isBlank(anomaly.describeFix())) {
+                report += "      Fix made: " + anomaly.describeFix()
+                        + NEW_LINE;
+            }
             if (!TextUtils.isBlank(anomaly.getSuggestedAction())) {
                 report += "      What to do: "
                         + firstLine(anomaly.getSuggestedAction()) + NEW_LINE;

@@ -568,7 +568,7 @@ public class StudentPanel extends ScrollPane {
         } else if (backend.needsReview(anomaly)) {
             tag = Parts.pill("Could not fix", Tone.BAD);
         }
-        VBox card = createCard(tag, title, anomaly);
+        VBox card = createCard(tag, title, describeFinding(anomaly));
 
         String before = repair.getOriginalValue();
         if (backend.supports(Capability.REPAIR_VALUES) && before != null
@@ -614,6 +614,16 @@ public class StudentPanel extends ScrollPane {
         addOpenCode(buttons, anomaly);
         addButtons(card, buttons);
         return card;
+    }
+
+    // Says what a fix did once it is made, such as the folder's new name,
+    // else what the student had wrong.
+    private String describeFinding(Anomaly anomaly) {
+        String done = anomaly.describeFix();
+        if (!done.isEmpty()) {
+            return done;
+        }
+        return anomaly.getMessage();
     }
 
     // Adds Open code to a card, opening the code sheet on the question
@@ -915,7 +925,7 @@ public class StudentPanel extends ScrollPane {
             tag = Parts.pill("Flag", Tone.WARN);
         }
         VBox card = createCard(tag, Problems.title(anomaly.getType()),
-                anomaly);
+                anomaly.getMessage());
         if (open) {
             addAdvice(card, anomaly);
         }
@@ -944,11 +954,11 @@ public class StudentPanel extends ScrollPane {
     }
 
     // Builds a card with its tag, title and detail.
-    private VBox createCard(Label tag, String titleText, Anomaly anomaly) {
+    private VBox createCard(Label tag, String titleText, String detailText) {
         Label title = Parts.strong(titleText);
         title.setWrapText(true);
-        Label detail = Parts.muted(Problems.shortenPaths(
-                anomaly.getMessage(), submission));
+        Label detail = Parts.muted(Problems.shortenPaths(detailText,
+                submission));
         detail.setWrapText(true);
         detail.getStyleClass().add("small-text");
         VBox text = new VBox(LINE_GAP, title, detail);

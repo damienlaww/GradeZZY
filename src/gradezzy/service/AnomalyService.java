@@ -149,7 +149,8 @@ public class AnomalyService {
         saveStatus(anomaly);
         if (before != FixStatus.APPROVED
                 && anomaly.getFixStatus() == FixStatus.APPROVED) {
-            record(FIX_APPROVED, anomaly, "");
+            // Says what was kept, such as the folder's new name
+            record(FIX_APPROVED, anomaly, anomaly.describeFix());
         }
     }
 
@@ -594,6 +595,7 @@ public class AnomalyService {
     // the database), so the new status is copied onto that one too.
     private void copyStatus(FixRecord fixRecord, Anomaly anomaly) {
         anomaly.setFixStatus(fixRecord.getAnomaly().getFixStatus());
+        anomaly.setFixDescription(fixRecord.getDescription());
     }
 
     // Writes a decision on a fix to the audit log, naming the student and

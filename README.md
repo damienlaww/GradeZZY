@@ -312,13 +312,18 @@ unzipped by hand and bulk zips downloaded from eLearn.
 
 - **Username.** Taken from the zip name after removing the prefix in
   `ingest.zip.name.prefix.pattern` (so `2023-2024-ping.lee.2023.zip`
-  gives `ping.lee.2023`) and any browser copy number such as ` (1)`.
+  gives `ping.lee.2023`), any browser copy number such as ` (1)` and
+  the ` - Copy` or ` - Copy (2)` Windows adds to a copied file, in lower
+  case (`2023-2024-PING.LEE.2023.ZIP` also gives `ping.lee.2023`). A
+  graded file with a Windows copy name gets a `DUPLICATE_SUBMISSION`
+  note.
 - **Bulk zips.** A zip that holds student zips, and no question folder,
   is unpacked into `workspace/working/.batch-*` and each zip inside is
   one student.
-- **Duplicates.** One file per username (in any letter case) is graded:
-  the one without a copy number, else the lowest. The others are named
-  in a `DUPLICATE_SUBMISSION` warning.
+- **Duplicates.** One file per username is graded: the newest
+  download, which has the highest copy number (` - Copy` counts as 1);
+  a file without one is the oldest. The others are named in a
+  `DUPLICATE_SUBMISSION` warning.
 - **Skipped.** `.DS_Store`, `__MACOSX`, `Thumbs.db`, the starter folder
   itself, and files that are not zips.
 
