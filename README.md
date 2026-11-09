@@ -22,6 +22,7 @@ teammate's part and the coding rules are in `design/TEAM-GUIDE.md`.
 - [Grading several submissions at once](#grading-several-submissions-at-once)
 - [Problems the backend reports](#problems-the-backend-reports)
 - [After grading: review, corrections and late work](#after-grading-review-corrections-and-late-work)
+- [Answer groups: common mistakes](#answer-groups-common-mistakes)
 - [Similar code check](#similar-code-check)
 - [Exports](#exports)
 - [Statistics](#statistics)
@@ -574,6 +575,45 @@ For example, on the six provided samples the console reports:
 | Late batch | `GradingService.findNewestRun`, `addToRun` | Adds students to the section's earlier run. A student graded before is graded again and the old total is kept in the audit log. Refused when the tester folder or score sheet is not the run's. |
 | Change score sheet | `GradingService.changeScoreSheet` | Matches the students to another sheet and saves the run, without grading again. |
 
+## Answer groups: common mistakes
+
+`AnswerGrouper` puts together the students of a run who lost marks the
+same way on a question, so the marker decides each mistake once. Groups
+are worked out from the results every time and are never stored, so a
+student graded again moves to the group of the new result.
+
+| Outcome | Pattern | Title |
+|---|---|---|
+| Some tests failed | `P` or `F` per test, such as `PPFPF` | "Failed tests 3 and 5" |
+| Did not compile | `COMPILE` | "Did not compile" |
+| No file or folder, fix not kept | `MISSING` | "No answer handed in" |
+| Stopped at the time limit | `T:` and the tests so far | "Ran too long after test 2" |
+| Crashed (a runtime error flag) | `X:` and the tests so far | "Crashed after test 1" |
+
+A question whose tester had a problem (`INTERNAL_ERROR`) is left out,
+as it is not the student's mistake. A flag counts for a question when it
+names the question or its file, or names its folder and no other
+question. Inside a group, students whose code is the same apart from
+the names they chose are marked "Same code shape": `JavaTokenizer`
+replaces every name with one token and every text literal with another,
+and keeps numbers and operators, so `<` and `<=` still differ. It is a
+hint that one look covers them, not a plagiarism finding.
+
+`AnswerGroupService` keeps the marker's decisions for each group, keyed
+by run, question and pattern, in the table `answer_group_notes`: the
+name of the mistake, and the students who were in the group when it was
+checked. A group shows as checked only while no student has joined it
+since. With the database off, decisions last until GradeZZY closes.
+
+On Review, a Students | Mistakes switch lists the groups question by
+question. Each group can be named, have one new mark and reason given
+to every student (`ScoreAdjustmentService.adjust` per student, with one
+Undo for all), be marked as checked (which also checks the students'
+open items about that question, compile errors and timeouts included),
+and have its code compared, stepping through the students. Each action
+applies only to the students the sheet listed who are still in the
+group. Statistics shows the largest groups under "Common mistakes".
+
 ## Similar code check
 
 `TokenSimilarityDetector` compares every pair of students, one question
@@ -608,6 +648,7 @@ folder of the section (`paths.output.dir.by.section`, else
 | Problem report | `AnomalyReportExporter` | One row per problem, with its fix status. |
 | Student reports | `StudentReportExporter` | A readable report per student: marks per question, test cases and problems. |
 | Audit log | `AuditLogExporter` | Every logged instructor action. |
+| Common mistakes | `CommonMistakesExporter` | One CSV row per answer group: question, mistake, pattern, the marker's name for it, the number of students, how many share a code shape, whether it was checked, and the usernames. The JSON also gives each question result its group's title and name. |
 
 `ExportService.summarizeScoreSheet` can list which students get a mark,
 which are on the sheet with no submission, which were not graded, and
@@ -642,6 +683,7 @@ erDiagram
     submissions ||--o{ anomalies : "problems"
     submissions ||--o{ score_adjustments : "changed marks"
     submissions ||--o| zero_checks : "0 checked"
+    runs ||--o{ answer_group_notes : "named mistakes"
     runs {
         text run_id PK
         text module_code
@@ -684,6 +726,12 @@ erDiagram
         real previous_score
         real new_score
         text reason
+    }
+    answer_group_notes {
+        text question_id
+        text pattern
+        text label
+        text checked_usernames
     }
     audit_entries {
         int entry_id PK
