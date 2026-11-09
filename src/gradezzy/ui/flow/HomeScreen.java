@@ -80,7 +80,6 @@ public class HomeScreen extends FlowScreen {
     // The width of one section card
     private static final double CARD_WIDTH = 252.0;
 
-
     // The names of the four steps, and each one's place
     private static final String[] STEP_NAMES = {"Set up", "Grade",
         "Review", "Export"};
@@ -112,11 +111,8 @@ public class HomeScreen extends FlowScreen {
     // The size of the upload icon of an empty card
     private static final double DROP_ICON_SIZE = 18.0;
 
-
-
     // The file name pattern of a score sheet
     private static final String CSV_PATTERN = "*.csv";
-
 
     // The most activity lines shown on Home
     private static final int MOST_ACTIVITY = 5;
@@ -1120,8 +1116,6 @@ public class HomeScreen extends FlowScreen {
     }
 
     // ---------------------------------------------------------- actions
-
-
 
     // Switches the assessment in use.
     private void chooseAssessment(String chosen) {

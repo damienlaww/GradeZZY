@@ -53,9 +53,9 @@ public final class SystemMouse {
         hand.mousePress(InputEvent.BUTTON1_DOWN_MASK);
         for (int step = 1; step <= DRAG_STEPS; step++) {
             double share = (double) step / DRAG_STEPS;
-            int x = (int) (start[0] + (end[0] - start[0]) * share);
-            int y = (int) (start[1] + (end[1] - start[1]) * share);
-            hand.mouseMove(x, y);
+            int pointX = (int) (start[0] + (end[0] - start[0]) * share);
+            int pointY = (int) (start[1] + (end[1] - start[1]) * share);
+            hand.mouseMove(pointX, pointY);
             hand.delay(STEP_MILLIS);
         }
         hand.delay(HOVER_MILLIS);

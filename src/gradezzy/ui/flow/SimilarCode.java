@@ -241,8 +241,7 @@ public class SimilarCode {
         row.getStyleClass().add("code-line");
         if (kind == LineKind.SAME) {
             row.getStyleClass().add(SAME_STYLE);
-        }
-        if (kind == LineKind.STARTER) {
+        } else if (kind == LineKind.STARTER) {
             row.getStyleClass().add(STARTER_STYLE);
             Label tag = new Label("starter");
             tag.getStyleClass().add("starter-tag");

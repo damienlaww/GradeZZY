@@ -66,14 +66,21 @@ public final class TesterHarness {
     // Milliseconds in a second
     private static final long MILLIS_PER_SECOND = 1000;
 
-    // Positions of the arguments TesterRunner passes, in order
+    // Position of the tester class name in the arguments
     private static final int TESTER_ARGUMENT = 0;
+
+    // Position of the most bytes of student output to pass on
     private static final int STUDENT_LIMIT_ARGUMENT = 1;
+
+    // Position of the time limit in seconds
     private static final int TIME_LIMIT_ARGUMENT = 2;
+
+    // Position of the start of a test case's header line
     private static final int HEADER_MARKER_ARGUMENT = 3;
 
     // Where the numbers of the test cases to skip start in the arguments
-    private static final int FIRST_SKIPPED_ARGUMENT = 4;
+    private static final int FIRST_SKIPPED_ARGUMENT =
+            HEADER_MARKER_ARGUMENT + 1;
 
     // Utility class: never created
     private TesterHarness() {

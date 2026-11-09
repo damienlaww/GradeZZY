@@ -337,27 +337,32 @@ public class FlowCheck {
                 InputKind.SUBMISSION);
         gradezzy.grading.ProgressListener quiet =
                 new gradezzy.grading.ProgressListener() {
+            /** Shows nothing when the run starts. */
             @Override
             public void onRunStarted(int totalSubmissions) {
                 // nothing to show
             }
 
+            /** Shows nothing when a submission starts. */
             @Override
             public void onSubmissionStarted(Submission submission) {
                 // nothing to show
             }
 
+            /** Shows nothing when a stage starts. */
             @Override
             public void onStageStarted(Submission submission,
                     String stageName) {
                 // nothing to show
             }
 
+            /** Shows nothing when a submission finishes. */
             @Override
             public void onSubmissionFinished(Submission submission) {
                 // nothing to show
             }
 
+            /** Shows nothing when the run finishes. */
             @Override
             public void onRunFinished(GradingRun gradingRun) {
                 // nothing to show
@@ -365,11 +370,13 @@ public class FlowCheck {
         };
         gradezzy.ui.backend.RunCallback done =
                 new gradezzy.ui.backend.RunCallback() {
+            /** Leaves the graded run with the backend. */
             @Override
             public void onFinished(GradingRun gradingRun) {
                 // the backend keeps the run
             }
 
+            /** Prints why a sample section was not graded. */
             @Override
             public void onFailed(String message) {
                 System.out.println("Sample section not graded: " + message);

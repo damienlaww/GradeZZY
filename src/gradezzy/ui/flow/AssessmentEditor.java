@@ -96,11 +96,9 @@ public final class AssessmentEditor {
     private final TextField testers = new TextField();
     private final TextField starter = new TextField();
 
-
     // Whether each folder can be used
     private final HBox testersStatus = Parts.row(0);
     private final HBox starterStatus = Parts.row(0);
-
 
     // The lists that come with the folders
     private final TextField classFiles = new TextField();
@@ -117,7 +115,6 @@ public final class AssessmentEditor {
 
     // Says which fields were filled in from the chosen folders
     private final Label filledNote = new Label();
-
 
     // Says what is wrong with the form
     private final Label problem = new Label();
@@ -238,7 +235,6 @@ public final class AssessmentEditor {
         problem.getStyleClass().add("field-problem");
         problem.setWrapText(true);
         show(problem, false);
-
 
         if (inline) {
             // Inside a page: the page scrolls, and Revert reloads it
@@ -608,10 +604,11 @@ public final class AssessmentEditor {
             if (Files.isDirectory(folder)) {
                 return folder;
             }
+            return null;
         } catch (RuntimeException exception) {
             // A path with characters this computer does not allow
+            return null;
         }
-        return null;
     }
 
     // Brings the questions, data files, provided class files and
@@ -691,9 +688,11 @@ public final class AssessmentEditor {
         if (folder == null) {
             return ids;
         }
-        for (Question question : AssessmentFolderScanner.findQuestions(
-                folder, window.getBackend().getSetting(
-                ConfigKeys.TESTER_CLASS_SUFFIX), null)) {
+        String suffix = window.getBackend().getSetting(
+                ConfigKeys.TESTER_CLASS_SUFFIX);
+        List<Question> found = AssessmentFolderScanner.findQuestions(folder,
+                suffix, null);
+        for (Question question : found) {
             ids.add(question.getId());
         }
         return ids;
