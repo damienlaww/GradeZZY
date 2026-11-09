@@ -4,8 +4,12 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
+import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.*;
+import gradezzy.persistence.SqliteResultRepository;
 import gradezzy.plagiarism.JavaTokenizer;
+import gradezzy.service.AnswerGroupService;
 import gradezzy.stats.AnswerGrouper;
 
 /** Run after compilation: javac -cp classes -d /tmp/gradezzy-tests tests/AnswerGroupsTest.java
@@ -18,6 +22,7 @@ public class AnswerGroupsTest {
         tokenizer();
         patterns();
         grouping();
+        notes();
         System.out.println("AnswerGroupsTest: " + checks + " checks passed");
     }
 
@@ -198,6 +203,78 @@ public class AnswerGroupsTest {
         check(q3.getUsernames().equals(Arrays.asList("q3only"))
                 && q3.getSameShapes().isEmpty(),
                 "a student without a file is grouped with no shape");
+    }
+
+    // ---------------------------------------------------------- Task 3
+
+    static GradingRun twoStudentRun() {
+        Assessment a = assessment();
+        GradingRun run = new GradingRun("run-notes", a, SECTION, LocalDateTime.now());
+        run.addSubmission(student(a, "amy", "Q2b", "PPFPF"));
+        run.addSubmission(student(a, "ben", "Q2b", "PPFPF"));
+        return run;
+    }
+
+    static AppConfig config(boolean database, Path file) throws Exception {
+        AppConfig config = new AppConfig("config.properties");
+        config.setString(ConfigKeys.DATABASE_ENABLED, String.valueOf(database));
+        config.setString(ConfigKeys.DATABASE_FILE, file.toString());
+        return config;
+    }
+
+    private static void notes() throws Exception {
+        // sessionOnlyWithoutRepository
+        GradingRun run = twoStudentRun();
+        AnswerGroupService session = new AnswerGroupService(null,
+                config(false, Path.of("unused.db")));
+        AnswerGroup group = session.listGroups(run).get(0);
+        session.setLabel(run, group, "  uses < instead\nof <=  ");
+        check(session.listGroups(run).get(0).getLabel()
+                .equals("uses < instead of <="), "label trimmed, one line: "
+                + session.listGroups(run).get(0).getLabel());
+        session.setChecked(run, session.listGroups(run).get(0), true);
+        check(session.listGroups(run).get(0).isChecked(), "checked");
+        run.addSubmission(student(run.getAssessment(), "cat", "Q2b", "PPFPF"));
+        AnswerGroup grown = session.listGroups(run).get(0);
+        check(!grown.isChecked() && grown.countNewSinceChecked() == 1,
+                "a newcomer clears the tick and counts as new");
+        session.setChecked(run, grown, false);
+        check(session.listGroups(run).get(0).getCheckedUsernames().isEmpty(),
+                "unchecking forgets who was checked");
+
+        // round trip through the database
+        Path file = Files.createTempFile("answer-groups-", ".db");
+        AppConfig saving = config(true, file);
+        SqliteResultRepository repository = new SqliteResultRepository(file.toString());
+        repository.open();
+        GradingRun saved = twoStudentRun();
+        AnswerGroupService first = new AnswerGroupService(repository, saving);
+        first.setLabel(saved, first.listGroups(saved).get(0), "off by one");
+        first.setChecked(saved, first.listGroups(saved).get(0), true);
+        check(first.getSaveProblem().isEmpty(), "saved without a problem: "
+                + first.getSaveProblem());
+        repository.close();
+        SqliteResultRepository reopened = new SqliteResultRepository(file.toString());
+        reopened.open();
+        AnswerGroup loaded = new AnswerGroupService(reopened, saving)
+                .listGroups(saved).get(0);
+        check(loaded.getLabel().equals("off by one") && loaded.isChecked(),
+                "name and tick survive a restart");
+        AnswerGroupService clearing = new AnswerGroupService(reopened, saving);
+        clearing.setLabel(saved, clearing.listGroups(saved).get(0), "");
+        clearing.setChecked(saved, clearing.listGroups(saved).get(0), false);
+        check(reopened.listAnswerGroupNotes(saved.getId()).isEmpty(),
+                "an empty note removes the row");
+
+        // saveProblemReported
+        AnswerGroupService failing = new AnswerGroupService(reopened, saving);
+        failing.listGroups(saved);
+        reopened.close();
+        failing.setLabel(saved, failing.listGroups(saved).get(0), "kept anyway");
+        check(failing.listGroups(saved).get(0).getLabel().equals("kept anyway")
+                && !failing.getSaveProblem().isEmpty(),
+                "a failed save keeps the name for the session and says why");
+        Files.deleteIfExists(file);
     }
 
     static void writeAnswer(Path root, String username, String code) throws Exception {

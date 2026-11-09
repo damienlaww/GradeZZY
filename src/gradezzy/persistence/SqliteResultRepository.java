@@ -27,6 +27,7 @@ import java.util.Map;
 
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
+import gradezzy.model.AnswerGroupNote;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
@@ -142,6 +143,15 @@ public class SqliteResultRepository implements ResultRepository {
                 + "run_id TEXT NOT NULL, "
                 + "username TEXT NOT NULL, "
                 + "PRIMARY KEY (run_id, username))",
+        // The marker's name and check for an answer group, kept apart
+        // from the submissions so grading again does not forget them
+        "CREATE TABLE IF NOT EXISTS answer_group_notes ("
+                + "run_id TEXT NOT NULL, "
+                + "question_id TEXT NOT NULL, "
+                + "pattern TEXT NOT NULL, "
+                + "label TEXT, "
+                + "checked_usernames TEXT, "
+                + "PRIMARY KEY (run_id, question_id, pattern))",
         "CREATE TABLE IF NOT EXISTS audit_entries ("
                 + "entry_id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + "logged_at TEXT, "
@@ -287,6 +297,22 @@ public class SqliteResultRepository implements ResultRepository {
     private static final String SELECT_DECISIONS = "SELECT anomaly_id, "
             + "decision FROM anomalies WHERE run_id = ? "
             + "AND decision IS NOT NULL";
+
+    // Saves, removes and lists the answer group notes
+    private static final String UPSERT_GROUP_NOTE = "INSERT OR REPLACE "
+            + "INTO answer_group_notes (run_id, question_id, pattern, "
+            + "label, checked_usernames) VALUES (?, ?, ?, ?, ?)";
+
+    private static final String DELETE_GROUP_NOTE = "DELETE FROM "
+            + "answer_group_notes WHERE run_id = ? AND question_id = ? "
+            + "AND pattern = ?";
+
+    private static final String SELECT_GROUP_NOTES = "SELECT question_id, "
+            + "pattern, label, checked_usernames FROM answer_group_notes "
+            + "WHERE run_id = ?";
+
+    // Separates the checked usernames saved in one column
+    private static final String NAME_SEPARATOR = "\n";
 
     // Saves, removes and lists the 0s marked as checked
     private static final String INSERT_ZERO_CHECK = "INSERT OR IGNORE "
@@ -814,6 +840,100 @@ public class SqliteResultRepository implements ResultRepository {
                     + "cannot be read: " + exception.getMessage(), exception);
         }
         return changes;
+    }
+
+    /**
+     * Saves the marker's name and check for one answer group, or removes
+     * them when the note holds neither.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param runId the run id
+     * @param note the note
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized void saveAnswerGroupNote(String runId,
+            AnswerGroupNote note) throws PersistenceException {
+        requireOpen();
+        PreparedStatement statement = null;
+        try {
+            try {
+                if (note.isEmpty()) {
+                    statement = connection.prepareStatement(
+                            DELETE_GROUP_NOTE);
+                } else {
+                    statement = connection.prepareStatement(
+                            UPSERT_GROUP_NOTE);
+                    statement.setString(4, note.getLabel());
+                    statement.setString(5, TextUtils.join(NAME_SEPARATOR,
+                            note.getCheckedUsernames()));
+                }
+                statement.setString(1, runId);
+                statement.setString(2, note.getQuestionId());
+                statement.setString(3, note.getPattern());
+                statement.executeUpdate();
+            } finally {
+                closeStatement(statement);
+            }
+        } catch (SQLException exception) {
+            throw new PersistenceException("The name of the mistake could "
+                    + "not be saved: " + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Lists the saved answer group notes of a run.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param runId the run id
+     * @return the notes
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized List<AnswerGroupNote> listAnswerGroupNotes(
+            String runId) throws PersistenceException {
+        requireOpen();
+        List<AnswerGroupNote> notes = new ArrayList<>();
+        PreparedStatement statement = null;
+        ResultSet rows = null;
+        try {
+            try {
+                statement = connection.prepareStatement(SELECT_GROUP_NOTES);
+                statement.setString(1, runId);
+                rows = statement.executeQuery();
+                while (rows.next()) {
+                    notes.add(new AnswerGroupNote(
+                            rows.getString("question_id"),
+                            rows.getString("pattern"),
+                            rows.getString("label"),
+                            splitNames(rows.getString("checked_usernames"))));
+                }
+            } finally {
+                closeQuery(rows, statement);
+            }
+        } catch (SQLException exception) {
+            throw new PersistenceException("The names of the mistakes "
+                    + "could not be read: " + exception.getMessage(),
+                    exception);
+        }
+        return notes;
+    }
+
+    // Splits the saved checked usernames; none when empty or null.
+    private List<String> splitNames(String saved) {
+        List<String> names = new ArrayList<>();
+        if (saved == null || saved.isEmpty()) {
+            return names;
+        }
+        String[] parts = saved.split(NAME_SEPARATOR);
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                names.add(part);
+            }
+        }
+        return names;
     }
 
     /**

@@ -35,6 +35,7 @@ import gradezzy.report.JsonExporter;
 import gradezzy.report.JsonWriter;
 import gradezzy.report.StudentReportExporter;
 import gradezzy.service.AnomalyService;
+import gradezzy.service.AnswerGroupService;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AuditService;
 import gradezzy.service.ExportService;
@@ -100,6 +101,9 @@ public class ApplicationContext {
         PlagiarismService plagiarismService = new PlagiarismService(config,
                 new TokenSimilarityDetector(config), repository);
         gradingService.setPlagiarismService(plagiarismService);
+        // Made before the exports, which list the common mistakes
+        AnswerGroupService answerGroupService = new AnswerGroupService(
+                repository, config);
 
         this.services = new ServiceRegistry(config, gradingService,
                 new AnomalyService(fixManager, repository, auditService,
@@ -114,6 +118,7 @@ public class ApplicationContext {
                 plagiarismService);
         services.setScoreAdjustmentService(new ScoreAdjustmentService(
                 repository, config));
+        services.setAnswerGroupService(answerGroupService);
     }
 
     // Stops the app when config.properties holds a value that is not
