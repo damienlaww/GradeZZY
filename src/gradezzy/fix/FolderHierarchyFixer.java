@@ -47,8 +47,9 @@ public class FolderHierarchyFixer extends AbstractFixer {
     private static final String AT_THE_TOP_OF_FOLDER =
             " at the top of the uploaded folder";
 
-    // The ending of a Java source file name
-    private static final String JAVA_EXTENSION = ".java";
+    // The ending of a compiled file. The provided ones are copied into
+    // the new folders from the starter, so the student's are not moved
+    private static final String CLASS_EXTENSION = ".class";
 
     // The application settings, which name the question folders
     private final AppConfig config;
@@ -242,14 +243,15 @@ public class FolderHierarchyFixer extends AbstractFixer {
     }
 
     // Finds the loose files that go into a new question folder: its
-    // answer files, then the files named like the starter's .java files
-    // in that folder, such as GoldMember.java for Q3. A file already
-    // taken by an earlier folder is left out.
+    // answer files, then the files named like the starter's other files
+    // in that folder, such as GoldMember.java for Q3 or a data file such
+    // as orders.txt. A file already taken by an earlier folder is left
+    // out.
     private List<Path> findFilesFor(String folderName, Path contentRoot,
             List<Path> taken) throws FixException {
         List<Path> files = findAnswerFiles(folderName, contentRoot);
         List<Path> looseFiles = listFiles(contentRoot);
-        for (String name : listStarterSources(folderName)) {
+        for (String name : listStarterFiles(folderName)) {
             Path looseFile = findByName(looseFiles, name);
             boolean isNewFile = looseFile != null
                     && !files.contains(looseFile);
@@ -262,10 +264,11 @@ public class FolderHierarchyFixer extends AbstractFixer {
         return files;
     }
 
-    // Lists the .java files the starter folder has in a question folder:
-    // the answer files and the question's other source files. There are
-    // none when no starter folder is set or it lacks that folder.
-    private List<String> listStarterSources(String folderName)
+    // Lists the files the starter folder has in a question folder, other
+    // than compiled ones: the answer files, the question's other source
+    // files and its data files. There are none when no starter folder is
+    // set or it lacks that folder.
+    private List<String> listStarterFiles(String folderName)
             throws FixException {
         List<String> names = new ArrayList<>();
         String starterSetting = config.getString(ConfigKeys.STARTER_DIR);
@@ -279,7 +282,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
         for (Path file : listFiles(starterFolder)) {
             String name = file.getFileName().toString();
-            if (name.endsWith(JAVA_EXTENSION)) {
+            boolean isCompiled = name.endsWith(CLASS_EXTENSION);
+            if (Files.isRegularFile(file) && !isCompiled) {
                 names.add(name);
             }
         }
