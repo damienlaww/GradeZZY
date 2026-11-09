@@ -300,21 +300,29 @@ public interface DashboardBackend {
     List<Student> listMissingStudents(GradingRun gradingRun);
 
     /**
-     * Runs one question's tester again and replaces only that result.
+     * Runs one question's tester again and replaces only that result and
+     * the total. Other marks, fixes and flags stay, and a mark set by hand
+     * is kept. In live mode it compiles and runs the tester, so call it
+     * off the window's thread (RegradeJob does).
      *
+     * @param run the run the student is in, as shown on Review
      * @param submission the student
      * @param questionId the question, such as Q1a
      * @return what happened
      */
-    ActionResult retryQuestion(Submission submission, String questionId);
+    ActionResult retryQuestion(GradingRun run, Submission submission,
+            String questionId);
 
     /**
-     * Grades one submission again from the start.
+     * Grades one submission again from the start. A refused upload stays
+     * refused, and a mark set by hand is kept. In live mode it runs every
+     * tester, so call it off the window's thread (RegradeJob does).
      *
+     * @param run the run the student is in, as shown on Review
      * @param submission the student
      * @return what happened
      */
-    ActionResult retrySubmission(Submission submission);
+    ActionResult retrySubmission(GradingRun run, Submission submission);
 
     // ------------------------------------------------- anomalies, repairs
 

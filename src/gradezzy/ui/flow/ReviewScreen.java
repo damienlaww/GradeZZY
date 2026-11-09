@@ -17,7 +17,9 @@ import java.util.List;
 
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.NumberBinding;
+import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -26,6 +28,7 @@ import javafx.collections.transformation.SortedList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
@@ -58,6 +61,7 @@ import gradezzy.model.QuestionResult;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
+import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.RepairItem;
@@ -65,6 +69,7 @@ import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.backend.ReviewRules;
 import gradezzy.ui.backend.StatusCounts;
+import gradezzy.util.TextUtils;
 
 /**
  * The Review step.
@@ -155,6 +160,21 @@ public class ReviewScreen extends FlowScreen {
 
     // The most fixes named when keeping them all
     private static final int MAX_LISTED_FIXES = 8;
+
+    // The most students named in each part of the Grade again sheets
+    private static final int MAX_LISTED_STUDENTS = 8;
+
+    // The width of the bar while the ticked students are graded again
+    private static final double REGRADE_BAR_WIDTH = 160.0;
+
+    // Starts each line of a list in a sheet
+    private static final String BULLET = "\u2022 ";
+
+    // Separates the names in one line of a sheet
+    private static final String NAME_SEPARATOR = ", ";
+
+    // Ends the first sentence of an outcome, which titles its summary
+    private static final String SENTENCE_END = ". ";
 
     // Averages are shown to one decimal place
     private static final double ONE_DECIMAL = 10.0;
@@ -249,6 +269,22 @@ public class ReviewScreen extends FlowScreen {
     // One note per problem every student shares, above the table
     private final VBox sharedBanner = new VBox(Parts.GAP_SMALL);
 
+    // Shown while the ticked students are graded again: how far it is,
+    // who is graded now, and a bar
+    private final HBox regradeBand = Parts.row(Parts.GAP);
+
+    // The words of the band, such as "1 of 3 done"
+    private final Label regradeCount = new Label();
+
+    // The student being graded again now
+    private final Label regradeNow = new Label();
+
+    // The share of the ticked students graded again so far, from 0 to 1
+    private final DoubleProperty regradeShare = new SimpleDoubleProperty(0);
+
+    // The job grading the ticked students again, or null when none runs
+    private RegradeJob tickedJob = null;
+
     // The details of the clicked student
     private final StudentPanel panel;
 
@@ -312,8 +348,9 @@ public class ReviewScreen extends FlowScreen {
         VBox header = new VBox(HEADING_GAP, Parts.heading(
                 "Review the results"), subtitle);
         guide.getStyleClass().add("review-guide");
-        main.getChildren().addAll(header, tools, guide, banner, sharedBanner,
-                tableFrame);
+        createRegradeBand();
+        main.getChildren().addAll(header, tools, guide, regradeBand, banner,
+                sharedBanner, tableFrame);
         main.getStyleClass().add("review-main");
         VBox.setVgrow(tableFrame, Priority.ALWAYS);
         HBox.setHgrow(main, Priority.ALWAYS);
@@ -707,8 +744,8 @@ public class ReviewScreen extends FlowScreen {
         tickAllBox.setOnAction(event -> tickAll(tickAllBox.isSelected()));
         tickAllBox.setAccessibleText("Tick every student shown");
         tick.setGraphic(tickAllBox);
-        Parts.tip(tickAllBox, "Tick every student shown, to approve their "
-                + "fixes together or export only them.");
+        Parts.tip(tickAllBox, "Tick every student shown, to keep their "
+                + "fixes together, grade them again or export only them.");
         tick.setSortable(false);
         fixWidth(tick, TICK_WIDTH);
         tick.setCellValueFactory(cell -> studentOf(cell));
@@ -1266,7 +1303,8 @@ public class ReviewScreen extends FlowScreen {
     }
 
     /**
-     * Says whether a student is ticked for export.
+     * Says whether a student is ticked, for the actions on several
+     * students: keeping fixes, marking flags, grading again and export.
      *
      * @param submission the student
      * @return true when ticked
@@ -1276,8 +1314,8 @@ public class ReviewScreen extends FlowScreen {
     }
 
     /**
-     * Ticks or unticks one student for export. Unticking a student also
-     * unticks the box that ticks every student.
+     * Ticks or unticks one student, for the actions on several students.
+     * Unticking a student also unticks the box that ticks every student.
      *
      * @param submission the student
      * @param ticked true to tick, false to untick
@@ -1336,6 +1374,12 @@ public class ReviewScreen extends FlowScreen {
                     + Parts.plural(flags.size(), "flag") + " as checked",
                     () -> askCheckAll(flags)));
         }
+        List<Submission> regradable = tickedToRegrade();
+        if (!regradable.isEmpty()) {
+            actions.addSecondary(Parts.secondary("Grade "
+                    + Parts.plural(regradable.size(), "ticked student")
+                    + " again", () -> askRegradeTicked(regradable)));
+        }
         actions.setPrimary("Continue to export", () -> continueToExport(),
                 true);
     }
@@ -1381,8 +1425,8 @@ public class ReviewScreen extends FlowScreen {
         guide.getStyleClass().add("ticked");
         Label text = Parts.strong(Parts.plural(ticked, "student")
                 + " ticked");
-        Label rest = Parts.muted("Approve their fixes together, or export "
-                + "only them.");
+        Label rest = Parts.muted("Keep their fixes together, grade them "
+                + "again, or export only them.");
         rest.getStyleClass().add("small-text");
         rest.setMinWidth(0);
         guide.getChildren().addAll(text, rest, Parts.grow());
@@ -1593,6 +1637,221 @@ public class ReviewScreen extends FlowScreen {
                 "fixes") + " back to review.");
         panel.refresh();
         refreshStatuses();
+    }
+
+    // ------------------------------------------------- grade ticked again
+
+    // Builds the band shown while the ticked students are graded again:
+    // the count, the student graded now, and a bar that fills.
+    private void createRegradeBand() {
+        regradeCount.getStyleClass().add("strong");
+        regradeNow.getStyleClass().addAll("muted", "small-text");
+        regradeNow.setMinWidth(0);
+        Region fill = new Region();
+        fill.getStyleClass().add("track-fill");
+        StackPane bar = new StackPane(fill);
+        bar.getStyleClass().add("score-track");
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.setMinWidth(REGRADE_BAR_WIDTH);
+        bar.setPrefWidth(REGRADE_BAR_WIDTH);
+        bar.setMaxWidth(REGRADE_BAR_WIDTH);
+        fill.maxWidthProperty().bind(bar.widthProperty().multiply(
+                regradeShare));
+        fill.minWidthProperty().bind(fill.maxWidthProperty());
+        regradeBand.getChildren().addAll(regradeCount, regradeNow,
+                Parts.grow(), bar);
+        regradeBand.getStyleClass().add("regrade-band");
+        regradeBand.setVisible(false);
+        regradeBand.setManaged(false);
+    }
+
+    // Returns the ticked students that can be graded again, or none when
+    // the backend cannot or a job already grades students again. A row
+    // made on Review has no upload to grade.
+    private List<Submission> tickedToRegrade() {
+        List<Submission> ticked = new ArrayList<>();
+        boolean canRegrade = getBackend().supports(
+                Capability.RETRY_SUBMISSION) && !getState().isRegrading();
+        if (!canRegrade) {
+            return ticked;
+        }
+        for (Submission submission : getState().getSelected()) {
+            if (!ResultState.isMadeOnReview(submission)) {
+                ticked.add(submission);
+            }
+        }
+        return ticked;
+    }
+
+    // Asks once before grading the ticked students again, naming them.
+    private void askRegradeTicked(List<Submission> ticked) {
+        VBox content = new VBox(Parts.GAP_SMALL);
+        Label about = Parts.muted("Each student is graded again from their "
+                + "upload, one after another in the background, and their "
+                + "totals are replaced. You can keep reviewing meanwhile.");
+        about.setWrapText(true);
+        content.getChildren().add(about);
+        List<String> names = new ArrayList<>();
+        for (Submission submission : ticked) {
+            names.add(Students.name(submission));
+        }
+        addLines(content, names);
+        Label rules = Parts.muted("Marks you set by hand are kept. Fixes "
+                + "are made again and wait for you to keep them, and flags "
+                + "wait to be checked again. An upload that was refused "
+                + "stays refused.");
+        rules.setWrapText(true);
+        content.getChildren().add(rules);
+        content.setMaxWidth(Parts.TEXT_WIDTH);
+        getWindow().confirm("Grade " + Parts.plural(ticked.size(),
+                "ticked student") + " again?", content, "Grade again",
+                () -> regradeTicked(ticked));
+    }
+
+    // Adds one line per entry to a sheet, up to MAX_LISTED_STUDENTS, then
+    // says how many more there are.
+    private void addLines(VBox content, List<String> entries) {
+        int listed = 0;
+        for (String entry : entries) {
+            if (listed == MAX_LISTED_STUDENTS) {
+                int more = entries.size() - listed;
+                content.getChildren().add(Parts.muted("and " + more
+                        + " more"));
+                return;
+            }
+            Label line = new Label(BULLET + entry);
+            line.setWrapText(true);
+            content.getChildren().add(line);
+            listed++;
+        }
+    }
+
+    // Grades the ticked students again: in the background in live mode,
+    // at once in the demo.
+    private void regradeTicked(List<Submission> ticked) {
+        RegradeJob job = new RegradeJob(getBackend(), getState().getRun(),
+                ticked);
+        if (getBackend().isDemo()) {
+            ActionResult result = job.runHere();
+            if (result.isDone()) {
+                getState().forgetExport(getState().getRun());
+            }
+            regradeEnded(job, result);
+            return;
+        }
+        boolean started = job.startOnce(getState(),
+                result -> regradeEnded(job, result), () -> regradeStepped());
+        if (!started) {
+            getWindow().notify("Wait until grading again or undoing a fix "
+                    + "has finished.");
+            return;
+        }
+        tickedJob = job;
+        // The student graded now is named as soon as the job starts them
+        job.messageProperty().addListener(
+                (value, before, now) -> regradeStepped());
+        regradeStepped();
+    }
+
+    // Shows how far the job is and redraws the rows graded so far.
+    private void regradeStepped() {
+        if (tickedJob == null) {
+            return;
+        }
+        int total = tickedJob.countStudents();
+        int done = Math.max(0, (int) tickedJob.getWorkDone());
+        regradeCount.setText("Grading " + Parts.plural(total,
+                "ticked student") + " again: " + done + " of " + total
+                + " done");
+        String now = tickedJob.getMessage();
+        if (now == null || now.isEmpty()) {
+            regradeNow.setText("");
+        } else {
+            regradeNow.setText("Now grading " + now);
+        }
+        double share = (double) done / total;
+        regradeShare.set(share);
+        regradeBand.setVisible(true);
+        regradeBand.setManaged(true);
+        panel.refresh();
+        refreshStatuses();
+    }
+
+    // Hides the band, redraws the table and shows what changed.
+    private void regradeEnded(RegradeJob job, ActionResult result) {
+        tickedJob = null;
+        regradeShare.set(0);
+        regradeBand.setVisible(false);
+        regradeBand.setManaged(false);
+        panel.refresh();
+        refreshStatuses();
+        showRegradeSummary(job, result);
+    }
+
+    // Shows a sheet with whose totals changed, whose stayed, which marks
+    // set by hand were kept, and who was not graded again and why.
+    private void showRegradeSummary(RegradeJob job, ActionResult result) {
+        VBox content = new VBox(Parts.GAP_SMALL);
+        content.setPrefWidth(Parts.TEXT_WIDTH);
+        content.setMaxWidth(Parts.TEXT_WIDTH);
+        List<String> changed = job.getChangedTotals();
+        if (changed.isEmpty()) {
+            content.getChildren().add(Parts.muted("No total changed."));
+        } else {
+            content.getChildren().add(Parts.strong(Parts.plural(
+                    changed.size(), "total") + " changed"));
+            addLines(content, changed);
+        }
+        addNamesLine(content, "Total stayed the same: ", job.getSameTotals());
+        addSummaryPart(content, "Marks you set by hand were kept",
+                job.getKeptHandMarks());
+        addNamesLine(content, "Not graded again, because the upload was "
+                + "refused; it stays refused: ", job.getRefusedUploads());
+        addSummaryPart(content, "Could not be graded again",
+                job.getFailures());
+
+        Button done = Parts.secondary("Done", () -> getWindow().closeSheet());
+        done.getStyleClass().add("confirm-ok");
+        HBox buttons = Parts.row(Parts.GAP, new Node[] {Parts.grow(), done});
+        VBox body = new VBox(Parts.GAP, Parts.title(summaryTitle(result)),
+                content, buttons);
+        body.getStyleClass().add("confirm");
+        getWindow().showSheet(body);
+        done.requestFocus();
+    }
+
+    // Returns the title of the summary: the first sentence of the
+    // outcome, such as "Graded 3 students again".
+    private String summaryTitle(ActionResult result) {
+        String message = result.getMessage();
+        int sentenceEnd = message.indexOf(SENTENCE_END);
+        if (sentenceEnd < 0) {
+            return message;
+        }
+        return message.substring(0, sentenceEnd);
+    }
+
+    // Adds a heading and one line per entry, when there are entries.
+    private void addSummaryPart(VBox content, String heading,
+            List<String> entries) {
+        if (entries.isEmpty()) {
+            return;
+        }
+        content.getChildren().add(Parts.strong(heading));
+        addLines(content, entries);
+    }
+
+    // Adds one line that starts with some words and names the students,
+    // when there are any.
+    private void addNamesLine(VBox content, String start,
+            List<String> names) {
+        if (names.isEmpty()) {
+            return;
+        }
+        Label line = Parts.muted(start + TextUtils.join(NAME_SEPARATOR,
+                names) + ".");
+        line.setWrapText(true);
+        content.getChildren().add(line);
     }
 
     // Counts what the instructor can still settle before exporting.

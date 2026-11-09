@@ -1808,6 +1808,17 @@
     -fx-padding: 8px 12px;
 }
 
+/* While the ticked students are graded again: how far it is and a bar,
+   in line with the words of the band above. No fill, as it is not a
+   status; the bar's track is a shade darker so it shows on the page. */
+.regrade-band {
+    -fx-padding: 0 12px;
+}
+
+.regrade-band .score-track {
+    -fx-background-color: -color-border-muted;
+}
+
 /* ---- explanation of a "?" ---- */
 
 .info-mark {

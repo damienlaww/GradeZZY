@@ -45,8 +45,11 @@ public class ExecuteStage implements GradingStage {
      */
     public static final String NAME = "Running testers";
 
-    // Start of the id of each anomaly this stage reports
-    private static final String ID_PREFIX = "execute-";
+    /**
+     * Start of the id of each anomaly this stage reports. Grading one
+     * question again uses it to find the ones it replaces.
+     */
+    public static final String ID_PREFIX = "execute-";
 
     // Exit code of a tester that finished normally
     private static final int SUCCESS_EXIT_CODE = 0;

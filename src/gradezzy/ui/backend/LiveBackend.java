@@ -75,6 +75,7 @@ import gradezzy.ui.GradingTask;
 import gradezzy.ui.GradingTaskKind;
 import gradezzy.util.FileUtils;
 import gradezzy.util.InputValidator;
+import gradezzy.util.TextUtils;
 
 /**
  * The backend that calls the real services.
@@ -94,6 +95,17 @@ public class LiveBackend implements DashboardBackend {
     // How many folders deep an answer file is looked for: the student's
     // folder, and one wrapper folder around it
     private static final int SOURCE_SEARCH_DEPTH = 3;
+
+    // The activity log actions of grading a student or a question again
+    private static final String STUDENT_GRADED_AGAIN = "Student graded again";
+    private static final String QUESTION_GRADED_AGAIN =
+            "Question graded again";
+
+    // Shown for a student or question that has no mark
+    private static final String NOT_GRADED = "not graded";
+
+    // Separates the questions in a list of kept marks
+    private static final String LIST_SEPARATOR = ", ";
 
     // Every service of the application
     private final ServiceRegistry services;
@@ -631,20 +643,169 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet: no service retries one question.
+     * Calls GradingService.regradeQuestion, which compiles and runs only
+     * that question again and saves the run, then puts a mark set by hand
+     * back with ScoreAdjustmentService.keepAfterRegrade. It runs a
+     * tester, so call it off the window's thread, as RegradeJob does.
+     * The activity log keeps the old and new marks.
      */
     @Override
-    public ActionResult retryQuestion(Submission submission,
+    public ActionResult retryQuestion(GradingRun run, Submission submission,
             String questionId) {
-        return ActionResult.notConnected(Capability.RETRY_QUESTION);
+        String refused = explainNoRegrade(run, submission);
+        if (refused != null) {
+            return ActionResult.failed(refused);
+        }
+
+        ScoreAdjustmentService adjustments =
+                services.getScoreAdjustmentService();
+        List<ScoreAdjustment> handMarks = findHandMark(
+                adjustments.listNewest(run, submission), questionId);
+        String markBefore = describeMark(submission, questionId);
+        String totalBefore = describeTotal(submission);
+        try {
+            services.getGradingService().regradeQuestion(run, submission,
+                    questionId, null);
+        } catch (GradingException exception) {
+            return ActionResult.failed(exception.getMessage());
+        } finally {
+            forgetSavedRuns();
+        }
+        rememberFoundNow(submission);
+        List<ScoreAdjustment> kept = adjustments.keepAfterRegrade(run,
+                submission, handMarks);
+
+        String markAfter = describeMark(submission, questionId);
+        String totalAfter = describeTotal(submission);
+        String keptWords = describeKept(kept);
+        String change = submission.getUsername() + " " + questionId + ": "
+                + markBefore + " to " + markAfter + ", total " + totalBefore
+                + " to " + totalAfter + "." + keptWords;
+        recordActivity(QUESTION_GRADED_AGAIN,
+                AuditEntry.withReference(change, run.getId()));
+        return ActionResult.done("Graded " + questionId + " of "
+                + submission.getUsername() + " again: " + markBefore
+                + " to " + markAfter + ". Total " + totalAfter + ". Other "
+                + "marks did not change." + keptWords);
     }
 
     /**
-     * Returns Not connected yet: no service retries one submission.
+     * Calls GradingService.regradeSubmission, which grades the student
+     * again from the upload and saves the run, then puts the marks set by
+     * hand back with ScoreAdjustmentService.keepAfterRegrade. It runs
+     * every tester, so call it off the window's thread, as RegradeJob
+     * does. An upload that was refused stays refused. The activity log
+     * keeps the old and new totals.
      */
     @Override
-    public ActionResult retrySubmission(Submission submission) {
-        return ActionResult.notConnected(Capability.RETRY_SUBMISSION);
+    public ActionResult retrySubmission(GradingRun run,
+            Submission submission) {
+        String refused = explainNoRegrade(run, submission);
+        if (refused != null) {
+            return ActionResult.failed(refused);
+        }
+
+        ScoreAdjustmentService adjustments =
+                services.getScoreAdjustmentService();
+        List<ScoreAdjustment> handMarks = adjustments.listNewest(run,
+                submission);
+        String totalBefore = describeTotal(submission);
+        try {
+            services.getGradingService().regradeSubmission(run, submission,
+                    null);
+        } catch (GradingException exception) {
+            return ActionResult.failed(exception.getMessage());
+        } finally {
+            forgetSavedRuns();
+        }
+        rememberFoundNow(submission);
+        List<ScoreAdjustment> kept = adjustments.keepAfterRegrade(run,
+                submission, handMarks);
+
+        String totalAfter = describeTotal(submission);
+        String keptWords = describeKept(kept);
+        String change = submission.getUsername() + ": " + totalBefore
+                + " to " + totalAfter + "." + keptWords;
+        recordActivity(STUDENT_GRADED_AGAIN,
+                AuditEntry.withReference(change, run.getId()));
+        return ActionResult.done("Graded " + submission.getUsername()
+                + " again. Total " + totalBefore + " to " + totalAfter + "."
+                + keptWords);
+    }
+
+    // Says why a student cannot be graded again, or returns null when
+    // they can. An upload that was refused stays refused: grading the
+    // same file again cannot help.
+    private String explainNoRegrade(GradingRun run, Submission submission) {
+        if (submission == null || run == null) {
+            return "Choose a student of a graded run first.";
+        }
+        boolean refused = submission.getIngestFailure() != null
+                || ResultState.isRejectedUpload(submission);
+        if (refused) {
+            return "The upload of " + submission.getUsername() + " was "
+                    + "refused, so it stays refused and was not graded "
+                    + "again. Choose a new copy of the zip on Set up.";
+        }
+        return null;
+    }
+
+    // Keeps only the mark set by hand for one question.
+    private List<ScoreAdjustment> findHandMark(
+            List<ScoreAdjustment> handMarks, String questionId) {
+        List<ScoreAdjustment> found = new ArrayList<>();
+        for (ScoreAdjustment change : handMarks) {
+            if (change.getQuestionId().equals(questionId)) {
+                found.add(change);
+            }
+        }
+        return found;
+    }
+
+    // Says which marks set by hand were kept, such as " Kept the mark set
+    // by hand for Q2b (4).", or "" when none was.
+    private String describeKept(List<ScoreAdjustment> kept) {
+        if (kept.isEmpty()) {
+            return "";
+        }
+        List<String> marks = new ArrayList<>();
+        for (ScoreAdjustment change : kept) {
+            marks.add(change.getQuestionId() + " ("
+                    + ScoreFormatter.format(change.getNewScore()) + ")");
+        }
+        String words = " Kept the mark set by hand for ";
+        if (kept.size() > 1) {
+            words = " Kept the marks set by hand for ";
+        }
+        return words + TextUtils.join(LIST_SEPARATOR, marks) + ".";
+    }
+
+    // The total of a student for a message, or "not graded".
+    private String describeTotal(Submission submission) {
+        if (!ResultState.hasTotal(submission)) {
+            return NOT_GRADED;
+        }
+        return ScoreFormatter.format(submission.getTotalScore());
+    }
+
+    // The mark of one question of a student, or "not graded".
+    private String describeMark(Submission submission, String questionId) {
+        for (QuestionResult result : submission.getQuestionResults()) {
+            Question question = result.getQuestion();
+            if (question != null && question.getId().equals(questionId)) {
+                return ScoreFormatter.format(result.getScore());
+            }
+        }
+        return NOT_GRADED;
+    }
+
+    // Remembers the problems a student was given when graded again in
+    // this session, so a failed undo of one of their fixes is explained
+    // right.
+    private void rememberFoundNow(Submission submission) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            anomaliesFoundNow.add(anomaly.getId());
+        }
     }
 
     /**

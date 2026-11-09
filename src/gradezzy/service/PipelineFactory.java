@@ -128,6 +128,37 @@ public class PipelineFactory {
         return pipeline;
     }
 
+    /**
+     * Creates the shorter pipeline that grades one question of a student
+     * again in the working copy they already have: it adds the tester,
+     * compiles and runs it, as the full pipeline does. Extracting,
+     * checking, fixing and the code checks are left out, so the fixes and
+     * flags of the student stay as they are. Scoring and saving are left
+     * to GradingService.regradeQuestion, because ScoreStage would give
+     * every other question a result too.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param cancellationToken the flag that stops the grading when set
+     * @param starterDirectory the starter folder, or null to use
+     *        paths.starter.dir
+     * @return the pipeline, ready to run
+     */
+    public GradingPipeline createQuestionPipeline(
+            CancellationToken cancellationToken, Path starterDirectory) {
+        GradingPipeline pipeline = new GradingPipeline(cancellationToken);
+        ProcessRunner processRunner = new ProcessRunner(config);
+
+        pipeline.addStage(new InstallTestersStage(
+                new TesterInstaller(config)));
+        pipeline.addStage(new CompileStage(new SourceCompiler(config,
+                processRunner), starterDirectory));
+        pipeline.addStage(new ExecuteStage(new TesterRunner(config,
+                processRunner), new TesterOutputScoreParser(config)));
+
+        return pipeline;
+    }
+
     // To add a validator, write a class that extends AbstractValidator
     // and add it here.
     private ValidationRunner createValidationRunner() {

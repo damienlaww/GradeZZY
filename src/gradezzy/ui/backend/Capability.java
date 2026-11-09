@@ -248,16 +248,18 @@ public enum Capability {
     /** Runs the tester of one question again. */
     RETRY_QUESTION("Retry one question",
             "Runs one question's tester again without touching other "
-            + "marks.", "Jing Yuan, Zach", null, CapabilityStatus.PROPOSED,
-            "Run the tester of one question again and replace only that "
-            + "question's result."),
+            + "marks.", "Jing Yuan, Zach", "GradingService.regradeQuestion",
+            CapabilityStatus.WORKS_NOW, "Nothing; only that question's "
+            + "result and the total change, and a mark set by hand is "
+            + "kept."),
 
     /** Grades one chosen submission again. */
     RETRY_SUBMISSION("Retry one submission",
             "Grades one student's submission again from the start.",
-            "Jing Yuan", null, CapabilityStatus.PROPOSED,
-            "Grade one chosen submission again, even when it did not "
-            + "fail."),
+            "Jing Yuan", "GradingService.regradeSubmission",
+            CapabilityStatus.WORKS_NOW, "Nothing; it also grades the "
+            + "students ticked on Review again. A refused upload stays "
+            + "refused, and a mark set by hand is kept."),
 
     /** Changes a mark by hand. */
     SCORE_ADJUSTMENT("Adjust a mark by hand",

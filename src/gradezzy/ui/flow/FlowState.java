@@ -52,6 +52,11 @@ public class FlowState {
     // and it grades one student again at a time.
     private final List<Anomaly> fixesInProgress = new ArrayList<>();
 
+    // The students a background job still has to grade again (a whole
+    // student or one question), the one being graded now first, or none.
+    // Only one such job runs at a time.
+    private final List<Submission> regradesInProgress = new ArrayList<>();
+
     // How many times grading has started, so a screen can tell that the
     // results may have changed since it last looked
     private int gradingCount = 0;
@@ -374,6 +379,37 @@ public class FlowState {
      */
     public int countFixesInProgress() {
         return fixesInProgress.size();
+    }
+
+    /**
+     * Records the students a background job still has to grade again,
+     * the one being graded now first.
+     *
+     * @param students the students, or none once the job has ended
+     */
+    public void setRegradesInProgress(List<Submission> students) {
+        regradesInProgress.clear();
+        regradesInProgress.addAll(students);
+    }
+
+    /**
+     * Says whether a background job is grading students again now.
+     *
+     * @return true while a job still has a student to grade
+     */
+    public boolean isRegrading() {
+        return !regradesInProgress.isEmpty();
+    }
+
+    /**
+     * Says whether a student is being graded again now, or waits for
+     * their turn in the background job.
+     *
+     * @param submission the student
+     * @return true while the job still has the student to grade
+     */
+    public boolean isRegrading(Submission submission) {
+        return regradesInProgress.contains(submission);
     }
 
     /**

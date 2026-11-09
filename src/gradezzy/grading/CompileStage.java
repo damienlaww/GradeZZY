@@ -51,8 +51,11 @@ public class CompileStage implements GradingStage {
      */
     public static final String NAME = "Compiling";
 
-    // Start of the id of each anomaly this stage reports
-    private static final String ID_PREFIX = "compile-";
+    /**
+     * Start of the id of each anomaly this stage reports. Grading one
+     * question again uses it to find the ones it replaces.
+     */
+    public static final String ID_PREFIX = "compile-";
 
     // Extension of a Java source file
     private static final String JAVA_EXTENSION = ".java";

@@ -431,7 +431,8 @@ public class StudentPanel extends ScrollPane {
             code.getStyleClass().add("small-text");
             details.getChildren().add(code);
         }
-        if (backend.supports(Capability.RETRY_QUESTION)) {
+        boolean regrading = window.getState().isRegrading(submission);
+        if (backend.supports(Capability.RETRY_QUESTION) && !regrading) {
             Hyperlink retry = Parts.link("Grade " + question.getId()
                     + " again", () -> askRetryQuestion(backend, question));
             retry.getStyleClass().add("small-text");
@@ -1041,11 +1042,23 @@ public class StudentPanel extends ScrollPane {
             links.getChildren().add(Parts.link("Open code and test output",
                     () -> openCode()));
         }
-        if (backend.supports(Capability.RETRY_SUBMISSION)) {
+        if (window.getState().isRegrading(submission)) {
+            links.getChildren().add(createRegradeNote());
+        } else if (backend.supports(Capability.RETRY_SUBMISSION)) {
             links.getChildren().add(Parts.link("Grade this student again",
                     () -> askRetrySubmission(backend)));
         }
         return links;
+    }
+
+    // Says, in place of the Grade again links, that the student is being
+    // graded again in the background.
+    private Label createRegradeNote() {
+        Label note = Parts.muted("Grading again in the background. This "
+                + "can take a minute; you can keep reviewing.");
+        note.getStyleClass().add("small-text");
+        note.setWrapText(true);
+        return note;
     }
 
     // ---------------------------------------------------------- actions
@@ -1060,8 +1073,10 @@ public class StudentPanel extends ScrollPane {
     // Asks before grading the shown student again.
     private void askRetrySubmission(DashboardBackend backend) {
         window.confirm("Grade " + Students.name(submission) + " again?",
-                "Their marks are replaced by the new result.",
-                "Grade again", () -> retrySubmission(backend));
+                "Their marks are replaced by the new result. Marks you set "
+                + "by hand are kept; fixes are made again and wait for you "
+                + "to keep them.", "Grade again",
+                () -> retrySubmission(backend));
     }
 
     // Asks before grading one question of the shown student again.
@@ -1069,7 +1084,8 @@ public class StudentPanel extends ScrollPane {
             Question question) {
         window.confirm("Grade " + question.getId() + " again?", "The mark "
                 + "for " + question.getId() + " is replaced by the new "
-                + "result.", "Grade again",
+                + "result. Other marks, fixes and flags stay, and a mark "
+                + "you set by hand is kept.", "Grade again",
                 () -> retryQuestion(backend, question));
     }
 
@@ -1083,22 +1099,50 @@ public class StudentPanel extends ScrollPane {
     }
 
     /**
-     * Grades the shown student again from the start.
+     * Grades the shown student again from the start. Live mode runs the
+     * testers, so it grades on a background thread.
      *
      * @param backend the backend that grades
      */
     private void retrySubmission(DashboardBackend backend) {
-        applyRegrade(backend.retrySubmission(submission));
+        if (backend.isDemo()) {
+            applyRegrade(backend.retrySubmission(
+                    window.getState().getRun(), submission));
+            return;
+        }
+        startRegradeJob(new RegradeJob(backend, window.getState().getRun(),
+                submission));
     }
 
     /**
-     * Grades one question of the shown student again.
+     * Grades one question of the shown student again. Live mode runs the
+     * tester, so it grades on a background thread.
      *
      * @param backend the backend that grades
      * @param question the question
      */
     private void retryQuestion(DashboardBackend backend, Question question) {
-        applyRegrade(backend.retryQuestion(submission, question.getId()));
+        if (backend.isDemo()) {
+            applyRegrade(backend.retryQuestion(window.getState().getRun(),
+                    submission, question.getId()));
+            return;
+        }
+        startRegradeJob(new RegradeJob(backend, window.getState().getRun(),
+                submission, question.getId()));
+    }
+
+    // Starts grading again in the background; the panel says so until it
+    // ends. Only one such job runs at a time. The job forgets an earlier
+    // export of the run itself.
+    private void startRegradeJob(RegradeJob job) {
+        // The outcome is always told, as the instructor may have moved on
+        if (job.startOnce(window.getState(), result -> apply(result, true),
+                null)) {
+            changed();
+            return;
+        }
+        window.notify("Wait until grading again or undoing a fix has "
+                + "finished.");
     }
 
     /**

@@ -2,7 +2,8 @@
  * File: ReviewTickCell.java
  *
  * Purpose: The check box at the start of each row of the Review table,
- * which adds the row's student to the export scope.
+ * which ticks the row's student for the actions on several students:
+ * keeping fixes, marking flags, grading again and export.
  *
  * Where it fits: ReviewScreen's tick column makes one per visible row.
  * The cell asks the screen whether its student is ticked and tells it
@@ -17,7 +18,8 @@ import gradezzy.model.Submission;
 import gradezzy.ui.backend.ResultState;
 
 /**
- * A check box that adds the row's student to the export scope.
+ * A check box that ticks the row's student for the actions on several
+ * students.
  */
 public class ReviewTickCell extends TableCell<Submission, Submission> {
 
@@ -35,6 +37,8 @@ public class ReviewTickCell extends TableCell<Submission, Submission> {
     public ReviewTickCell(ReviewScreen screen) {
         this.screen = screen;
         box.setOnAction(event -> boxClicked());
+        Parts.tip(box, "Tick to act on this student with others: keep "
+                + "their fixes, grade them again or export only them.");
     }
 
     /**

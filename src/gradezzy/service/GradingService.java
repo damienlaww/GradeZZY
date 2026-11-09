@@ -1,8 +1,9 @@
 /*
  * File: GradingService.java
  *
- * Purpose: Starts, cancels, retries and resumes a grading run, and runs
- * the similar code check when a batch has been graded.
+ * Purpose: Starts, cancels, retries and resumes a grading run, grades
+ * one student or one question of a student again, and runs the similar
+ * code check when a batch has been graded.
  *
  * Where it fits: The entry point to batch grading for both the console
  * and the window. It loads the submissions, prepares the testers, builds
@@ -13,6 +14,7 @@ package gradezzy.service;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -29,10 +31,13 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.config.ExportFolders;
 import gradezzy.config.ModuleSections;
 import gradezzy.grading.CancellationToken;
+import gradezzy.grading.CompileStage;
+import gradezzy.grading.ExecuteStage;
 import gradezzy.grading.GradingContext;
 import gradezzy.grading.GradingException;
 import gradezzy.grading.GradingPipeline;
 import gradezzy.grading.ProgressListener;
+import gradezzy.grading.ScoreCalculator;
 import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.ingest.SubmissionLoader;
@@ -40,6 +45,8 @@ import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Question;
+import gradezzy.model.QuestionResult;
 import gradezzy.model.Section;
 import gradezzy.model.Severity;
 import gradezzy.model.Student;
@@ -76,6 +83,10 @@ public class GradingService {
     // tester folder
     private static final String RESUME_WARNING_ACTION = "Check the marks "
             + "of this student, or grade the batch again with Set up.";
+
+    // Start of the id of the problem added when grading one question
+    // again fails
+    private static final String REGRADE_FAILED_ID_PREFIX = "regrade-";
 
     // Start of the id of the warning on a student who is not on the
     // score sheet, as ExtractStage gives it
@@ -135,6 +146,10 @@ public class GradingService {
 
     // Runs the similar code check after grading, or null to skip it
     private PlagiarismService plagiarismService = null;
+
+    // Keeps the mark of a question graded again within its maximum, as
+    // ScoreStage does
+    private final ScoreCalculator scoreCalculator = new ScoreCalculator();
 
     // The flag that stops the current run
     private final CancellationToken cancellationToken =
@@ -778,15 +793,7 @@ public class GradingService {
     // regradeSubmission.
     private void regradeAlone(GradingRun gradingRun, Submission submission,
             ProgressListener listener) throws GradingException {
-        if (gradingRun == null || submission == null
-                || !gradingRun.getSubmissions().contains(submission)) {
-            throw new GradingException("That student is not in the run.");
-        }
-        if (submission.getIngestFailure() != null) {
-            throw new GradingException("The upload of "
-                    + submission.getUsername() + " could not be used, so "
-                    + "it cannot be graded again.");
-        }
+        checkCanRegrade(gradingRun, submission);
 
         ProgressListener progress = listener;
         if (progress == null) {
@@ -813,6 +820,257 @@ public class GradingService {
         } finally {
             saveRun(gradingRun, true);
         }
+    }
+
+    // Refuses a student who is not in the run, or whose upload could not
+    // be used: grading the same file again cannot help.
+    private void checkCanRegrade(GradingRun gradingRun,
+            Submission submission) throws GradingException {
+        boolean inRun = gradingRun != null && submission != null
+                && gradingRun.getSubmissions().contains(submission);
+        if (!inRun) {
+            throw new GradingException("That student is not in the run.");
+        }
+        if (submission.getIngestFailure() != null) {
+            throw new GradingException("The upload of "
+                    + submission.getUsername() + " could not be used, so "
+                    + "it cannot be graded again.");
+        }
+    }
+
+    /**
+     * Grades one question of one student again. The question's tester is
+     * added to the student's working copy, compiled and run again, as
+     * grading does, with the run's testers. Only that question's result
+     * is replaced, so the total changes by the new mark alone. The other
+     * questions, the fixes in the working copy and the flags of the code
+     * checks stay as they are, with the decisions made on them. The
+     * problems the compiler and the tester gave this question (it did not
+     * compile, timed out, ended with an error, or misses a data file) are
+     * replaced by the ones of the new run. The run is saved.
+     *
+     * <p>A step that fails is recorded on the student as an
+     * INTERNAL_ERROR, as the pipeline does, the earlier result is kept
+     * and the exception says why.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param gradingRun the run that holds the student
+     * @param submission the student
+     * @param questionId the question, such as Q2b
+     * @param listener the object told about progress, or null to tell
+     *        nobody
+     * @return the new result of the question, now in the submission
+     * @throws GradingException if grading is still running; the student
+     *         is not in the run, has an upload that could not be used, or
+     *         has no working copy or no result for the question; the run
+     *         has no tester for it; or grading it failed
+     */
+    public QuestionResult regradeQuestion(GradingRun gradingRun,
+            Submission submission, String questionId,
+            ProgressListener listener) throws GradingException {
+        beginOnlyGrading();
+        try {
+            return regradeQuestionAlone(gradingRun, submission, questionId,
+                    listener);
+        } finally {
+            endGrading();
+        }
+    }
+
+    // Grades one question of one student again while nothing else is
+    // graded; see regradeQuestion. A copy of the student goes through the
+    // short pipeline, so nothing of the student changes until it is done.
+    private QuestionResult regradeQuestionAlone(GradingRun gradingRun,
+            Submission submission, String questionId,
+            ProgressListener listener) throws GradingException {
+        checkCanRegrade(gradingRun, submission);
+        QuestionResult oldResult = findResult(submission, questionId);
+        if (oldResult == null) {
+            throw new GradingException(questionId + " of "
+                    + submission.getUsername() + " has no result to "
+                    + "replace. Grade the whole student again instead.");
+        }
+        if (!hasWorkingCopy(submission)) {
+            throw new GradingException(submission.getUsername() + " has "
+                    + "no working copy to run " + questionId + " in. "
+                    + "Grade the whole student again instead.");
+        }
+        GradingContext context = findContext(gradingRun);
+        Assessment assessment = context.getAssessment();
+        Question question = assessment.findQuestion(questionId);
+        TesterFile tester = TesterFile.findFor(context.getTesters(),
+                questionId);
+        if (question == null || tester == null) {
+            throw new GradingException("The testers of this run have no "
+                    + "tester for " + questionId + ", so it cannot be "
+                    + "graded again.");
+        }
+
+        Submission copy = copyForQuestion(submission);
+        runQuestionPipeline(gradingRun, context, copy, tester, listener);
+        if (copy.getStatus() != SubmissionStatus.GRADED) {
+            String problem = keepEarlierResult(gradingRun, submission, copy,
+                    questionId);
+            throw new GradingException(problem);
+        }
+
+        QuestionResult newResult = findResult(copy, questionId);
+        if (newResult == null) {
+            // The folder or file is missing: 0 marks, as ScoreStage gives
+            newResult = new QuestionResult(question);
+        }
+        newResult.setScore(scoreCalculator.questionScore(newResult));
+        replaceQuestionProblems(submission, copy, question, tester);
+        replaceResult(submission, oldResult, newResult);
+        saveRun(gradingRun, true);
+        return newResult;
+    }
+
+    // Makes the copy of a student that grades one question again: the
+    // same username, upload, working copy and roster entry, with no
+    // results and no problems yet.
+    private Submission copyForQuestion(Submission submission) {
+        Submission copy = new Submission(submission.getUsername(),
+                submission.getSection(), submission.getOriginalPath());
+        copy.setWorkingCopyPath(submission.getWorkingCopyPath());
+        copy.setStudent(submission.getStudent());
+        return copy;
+    }
+
+    // Runs the short pipeline of one question on the copy of a student,
+    // with only that question's tester.
+    private void runQuestionPipeline(GradingRun gradingRun,
+            GradingContext context, Submission copy, TesterFile tester,
+            ProgressListener listener) {
+        GradingRun questionRun = new GradingRun(gradingRun.getId(),
+                gradingRun.getAssessment(), gradingRun.getSection(),
+                gradingRun.getStartedAt());
+        questionRun.addSubmission(copy);
+        GradingContext questionContext = new GradingContext(config,
+                context.getAssessment());
+        questionContext.setRunId(gradingRun.getId());
+        questionContext.getTesters().add(tester);
+
+        ProgressListener progress = listener;
+        if (progress == null) {
+            progress = new QuietProgressListener();
+        }
+        setCurrentRunId(gradingRun.getId());
+        cancellationToken.reset();
+        GradingPipeline pipeline = pipelineFactory.createQuestionPipeline(
+                cancellationToken, gradingRun.getStarterDirectory());
+        pipeline.run(questionRun, questionContext,
+                new RetryProgressListener(progress, gradingRun));
+    }
+
+    // Records on the student that grading a question again failed, keeps
+    // the earlier result and saves the run. Returns the problem's words.
+    private String keepEarlierResult(GradingRun gradingRun,
+            Submission submission, Submission copy, String questionId) {
+        String reason = "it was stopped.";
+        for (Anomaly anomaly : copy.getAnomalies()) {
+            boolean failure = anomaly.getType() == AnomalyType.INTERNAL_ERROR
+                    && anomaly.getSeverity() == Severity.ERROR;
+            if (failure) {
+                reason = anomaly.getMessage();
+            }
+        }
+        String message = questionId + " was not graded again: " + reason
+                + " Its earlier mark is kept.";
+        submission.addAnomaly(new Anomaly(REGRADE_FAILED_ID_PREFIX
+                + UUID.randomUUID(), AnomalyType.INTERNAL_ERROR,
+                Severity.ERROR, submission.getUsername(), message,
+                "Grade " + questionId + " again, or grade the whole "
+                + "student again."));
+        saveRun(gradingRun, true);
+        return message;
+    }
+
+    // Swaps the problems the compiler and the tester gave a question for
+    // the ones the new run gave it. Every other problem stays.
+    private void replaceQuestionProblems(Submission submission,
+            Submission copy, Question question, TesterFile tester) {
+        List<Anomaly> earlier = new ArrayList<>();
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            if (isQuestionRunProblem(anomaly, question, tester)) {
+                earlier.add(anomaly);
+            }
+        }
+        submission.getAnomalies().removeAll(earlier);
+        for (Anomaly anomaly : copy.getAnomalies()) {
+            submission.addAnomaly(anomaly);
+        }
+    }
+
+    // Says whether a problem came from compiling or running a question's
+    // tester: its id is one the tester, compile or execute steps give,
+    // or an earlier failed try of this question, and its words name the
+    // question or its tester.
+    private boolean isQuestionRunProblem(Anomaly anomaly, Question question,
+            TesterFile tester) {
+        String id = anomaly.getId();
+        boolean fromRun = id.startsWith(TesterInstaller.ID_PREFIX)
+                || id.startsWith(CompileStage.ID_PREFIX)
+                || id.startsWith(ExecuteStage.ID_PREFIX)
+                || id.startsWith(REGRADE_FAILED_ID_PREFIX);
+        if (!fromRun) {
+            return false;
+        }
+        String message = anomaly.getMessage();
+        return containsWord(message, question.getId())
+                || containsWord(message, tester.getClassName());
+    }
+
+    // Says whether a text holds a word on its own, so Q1 is not found in
+    // Q1a and Q2b is found in "Q2b.java".
+    private boolean containsWord(String text, String word) {
+        int index = text.indexOf(word);
+        while (index >= 0) {
+            int end = index + word.length();
+            boolean startsWord = index == 0
+                    || !Character.isLetterOrDigit(text.charAt(index - 1));
+            boolean endsWord = end == text.length()
+                    || !Character.isLetterOrDigit(text.charAt(end));
+            if (startsWord && endsWord) {
+                return true;
+            }
+            int next = index + 1;
+            index = text.indexOf(word, next);
+        }
+        return false;
+    }
+
+    // Puts a question's new result where its old one was, so the
+    // questions keep their order.
+    private void replaceResult(Submission submission,
+            QuestionResult oldResult, QuestionResult newResult) {
+        List<QuestionResult> results = submission.getQuestionResults();
+        int place = results.indexOf(oldResult);
+        if (place < 0) {
+            results.add(newResult);
+            return;
+        }
+        results.set(place, newResult);
+    }
+
+    // Finds a student's result of one question, or null.
+    private QuestionResult findResult(Submission submission,
+            String questionId) {
+        for (QuestionResult result : submission.getQuestionResults()) {
+            Question graded = result.getQuestion();
+            if (graded != null && graded.getId().equals(questionId)) {
+                return result;
+            }
+        }
+        return null;
+    }
+
+    // Says whether a student still has the working copy grading made.
+    private boolean hasWorkingCopy(Submission submission) {
+        Path workingCopy = submission.getWorkingCopyPath();
+        return workingCopy != null
+                && Files.isDirectory(workingCopy, LinkOption.NOFOLLOW_LINKS);
     }
 
     /**

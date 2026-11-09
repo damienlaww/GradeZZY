@@ -581,7 +581,9 @@ For example, on the six provided samples the console reports:
 | Record a review decision | `AnomalyService.saveDecision`, `saveZeroCheck` | Saved with the run, so it is there after a restart. |
 | Change a mark | `ScoreAdjustmentService.adjust`, `undo` | A mark from 0 to the question's maximum, with a required reason. Saved, shown in exports and the audit log. Only the newest change of a question can be undone. |
 | Run one question again | `QuestionRerunner` | Runs one tester for one student to look at the output; the saved marks do not change. |
-| Grade one student again | `GradingService.regradeSubmission` | Runs the pipeline for that student and replaces the result. |
+| Grade one student again | `GradingService.regradeSubmission` | Runs the pipeline for that student and replaces the result. From Review ("Grade this student again"), marks set by hand are put back (`ScoreAdjustmentService.keepAfterRegrade`) and the activity log keeps the old and new totals. Fixes are made again and wait for Keep. |
+| Grade one question again | `GradingService.regradeQuestion` | Adds, compiles and runs only that question's tester in the student's working copy (`PipelineFactory.createQuestionPipeline`), then replaces only that question's result and its compile or tester problems. Other marks, fixes, flags and decisions stay; a mark set by hand is kept. A step that fails adds an error to the student and keeps the old mark. |
+| Grade ticked students again | `ui.flow.RegradeJob`, `GradingService.regradeSubmission` | Review's "Grade N ticked students again": one confirm, one background job with a progress bar, then a summary of whose totals changed. A refused upload stays refused and a mark set by hand is kept; the summary names both. Each student gets a line in the activity log. |
 | Cancel | `GradingService.cancel` | Each student stops at its next stage; finished students are saved. |
 | Retry failed | `GradingService.retryFailed` | Grades only the students that failed or were not finished. |
 | Resume | `GradingService.resume` | Loads a saved run, with its own score sheet, tester and starter folders, and grades what is left. |
