@@ -1263,6 +1263,29 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
+     * Returns the sample pair for a Similar code flag of one of its two
+     * students.
+     */
+    @Override
+    public SimilarityPair findSimilarPair(GradingRun gradingRun,
+            Anomaly anomaly) {
+        boolean similarFlag = anomaly != null
+                && anomaly.getType() == AnomalyType.SIMILAR_CODE;
+        if (!similarFlag) {
+            return null;
+        }
+        String username = anomaly.getUsername();
+        for (SimilarityPair pair : listSimilarPairs(gradingRun)) {
+            boolean ofStudent = pair.getFirstUsername().equals(username)
+                    || pair.getSecondUsername().equals(username);
+            if (ofStudent) {
+                return pair;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Returns synthetic excerpts and the files left out of the comparison.
      */
     @Override

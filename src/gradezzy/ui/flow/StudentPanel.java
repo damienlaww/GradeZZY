@@ -35,6 +35,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
@@ -42,6 +43,7 @@ import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.Submission;
 import gradezzy.model.TestCaseResult;
+import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
@@ -931,6 +933,7 @@ public class StudentPanel extends ScrollPane {
         }
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         if (!backend.supports(Capability.FLAG_REVIEW)) {
+            addCompare(buttons, anomaly, backend);
             addOpenCode(buttons, anomaly);
             addButtons(card, buttons);
             return card;
@@ -948,9 +951,37 @@ public class StudentPanel extends ScrollPane {
         } else if (decision != ReviewDecision.OPEN) {
             buttons.getChildren().add(undoButton(backend, anomaly));
         }
+        addCompare(buttons, anomaly, backend);
         addOpenCode(buttons, anomaly);
         addButtons(card, buttons);
         return card;
+    }
+
+    // Adds Compare to a Similar code flag, opening both students' answers
+    // to the flagged question side by side.
+    private void addCompare(HBox buttons, Anomaly anomaly,
+            DashboardBackend backend) {
+        GradingRun run = window.getState().getRun();
+        boolean canCompare = anomaly.getType() == AnomalyType.SIMILAR_CODE
+                && run != null
+                && backend.supports(Capability.SIMILARITY_DETAIL);
+        if (!canCompare) {
+            return;
+        }
+        SimilarityPair pair = backend.findSimilarPair(run, anomaly);
+        if (pair == null) {
+            return;
+        }
+        Button compare = Parts.small("Compare",
+                () -> openCompare(run, pair));
+        Parts.tip(compare, "Show " + pair.getQuestionId() + " of both "
+                + "students side by side, with the same lines marked.");
+        buttons.getChildren().add(compare);
+    }
+
+    // Opens the sheet that compares a similar pair.
+    private void openCompare(GradingRun run, SimilarityPair pair) {
+        window.showSheet(SimilaritySheet.create(window, run, pair));
     }
 
     // Builds a card with its tag, title and detail.

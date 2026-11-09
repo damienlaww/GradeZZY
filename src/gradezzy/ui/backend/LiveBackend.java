@@ -95,21 +95,6 @@ public class LiveBackend implements DashboardBackend {
     // folder, and one wrapper folder around it
     private static final int SOURCE_SEARCH_DEPTH = 3;
 
-    // How PlagiarismService writes a Similar code flag: its id is
-    // SIMILAR-<run>/<student>/<other student>/<question>, and its message
-    // starts "<question> is <percent>% similar"
-    private static final String SIMILAR_ID_PREFIX = "SIMILAR-";
-    private static final String SIMILAR_ID_SEPARATOR = "/";
-    private static final int SIMILAR_ID_PARTS = 3;
-    private static final int STUDENT_PART = 0;
-    private static final int OTHER_STUDENT_PART = 1;
-    private static final int QUESTION_PART = 2;
-    private static final String SIMILAR_MESSAGE_MIDDLE = " is ";
-    private static final String PERCENT_SIGN = "%";
-
-    // Turns a percentage into a similarity from 0 to 1
-    private static final double PERCENT = 100.0;
-
     // Every service of the application
     private final ServiceRegistry services;
 
@@ -1489,30 +1474,22 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Reads the pairs back from the run's Similar code flags, so nothing
-     * is checked again and a saved run shows the pairs it was saved with.
+     * Calls PlagiarismService.listPairs, which reads the pairs back from
+     * the run's Similar code flags, so nothing is checked again and a
+     * saved run shows the pairs it was saved with.
      */
     @Override
     public List<SimilarityPair> listSimilarPairs(GradingRun gradingRun) {
-        List<SimilarityPair> pairs = new ArrayList<>();
-        if (gradingRun == null) {
-            return pairs;
-        }
+        return services.getPlagiarismService().listPairs(gradingRun);
+    }
 
-        String idStart = SIMILAR_ID_PREFIX + gradingRun.getId()
-                + SIMILAR_ID_SEPARATOR;
-        // Both students of a pair hold a flag, so each pair is kept once
-        List<String> pairKeys = new ArrayList<>();
-        for (Submission submission : gradingRun.getSubmissions()) {
-            for (Anomaly anomaly : submission.getAnomalies()) {
-                SimilarityPair pair = readSimilarFlag(anomaly, idStart);
-                if (pair != null && !pairKeys.contains(pairKey(pair))) {
-                    pairKeys.add(pairKey(pair));
-                    insertBySimilarity(pairs, pair);
-                }
-            }
-        }
-        return pairs;
+    /**
+     * Calls PlagiarismService.readPair, the one place a flag is read.
+     */
+    @Override
+    public SimilarityPair findSimilarPair(GradingRun gradingRun,
+            Anomaly anomaly) {
+        return services.getPlagiarismService().readPair(gradingRun, anomaly);
     }
 
     /**
@@ -1528,63 +1505,6 @@ public class LiveBackend implements DashboardBackend {
         // The check saves the run, so saved copies of it are stale
         forgetSavedRuns();
         return pairs;
-    }
-
-    // Reads the pair a Similar code flag of the run names, or returns
-    // null for any other anomaly or a flag that cannot be read.
-    private SimilarityPair readSimilarFlag(Anomaly anomaly, String idStart) {
-        if (anomaly.getType() != AnomalyType.SIMILAR_CODE
-                || !anomaly.getId().startsWith(idStart)) {
-            return null;
-        }
-
-        String[] parts = anomaly.getId().substring(idStart.length())
-                .split(SIMILAR_ID_SEPARATOR);
-        if (parts.length != SIMILAR_ID_PARTS) {
-            return null;
-        }
-
-        String questionId = parts[QUESTION_PART];
-        String message = anomaly.getMessage();
-        String start = questionId + SIMILAR_MESSAGE_MIDDLE;
-        int end = message.indexOf(PERCENT_SIGN);
-        if (!message.startsWith(start) || end < start.length()) {
-            return null;
-        }
-
-        try {
-            int percent = Integer.parseInt(message.substring(
-                    start.length(), end));
-            return new SimilarityPair(parts[STUDENT_PART],
-                    parts[OTHER_STUDENT_PART], questionId,
-                    percent / PERCENT);
-        } catch (NumberFormatException exception) {
-            return null;
-        }
-    }
-
-    // Names a pair the same way whichever student comes first.
-    private String pairKey(SimilarityPair pair) {
-        String first = pair.getFirstUsername();
-        String second = pair.getSecondUsername();
-        if (first.compareTo(second) > 0) {
-            return pair.getQuestionId() + SIMILAR_ID_SEPARATOR + second
-                    + SIMILAR_ID_SEPARATOR + first;
-        }
-        return pair.getQuestionId() + SIMILAR_ID_SEPARATOR + first
-                + SIMILAR_ID_SEPARATOR + second;
-    }
-
-    // Adds a pair after every pair at least as similar, so the list stays
-    // most similar first.
-    private void insertBySimilarity(List<SimilarityPair> pairs,
-            SimilarityPair pair) {
-        int place = 0;
-        while (place < pairs.size()
-                && pairs.get(place).getSimilarity() >= pair.getSimilarity()) {
-            place++;
-        }
-        pairs.add(place, pair);
     }
 
     /**

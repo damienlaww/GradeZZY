@@ -645,17 +645,19 @@ window's Export step can run it on demand.
 The window lists each pair with a pill such as "84% similar": red above
 75%, amber at 75% or below (the percent as shown, rounded).
 
-"Compare" on a similar pair opens both answer files side by side, in one
-box that scrolls as one. `LineComparison` marks each line, ignoring
-spaces: red when the same line is in the other student's file, grey with
-a "starter" tag when it is in the starter file (starter code is never
-red), and plain when it is the student's own. A line holding only
-brackets, such as `}`, takes the colour of the line above it. Each side
-shows how many of its own lines are the same, and "Next same part" and
-"Previous" jump between the red blocks of the first student's file. The
-lines only help the instructor read a pair; the percentage still comes
-from the trigrams above, so a renamed variable makes a line plain even
-though the score may stay high.
+"Compare" on a similar pair, in the Similar code card on Export or on a
+Similar code flag in the student panel, opens both answer files side by
+side, in one box that scrolls as one. `LineComparison` marks each line,
+ignoring spaces: red when the same line is in the other student's file,
+grey with a "starter" tag when it is in the starter file (starter code
+is never red), and plain when it is the student's own. A line holding
+only brackets, such as `}`, takes the colour of the line above it. Each
+side shows how many of its own lines are the same, and "Next same part"
+and "Previous" jump between the red blocks of the first student's file.
+The lines only help the instructor read a pair; the percentage still
+comes from the trigrams above, so a renamed variable makes a line plain
+even though the score may stay high. `PlagiarismService.readPair` is the
+one place that reads the pair back from a flag.
 
 ## Exports
 

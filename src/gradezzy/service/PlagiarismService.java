@@ -59,7 +59,7 @@ public class PlagiarismService {
 
     // What the instructor can do about a Similar code anomaly
     private static final String SUGGESTED_ACTION =
-            "Use Compare in the Similar code card on Export.";
+            "Use Compare to read both answers side by side.";
 
     // The application settings
     private final AppConfig config;
@@ -175,6 +175,27 @@ public class PlagiarismService {
             }
         }
         return pairs;
+    }
+
+    /**
+     * Reads the pair a Similar code flag names: the student it is on,
+     * the other student, the question and the similarity, as the check
+     * wrote them into its id and message. The window uses it to open
+     * Compare from the flag.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param gradingRun the run the flag belongs to
+     * @param anomaly the flag
+     * @return the pair, or null for any other anomaly, a flag of another
+     *         run or a flag that cannot be read
+     */
+    public SimilarityPair readPair(GradingRun gradingRun, Anomaly anomaly) {
+        if (gradingRun == null || anomaly == null) {
+            return null;
+        }
+        String idStart = ID_PREFIX + gradingRun.getId() + ID_SEPARATOR;
+        return readFlag(anomaly, idStart);
     }
 
     // Reads the pair a Similar code flag of the run names, as flag wrote

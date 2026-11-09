@@ -914,6 +914,19 @@ public interface DashboardBackend {
     List<SimilarityPair> checkSimilarity(GradingRun gradingRun);
 
     /**
+     * Reads the pair a Similar code flag is about, so Compare can open
+     * from the flag.
+     *
+     * <p>Tier: COULD. Owner: Jing Yuan.
+     *
+     * @param gradingRun the run the flag belongs to
+     * @param anomaly the flag
+     * @return the pair, or null when the anomaly is not a Similar code
+     *         flag of the run
+     */
+    SimilarityPair findSimilarPair(GradingRun gradingRun, Anomaly anomaly);
+
+    /**
      * Returns the evidence for one similar pair.
      *
      * @param gradingRun the run the pair belongs to
