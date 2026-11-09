@@ -53,6 +53,15 @@ public final class AssessmentEditor {
     // The size of the close icon
     private static final double CLOSE_SIZE = 16.0;
 
+    // The size of the plus icon of Add question
+    private static final double ADD_ICON_SIZE = 12.0;
+
+    // The gap between a section's heading and the line under it
+    private static final double HEADING_GAP = 2.0;
+
+    // The gap between the parts of a section
+    private static final double SECTION_GAP = 10.0;
+
     // The width of the label column of the form
     private static final double LABEL_WIDTH = 150.0;
 
@@ -297,7 +306,7 @@ public final class AssessmentEditor {
             columnName("Max (tester)", QuestionFields.SHORT_WIDTH),
             columnName("", QuestionFields.LINK_WIDTH)});
         Button add = Parts.small("Add question", () -> addEmptyQuestion());
-        add.setGraphic(Parts.icon(Parts.PLUS, CLOSE_SIZE * 3 / 4));
+        add.setGraphic(Parts.icon(Parts.PLUS, ADD_ICON_SIZE));
         Parts.tip(add, "Add a row. Type its id first; the folder and file "
                 + "are filled in for you, and its maximum mark is read from "
                 + "its tester.");
@@ -337,9 +346,9 @@ public final class AssessmentEditor {
         Label about = Parts.muted(help);
         about.getStyleClass().add("small-text");
         about.setWrapText(true);
-        VBox words = new VBox(2, heading, about);
+        VBox words = new VBox(HEADING_GAP, heading, about);
         HBox head = Parts.row(Parts.GAP_SMALL, new Node[] {badge, words});
-        VBox box = new VBox(Parts.GAP_SMALL + 2, head);
+        VBox box = new VBox(SECTION_GAP, head);
         box.getChildren().addAll(rows);
         box.getStyleClass().add("editor-section");
         return box;
@@ -362,15 +371,20 @@ public final class AssessmentEditor {
     private VBox folderField(TextField field, HBox status, InputKind kind) {
         field.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(field, Priority.ALWAYS);
-        field.focusedProperty().addListener((seen, before, now) -> {
-            if (!now) {
-                checkFolder(field, status, kind);
-            }
-        });
+        field.focusedProperty().addListener((seen, before, now) ->
+                focusChanged(now, field, status, kind));
         Button choose = Parts.small("Choose", () -> chooseFolder(field,
                 status, kind));
         HBox line = Parts.row(Parts.GAP_SMALL, new Node[] {field, choose});
-        return new VBox(Parts.GAP_SMALL / 2, line, status);
+        return new VBox(Parts.GAP_TINY, line, status);
+    }
+
+    // Checks a folder field once the cursor leaves it.
+    private void focusChanged(boolean focused, TextField field,
+            HBox status, InputKind kind) {
+        if (!focused) {
+            checkFolder(field, status, kind);
+        }
     }
 
     // ---------------------------------------------------------- actions
@@ -423,7 +437,7 @@ public final class AssessmentEditor {
         if (questionId.isEmpty()) {
             return TesterMarks.UNKNOWN;
         }
-        Path tester;
+        Path tester = null;
         try {
             tester = folder.resolve(questionId + window.getBackend()
                     .getSetting(ConfigKeys.TESTER_CLASS_SUFFIX)
@@ -501,7 +515,7 @@ public final class AssessmentEditor {
             status.getChildren().add(smallMuted("Not chosen yet."));
             return;
         }
-        ImportItem item;
+        ImportItem item = null;
         try {
             item = window.getBackend().inspect(kind, Path.of(text));
         } catch (RuntimeException exception) {
@@ -510,7 +524,7 @@ public final class AssessmentEditor {
                     Tone.BAD));
             return;
         }
-        Label pill;
+        Label pill = null;
         if (item.getState() == ImportState.INVALID) {
             pill = Parts.pill("Cannot be used", Tone.BAD);
         } else if (item.getState() == ImportState.WARNING) {
@@ -729,14 +743,7 @@ public final class AssessmentEditor {
 
     // Joins a list with commas and spaces, for a field.
     private String joinList(List<String> items) {
-        String text = "";
-        for (String item : items) {
-            if (!text.isEmpty()) {
-                text += LIST_SEPARATOR + " ";
-            }
-            text += item;
-        }
-        return text;
+        return TextUtils.join(LIST_SEPARATOR + " ", items);
     }
 
     // Shows or hides a node and frees its space.

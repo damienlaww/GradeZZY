@@ -100,8 +100,7 @@ public class FixStage implements GradingStage {
         }
     }
 
-    // Says whether a fix moved or renamed something: all but the header
-    // and encoding fixes, which only change what is inside a file.
+    // Says whether a fix moved or renamed something.
     private boolean movedOrRenamed(List<FixRecord> applied) {
         for (FixRecord fixRecord : applied) {
             AnomalyType type = fixRecord.getAnomaly().getType();
@@ -132,10 +131,10 @@ public class FixStage implements GradingStage {
         }
     }
 
-    // Builds the problem for one file. Its message starts with the file's
-    // path in the working copy, which EncodingFixer reads back.
+    // Builds the problem for one file, starting with its path.
     private Anomaly createEncodingProblem(Submission submission, Path file,
             byte[] bytes) {
+        // EncodingFixer reads this path back from the message
         String shownPath = showPath(submission.getWorkingCopyPath(), file);
         String problem = EncodingFixer.describeProblem(shownPath, bytes);
 
@@ -144,8 +143,7 @@ public class FixStage implements GradingStage {
                 submission.getUsername(), problem, ENCODING_ACTION);
     }
 
-    // Returns the path of a file inside the working copy, such as
-    // ping.lee.2023/Q1/Q1a.java.
+    // Returns a file's path such as ping.lee.2023/Q1/Q1a.java.
     private String showPath(Path workingCopy, Path file) {
         List<String> names = new ArrayList<>();
         for (Path part : workingCopy.relativize(file)) {
@@ -155,7 +153,6 @@ public class FixStage implements GradingStage {
     }
 
     // Lists the working copy's Java files, or none if it cannot be read.
-    // An unreadable working copy is reported by the checks.
     private List<Path> listJavaFiles(Path workingCopy) {
         try {
             return EncodingFixer.findJavaFiles(workingCopy);

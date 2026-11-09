@@ -225,12 +225,14 @@ public class HardCodedAnswerDetector implements Detector {
         }
 
         if (end > 0 && JavaSourceText.isQuote(text.charAt(end - 1))) {
-            int start = text.lastIndexOf(text.charAt(end - 1), end - 2);
+            int closingQuote = end - 1;
+            int openingQuote = text.lastIndexOf(text.charAt(closingQuote),
+                    closingQuote - 1);
 
-            if (start < 0) {
+            if (openingQuote < 0) {
                 return "";
             }
-            return text.substring(start, end);
+            return text.substring(openingQuote, end);
         }
 
         int start = end;
@@ -255,8 +257,7 @@ public class HardCodedAnswerDetector implements Detector {
         return "";
     }
 
-    // Says whether a minus starts a number, as in (-5 or == -5, because
-    // nothing before it can end a value, unlike the minus in n - 5.
+    // Says whether a minus starts a number, as in (-5, not n - 5.
     private boolean isNegativeSign(String text, int minusIndex) {
         int before = minusIndex - 1;
 
@@ -354,8 +355,7 @@ public class HardCodedAnswerDetector implements Detector {
         return true;
     }
 
-    // Says whether a quoted literal holds only signs and escapes, such as
-    // "-", ", " or '\n', with no letter or digit of its own.
+    // Says whether a quoted literal holds only signs, such as ", ".
     private boolean isSeparator(String literal) {
         if (!JavaSourceText.isQuote(literal.charAt(0))) {
             return false;

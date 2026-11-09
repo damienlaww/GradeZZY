@@ -54,13 +54,14 @@ public class StepBar extends HBox {
      */
     public void update(Step current, Step furthest, boolean away) {
         getChildren().clear();
-        for (Step step : Step.values()) {
-            if (step.ordinal() > 0) {
-                Region line = new Region();
-                line.getStyleClass().add("step-line");
-                getChildren().add(line);
-            }
-            getChildren().add(createItem(step, current, furthest, away));
+        Step[] steps = Step.values();
+        getChildren().add(createItem(steps[0], current, furthest, away));
+        for (int index = 1; index < steps.length; index++) {
+            Region line = new Region();
+            line.getStyleClass().add("step-line");
+            getChildren().add(line);
+            getChildren().add(createItem(steps[index], current, furthest,
+                    away));
         }
     }
 

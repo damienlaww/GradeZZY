@@ -555,21 +555,18 @@ public class StudentPanel extends ScrollPane {
     private VBox createFixCard(RepairItem repair, DashboardBackend backend) {
         Anomaly anomaly = repair.getAnomaly();
         FixStatus status = anomaly.getFixStatus();
-        Label tag;
-        String title = Problems.fixedTitle(anomaly.getType());
+        Label tag = Parts.pill("Checked", Tone.NEUTRAL);
+        String title = Problems.title(anomaly.getType());
         if (status == FixStatus.APPROVED) {
             tag = Parts.pill("Fix kept", Tone.GOOD);
+            title = Problems.fixedTitle(anomaly.getType());
         } else if (status == FixStatus.UNDONE) {
             tag = Parts.pill("Fix rejected", Tone.NEUTRAL);
-            title = Problems.title(anomaly.getType());
         } else if (status == FixStatus.APPLIED) {
             tag = Parts.pill("Fixed for you", Tone.WARN);
+            title = Problems.fixedTitle(anomaly.getType());
         } else if (backend.needsReview(anomaly)) {
             tag = Parts.pill("Could not fix", Tone.BAD);
-            title = Problems.title(anomaly.getType());
-        } else {
-            tag = Parts.pill("Checked", Tone.NEUTRAL);
-            title = Problems.title(anomaly.getType());
         }
         VBox card = createCard(tag, title, anomaly);
 
@@ -911,13 +908,11 @@ public class StudentPanel extends ScrollPane {
         boolean flag = Problems.isFlag(anomaly.getType());
         ReviewDecision decision = backend.getDecision(anomaly);
         boolean open = backend.needsReview(anomaly);
-        Label tag;
+        Label tag = Parts.pill("Problem", Tone.BAD);
         if (!open) {
             tag = Parts.pill(decisionWords(decision, flag), Tone.NEUTRAL);
         } else if (flag) {
             tag = Parts.pill("Flag", Tone.WARN);
-        } else {
-            tag = Parts.pill("Problem", Tone.BAD);
         }
         VBox card = createCard(tag, Problems.title(anomaly.getType()),
                 anomaly);

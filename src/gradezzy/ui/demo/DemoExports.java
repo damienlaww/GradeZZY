@@ -9,6 +9,7 @@
  */
 package gradezzy.ui.demo;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import gradezzy.model.GradingRun;
@@ -17,6 +18,7 @@ import gradezzy.model.QuestionResult;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.ResultState;
+import gradezzy.util.TextUtils;
 
 /**
  * Export previews for demo mode.
@@ -90,46 +92,46 @@ public final class DemoExports {
                 + jsonText(run.getSection().getLabel()) + ",\n";
         json += INDENT + "\"students\": [";
 
-        for (int index = 0; index < scope.size(); index++) {
-            Submission submission = scope.get(index);
-            if (index > 0) {
-                json += ",";
-            }
-            json += "\n" + INDENT + INDENT + "{ " + "\"username\": "
-                    + jsonText(submission.getUsername())
-                    + ", \"scores\": {";
-            json += scoresText(run, submission);
-            json += " }, \"total\": ";
-            if (ResultState.hasTotal(submission)) {
-                json += format(submission.getTotalScore());
-            } else {
-                json += "null";
-            }
-            json += " }";
+        List<String> students = new ArrayList<>();
+        for (Submission submission : scope) {
+            students.add(studentJson(run, submission));
         }
+        json += TextUtils.join(",", students);
         json += "\n" + INDENT + "]\n}\n";
+        return json;
+    }
+
+    // Returns the JSON object of one student, on a line of its own.
+    private static String studentJson(GradingRun run,
+            Submission submission) {
+        String json = "\n" + INDENT + INDENT + "{ " + "\"username\": "
+                + jsonText(submission.getUsername()) + ", \"scores\": {";
+        json += scoresText(run, submission);
+        json += " }, \"total\": ";
+        if (ResultState.hasTotal(submission)) {
+            json += format(submission.getTotalScore());
+        } else {
+            json += "null";
+        }
+        json += " }";
         return json;
     }
 
     // Returns "Q1a": 3, ... for one student; ungraded marks are null.
     private static String scoresText(GradingRun run, Submission submission) {
         boolean graded = ResultState.hasTotal(submission);
-        boolean first = true;
-        String text = "";
+        List<String> marks = new ArrayList<>();
         for (Question question : run.getAssessment().getQuestions()) {
-            if (!first) {
-                text += ",";
-            }
-            first = false;
-            text += " " + jsonText(question.getId()) + ": ";
+            String mark = " " + jsonText(question.getId()) + ": ";
             QuestionResult result = find(submission, question);
             if (graded && result != null) {
-                text += format(result.getScore());
+                mark += format(result.getScore());
             } else {
-                text += "null";
+                mark += "null";
             }
+            marks.add(mark);
         }
-        return text;
+        return TextUtils.join(",", marks);
     }
 
     // Finds the result of one question.

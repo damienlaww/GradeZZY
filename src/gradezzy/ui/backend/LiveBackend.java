@@ -23,18 +23,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import javafx.scene.control.TreeItem;
-
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.config.ModuleSections;
 import gradezzy.exec.ProcessRunner;
 import gradezzy.exec.SourceCompiler;
 import gradezzy.fix.FixRecord;
+import gradezzy.grading.CompileStage;
 import gradezzy.grading.GradingException;
 import gradezzy.grading.ProgressListener;
 import gradezzy.grading.QuestionRerunner;
-import gradezzy.grading.CompileStage;
 import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.model.Anomaly;
@@ -177,8 +175,6 @@ public class LiveBackend implements DashboardBackend {
     public boolean supports(Capability capability) {
         return capability.isWired();
     }
-
-
 
     /**
      * Returns the module codes listed in config.properties.
@@ -347,8 +343,6 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public ImportItem inspect(InputKind kind, Path path) {
-        String name = String.valueOf(path.getFileName());
-
         if (kind == InputKind.SUBMISSION) {
             return inspectSubmission(path);
         }
@@ -357,6 +351,7 @@ public class LiveBackend implements DashboardBackend {
             if (!InputValidator.isReadableFile(path)) {
                 return unreadable(kind, path);
             }
+            String name = String.valueOf(path.getFileName());
             if (!name.toLowerCase().endsWith(CSV_EXTENSION)) {
                 return new ImportItem(kind, path, "", ImportState.INVALID,
                         "Choose the score sheet CSV file.");
@@ -941,7 +936,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet: no service returns a fix to Applied.
+     * Calls AnomalyService.reopenFix, so a kept fix waits for review again.
      */
     @Override
     public ActionResult undoRepairDecision(RepairItem repair) {
@@ -1216,8 +1211,8 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls HistoryService.restore. It returns nothing, so this says Not
-     * connected yet until the RESTORE capability works.
+     * Calls HistoryService.restore, then forgets every run and decision
+     * so they are read again from the restored history.
      */
     @Override
     public ActionResult restoreBackup(Path backupFile) {
@@ -1447,7 +1442,6 @@ public class LiveBackend implements DashboardBackend {
                 || key.equals(ConfigKeys.ASSESSMENT_NAME)
                 || key.equals(ConfigKeys.TESTERS_DIR)
                 || key.equals(ConfigKeys.STARTER_DIR)
-
                 || key.equals(ConfigKeys.PROVIDED_CLASS_FILES)
                 || key.equals(ConfigKeys.TESTER_DATA_FILES)
                 || key.equals(ConfigKeys.PLACEHOLDER_FOLDER_NAMES);
@@ -1710,8 +1704,12 @@ public class LiveBackend implements DashboardBackend {
     // folder that can be used.
     private String describeStarterFallback(Path folder) {
         Path configured = getConfiguredPath(InputKind.STARTER);
-        if (!isSameFolder(folder, configured) && inspect(InputKind.STARTER,
-                configured).getState().isUsable()) {
+        boolean otherUsable = false;
+        if (!isSameFolder(folder, configured)) {
+            ImportItem settingsItem = inspect(InputKind.STARTER, configured);
+            otherUsable = settingsItem.getState().isUsable();
+        }
+        if (otherUsable) {
             return "so the starter folder in Settings is used instead.";
         }
         return "so untouched and empty answers cannot be flagged.";
@@ -1948,8 +1946,8 @@ public class LiveBackend implements DashboardBackend {
     // Returns the newest saved run of a section, or null.
     private GradingRun findNewestSavedRun(String sectionLabel) {
         for (GradingRun saved : getSavedRuns()) {
-            if (saved.getSection() != null && sectionLabel.equals(
-                    saved.getSection().getLabel())) {
+            Section section = saved.getSection();
+            if (section != null && sectionLabel.equals(section.getLabel())) {
                 return saved;
             }
         }
@@ -2060,14 +2058,17 @@ public class LiveBackend implements DashboardBackend {
 
     // Joins words as "a", "a and b" or "a, b and c".
     private String joinWords(List<String> words) {
-        String text = "";
-        for (int index = 0; index < words.size(); index++) {
-            if (index > 0 && index == words.size() - 1) {
-                text += " and ";
-            } else if (index > 0) {
-                text += ", ";
-            }
-            text += words.get(index);
+        if (words.isEmpty()) {
+            return "";
+        }
+
+        String text = words.get(0);
+        int last = words.size() - 1;
+        for (int index = 1; index < last; index++) {
+            text += ", " + words.get(index);
+        }
+        if (last > 0) {
+            text += " and " + words.get(last);
         }
         return text;
     }

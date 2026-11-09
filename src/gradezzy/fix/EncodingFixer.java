@@ -283,8 +283,7 @@ public class EncodingFixer extends AbstractFixer {
         }
     }
 
-    // Finds the file the message names inside the working copy, or
-    // returns null.
+    // Finds the file the message names, or returns null.
     private Path findFileInMessage(Path root, Anomaly anomaly) {
         String shownPath = findShownPath(anomaly.getMessage());
         if (shownPath == null || shownPath.isEmpty()) {
@@ -298,8 +297,7 @@ public class EncodingFixer extends AbstractFixer {
         }
     }
 
-    // Returns the start of the message, before its fixed ending: the
-    // file's path in the working copy. Returns null for another message.
+    // Returns the file path that starts the message, or null.
     private String findShownPath(String message) {
         if (message.endsWith(MARK_PROBLEM)) {
             return message.substring(0,
@@ -311,8 +309,7 @@ public class EncodingFixer extends AbstractFixer {
         return null;
     }
 
-    // Finds the fixed file where it was fixed, else the one file with its
-    // name that still holds what the fix wrote, after a later move.
+    // Finds the fixed file, even if a later fix moved it.
     private Path findFileNow(FixRecord fixRecord,
             byte[] written) throws FixException {
         Path fixedPath = fixRecord.getFixedPath();
@@ -320,6 +317,7 @@ public class EncodingFixer extends AbstractFixer {
             return fixedPath;
         }
 
+        // Else the one file of that name still holding what the fix wrote
         List<Path> matches = new ArrayList<>();
         for (Path candidate : listJavaFiles(fixRecord.getWorkingCopy())) {
             String candidateName = candidate.getFileName().toString();
@@ -346,8 +344,7 @@ public class EncodingFixer extends AbstractFixer {
         return Arrays.equals(readBytes(file), bytes);
     }
 
-    // Lists the working copy's Java files, turning a failure into a
-    // FixException.
+    // Lists the working copy's Java files, or throws a FixException.
     private List<Path> listJavaFiles(Path workingCopy) throws FixException {
         try {
             return findJavaFiles(workingCopy);

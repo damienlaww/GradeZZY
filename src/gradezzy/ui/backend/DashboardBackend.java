@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-
 import gradezzy.config.ConfigKeys;
 import gradezzy.config.ExportFolders;
 import gradezzy.grading.GradingException;

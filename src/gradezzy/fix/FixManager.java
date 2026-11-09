@@ -48,7 +48,7 @@ public class FixManager {
      * Creates a new fix manager.
      */
     public FixManager() {
-        // nothing to set up yet
+        // nothing to set up
     }
 
     /**
@@ -288,22 +288,20 @@ public class FixManager {
         }
     }
 
-    // The keys of the fixes the instructor undid for a student. A copy,
-    // so a key added while this student is fixed waits for the next pass.
+    // Returns a copy of the keys of the fixes the instructor undid.
     private List<String> findRejectedFixes(Submission submission) {
+        // A key added during this pass waits for the next one
         return new ArrayList<>(submission.getRejectedFixes());
     }
 
-    // Says whether an anomaly still waits for a fix in this pass: not
-    // fixed, not skipped, and not removed by a fix that covered it.
+    // Says whether an anomaly still waits for a fix in this pass.
     private boolean isOpen(Submission submission, Anomaly anomaly) {
         return anomaly.getFixStatus() != FixStatus.APPLIED
                 && anomaly.getFixStatus() != FixStatus.UNDONE
                 && submission.getAnomalies().contains(anomaly);
     }
 
-    // Applies one fix and keeps its key, skips it if it was rejected, or
-    // keeps the reason and returns null if it fails.
+    // Applies one fix, or skips it, or returns null if it fails.
     private FixRecord tryApply(Fixer fixer, Submission submission,
             Anomaly anomaly, List<String> rejectedKeys,
             List<String> skippedKeys, List<Anomaly> repeats) {
@@ -334,10 +332,10 @@ public class FixManager {
         }
     }
 
-    // Marks a rejected fix UNDONE. Another anomaly of the same fix is
-    // kept as a repeat, which applyTo removes once every fixer has run.
+    // Marks a rejected fix UNDONE.
     private void skip(Anomaly anomaly, String fixKey,
             List<String> skippedKeys, List<Anomaly> repeats) {
+        // applyTo removes a repeat once every fixer has run
         if (skippedKeys.contains(fixKey)) {
             repeats.add(anomaly);
         } else {
@@ -357,10 +355,10 @@ public class FixManager {
         keys.put(anomaly.getId(), fixKey);
     }
 
-    // Makes a fix key from the path the student uploaded: the path is
-    // taken back through this student's earlier fixes, newest first.
+    // Makes a fix key from the path the student uploaded.
     private String makeKey(String fixerName, Submission submission,
             Path path) {
+        // Undo this student's earlier fixes on the path, newest first
         Path uploadedPath = path;
         for (int i = fixRecords.size() - 1; i >= 0; i--) {
             FixRecord earlier = fixRecords.get(i);

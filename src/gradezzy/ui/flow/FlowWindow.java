@@ -66,6 +66,9 @@ public class FlowWindow {
     // How long a notice stays on screen
     private static final Duration NOTICE_TIME = Duration.seconds(3.5);
 
+    // How many times longer a notice with a link stays
+    private static final double ACTION_NOTICE_FACTOR = 2.0;
+
     // How often to check whether a stopped batch has finished, before
     // closing
     private static final Duration CLOSE_CHECK_TIME = Duration.millis(200);
@@ -789,7 +792,7 @@ public class FlowWindow {
 
     /**
      * Gives the window the application's host services, so it can open
-     * a folder in Finder or File Explorer. COULD.
+     * a folder in Finder or File Explorer.
      *
      * @param services the host services, or null for none
      */
@@ -800,7 +803,7 @@ public class FlowWindow {
     /**
      * Opens a folder in Finder or File Explorer. When the folder does
      * not exist yet, or nothing can open it, a notice says where it is
-     * instead. COULD.
+     * instead.
      *
      * @param folder the folder, as the settings give it
      */
@@ -862,7 +865,7 @@ public class FlowWindow {
             notice.setGraphic(link);
             notice.setContentDisplay(ContentDisplay.RIGHT);
             notice.setMouseTransparent(false);
-            time = NOTICE_TIME.multiply(2);
+            time = NOTICE_TIME.multiply(ACTION_NOTICE_FACTOR);
         }
         if (noticeTimer != null) {
             noticeTimer.stop();

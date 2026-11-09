@@ -35,6 +35,7 @@ import javafx.scene.shape.Circle;
 
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
+import gradezzy.util.TextUtils;
 
 /**
  * Up to three graded sections side by side.
@@ -259,13 +260,10 @@ public class CompareView {
             start = end + 1;
         }
 
-        String names = parts.get(0);
-        for (int index = 1; index < parts.size(); index++) {
-            if (index == parts.size() - 1) {
-                names += " and " + parts.get(index);
-            } else {
-                names += ", " + parts.get(index);
-            }
+        String last = parts.remove(parts.size() - 1);
+        String names = last;
+        if (!parts.isEmpty()) {
+            names = TextUtils.join(", ", parts) + " and " + last;
         }
         String verb = " have";
         if (notGraded.size() == 1) {
