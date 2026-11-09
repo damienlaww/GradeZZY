@@ -539,7 +539,7 @@ public class AssessmentLibrary {
         assessment.setName(required(values, ConfigKeys.ASSESSMENT_NAME));
         assessment.setTestersDirectory(values.getProperty(
                 ConfigKeys.TESTERS_DIR, ""));
-        for (String id : splitList(required(values,
+        for (String id : AppConfig.splitList(required(values,
                 ConfigKeys.QUESTION_IDS))) {
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
             assessment.getQuestions().add(new Question(id,
@@ -553,11 +553,11 @@ public class AssessmentLibrary {
                 ConfigKeys.STARTER_DIR, ""));
 
         assessment.setModuleCode(values.getProperty(MODULE_PROPERTY, ""));
-        assessment.getProvidedClassFiles().addAll(splitList(
+        assessment.getProvidedClassFiles().addAll(AppConfig.splitList(
                 values.getProperty(ConfigKeys.PROVIDED_CLASS_FILES, "")));
-        assessment.getTesterDataFiles().addAll(splitList(
+        assessment.getTesterDataFiles().addAll(AppConfig.splitList(
                 values.getProperty(ConfigKeys.TESTER_DATA_FILES, "")));
-        assessment.getPlaceholderFolderNames().addAll(splitList(
+        assessment.getPlaceholderFolderNames().addAll(AppConfig.splitList(
                 values.getProperty(ConfigKeys.PLACEHOLDER_FOLDER_NAMES,
                         "")));
         return assessment;
@@ -698,18 +698,6 @@ public class AssessmentLibrary {
             }
             assessments.set(position, next);
         }
-    }
-
-    // Splits a list value the same way AppConfig.getList does.
-    private List<String> splitList(String text) {
-        List<String> items = new ArrayList<>();
-        for (String part : text.split(LIST_SEPARATOR)) {
-            String item = part.trim();
-            if (!item.isEmpty()) {
-                items.add(item);
-            }
-        }
-        return items;
     }
 
     // Joins list items with commas.

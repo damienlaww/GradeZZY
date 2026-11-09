@@ -60,6 +60,13 @@ public class ConsoleMain {
     // Separates the names in the list of skipped files
     private static final String SKIPPED_SEPARATOR = ", ";
 
+    // Separates the items of the other lists printed, such as the
+    // sections to choose from and the maximum marks
+    private static final String LIST_SEPARATOR = ", ";
+
+    // Follows a similarity printed as a percentage
+    private static final String PERCENT_SIGN = "%";
+
     // The first argument that runs only the tester strength check, and
     // how many arguments it takes up
     private static final String TESTERS_OPTION = "--testers";
@@ -128,6 +135,12 @@ public class ConsoleMain {
             // For example a path setting holding a character that is not
             // allowed in a path
             fail("A setting is not valid: " + exception.getMessage());
+        } catch (RuntimeException exception) {
+            // Anything else: one line for the instructor instead of a
+            // stack trace
+            fail("An unexpected problem stopped grading: " + exception
+                    + ". Try again; if it happens again, check the "
+                    + "settings and the uploaded files.");
         }
     }
 
@@ -272,7 +285,7 @@ public class ConsoleMain {
         }
 
         throw new ConfigException("Unknown " + kind + " '" + typed
-                + "'. Choose one of: " + TextUtils.join(", ", codes)
+                + "'. Choose one of: " + TextUtils.join(LIST_SEPARATOR, codes)
                 + " (setting '" + key + "').");
     }
 
@@ -290,7 +303,7 @@ public class ConsoleMain {
             marks.add(question.getId() + " " + question.getMaxScore());
         }
         System.out.println("Maximum marks from the testers: "
-                + TextUtils.join(", ", marks) + "; total "
+                + TextUtils.join(LIST_SEPARATOR, marks) + "; total "
                 + assessment.getMaxTotal() + ".");
 
         // The sheet startGrading reads: the section's own, else the one
@@ -350,7 +363,8 @@ public class ConsoleMain {
             System.out.println("  " + pair.getQuestionId() + ": "
                     + pair.getFirstUsername() + " and "
                     + pair.getSecondUsername() + ", "
-                    + Math.round(pair.getSimilarity() * PERCENT) + "%");
+                    + Math.round(pair.getSimilarity() * PERCENT)
+                    + PERCENT_SIGN);
         }
     }
 

@@ -130,6 +130,30 @@ public class GradingRun {
     }
 
     /**
+     * Finds a student's submission, ignoring case. A copy whose upload
+     * was refused is used only if no other copy was loaded, as the CSV
+     * export does.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param username the student's username
+     * @return the submission, or null when the student has none
+     */
+    public Submission findLoaded(String username) {
+        Submission found = null;
+        for (Submission submission : submissions) {
+            boolean isBetterCopy = found == null
+                    || found.getIngestFailure() != null;
+            boolean isStudent = submission.getUsername()
+                    .equalsIgnoreCase(username);
+            if (isStudent && isBetterCopy) {
+                found = submission;
+            }
+        }
+        return found;
+    }
+
+    /**
      * Returns the score sheet the batch was graded against. The CSV
      * export fills in this sheet.
      *
