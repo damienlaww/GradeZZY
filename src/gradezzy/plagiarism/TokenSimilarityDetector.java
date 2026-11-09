@@ -147,16 +147,20 @@ public class TokenSimilarityDetector implements SimilarityDetector {
     }
 
     // Reads each student's trigrams for a question, minus the starter's.
+    // The question's other source files, such as GoldMember.java, count
+    // as part of its answer.
     private List<Set<String>> readNewCode(List<Submission> submissions,
             Assessment assessment, Question question, Path starter) {
-        Path starterFile = starter.resolve(question.getFolderName())
-                .resolve(question.getFileName());
-        Set<String> starterTrigrams = readTrigrams(starterFile);
+        Path starterFolder = starter.resolve(question.getFolderName());
+        Set<String> starterTrigrams = readQuestionTrigrams(starterFolder,
+                question);
         List<Set<String>> answers = new ArrayList<>();
 
         for (Submission submission : submissions) {
-            Set<String> answer = readTrigrams(findStudentFile(submission,
-                    assessment, question));
+            Path studentFolder = findStudentFolder(submission, assessment,
+                    question);
+            Set<String> answer = readQuestionTrigrams(studentFolder,
+                    question);
 
             answer.removeAll(starterTrigrams);
             answers.add(answer);
@@ -165,18 +169,30 @@ public class TokenSimilarityDetector implements SimilarityDetector {
         return answers;
     }
 
-    // Finds a student's file for a question, or returns null if it is missing.
-    private Path findStudentFile(Submission submission, Assessment assessment,
-            Question question) {
+    // Reads the trigrams of every file the student writes for a question
+    // in one folder, or none when the folder is missing.
+    private Set<String> readQuestionTrigrams(Path folder, Question question) {
+        Set<String> trigrams = new HashSet<>();
+        if (folder == null) {
+            return trigrams;
+        }
+
+        Path answerFile = folder.resolve(question.getFileName());
+        trigrams.addAll(readTrigrams(answerFile));
+        for (String extraFile : question.getExtraFileNames()) {
+            Path extraPath = folder.resolve(extraFile);
+            trigrams.addAll(readTrigrams(extraPath));
+        }
+        return trigrams;
+    }
+
+    // Finds a student's folder for a question, or returns null if it is
+    // missing.
+    private Path findStudentFolder(Submission submission,
+            Assessment assessment, Question question) {
         try {
-            Path folder = QuestionFolderFinder.find(submission, assessment,
+            return QuestionFolderFinder.find(submission, assessment,
                     question);
-
-            if (folder == null) {
-                return null;
-            }
-
-            return folder.resolve(question.getFileName());
         } catch (IOException exception) {
             return null;
         }

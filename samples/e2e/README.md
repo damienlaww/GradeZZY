@@ -150,12 +150,14 @@ the Excel layout (byte order mark, no last `#` column).
 - **Similar code** (Similar code check on), after both batches:
   - junwei.tan and kelvin.ong on Q1a and Q2a (1.00);
   - junwei.tan and nicole.yap on Q2b (1.00);
+  - junwei.tan, kelvin.ong and nicole.yap on Q3, each pair 1.00: Q3
+    reads `ShapeComparator.java` together with `Q3.java`, and all three
+    hand in Jun Wei's comparator;
   - marcus.yeo and priya.menon on Q2b (0.80). This pair is honest (the
     same common approach) and should be dismissed.
   - Not flagged: kelvin's Q2b (renaming two variables takes it under
-    0.80), and Q1b and Q3 for anyone. Answers shorter than 50 trigrams
-    of their own are not compared, and only `Q3.java` is read, not
-    `ShapeComparator.java`.
+    0.80), and Q1b for anyone. Answers shorter than 50 trigrams of
+    their own are not compared.
   - Nothing flags that kelvin.ong's headers carry Jun Wei's name.
 - **Statistics for CS102 G4** (both batches): mean 17.58, median 19,
   pass rate 95% over the 38 graded submissions. That count includes the

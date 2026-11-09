@@ -113,7 +113,8 @@ public class PipelineFactory {
                 new RosterReader(config), starterDirectory));
         pipeline.addStage(new ValidateStage(createValidationRunner()));
         pipeline.addStage(new FixStage(fixManager,
-                createFileCheckRunner()));
+                createFileCheckRunner(), workingCopyManager,
+                starterDirectory));
         pipeline.addStage(new DetectStage(createDetectors(
                 starterDirectory), createRosterChecks()));
         pipeline.addStage(new InstallTestersStage(

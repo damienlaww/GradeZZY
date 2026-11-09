@@ -3,7 +3,8 @@
  *
  * Purpose: Renames a question folder or a required file whose name differs
  * from the expected one only in letter case, such as q3 to Q3 or q1a.java
- * to Q1a.java.
+ * to Q1a.java, or a file whose name has an ending added, such as
+ * Q2a.java.txt to Q2a.java.
  *
  * Where it fits: Java and the testers need the exact names. Windows and
  * macOS ignore case, so a wrong case is easy to miss and costs the marks
@@ -21,7 +22,10 @@ import gradezzy.model.Submission;
 
 /**
  * Renames a question folder or a required file whose name differs from the
- * expected one only in letter case.
+ * expected one only in letter case. A required file can also be the answer
+ * file with an ending added, such as Q2a.java.txt, or another file of the
+ * starter, such as TaskComparator.java. FileNameValidator names the wrong
+ * and the right file in its message, and this fixer reads them from there.
  */
 public class CaseNameFixer extends AbstractFixer {
 
@@ -30,7 +34,15 @@ public class CaseNameFixer extends AbstractFixer {
      */
     public static final String NAME = "Fix letter case";
 
-    // The application settings, which name the folders and files
+    // Comes between the wrong and the right path in the message that
+    // FileNameValidator writes, such as "Q4/Taskcomparator.java should be
+    // named Q4/TaskComparator.java."
+    private static final String RIGHT_PATH_START = " should be named ";
+
+    // Ends the message that FileNameValidator writes
+    private static final String MESSAGE_END = ".";
+
+    // The application settings, which name the folders
     private final AppConfig config;
 
     /**
@@ -57,12 +69,13 @@ public class CaseNameFixer extends AbstractFixer {
 
     /**
      * Finds the question folder or required file the anomaly is about,
-     * when its name differs from the expected one only in case.
+     * when its name differs from the expected one only in case, or the
+     * file's name has an ending added.
      *
      * @param submission the submission
      * @param anomaly the anomaly
-     * @return the folder or file to rename, or null when the name does
-     *         not differ only in case
+     * @return the folder or file to rename, or null when there is nothing
+     *         to rename
      * @throws FixException if the working copy cannot be read
      */
     @Override
@@ -87,12 +100,13 @@ public class CaseNameFixer extends AbstractFixer {
 
     /**
      * Renames the question folder or required file the anomaly is about,
-     * when its name differs from the expected one only in case.
+     * when its name differs from the expected one only in case, or the
+     * file's name has an ending added.
      *
      * @param submission the submission
      * @param anomaly the anomaly
-     * @return a record that allows the fix to be undone, or null when the
-     *         name does not differ only in case
+     * @return a record that allows the fix to be undone, or null when there
+     *         is nothing to rename
      * @throws FixException if the operation fails
      */
     @Override
@@ -152,28 +166,42 @@ public class CaseNameFixer extends AbstractFixer {
         return findIgnoringCase(listFolders(contentRoot), folderName);
     }
 
-    // Finds the anomaly's required file when only its case is wrong.
+    // Finds the anomaly's misnamed file while the right name is not there.
     private Path findWrongCaseFile(Anomaly anomaly,
             Path contentRoot) throws FixException {
-        String questionId = findQuestionId(config, anomaly);
-        if (questionId == null) {
+        String wrongPath = readWrongPath(anomaly);
+        String rightPath = readRightPath(anomaly);
+        boolean pathsRead = isShownPath(wrongPath) && isShownPath(rightPath);
+        if (!pathsRead) {
             throw new FixException("Could not tell which file this name "
                     + "problem is about, so nothing was renamed.");
         }
 
-        String folderName = readFolderName(config, questionId);
-        String fileName = readFileName(config, questionId);
+        String folderName = readFolderPart(rightPath);
         Path folder = findExact(listFolders(contentRoot), folderName);
         if (folder == null) {
             return null;
         }
-        return findWrongCase(listFiles(folder), fileName);
+
+        List<Path> files = listFiles(folder);
+        String rightName = readNamePart(rightPath);
+        if (findExact(files, rightName) != null) {
+            return null;
+        }
+        String wrongName = readNamePart(wrongPath);
+        return findExact(files, wrongName);
     }
 
-    // Returns the expected name that a wrongly cased name stands for.
+    // Says whether a path read from a message names a folder and a file.
+    private boolean isShownPath(String shownPath) {
+        return shownPath != null && shownPath.contains(FOLDER_SEPARATOR);
+    }
+
+    // Returns the expected name that a wrong name stands for.
     private String findRightName(Anomaly anomaly, String wrongName) {
         if (anomaly.getType() == AnomalyType.WRONG_FILE_NAME) {
-            return readFileName(config, findQuestionId(config, anomaly));
+            String rightPath = readRightPath(anomaly);
+            return readNamePart(rightPath);
         }
 
         String rightName = wrongName;
@@ -185,12 +213,45 @@ public class CaseNameFixer extends AbstractFixer {
         return rightName;
     }
 
-    // Returns the file named like the wanted one but in another case.
-    private Path findWrongCase(List<Path> files, String wantedName) {
-        if (findExact(files, wantedName) != null) {
+    // Reads the wrong path from a file name message, such as
+    // Q2/Q2a.java.txt, or returns null for another message. The message
+    // is split at its last RIGHT_PATH_START, because only the wrong name
+    // comes from the student.
+    private String readWrongPath(Anomaly anomaly) {
+        String message = anomaly.getMessage();
+        int middle = message.lastIndexOf(RIGHT_PATH_START);
+        if (middle < 0) {
             return null;
         }
-        return findIgnoringCase(files, wantedName);
+        return message.substring(0, middle);
+    }
+
+    // Reads the right path from a file name message, such as
+    // Q2/Q2a.java, or returns null for another message.
+    private String readRightPath(Anomaly anomaly) {
+        String message = anomaly.getMessage();
+        int middle = message.lastIndexOf(RIGHT_PATH_START);
+        boolean isNameMessage = middle >= 0 && message.endsWith(MESSAGE_END);
+        if (!isNameMessage) {
+            return null;
+        }
+
+        int rightStart = middle + RIGHT_PATH_START.length();
+        int rightEnd = message.length() - MESSAGE_END.length();
+        return message.substring(rightStart, rightEnd);
+    }
+
+    // Returns the folder of a path such as Q2/Q2a.java: Q2.
+    private String readFolderPart(String shownPath) {
+        int separatorIndex = shownPath.lastIndexOf(FOLDER_SEPARATOR);
+        return shownPath.substring(0, separatorIndex);
+    }
+
+    // Returns the file of a path such as Q2/Q2a.java: Q2a.java.
+    private String readNamePart(String shownPath) {
+        int nameStart = shownPath.lastIndexOf(FOLDER_SEPARATOR)
+                + FOLDER_SEPARATOR.length();
+        return shownPath.substring(nameStart);
     }
 
     // Finds the renamed folder or file as the working copy is now.

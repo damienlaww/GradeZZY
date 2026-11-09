@@ -2,8 +2,9 @@
  * File: FolderHierarchyFixer.java
  *
  * Purpose: Corrects a wrong folder hierarchy: moves Q folders that sit at the
- * top of the zip into a new folder named after the username, and moves Q
- * folders that sit one level too deep back up.
+ * top of the zip into a new folder named after the username, moves Q
+ * folders that sit one level too deep back up, and makes the missing Q
+ * folders for answer files left loose in the username folder.
  *
  * Where it fits: Handles the improper hierarchy cases from the brief.
  */
@@ -14,19 +15,23 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
+import gradezzy.config.ConfigKeys;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.FixStatus;
 import gradezzy.model.Submission;
+import gradezzy.util.FileUtils;
 
 /**
- * Corrects a wrong folder hierarchy: adds a missing username folder, or
- * moves question folders up out of an extra folder.
+ * Corrects a wrong folder hierarchy: adds a missing username folder,
+ * moves question folders up out of an extra folder, or makes the missing
+ * question folders for answer files left loose.
  */
 public class FolderHierarchyFixer extends AbstractFixer {
 
@@ -41,6 +46,9 @@ public class FolderHierarchyFixer extends AbstractFixer {
     // Follows them instead when the upload was a folder unzipped by hand
     private static final String AT_THE_TOP_OF_FOLDER =
             " at the top of the uploaded folder";
+
+    // The ending of a Java source file name
+    private static final String JAVA_EXTENSION = ".java";
 
     // The application settings, which name the question folders
     private final AppConfig config;
@@ -69,13 +77,15 @@ public class FolderHierarchyFixer extends AbstractFixer {
 
     /**
      * Finds what the fix would change: the extra folder that holds the
-     * anomaly's question folder, or the whole working copy when the
-     * username folder is missing.
+     * anomaly's question folder, the folder that holds the question's
+     * answer file loose, or the whole working copy when the username
+     * folder is missing.
      *
      * @param submission the submission
      * @param anomaly the anomaly
-     * @return the extra folder or the working copy, or null when the
-     *         question folder is not one level too deep
+     * @return the extra folder, the folder with the loose files or the
+     *         working copy, or null when the question folder is neither
+     *         one level too deep nor missing with its answer file loose
      * @throws FixException if a username folder exists already or the
      *         working copy cannot be read
      */
@@ -88,7 +98,11 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
 
         if (anomaly.getType() == AnomalyType.MISSING_QUESTION_FOLDER) {
-            return findExtraFolderOf(submission, anomaly);
+            Path extraFolder = findExtraFolderOf(submission, anomaly);
+            if (extraFolder != null) {
+                return extraFolder;
+            }
+            return findLooseFilesFolderOf(submission, anomaly);
         }
 
         String username = submission.getUsername();
@@ -101,15 +115,18 @@ public class FolderHierarchyFixer extends AbstractFixer {
     }
 
     /**
-     * Adds the missing username folder, or moves every question folder up
+     * Adds the missing username folder, moves every question folder up
      * out of an extra folder in one fix, giving each the right letter
-     * case. The other problems of that move are then removed, so the
-     * instructor sees one fix.
+     * case, or makes every missing question folder whose answer file is
+     * loose and moves that question's files into it, in one fix. The
+     * other problems of that fix are then removed, so the instructor sees
+     * one fix.
      *
      * @param submission the submission
      * @param anomaly the anomaly
      * @return a record that allows the fix to be undone, or null when the
-     *         question folder is not one level too deep
+     *         question folder is neither one level too deep nor missing
+     *         with its answer file loose
      * @throws FixException if the operation fails
      */
     @Override
@@ -120,15 +137,18 @@ public class FolderHierarchyFixer extends AbstractFixer {
             return null;
         }
 
-        if (anomaly.getType() == AnomalyType.MISSING_QUESTION_FOLDER) {
+        if (anomaly.getType() == AnomalyType.MISSING_WRAPPER_FOLDER) {
+            return addUsernameFolder(submission, anomaly);
+        } else if (findExtraFolderOf(submission, anomaly) != null) {
             return moveUp(submission, anomaly, pathToChange);
         }
-        return addUsernameFolder(submission, anomaly);
+        return makeFolders(submission, anomaly, pathToChange);
     }
 
     /**
-     * Reverses the fix: removes the added username folder, or moves the
-     * question folders back down into the extra folder.
+     * Reverses the fix: removes the added username folder, moves the
+     * question folders back down into the extra folder, or moves the
+     * loose files back out and removes the folders the fix made.
      *
      * @param fixRecord the fix record
      * @throws FixException if the operation fails
@@ -136,10 +156,12 @@ public class FolderHierarchyFixer extends AbstractFixer {
     @Override
     public void undo(FixRecord fixRecord) throws FixException {
         if (fixRecord.getAnomaly().getType()
-                == AnomalyType.MISSING_QUESTION_FOLDER) {
-            moveBackDown(fixRecord);
-        } else {
+                != AnomalyType.MISSING_QUESTION_FOLDER) {
             removeUsernameFolder(fixRecord);
+        } else if (madeFolders(fixRecord)) {
+            moveFilesBack((FolderMoveRecord) fixRecord);
+        } else {
+            moveBackDown(fixRecord);
         }
     }
 
@@ -161,6 +183,107 @@ public class FolderHierarchyFixer extends AbstractFixer {
             return null;
         }
         return extraFolder;
+    }
+
+    // Finds the folder that holds the answer file of the anomaly's
+    // question loose, when that question's folder is missing.
+    private Path findLooseFilesFolderOf(Submission submission,
+            Anomaly anomaly) throws FixException {
+        List<String> folderNames = readFolderNames(config);
+        Path contentRoot = findContentRoot(submission.getWorkingCopyPath(),
+                submission.getUsername(), folderNames);
+        if (contentRoot == null) {
+            return null;
+        }
+
+        String folderName = findMissingFolderName(submission, anomaly,
+                contentRoot, folderNames);
+        if (!canMakeFolder(folderName, contentRoot)) {
+            return null;
+        }
+        return contentRoot;
+    }
+
+    // Says whether a question folder is missing, in any case, while an
+    // answer file of its questions lies loose in the content root.
+    private boolean canMakeFolder(String folderName, Path contentRoot)
+            throws FixException {
+        if (folderName == null) {
+            return false;
+        }
+
+        Path existing = findIgnoringCase(listFolders(contentRoot),
+                folderName);
+        if (existing != null) {
+            return false;
+        }
+
+        List<Path> answerFiles = findAnswerFiles(folderName, contentRoot);
+        return !answerFiles.isEmpty();
+    }
+
+    // Finds the loose answer files of the questions in a folder, such as
+    // Q2a.java and Q2b.java for Q2.
+    private List<Path> findAnswerFiles(String folderName,
+            Path contentRoot) throws FixException {
+        List<Path> looseFiles = listFiles(contentRoot);
+        List<Path> answerFiles = new ArrayList<>();
+        for (String questionId : config.getList(ConfigKeys.QUESTION_IDS)) {
+            String fileName = readFileName(config, questionId);
+            Path answerFile = findByName(looseFiles, fileName);
+            boolean inFolder = readFolderName(config, questionId).equals(
+                    folderName);
+            boolean isLooseAnswer = inFolder && answerFile != null;
+            if (isLooseAnswer) {
+                answerFiles.add(answerFile);
+            }
+        }
+        return answerFiles;
+    }
+
+    // Finds the loose files that go into a new question folder: its
+    // answer files, then the files named like the starter's .java files
+    // in that folder, such as GoldMember.java for Q3. A file already
+    // taken by an earlier folder is left out.
+    private List<Path> findFilesFor(String folderName, Path contentRoot,
+            List<Path> taken) throws FixException {
+        List<Path> files = findAnswerFiles(folderName, contentRoot);
+        List<Path> looseFiles = listFiles(contentRoot);
+        for (String name : listStarterSources(folderName)) {
+            Path looseFile = findByName(looseFiles, name);
+            boolean isNewFile = looseFile != null
+                    && !files.contains(looseFile);
+            if (isNewFile) {
+                files.add(looseFile);
+            }
+        }
+
+        files.removeAll(taken);
+        return files;
+    }
+
+    // Lists the .java files the starter folder has in a question folder:
+    // the answer files and the question's other source files. There are
+    // none when no starter folder is set or it lacks that folder.
+    private List<String> listStarterSources(String folderName)
+            throws FixException {
+        List<String> names = new ArrayList<>();
+        String starterSetting = config.getString(ConfigKeys.STARTER_DIR);
+        if (starterSetting.isEmpty()) {
+            return names;
+        }
+
+        Path starterFolder = Paths.get(starterSetting).resolve(folderName);
+        if (!Files.isDirectory(starterFolder)) {
+            return names;
+        }
+        for (Path file : listFiles(starterFolder)) {
+            String name = file.getFileName().toString();
+            if (name.endsWith(JAVA_EXTENSION)) {
+                names.add(name);
+            }
+        }
+        return names;
     }
 
     // Says whether a question folder is in the extra folder only.
@@ -286,16 +409,21 @@ public class FolderHierarchyFixer extends AbstractFixer {
             List<String> folderNames) throws FixException {
         List<Anomaly> sameMove = new ArrayList<>();
         for (Anomaly other : submission.getAnomalies()) {
-            boolean isOther = other.getType()
-                    == AnomalyType.MISSING_QUESTION_FOLDER
-                    && other.getFixStatus() != FixStatus.APPLIED
-                    && !other.getId().equals(anomaly.getId());
-            if (isOther && isMovedToo(submission, other, contentRoot,
-                    extraFolder, folderNames)) {
+            boolean movedToo = isOtherMissingFolder(other, anomaly)
+                    && isMovedToo(submission, other, contentRoot,
+                    extraFolder, folderNames);
+            if (movedToo) {
                 sameMove.add(other);
             }
         }
         return sameMove;
+    }
+
+    // Says whether a problem is another missing folder not yet fixed.
+    private boolean isOtherMissingFolder(Anomaly other, Anomaly anomaly) {
+        return other.getType() == AnomalyType.MISSING_QUESTION_FOLDER
+                && other.getFixStatus() != FixStatus.APPLIED
+                && !other.getId().equals(anomaly.getId());
     }
 
     // Says whether the folder another problem is about moves up too.
@@ -369,6 +497,194 @@ public class FolderHierarchyFixer extends AbstractFixer {
         moveFolders(movedFolders, targets);
     }
 
+    // Makes every missing question folder whose answer file is loose in
+    // the content root and moves that question's loose files into it,
+    // all in one fix. Files that belong to no question stay where they
+    // are.
+    private FixRecord makeFolders(Submission submission, Anomaly anomaly,
+            Path contentRoot) throws FixException {
+        Path workingCopy = submission.getWorkingCopyPath();
+        List<String> folderNames = readFolderNames(config);
+        List<Anomaly> sameFix = findSameFolders(submission, anomaly,
+                contentRoot, folderNames);
+
+        List<Path> newFolders = new ArrayList<>();
+        List<String> newNames = new ArrayList<>();
+        List<Path> pathsBefore = new ArrayList<>();
+        List<Path> pathsAfter = new ArrayList<>();
+        for (String folderName : folderNames) {
+            if (canMakeFolder(folderName, contentRoot)) {
+                Path newFolder = contentRoot.resolve(folderName);
+                newFolders.add(newFolder);
+                newNames.add(folderName);
+                List<Path> files = findFilesFor(folderName, contentRoot,
+                        pathsBefore);
+                for (Path file : files) {
+                    pathsBefore.add(file);
+                    pathsAfter.add(newFolder.resolve(file.getFileName()));
+                }
+            }
+        }
+
+        createFolders(newFolders);
+        try {
+            moveFolders(pathsBefore, pathsAfter);
+        } catch (FixException exception) {
+            removeFolders(newFolders, exception);
+            throw exception;
+        }
+        submission.getAnomalies().removeAll(sameFix);
+
+        List<String> namesBefore = new ArrayList<>();
+        List<String> namesAfter = new ArrayList<>();
+        for (int i = 0; i < pathsBefore.size(); i++) {
+            namesBefore.add(pathsBefore.get(i).getFileName().toString());
+            namesAfter.add(showMoved(pathsAfter.get(i)));
+        }
+        String shownRoot = showFolder(workingCopy, contentRoot);
+        String description = describeNewFolders(newNames, namesBefore,
+                contentRoot);
+        String valueBefore = shownRoot + joinNames(namesBefore);
+        String valueAfter = shownRoot + joinNames(namesAfter);
+
+        return new FolderMoveRecord(anomaly, NAME, description, workingCopy,
+                contentRoot, valueBefore, valueAfter, pathsBefore, pathsAfter,
+                newFolders);
+    }
+
+    // Finds the other missing folder problems that makeFolders also
+    // fixes.
+    private List<Anomaly> findSameFolders(Submission submission,
+            Anomaly anomaly, Path contentRoot, List<String> folderNames)
+            throws FixException {
+        List<Anomaly> sameFix = new ArrayList<>();
+        for (Anomaly other : submission.getAnomalies()) {
+            if (!isOtherMissingFolder(other, anomaly)) {
+                continue;
+            }
+
+            String otherFolder = findMissingFolderName(submission, other,
+                    contentRoot, folderNames);
+            if (canMakeFolder(otherFolder, contentRoot)) {
+                sameFix.add(other);
+            }
+        }
+        return sameFix;
+    }
+
+    // Says in words what makeFolders did.
+    private String describeNewFolders(List<String> folderNames,
+            List<String> fileNames, Path contentRoot) {
+        String made = "Made the " + joinNames(folderNames) + " folder";
+        String into = "it";
+        if (folderNames.size() > 1) {
+            made += "s";
+            into = "their question folders";
+        }
+        return made + " in " + contentRoot.getFileName() + " and moved "
+                + joinNames(fileNames) + " into " + into + ".";
+    }
+
+    // Makes the new question folders, removing those made if one fails.
+    private void createFolders(List<Path> folders) throws FixException {
+        for (int i = 0; i < folders.size(); i++) {
+            Path folder = folders.get(i);
+            try {
+                Files.createDirectory(folder);
+            } catch (IOException exception) {
+                FixException failure = new FixException("Could not make "
+                        + "the " + folder.getFileName() + " folder: "
+                        + exception.getMessage(), exception);
+                removeFolders(folders.subList(0, i), failure);
+                throw failure;
+            }
+        }
+    }
+
+    // Removes the new question folders after a failed fix; each is empty.
+    private void removeFolders(List<Path> folders, FixException failure) {
+        for (Path folder : folders) {
+            removeEmptyFolder(folder, failure);
+        }
+    }
+
+    // Says whether a fix made new question folders for loose files.
+    private boolean madeFolders(FixRecord fixRecord) {
+        if (!(fixRecord instanceof FolderMoveRecord)) {
+            return false;
+        }
+
+        FolderMoveRecord moveRecord = (FolderMoveRecord) fixRecord;
+        return !moveRecord.getNewFolders().isEmpty();
+    }
+
+    // Moves the files back out of the folders made for them, wherever
+    // the content root is now, then removes those folders together with
+    // what grading put in them since, such as the testers.
+    private void moveFilesBack(FolderMoveRecord moveRecord)
+            throws FixException {
+        String username = moveRecord.getAnomaly().getUsername();
+        Path contentRoot = findContentRoot(moveRecord.getWorkingCopy(),
+                username, readFolderNames(config));
+        if (contentRoot == null) {
+            throw new FixException("The new question folders are no "
+                    + "longer there, so nothing was moved.");
+        }
+
+        List<Path> pathsBefore = moveRecord.getPathsBefore();
+        List<Path> pathsAfter = moveRecord.getPathsAfter();
+        List<Path> movedFiles = new ArrayList<>();
+        List<Path> targets = new ArrayList<>();
+        for (int i = 0; i < pathsAfter.size(); i++) {
+            Path pathAfter = pathsAfter.get(i);
+            Path movedFile = findMovedFile(contentRoot, pathAfter);
+            if (movedFile == null) {
+                throw new FixException(showMoved(pathAfter)
+                        + " is no longer there, so nothing was moved.");
+            }
+            movedFiles.add(movedFile);
+            Path pathBefore = pathsBefore.get(i);
+            targets.add(contentRoot.resolve(pathBefore.getFileName()));
+        }
+        moveFolders(movedFiles, targets);
+
+        for (Path newFolder : moveRecord.getNewFolders()) {
+            Path folderNow = contentRoot.resolve(newFolder.getFileName());
+            deleteNewFolder(folderNow);
+        }
+    }
+
+    // Finds a moved file in its new question folder as the working copy
+    // is now, or returns null.
+    private Path findMovedFile(Path contentRoot, Path pathAfter)
+            throws FixException {
+        String folderName = pathAfter.getParent().getFileName().toString();
+        Path folder = findExact(listFolders(contentRoot), folderName);
+        if (folder == null) {
+            return null;
+        }
+
+        String fileName = pathAfter.getFileName().toString();
+        return findExact(listFiles(folder), fileName);
+    }
+
+    // Writes a moved file as its folder and name, such as Q3/Q3.java.
+    private String showMoved(Path pathAfter) {
+        return pathAfter.getParent().getFileName() + FOLDER_SEPARATOR
+                + pathAfter.getFileName();
+    }
+
+    // Removes a folder the fix made, with what grading put in it since.
+    private void deleteNewFolder(Path folder) throws FixException {
+        try {
+            FileUtils.deleteDirectory(folder);
+        } catch (IOException exception) {
+            throw new FixException("Moved the files back but could not "
+                    + "remove " + folder.getFileName() + ": "
+                    + exception.getMessage(), exception);
+        }
+    }
+
     // Returns the one folder that is not a question folder but holds one.
     private Path findExtraFolder(Path contentRoot,
             List<String> folderNames) throws FixException {
@@ -399,7 +715,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
         return false;
     }
 
-    // Moves folders to new paths, putting them back if a move fails.
+    // Moves folders or files to new paths, putting them back if a move
+    // fails.
     private void moveFolders(List<Path> folders,
             List<Path> targets) throws FixException {
         for (int i = 0; i < folders.size(); i++) {
@@ -424,7 +741,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
     }
 
-    // Moves one folder to a new path, whose name may differ in case.
+    // Moves one folder or file to a new path, whose name may differ in
+    // case.
     private void moveFolder(Path folder, Path target) throws FixException {
         if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
             throw new FixException(target.getFileName() + " already exists "

@@ -112,11 +112,18 @@ public class HardCodedAnswerDetector implements Detector {
         List<Anomaly> flags = new ArrayList<>();
 
         for (Question question : assessment.getQuestions()) {
-            String studentText = JavaSourceText.readStudentFile(submission,
-                    assessment, question);
+            List<String> fileNames = JavaSourceText.listSourceFiles(question);
 
-            if (studentText != null) {
-                checkMethods(flags, submission, question, studentText);
+            for (String fileName : fileNames) {
+                String studentText = JavaSourceText.readStudentFile(
+                        submission, assessment, question, fileName);
+                String fileDescription = JavaSourceText.describeFile(
+                        question, fileName);
+
+                if (studentText != null) {
+                    checkMethods(flags, submission, fileDescription,
+                            studentText);
+                }
             }
         }
 
@@ -125,7 +132,7 @@ public class HardCodedAnswerDetector implements Detector {
 
     // Flags each answer method, overloads too, with too many literal branches.
     private void checkMethods(List<Anomaly> flags, Submission submission,
-            Question question, String studentText) {
+            String fileDescription, String studentText) {
         String code = JavaSourceText.removeComments(studentText);
 
         for (String methodName : JavaSourceText.findAnswerMethodNames(code)) {
@@ -135,7 +142,7 @@ public class HardCodedAnswerDetector implements Detector {
 
                 if (literalBranches >= MIN_LITERAL_BRANCHES) {
                     flags.add(createFlag(submission,
-                            JavaSourceText.describeFile(question) + ": "
+                            fileDescription + ": "
                             + methodName + " has " + literalBranches
                             + " if or case branches that compare a value "
                             + "with a fixed literal, so it may be "

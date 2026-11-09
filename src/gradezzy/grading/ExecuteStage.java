@@ -95,6 +95,9 @@ public class ExecuteStage implements GradingStage {
     // Ends the first line of a run's log, its label
     private static final String LINE_END = "\n";
 
+    // Runs and test cases are counted from 1, while lists count from 0
+    private static final int FIRST_NUMBER = 1;
+
     // The helper that runs java
     private final TesterRunner testerRunner;
 
@@ -173,7 +176,7 @@ public class ExecuteStage implements GradingStage {
         long maxReruns = context.getConfig().getLong(
                 ConfigKeys.MAX_HANG_RERUNS);
         List<Integer> skippedCases = new ArrayList<>();
-        // Each run's log, kept so a hung case's own output is not lost
+        // Each run's log, kept so a stopped case's own output is not lost
         List<String> runLogs = new ArrayList<>();
         ProcessResult run = runTester(folder, tester.getClassName(),
                 skippedCases);
@@ -182,7 +185,8 @@ public class ExecuteStage implements GradingStage {
         QuestionResult parsed = scoreParser.parse(question, run);
         int stoppedCase = findStoppedCase(run, parsed, skippedCases);
         while (stoppedCase != NO_CASE && skippedCases.size() < maxReruns) {
-            runLogs.add(labelRun(runLogs.size() + 1, run, stoppedCase,
+            int runNumber = runLogs.size() + FIRST_NUMBER;
+            runLogs.add(labelRun(runNumber, run, stoppedCase,
                     parsed.getOutput()));
             skippedCases.add(stoppedCase);
             putBackFiles(snapshot, question);
@@ -194,19 +198,35 @@ public class ExecuteStage implements GradingStage {
             stoppedCase = findStoppedCase(run, parsed, skippedCases);
         }
 
-        result.setScore(parsed.getScore());
         result.setTimedOut(firstRun.isTimedOut());
         if (runLogs.isEmpty()) {
             result.setOutput(parsed.getOutput());
         } else {
-            runLogs.add(labelRun(runLogs.size() + 1, run, stoppedCase,
+            int runNumber = runLogs.size() + FIRST_NUMBER;
+            runLogs.add(labelRun(runNumber, run, stoppedCase,
                     parsed.getOutput()));
             result.setOutput(fitRunLogs(runLogs, context.getConfig().getInt(
                     ConfigKeys.MAX_OUTPUT_CHARACTERS)));
         }
+        copyCases(parsed, skippedCases, result);
+        result.setScore(scoreOf(submission, tester, question, parsed, run));
+        reportOutcome(submission, context, question, firstRun, parsed,
+                skippedCases, stoppedCase, outOfMemory);
+    }
+
+    /**
+     * Copies the test cases of the last run into the question's result.
+     * A skipped case is shown as skipped, not as the "Failed -> Exception"
+     * the tester printed for it.
+     *
+     * @param parsed the parsed last run
+     * @param skippedCases the cases that were skipped
+     * @param result the result of the question, filled in here
+     */
+    private void copyCases(QuestionResult parsed, List<Integer> skippedCases,
+            QuestionResult result) {
         for (TestCaseResult testCase : parsed.getTestCaseResults()) {
             if (skippedCases.contains(testCase.getTestNumber())) {
-                // The tester printed its own "Failed -> Exception" here
                 result.addTestCaseResult(new TestCaseResult(
                         testCase.getTestNumber(), false,
                         SkippedCaseException.SKIPPED_MESSAGE));
@@ -214,26 +234,63 @@ public class ExecuteStage implements GradingStage {
                 result.addTestCaseResult(testCase);
             }
         }
+    }
 
-        // Student code can set the tester's score field by reflection,
-        // so a printed total is never worth more than its Passed lines
-        int caseCount = parsed.getTestCaseResults().size();
+    /**
+     * Works out a question's score from its last run. A run that did not
+     * finish never printed its total, so the marks of its passed cases
+     * are added up. A run that finished printed its total, which is kept
+     * unless it is more than the passed cases earn: student code can set
+     * the tester's score field by reflection.
+     *
+     * @param submission the submission, which gets a flag if the printed
+     *        total is too high
+     * @param tester the tester of the question
+     * @param question the question
+     * @param parsed the parsed last run
+     * @param run the last run
+     * @return the score
+     */
+    private double scoreOf(Submission submission, TesterFile tester,
+            Question question, QuestionResult parsed, ProcessResult run) {
         boolean finished = !run.isTimedOut()
                 && run.getExitCode() == SUCCESS_EXIT_CODE;
-        if (finished && caseCount > 0) {
-            double earned = marksEarned(tester, question, passCount(parsed),
-                    caseCount);
-            if (parsed.getScore() > earned + SCORE_TOLERANCE) {
-                result.setScore(earned);
-                addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
-                        + question.getId() + " tester printed a total of "
-                        + parsed.getScore() + ", but only "
-                        + passCount(parsed) + " of " + caseCount
-                        + " case(s) passed, so " + earned + " was given.",
-                        TOTAL_TOO_HIGH_ACTION);
-            }
+        double earned = marksEarned(tester, question, parsed, finished);
+        if (!finished) {
+            return Math.min(earned, question.getMaxScore());
         }
 
+        int caseCount = parsed.getTestCaseResults().size();
+        boolean totalBelieved = caseCount == 0
+                || parsed.getScore() <= earned + SCORE_TOLERANCE;
+        if (totalBelieved) {
+            return parsed.getScore();
+        }
+        addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
+                + question.getId() + " tester printed a total of "
+                + parsed.getScore() + ", but only " + passCount(parsed)
+                + " of " + caseCount + " case(s) passed, so " + earned
+                + " was given.", TOTAL_TOO_HIGH_ACTION);
+        return earned;
+    }
+
+    /**
+     * Flags a run that timed out, was ended early or crashed, and says
+     * what happened to its cases.
+     *
+     * @param submission the submission
+     * @param context the context
+     * @param question the question
+     * @param firstRun the first run of the tester
+     * @param parsed the parsed last run
+     * @param skippedCases the cases that were skipped
+     * @param stoppedCase the case the last run stopped in, or NO_CASE
+     * @param outOfMemory true when a run printed OutOfMemoryError
+     */
+    private void reportOutcome(Submission submission, GradingContext context,
+            Question question, ProcessResult firstRun, QuestionResult parsed,
+            List<Integer> skippedCases, int stoppedCase,
+            boolean outOfMemory) {
         String outcome = passCount(parsed) + " case(s) passed and their "
                 + "marks are kept." + describeSkipped(skippedCases)
                 + describeNotRun(stoppedCase);
@@ -417,23 +474,81 @@ public class ExecuteStage implements GradingStage {
     }
 
     /**
-     * Works out the most a number of passed cases can earn. The tester's
-     * own marks are used, so a case worth 2 marks counts as 2.
+     * Adds up what the passed cases earn. Each case is worth what its own
+     * "score +=" line in the tester gives, so a case worth 0.5 counts as
+     * 0.5 and one worth 2 counts as 2. When the tester's lines cannot be
+     * matched to its cases one for one, the passed cases are taken to be
+     * worth the most they can be, so no earned mark is taken away.
      *
      * @param tester the tester of the question
      * @param question the question
-     * @param passes the number of passed cases
-     * @param caseCount the number of cases
-     * @return the most those cases can earn
+     * @param parsed the parsed run
+     * @param finished true if the run reached its end, so every case of
+     *        the tester was run
+     * @return what the passed cases earn
      */
     private double marksEarned(TesterFile tester, Question question,
-            int passes, int caseCount) {
-        try {
-            return TesterMarks.readBestMarks(tester.getSourceFile(), passes);
-        } catch (IOException exception) {
-            // The tester cannot be read now, so every case counts the same
-            return passes * question.getMaxScore() / caseCount;
+            QuestionResult parsed, boolean finished) {
+        int passes = passCount(parsed);
+        if (passes == 0) {
+            return 0.0;
         }
+
+        List<TestCaseResult> cases = parsed.getTestCaseResults();
+        List<Double> caseMarks = readCaseMarks(tester);
+        if (caseMarks == null) {
+            // The tester cannot be read now, so every case counts the same
+            return passes * question.getMaxScore() / cases.size();
+        }
+        if (!matchesCases(caseMarks, cases, finished)) {
+            return TesterMarks.sumLargest(caseMarks, passes);
+        }
+
+        double total = 0.0;
+        for (TestCaseResult testCase : cases) {
+            if (testCase.isPassed()) {
+                int markIndex = testCase.getTestNumber() - FIRST_NUMBER;
+                total += caseMarks.get(markIndex);
+            }
+        }
+        return total;
+    }
+
+    /**
+     * Reads what each case of a tester is worth, in order.
+     *
+     * @param tester the tester of the question
+     * @return the marks, or null if the tester cannot be read now
+     */
+    private List<Double> readCaseMarks(TesterFile tester) {
+        try {
+            return TesterMarks.readCaseMarks(tester.getSourceFile());
+        } catch (IOException exception) {
+            return null;
+        }
+    }
+
+    /**
+     * Says whether a tester has one mark for each of its cases, so that
+     * case n is worth the n-th mark. A run that did not reach its end
+     * printed only its first cases, so it only needs a mark for each.
+     *
+     * @param caseMarks the tester's marks in order
+     * @param cases the cases of the run
+     * @param finished true if the run reached its end
+     * @return true if every case has its own mark
+     */
+    private boolean matchesCases(List<Double> caseMarks,
+            List<TestCaseResult> cases, boolean finished) {
+        if (finished) {
+            return caseMarks.size() == cases.size();
+        }
+        for (TestCaseResult testCase : cases) {
+            if (testCase.getTestNumber() > caseMarks.size()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

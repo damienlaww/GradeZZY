@@ -345,12 +345,19 @@ same sheet re-saved by Excel (byte order mark, LF endings).
 | Validator | Checks | Reports |
 |---|---|---|
 | `StructureValidator` | One top folder named after the username, holding one folder per question group. | `MISSING_WRAPPER_FOLDER`, `WRONG_FOLDER_NAME` (a starter name such as `RenameToYourUsername` is called out), `MISSING_QUESTION_FOLDER` |
-| `FileNameValidator` | A file whose name matches a required name only when case is ignored (`q1a.java`). Java needs the exact name. | `WRONG_FILE_NAME` |
-| `RequiredFilesValidator` | Every file in `assessment.question.<id>.file` is present. | `MISSING_FILE` |
+| `FileNameValidator` | A file whose name matches a required name only when case is ignored (`q1a.java`), or has an ending added (Notepad's `Q2a.java.txt`). Java needs the exact name. | `WRONG_FILE_NAME` |
+| `RequiredFilesValidator` | Every file in `assessment.question.<id>.file` is present, and every other source file of the question. | `MISSING_FILE` |
 | `HeaderNameValidator` | The first `validation.header.scan.lines` lines of each required file hold a name after `Name:` and an email after `Email ID:`. | `MISSING_HEADER_NAME` |
 
 Each problem is reported once: a misnamed file is not also reported as
 missing, and the files of a missing folder are not reported one by one.
+
+A question's other source files are the starter's other `.java` files in
+its folder, such as `GoldMember.java` next to `Q3.java`
+(`Question.getExtraFileNames`, read from the run's starter folder by
+`AssessmentFolderScanner.fillExtraFiles` before every grading). The file
+checks, the hard-coded answer check and the similar code check read
+them as well as the answer file.
 
 ### 3. Fix: correcting the working copy
 
@@ -359,15 +366,16 @@ are in place before names and headers are touched:
 
 | Fixer | Fixes | How |
 |---|---|---|
-| `EncodingFixer` | `WRONG_ENCODING` | Backs the file up, removes a UTF-8 byte order mark, and rewrites a file that is not UTF-8 (read as Windows-1252) as UTF-8. |
-| `FolderHierarchyFixer` | `MISSING_WRAPPER_FOLDER`, `MISSING_QUESTION_FOLDER` | Moves the question folders into a new username folder, or up out of one extra folder level. |
+| `EncodingFixer` | `WRONG_ENCODING` | Backs the file up, removes a UTF-8 byte order mark, rewrites a UTF-16 file (Notepad's "Unicode", found by its byte order mark) as UTF-8, and rewrites a file that is not UTF-8 (read as Windows-1252) as UTF-8. |
+| `FolderHierarchyFixer` | `MISSING_WRAPPER_FOLDER`, `MISSING_QUESTION_FOLDER` | Moves the question folders into a new username folder, or up out of one extra folder level. When the answer files lie loose in the username folder with no question folders, makes those folders and moves each question's files into its own. |
 | `FolderNameFixer` | `WRONG_FOLDER_NAME` | Renames the only top folder to the username. |
-| `CaseNameFixer` | `WRONG_FILE_NAME`, `MISSING_QUESTION_FOLDER` | Renames `q3` to `Q3` or `q1a.java` to `Q1a.java`, through a temporary name because Windows and macOS ignore case. |
+| `CaseNameFixer` | `WRONG_FILE_NAME`, `MISSING_QUESTION_FOLDER` | Renames `q3` to `Q3`, `q1a.java` to `Q1a.java` or `Q2a.java.txt` to `Q2a.java`, through a temporary name because Windows and macOS ignore case. |
 | `MisplacedFileFixer` | `MISSING_FILE` | Moves a required file found in exactly one other question folder, such as `Q2/Q1a.java`, into its own folder. Found in none or in two, it is left for the instructor. |
 | `HeaderNameFixer` | `MISSING_HEADER_NAME` | Writes the roster name and email after the blank labels, keeping the file's own encoding. |
 
 After a fix that moved or renamed something, `FixStage` runs the file
-checks again on the new layout and fixes only what is new. A fix that
+checks again on the new layout and fixes only what is new, and copies
+the provided class files into any question folder a fix made. A fix that
 cannot be made leaves the problem for the instructor, with the reason.
 Setting `fix.auto.apply.enabled=false` reports problems without fixing.
 
@@ -494,12 +502,21 @@ flowchart TD
 Each timeout adds a `TIMEOUT` problem saying which cases passed, which
 hung and which were never reached. An exception inside a case is
 printed by the tester and counted as a failed case. An error the tester
-cannot catch, such as a `StackOverflowError`, ends the whole run (exit
+cannot catch, such as a `StackOverflowError`, or static code in the
+student's class that throws while it loads, ends the whole run (exit
 code `TesterHarness.CRASH_EXIT_CODE`); that case is skipped and the tester
 run again, like a hang, and a `RUNTIME_ERROR` says so. A student's own
 `System.exit` is not run again. A run that ends early never prints the
 tester's total, so its `RUNTIME_ERROR` asks the instructor to read the
 output before accepting the passes.
+
+**Each case earns its own marks.** A run that timed out, crashed or
+ended early never printed its total, so each passed case earns what its
+own `score += <number>;` line in the tester gives (`TesterMarks.readCaseMarks`):
+a case worth 0.5 counts as 0.5 and one worth 2 as 2. A finished run's
+printed total is kept unless it is more than its passed cases earn,
+which student code can cause by setting the tester's score field by
+reflection; then the passed cases' marks are given and flagged.
 
 ### 8. Score and 9. Persist
 

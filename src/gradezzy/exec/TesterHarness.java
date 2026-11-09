@@ -122,9 +122,10 @@ public final class TesterHarness {
         try {
             testerMain.invoke(null, (Object) new String[0]);
         } catch (InvocationTargetException exception) {
-            exception.getCause().printStackTrace();
-            trusted.flush();
-            Runtime.getRuntime().halt(CRASH_EXIT_CODE);
+            endAfterCrash(trusted, exception.getCause());
+        } catch (ExceptionInInitializerError error) {
+            // Static code in the student's class threw while it loaded
+            endAfterCrash(trusted, error);
         }
 
         trusted.printMarked(FINISHED_LINE);
@@ -132,6 +133,21 @@ public final class TesterHarness {
         // halt, not exit: student threads or shutdown hooks cannot keep
         // the process alive or print after the tester has finished
         Runtime.getRuntime().halt(SUCCESS_EXIT_CODE);
+    }
+
+    /**
+     * Ends the run after the tester threw: prints the stack trace as java
+     * would, then ends with CRASH_EXIT_CODE, so the case it crashed in can
+     * be skipped and the tester run again.
+     *
+     * @param trusted the marking stream
+     * @param problem what the tester threw
+     */
+    private static void endAfterCrash(TrustedPrintStream trusted,
+            Throwable problem) {
+        problem.printStackTrace();
+        trusted.flush();
+        Runtime.getRuntime().halt(CRASH_EXIT_CODE);
     }
 
     /**

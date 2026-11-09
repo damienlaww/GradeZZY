@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
@@ -21,8 +22,10 @@ import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 
 /**
- * Checks that every required Java source file is present. A file that is
- * there under a name differing only in case, such as q1a.java, is left to
+ * Checks that every required Java source file is present, and each
+ * question's other source files from the starter, such as GoldMember.java.
+ * A file that is there under a name differing only in case, such as
+ * q1a.java, or with an extension added, such as Q1a.java.txt, is left to
  * FileNameValidator, so each problem is reported once. A question whose
  * folder is missing is left to StructureValidator for the same reason.
  * When the file is there with another ending, such as Q1b.java.txt, the
@@ -40,6 +43,9 @@ public class RequiredFilesValidator extends AbstractValidator {
 
     // The ending of a compiled file, which renaming cannot turn into source
     private static final String CLASS_ENDING = ".class";
+
+    // Separates the folder and the file in a message
+    private static final String FOLDER_SEPARATOR = "/";
 
     /**
      * Creates a new required files validator.
@@ -78,11 +84,26 @@ public class RequiredFilesValidator extends AbstractValidator {
         for (Question question : assessment.getQuestions()) {
             Path folder = findQuestionFolder(contentRoot, question);
 
-            if (folder != null && isMissing(folder, question)) {
+            if (folder == null) {
+                continue;
+            }
+            if (isMissing(folder, question.getFileName())) {
                 anomalies.add(createAnomaly(submission,
                         AnomalyType.MISSING_FILE, Severity.ERROR,
                         describeMissing(question,
                         findOtherEnding(folder, question))));
+            }
+            // A second class the student writes, such as GoldMember.java
+            for (String extraFile : question.getExtraFileNames()) {
+                if (isMissing(folder, extraFile)) {
+                    String message = question.getFolderName()
+                            + FOLDER_SEPARATOR + extraFile + " is missing, "
+                            + "so " + question.getId() + " cannot compile. "
+                            + "The starter has it.";
+                    anomalies.add(createAnomaly(submission,
+                            AnomalyType.MISSING_FILE, Severity.ERROR,
+                            message));
+                }
             }
         }
 
@@ -129,11 +150,21 @@ public class RequiredFilesValidator extends AbstractValidator {
                 + "student.";
     }
 
-    // Says whether no file in the folder has the question's file name,
-    // even when case is ignored.
-    private boolean isMissing(Path folder,
-            Question question) throws IOException {
-        return findIgnoringCase(listFiles(folder),
-                question.getFileName()) == null;
+    // Says whether no file in the folder has the file name, even when
+    // case is ignored or an extension was added, as Notepad does with
+    // Q1a.java.txt.
+    private boolean isMissing(Path folder, String fileName)
+            throws IOException {
+        String wanted = fileName.toLowerCase(Locale.ROOT);
+        for (Path file : listFiles(folder)) {
+            String name = file.getFileName().toString().toLowerCase(
+                    Locale.ROOT);
+            boolean sameName = name.equals(wanted)
+                    || name.startsWith(wanted + ENDING_SEPARATOR);
+            if (sameName) {
+                return false;
+            }
+        }
+        return true;
     }
 }

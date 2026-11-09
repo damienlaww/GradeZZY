@@ -1626,8 +1626,17 @@ public class GradingService {
     // Builds the pipeline for a run. The one-argument factory method,
     // which uses the starter folder in the settings, is kept for a run
     // with no starter folder of its own.
+    // Each question's other source files are read from the starter
+    // folder here, so every way of grading a run knows them.
     private GradingPipeline createPipeline(GradingRun gradingRun) {
         Path starterDirectory = gradingRun.getStarterDirectory();
+        Path starterForFiles = starterDirectory;
+        if (starterForFiles == null) {
+            starterForFiles = Paths.get(config.getString(
+                    ConfigKeys.STARTER_DIR));
+        }
+        AssessmentFolderScanner.fillExtraFiles(gradingRun.getAssessment(),
+                starterForFiles);
         if (starterDirectory == null) {
             return pipelineFactory.createPipeline(cancellationToken);
         }

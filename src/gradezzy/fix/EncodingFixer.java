@@ -4,7 +4,8 @@
  * Purpose: Saves a Java file again as plain UTF-8, so javac can read it.
  *
  * Where it fits: Handles the wrong encoding case that FixStage finds: a file
- * that starts with a byte order mark, or one saved as Windows-1252.
+ * that starts with a byte order mark, one saved as UTF-16, or one saved as
+ * Windows-1252.
  */
 package gradezzy.fix;
 
@@ -30,6 +31,7 @@ import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Submission;
 import gradezzy.util.FileUtils;
+import gradezzy.util.TextUtils;
 
 /**
  * Saves a Java file again as plain UTF-8, so javac can read it.
@@ -44,6 +46,10 @@ public class EncodingFixer extends AbstractFixer {
     // Follows the file's path in the message for a byte order mark
     private static final String MARK_PROBLEM = " starts with a byte order "
             + "mark (saved as UTF-8 with BOM), so it does not compile.";
+
+    // Follows the file's path in the message for a UTF-16 file
+    private static final String UTF16_PROBLEM = " is saved as UTF-16 "
+            + "(Notepad's \"Unicode\"), so it does not compile.";
 
     // Follows the file's path in the message for a file not in UTF-8
     private static final String CHARSET_PROBLEM = " is not saved as UTF-8 "
@@ -136,6 +142,10 @@ public class EncodingFixer extends AbstractFixer {
             change = "Removed the byte order mark from the start of "
                     + fileName + ".";
             before = fileName + " saved as UTF-8 with BOM";
+        } else if (TextUtils.isUtf16(original)) {
+            change = "Saved " + fileName + " again as UTF-8, reading it as "
+                    + "UTF-16.";
+            before = fileName + " saved as UTF-16";
         }
         String after = fileName + " saved as UTF-8";
 
@@ -181,6 +191,8 @@ public class EncodingFixer extends AbstractFixer {
     public static String describeProblem(String shownPath, byte[] bytes) {
         if (hasByteOrderMark(bytes)) {
             return shownPath + MARK_PROBLEM;
+        } else if (TextUtils.isUtf16(bytes)) {
+            return shownPath + UTF16_PROBLEM;
         }
         return shownPath + CHARSET_PROBLEM;
     }
@@ -189,10 +201,12 @@ public class EncodingFixer extends AbstractFixer {
      * Says whether javac would fail to read these bytes as UTF-8.
      *
      * @param bytes the content of a Java file
-     * @return true if they start with a byte order mark or are not UTF-8
+     * @return true if they start with a byte order mark, are UTF-16 or
+     *         are not UTF-8
      */
     public static boolean needsConverting(byte[] bytes) {
-        return hasByteOrderMark(bytes) || !isValidUtf8(bytes);
+        return hasByteOrderMark(bytes) || TextUtils.isUtf16(bytes)
+                || !isValidUtf8(bytes);
     }
 
     /**
@@ -253,8 +267,14 @@ public class EncodingFixer extends AbstractFixer {
         return javaFiles;
     }
 
-    // Removes a byte order mark, and reads non-UTF-8 bytes as Windows-1252.
+    // Removes a byte order mark, reads UTF-16 by its byte order mark, and
+    // reads other non-UTF-8 bytes as Windows-1252.
     private static byte[] convertToUtf8(byte[] bytes) {
+        if (TextUtils.isUtf16(bytes)) {
+            String text = TextUtils.decodeSource(bytes);
+            return text.getBytes(StandardCharsets.UTF_8);
+        }
+
         byte[] withoutMark = bytes;
         if (hasByteOrderMark(bytes)) {
             withoutMark = Arrays.copyOfRange(bytes, BYTE_ORDER_MARK.length,
@@ -302,6 +322,9 @@ public class EncodingFixer extends AbstractFixer {
         if (message.endsWith(MARK_PROBLEM)) {
             return message.substring(0,
                     message.length() - MARK_PROBLEM.length());
+        } else if (message.endsWith(UTF16_PROBLEM)) {
+            return message.substring(0,
+                    message.length() - UTF16_PROBLEM.length());
         } else if (message.endsWith(CHARSET_PROBLEM)) {
             return message.substring(0,
                     message.length() - CHARSET_PROBLEM.length());
