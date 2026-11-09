@@ -1,7 +1,7 @@
 /*
  * File: SkippedCaseException.java
  *
- * Purpose: Stops a test case that hung on an earlier run of the tester.
+ * Purpose: Stops a test case that hung or crashed on an earlier run.
  *
  * Where it fits: Thrown by TrustedPrintStream inside the tester's own try
  * block, so the tester fails the case and goes on to the next one.
@@ -9,7 +9,7 @@
 package gradezzy.exec;
 
 /**
- * Stops a test case that hung on an earlier run of the tester. The
+ * Stops a test case that hung or crashed on an earlier run. The
  * provided testers print the stack trace of any exception in a case, so
  * this one has no stack frames and prints as its message alone: the
  * instructor reads one plain line instead of a GradeZZY stack trace.
@@ -22,7 +22,7 @@ public class SkippedCaseException extends RuntimeException {
      * The line printed for a skipped case, and its detail in the results.
      */
     public static final String SKIPPED_MESSAGE =
-            "Skipped: this case hung in an earlier run.";
+            "Skipped: this case stopped the tester in an earlier run.";
 
     /**
      * Creates the exception, with no stack frames to print.

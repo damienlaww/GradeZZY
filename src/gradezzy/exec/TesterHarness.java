@@ -44,8 +44,13 @@ public final class TesterHarness {
     // Exit code of a run that reached the end of the tester
     private static final int SUCCESS_EXIT_CODE = 0;
 
-    // Exit code java itself uses when main throws
-    private static final int ERROR_EXIT_CODE = 1;
+    /**
+     * Exit code of a run whose tester threw something it did not catch,
+     * such as a StackOverflowError from a student's endless recursion.
+     * It is not 1, which a student's System.exit(1) also gives, so
+     * ExecuteStage can tell a crash from code that ends the program.
+     */
+    public static final int CRASH_EXIT_CODE = 3;
 
     // The system property that chooses how java starts other programs
     private static final String LAUNCH_PROPERTY =
@@ -113,7 +118,7 @@ public final class TesterHarness {
         } catch (InvocationTargetException exception) {
             exception.getCause().printStackTrace();
             trusted.flush();
-            Runtime.getRuntime().halt(ERROR_EXIT_CODE);
+            Runtime.getRuntime().halt(CRASH_EXIT_CODE);
         }
 
         trusted.printMarked(FINISHED_LINE);

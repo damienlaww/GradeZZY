@@ -480,8 +480,13 @@ flowchart TD
 
 Each timeout adds a `TIMEOUT` problem saying which cases passed, which
 hung and which were never reached. An exception inside a case is
-printed by the tester and counted as a failed case; a tester that ends
-with an error adds `RUNTIME_ERROR`.
+printed by the tester and counted as a failed case. An error the tester
+cannot catch, such as a `StackOverflowError`, ends the whole run (exit
+code `TesterHarness.CRASH_EXIT_CODE`); that case is skipped and the tester
+run again, like a hang, and a `RUNTIME_ERROR` says so. A student's own
+`System.exit` is not run again. A run that ends early never prints the
+tester's total, so its `RUNTIME_ERROR` asks the instructor to read the
+output before accepting the passes.
 
 ### 8. Score and 9. Persist
 
@@ -604,10 +609,11 @@ folder of the section (`paths.output.dir.by.section`, else
 | Student reports | `StudentReportExporter` | A readable report per student: marks per question, test cases and problems. |
 | Audit log | `AuditLogExporter` | Every logged instructor action. |
 
-Before writing the CSV, `ExportService.summarizeScoreSheet` lists which
-students get a mark, which are on the sheet with no submission, which
-were not graded, and which graded students are not on the sheet, so a
-blank numerator is never silent.
+`ExportService.summarizeScoreSheet` can list which students get a mark,
+which are on the sheet with no submission, which were not graded, and
+which graded students are not on the sheet. Nothing calls it yet: the
+Export step does not show this summary, so blank numerators in the CSV
+are not reported.
 
 ## Statistics
 
@@ -728,6 +734,7 @@ reported and grading goes on.
 |---|---|
 | One student crashes the grader | Each stage failure becomes an `INTERNAL_ERROR` on that student; the batch carries on. |
 | Infinite loop or very slow code | Per-run time limit, kill of the whole process tree, rerun without the hung case. |
+| An error the tester cannot catch (`StackOverflowError`, `OutOfMemoryError`) | Rerun without the case that crashed, so the cases after it are still marked. |
 | Endless printing | Output capped; student output has its own smaller share so the tester's lines are never cut off. |
 | Huge memory use or deep recursion | Heap limit, 2 MB stack, one CPU per run. |
 | Student prints `Passed` | Only token-marked lines from the tester are counted. |
@@ -788,7 +795,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `exec.thread.count` | `4` | Submissions graded at the same time. |
 | `exec.max.output.characters` | `100000` | Longest program output kept. In a tester run, student prints may use half of it, so the tester's own lines are never cut off. When a tester is run again after a hang, the runs share this limit: the last run is kept whole and the earlier ones keep their ends. |
 | `exec.max.memory.mb` | `256` | Most memory, in MB, one tester run may use for its objects. `0` means no limit. Each run also gets a 2 MB thread stack and one CPU. A whole number of 0 or more; GradeZZY does not start with any other value. |
-| `exec.max.hang.reruns` | `2` | Times a question's tester is run again, without the case that hung, so the cases after it are still marked. Each rerun can take the whole time limit. After the last one, the cases not yet run get no mark and the timeout flag asks the instructor to check them. A whole number of 0 or more; GradeZZY does not start with any other value. |
+| `exec.max.hang.reruns` | `2` | Times a question's tester is run again, without the case that hung or crashed, so the cases after it are still marked. Each rerun can take the whole time limit. After the last one, the cases not yet run get no mark and the timeout flag asks the instructor to check them. A whole number of 0 or more; GradeZZY does not start with any other value. |
 | `grading.tester.class.suffix` | `Tester` | `Q1a` becomes `Q1aTester`. |
 | `grading.pass.marker` | `Passed` | Line a tester prints for a passed test. |
 | `grading.fail.marker` | `Failed` | Start of the line for a failed test. |
