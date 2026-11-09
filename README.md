@@ -604,10 +604,11 @@ folder of the section (`paths.output.dir.by.section`, else
 | Student reports | `StudentReportExporter` | A readable report per student: marks per question, test cases and problems. |
 | Audit log | `AuditLogExporter` | Every logged instructor action. |
 
-Before writing the CSV, `ExportService.summarizeScoreSheet` lists which
-students get a mark, which are on the sheet with no submission, which
-were not graded, and which graded students are not on the sheet, so a
-blank numerator is never silent.
+`ExportService.summarizeScoreSheet` can list which students get a mark,
+which are on the sheet with no submission, which were not graded, and
+which graded students are not on the sheet. Nothing calls it yet: the
+Export step does not show this summary, so blank numerators in the CSV
+are not reported.
 
 ## Statistics
 
