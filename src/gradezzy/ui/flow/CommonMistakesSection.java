@@ -96,8 +96,8 @@ public class CommonMistakesSection {
         view.getChildren().setAll(Parts.title("Common mistakes"),
                 Parts.muted("Students who lost marks the same way on a "
                 + "question. Name them on Review, under Mistakes."));
-        List<AnswerGroup> groups = largestFirst(
-                window.getBackend().listAnswerGroups(run));
+        List<AnswerGroup> listed = window.getBackend().listAnswerGroups(run);
+        List<AnswerGroup> groups = largestFirst(listed);
         if (groups.isEmpty()) {
             view.getChildren().add(Parts.subtitle(
                     "No common mistakes in this run."));
@@ -113,8 +113,8 @@ public class CommonMistakesSection {
         for (int index = 0; index < shown; index++) {
             addRow(table, run, groups.get(index));
         }
-        view.getChildren().addAll(table, Parts.muted(note(groups.size(),
-                shown)));
+        Label hint = Parts.muted(note(groups.size(), shown));
+        view.getChildren().addAll(table, hint);
     }
 
     // Adds one group's row, which lists its students when clicked.
@@ -124,9 +124,10 @@ public class CommonMistakesSection {
             name = new Label(group.getLabel());
         }
         int students = group.getUsernames().size();
-        HBox row = table.addRow(new Node[] {
-            new Label(group.getQuestionId()), new Label(group.getTitle()),
-            name, new Label(String.valueOf(students))});
+        Label question = new Label(group.getQuestionId());
+        Label mistake = new Label(group.getTitle());
+        Label count = new Label(String.valueOf(students));
+        HBox row = table.addRow(new Node[] {question, mistake, name, count});
         row.setCursor(Cursor.HAND);
         row.setOnMouseClicked(event -> rowClicked(event, run, group));
     }
@@ -137,8 +138,8 @@ public class CommonMistakesSection {
         event.consume();
         VBox list = new VBox(Parts.GAP_SMALL);
         for (String username : group.getUsernames()) {
-            list.getChildren().add(new Label(BULLET + describe(run,
-                    username)));
+            Label line = new Label(BULLET + describe(run, username));
+            list.getChildren().add(line);
         }
         Button close = Parts.secondary("Close", () -> window.closeSheet());
         HBox buttons = Parts.row(Parts.GAP, new Node[] {Parts.grow(), close});

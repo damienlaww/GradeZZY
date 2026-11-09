@@ -84,6 +84,16 @@ public final class CodeSheet {
     // A triangle pointing right: run
     private static final String RUN_ICON = "M8 5v14l11-7z";
 
+    // The fewest students an answer group needs for Previous and Next
+    private static final int MIN_STEPPED_GROUP = 2;
+
+    // How far Previous and Next move through the group
+    private static final int BACKWARD = -1;
+    private static final int FORWARD = 1;
+
+    // The students are counted from 1, one more than their index
+    private static final int FIRST_STUDENT_NUMBER = 1;
+
     // The window that shows the sheet
     private final FlowWindow window;
 
@@ -226,9 +236,10 @@ public final class CodeSheet {
                 subtitle);
         HBox top = Parts.row(Parts.GAP,
                 new Node[] {titles, Parts.grow(), close});
-        if (group.size() > 1) {
-            top.getChildren().add(top.getChildren().size() - 1,
-                    createStepper());
+        if (group.size() >= MIN_STEPPED_GROUP) {
+            // The stepper goes just before the close button
+            int closePlace = top.getChildren().size() - 1;
+            top.getChildren().add(closePlace, createStepper());
         }
 
         // Each panel keeps a gap from the line between them, so the code
@@ -261,11 +272,13 @@ public final class CodeSheet {
     // students of an answer group on the question shown.
     private HBox createStepper() {
         int position = group.indexOf(submission);
-        Button previous = Parts.small("Previous", () -> step(-1));
-        Button next = Parts.small("Next", () -> step(1));
+        int lastPosition = group.size() - 1;
+        int studentNumber = position + FIRST_STUDENT_NUMBER;
+        Button previous = Parts.small("Previous", () -> stepBackward());
+        Button next = Parts.small("Next", () -> stepForward());
         previous.setDisable(position <= 0);
-        next.setDisable(position >= group.size() - 1);
-        Label where = Parts.muted("Student " + (position + 1) + " of "
+        next.setDisable(position >= lastPosition);
+        Label where = Parts.muted("Student " + studentNumber + " of "
                 + group.size());
         HBox stepper = Parts.row(Parts.GAP_SMALL,
                 new Node[] {previous, where, next});
@@ -273,18 +286,31 @@ public final class CodeSheet {
         return stepper;
     }
 
+    // Shows the student before this one in the group.
+    private void stepBackward() {
+        step(BACKWARD);
+    }
+
+    // Shows the student after this one in the group.
+    private void stepForward() {
+        step(FORWARD);
+    }
+
     // Shows the student before or after this one in the group.
     private void step(int offset) {
-        int position = group.indexOf(submission) + offset;
-        if (position < 0 || position >= group.size()) {
+        int current = group.indexOf(submission);
+        int position = current + offset;
+        boolean inGroup = position >= 0 && position < group.size();
+        if (!inGroup) {
             return;
         }
         String questionId = null;
         if (shown != null) {
             questionId = shown.getId();
         }
-        window.showSheet(create(window, group.get(position), questionId,
-                null, group));
+        Submission other = group.get(position);
+        Node sheet = create(window, other, questionId, null, group);
+        window.showSheet(sheet);
     }
 
     // Builds the list on the left: one button per question, with its

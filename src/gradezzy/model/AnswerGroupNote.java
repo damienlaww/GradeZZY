@@ -109,6 +109,8 @@ public class AnswerGroupNote {
      * @return true with no name and no check
      */
     public boolean isEmpty() {
-        return label.isEmpty() && checkedUsernames.isEmpty();
+        boolean noName = label.isEmpty();
+        boolean noCheck = checkedUsernames.isEmpty();
+        return noName && noCheck;
     }
 }

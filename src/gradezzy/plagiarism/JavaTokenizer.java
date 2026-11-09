@@ -59,6 +59,9 @@ public final class JavaTokenizer {
     // What a string or char literal becomes in a shape
     private static final String TEXT_TOKEN = "STR";
 
+    // How far a piece of one character reaches past its start
+    private static final int ONE_CHARACTER = 1;
+
     // The words a shape keeps: Java's reserved words and literals
     private static final Set<String> KEYWORDS = new HashSet<>(Arrays.asList(
             new String[] {"abstract", "assert", "boolean", "break", "byte",
@@ -124,14 +127,22 @@ public final class JavaTokenizer {
     // Returns what a token becomes in a shape.
     private static String shapeToken(String token) {
         char first = token.charAt(0);
-        if (first == DOUBLE_QUOTE || first == SINGLE_QUOTE) {
+        if (isQuote(first)) {
             return TEXT_TOKEN;
         }
-        if (Character.isJavaIdentifierStart(first)
-                && !KEYWORDS.contains(token)) {
+        boolean word = Character.isJavaIdentifierStart(first);
+        boolean keyword = KEYWORDS.contains(token);
+        if (word && !keyword) {
             return NAME_TOKEN;
         }
         return token;
+    }
+
+    // Says whether a character starts a string or char literal.
+    private static boolean isQuote(char character) {
+        boolean doubleQuote = character == DOUBLE_QUOTE;
+        boolean singleQuote = character == SINGLE_QUOTE;
+        return doubleQuote || singleQuote;
     }
 
     // Returns where the token, space or comment starting at start ends.
@@ -141,9 +152,9 @@ public final class JavaTokenizer {
         if (source.startsWith(LINE_COMMENT, start)) {
             return findEndAfter(source, NEW_LINE, start);
         } else if (source.startsWith(BLOCK_COMMENT_START, start)) {
-            return findEndAfter(source, BLOCK_COMMENT_END,
-                    start + BLOCK_COMMENT_START.length());
-        } else if (first == DOUBLE_QUOTE || first == SINGLE_QUOTE) {
+            int afterStart = start + BLOCK_COMMENT_START.length();
+            return findEndAfter(source, BLOCK_COMMENT_END, afterStart);
+        } else if (isQuote(first)) {
             return findLiteralEnd(source, start);
         } else if (Character.isDigit(first)) {
             return findNumberEnd(source, start);
@@ -151,7 +162,7 @@ public final class JavaTokenizer {
             return findWordEnd(source, start);
         }
 
-        return start + 1;
+        return start + ONE_CHARACTER;
     }
 
     // Returns the position just after the next marker, or the source end.
@@ -168,9 +179,9 @@ public final class JavaTokenizer {
     // Returns where a string or char literal ends, after its closing quote.
     private static int findLiteralEnd(String source, int start) {
         char quote = source.charAt(start);
-        int end = start + 1;
+        int end = start + ONE_CHARACTER;
 
-        while (end < source.length() && source.charAt(end) != quote) {
+        while (isInsideLiteral(source, end, quote)) {
             if (source.charAt(end) == BACKSLASH) {
                 end++;
             }
@@ -178,38 +189,70 @@ public final class JavaTokenizer {
             end++;
         }
 
-        return Math.min(end + 1, source.length());
+        int afterQuote = end + ONE_CHARACTER;
+        return Math.min(afterQuote, source.length());
+    }
+
+    // Says whether a position is still inside a literal: before the end
+    // of the source and not its closing quote.
+    private static boolean isInsideLiteral(String source, int position,
+            char quote) {
+        if (position >= source.length()) {
+            return false;
+        }
+        return source.charAt(position) != quote;
     }
 
     // Returns where a number such as 42, 3.14 or 10L ends.
     private static int findNumberEnd(String source, int start) {
-        int end = start + 1;
+        int end = start + ONE_CHARACTER;
 
-        while (end < source.length()
-                && (Character.isLetterOrDigit(source.charAt(end))
-                || source.charAt(end) == DECIMAL_POINT)) {
+        while (isNumberPart(source, end)) {
             end++;
         }
 
         return end;
+    }
+
+    // Says whether the character at a position can carry on a number: a
+    // letter, a digit or a decimal point before the end of the source.
+    private static boolean isNumberPart(String source, int position) {
+        if (position >= source.length()) {
+            return false;
+        }
+        char character = source.charAt(position);
+        boolean letterOrDigit = Character.isLetterOrDigit(character);
+        return letterOrDigit || character == DECIMAL_POINT;
     }
 
     // Returns where a name or keyword ends.
     private static int findWordEnd(String source, int start) {
-        int end = start + 1;
+        int end = start + ONE_CHARACTER;
 
-        while (end < source.length()
-                && Character.isJavaIdentifierPart(source.charAt(end))) {
+        while (isWordPart(source, end)) {
             end++;
         }
 
         return end;
     }
 
+    // Says whether the character at a position can carry on a name,
+    // before the end of the source.
+    private static boolean isWordPart(String source, int position) {
+        if (position >= source.length()) {
+            return false;
+        }
+        return Character.isJavaIdentifierPart(source.charAt(position));
+    }
+
     // Says whether a piece of source is a token, not a space or a comment.
     private static boolean isToken(String piece) {
-        return !Character.isWhitespace(piece.charAt(0))
-                && !piece.startsWith(LINE_COMMENT)
-                && !piece.startsWith(BLOCK_COMMENT_START);
+        if (Character.isWhitespace(piece.charAt(0))) {
+            return false;
+        }
+        if (piece.startsWith(LINE_COMMENT)) {
+            return false;
+        }
+        return !piece.startsWith(BLOCK_COMMENT_START);
     }
 }

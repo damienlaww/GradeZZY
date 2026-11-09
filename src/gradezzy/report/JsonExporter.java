@@ -189,9 +189,9 @@ public class JsonExporter implements Exporter {
         List<String> questionResults = new ArrayList<>();
         for (QuestionResult questionResult
                 : submission.getQuestionResults()) {
-            questionResults.add(writeQuestionResult(questionResult,
-                    findGroup(groups, submission.getUsername(),
-                    questionResult)));
+            AnswerGroup group = findGroup(groups, submission.getUsername(),
+                    questionResult);
+            questionResults.add(writeQuestionResult(questionResult, group));
         }
 
         List<String> anomalies = new ArrayList<>();
@@ -277,8 +277,10 @@ public class JsonExporter implements Exporter {
             return null;
         }
         for (AnswerGroup group : groups) {
-            if (group.getQuestionId().equals(question.getId())
-                    && group.getUsernames().contains(username)) {
+            boolean sameQuestion = group.getQuestionId().equals(
+                    question.getId());
+            boolean holdsStudent = group.getUsernames().contains(username);
+            if (sameQuestion && holdsStudent) {
                 return group;
             }
         }

@@ -550,18 +550,21 @@ public interface DashboardBackend {
      */
     default ActionResult nameAnswerGroup(GradingRun run, AnswerGroup group,
             String label) {
-        if (run == null || group == null) {
+        boolean chosen = run != null && group != null;
+        if (!chosen) {
             return ActionResult.failed("Choose a group first.");
         }
         AnswerGroupService service = getAnswerGroupService();
         service.setLabel(run, group, label);
-        String where = group.getQuestionId() + " " + group.getTitle();
+        String where = group.getQuestionId() + GROUP_WORD_SEPARATOR
+                + group.getTitle();
         String message = "Named the mistake.";
         if (group.getLabel().isEmpty()) {
             recordActivity(MISTAKE_NAME_REMOVED, where);
             message = "Removed the name of the mistake.";
         } else {
-            recordActivity(MISTAKE_NAMED, where + ": " + group.getLabel());
+            recordActivity(MISTAKE_NAMED, where + GROUP_LABEL_SEPARATOR
+                    + group.getLabel());
         }
         return ActionResult.done(message + unsavedNote(service));
     }
@@ -580,12 +583,14 @@ public interface DashboardBackend {
      */
     default ActionResult setAnswerGroupChecked(GradingRun run,
             AnswerGroup group, boolean checked) {
-        if (run == null || group == null) {
+        boolean chosen = run != null && group != null;
+        if (!chosen) {
             return ActionResult.failed("Choose a group first.");
         }
         AnswerGroupService service = getAnswerGroupService();
         service.setChecked(run, group, checked);
-        String where = group.getQuestionId() + " " + group.getTitle();
+        String where = group.getQuestionId() + GROUP_WORD_SEPARATOR
+                + group.getTitle();
         String message = "Marked the group as checked.";
         if (checked) {
             recordActivity(GROUP_CHECKED, where);
@@ -613,17 +618,49 @@ public interface DashboardBackend {
                 + "closes: " + service.getSaveProblem();
     }
 
-    /** The activity log's words for a mistake that was named. */
+    /**
+     * The activity log's words for a mistake that was named.
+     *
+     * <p>Tier: COULD.
+     */
     String MISTAKE_NAMED = "Mistake named";
 
-    /** The activity log's words for a name that was removed. */
+    /**
+     * The activity log's words for a name that was removed.
+     *
+     * <p>Tier: COULD.
+     */
     String MISTAKE_NAME_REMOVED = "Mistake name removed";
 
-    /** The activity log's words for a group marked as checked. */
+    /**
+     * The activity log's words for a group marked as checked.
+     *
+     * <p>Tier: COULD.
+     */
     String GROUP_CHECKED = "Group checked";
 
-    /** The activity log's words for a group check taken back. */
+    /**
+     * The activity log's words for a group check taken back.
+     *
+     * <p>Tier: COULD.
+     */
     String GROUP_CHECK_TAKEN_BACK = "Group check taken back";
+
+    /**
+     * Comes between a group's question and its title in the activity
+     * log, such as "Q2b Failed test 3".
+     *
+     * <p>Tier: COULD.
+     */
+    String GROUP_WORD_SEPARATOR = " ";
+
+    /**
+     * Comes between a group and the name of its mistake in the activity
+     * log.
+     *
+     * <p>Tier: COULD.
+     */
+    String GROUP_LABEL_SEPARATOR = ": ";
 
     // ---------------------------------------------------------- export
 

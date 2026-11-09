@@ -18,7 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,6 +35,7 @@ import gradezzy.model.SubmissionStatus;
 import gradezzy.model.TestCaseResult;
 import gradezzy.plagiarism.JavaTokenizer;
 import gradezzy.testcase.QuestionFolderFinder;
+import gradezzy.util.TextUtils;
 
 /**
  * Works out the answer groups of a run.
@@ -71,6 +72,19 @@ public final class AnswerGrouper {
     private static final String BEFORE_FIRST = " before test 1";
     private static final String AFTER_TEST = " after test ";
 
+    // Come between the test numbers of a failed-tests title
+    private static final String NUMBER_SEPARATOR = ", ";
+    private static final String LAST_NUMBER_SEPARATOR = " and ";
+
+    // Tests are numbered from 1, one more than their index
+    private static final int FIRST_TEST_NUMBER = 1;
+
+    // Comes between a flag's message and its suggested action
+    private static final String TEXT_SEPARATOR = " ";
+
+    // The one character other than letters and digits a word can hold
+    private static final char UNDERSCORE = '_';
+
     // Only static methods; never created
     private AnswerGrouper() {
     }
@@ -88,10 +102,14 @@ public final class AnswerGrouper {
      */
     public static List<AnswerGroup> group(GradingRun run) {
         List<AnswerGroup> groups = new ArrayList<>();
-        if (run == null || run.getAssessment() == null) {
+        if (run == null) {
             return groups;
         }
-        for (Question question : run.getAssessment().getQuestions()) {
+        Assessment assessment = run.getAssessment();
+        if (assessment == null) {
+            return groups;
+        }
+        for (Question question : assessment.getQuestions()) {
             List<AnswerGroup> questionGroups = groupQuestion(run, question);
             for (AnswerGroup group : questionGroups) {
                 addSameShapes(run, question, group);
@@ -116,16 +134,14 @@ public final class AnswerGrouper {
     public static String patternOf(Submission submission,
             QuestionResult result) {
         Question question = result.getQuestion();
-        if (question == null
-                || hasFlag(submission, question, AnomalyType.INTERNAL_ERROR)) {
+        if (question == null) {
+            return null;
+        }
+        if (hasFlag(submission, question, AnomalyType.INTERNAL_ERROR)) {
             return null;
         }
         if (!result.isCompiled()) {
-            // A file or folder that was fixed is no longer missing
-            if (hasUnfixedFlag(submission, question,
-                    AnomalyType.MISSING_FILE)
-                    || hasUnfixedFlag(submission, question,
-                    AnomalyType.MISSING_QUESTION_FOLDER)) {
+            if (isMissing(submission, question)) {
                 return MISSING;
             }
             return COMPILE;
@@ -161,12 +177,12 @@ public final class AnswerGrouper {
             return "Did not compile";
         }
         if (pattern.startsWith(TIMEOUT_PREFIX)) {
-            return RAN_TOO_LONG + whereStopped(pattern.substring(
-                    TIMEOUT_PREFIX.length()));
+            String tests = pattern.substring(TIMEOUT_PREFIX.length());
+            return RAN_TOO_LONG + whereStopped(tests);
         }
         if (pattern.startsWith(CRASH_PREFIX)) {
-            return CRASHED + whereStopped(pattern.substring(
-                    CRASH_PREFIX.length()));
+            String tests = pattern.substring(CRASH_PREFIX.length());
+            return CRASHED + whereStopped(tests);
         }
         return failedTitle(pattern);
     }
@@ -194,8 +210,7 @@ public final class AnswerGrouper {
             String[] names = {question.getId(), question.getFileName(),
                 question.getFolderName()};
             for (String name : names) {
-                if (name != null && name.length() > foundLength
-                        && namesWord(text, name)) {
+                if (namesLonger(text, name, foundLength)) {
                     found = question.getId();
                     foundLength = name.length();
                 }
@@ -223,21 +238,46 @@ public final class AnswerGrouper {
         if (namesQuestion(text, question)) {
             return true;
         }
-        return namesWord(text, question.getFolderName())
-                && !namesOtherQuestion(text, submission, question);
+        if (!namesWord(text, question.getFolderName())) {
+            return false;
+        }
+        return !namesOtherQuestion(text, submission, question);
+    }
+
+    // Says whether a student's question is missing: a missing file or
+    // folder flag whose fix was not applied or kept. A file or folder
+    // that was fixed is no longer missing.
+    private static boolean isMissing(Submission submission,
+            Question question) {
+        boolean noFile = hasUnfixedFlag(submission, question,
+                AnomalyType.MISSING_FILE);
+        boolean noFolder = hasUnfixedFlag(submission, question,
+                AnomalyType.MISSING_QUESTION_FOLDER);
+        return noFile || noFolder;
+    }
+
+    // Says whether a text names a name longer than the longest found so
+    // far as a whole word. A null name names nothing.
+    private static boolean namesLonger(String text, String name,
+            int foundLength) {
+        if (name == null) {
+            return false;
+        }
+        if (name.length() <= foundLength) {
+            return false;
+        }
+        return namesWord(text, name);
     }
 
     // Groups the answers of one question by pattern, in the run's order.
+    // The patterns are kept in a list beside the map so the groups come
+    // out in the order they were first seen.
     private static List<AnswerGroup> groupQuestion(GradingRun run,
             Question question) {
-        Map<String, AnswerGroup> byPattern = new LinkedHashMap<>();
+        List<String> patterns = new ArrayList<>();
+        Map<String, AnswerGroup> byPattern = new HashMap<>();
         for (Submission submission : run.getSubmissions()) {
-            QuestionResult result = findResult(submission, question);
-            if (submission.getStatus() != SubmissionStatus.GRADED
-                    || result == null) {
-                continue;
-            }
-            String pattern = patternOf(submission, result);
+            String pattern = gradedPattern(submission, question);
             if (pattern == null) {
                 continue;
             }
@@ -245,11 +285,32 @@ public final class AnswerGrouper {
             if (group == null) {
                 group = new AnswerGroup(question.getId(), pattern,
                         titleOf(pattern));
+                patterns.add(pattern);
                 byPattern.put(pattern, group);
             }
             group.addUsername(submission.getUsername());
         }
-        return new ArrayList<>(byPattern.values());
+
+        List<AnswerGroup> groups = new ArrayList<>();
+        for (String pattern : patterns) {
+            groups.add(byPattern.get(pattern));
+        }
+        return groups;
+    }
+
+    // Returns the pattern of a graded student's answer to a question, or
+    // null when the student was not graded, has no result for it or the
+    // answer is not grouped.
+    private static String gradedPattern(Submission submission,
+            Question question) {
+        if (submission.getStatus() != SubmissionStatus.GRADED) {
+            return null;
+        }
+        QuestionResult result = findResult(submission, question);
+        if (result == null) {
+            return null;
+        }
+        return patternOf(submission, result);
     }
 
     // Puts a group after the groups of earlier questions and before the
@@ -257,11 +318,21 @@ public final class AnswerGrouper {
     private static void insertBySize(List<AnswerGroup> groups,
             AnswerGroup group, Question question) {
         int position = groups.size();
-        while (position > 0 && comesBefore(group,
-                groups.get(position - 1), question)) {
+        while (goesBefore(groups, position, group, question)) {
             position--;
         }
         groups.add(position, group);
+    }
+
+    // Says whether a new group goes before the group just ahead of a
+    // position of the list; nothing is ahead of the start.
+    private static boolean goesBefore(List<AnswerGroup> groups,
+            int position, AnswerGroup group, Question question) {
+        if (position <= 0) {
+            return false;
+        }
+        int before = position - 1;
+        return comesBefore(group, groups.get(before), question);
     }
 
     // Says whether a new group goes before an earlier one of the list.
@@ -282,21 +353,26 @@ public final class AnswerGrouper {
     // student whose file cannot be read has no shape.
     private static void addSameShapes(GradingRun run, Question question,
             AnswerGroup group) {
-        Map<String, List<String>> byShape = new LinkedHashMap<>();
+        List<String> shapes = new ArrayList<>();
+        Map<String, List<String>> byShape = new HashMap<>();
         for (String username : group.getUsernames()) {
-            String shape = readShape(run, findSubmission(run, username),
-                    question);
+            Submission submission = findSubmission(run, username);
+            String shape = readShape(run, submission, question);
             if (shape == null) {
                 continue;
             }
             List<String> same = byShape.get(shape);
             if (same == null) {
                 same = new ArrayList<>();
+                shapes.add(shape);
                 byShape.put(shape, same);
             }
             same.add(username);
         }
-        for (List<String> same : byShape.values()) {
+
+        // The shapes in the order they were first seen
+        for (String shape : shapes) {
+            List<String> same = byShape.get(shape);
             if (same.size() > 1) {
                 group.addSameShape(same);
             }
@@ -320,8 +396,9 @@ public final class AnswerGrouper {
             if (!Files.isRegularFile(file)) {
                 return null;
             }
-            return JavaTokenizer.shapeOf(new String(Files.readAllBytes(
-                    file), StandardCharsets.UTF_8));
+            byte[] bytes = Files.readAllBytes(file);
+            String source = new String(bytes, StandardCharsets.UTF_8);
+            return JavaTokenizer.shapeOf(source);
         } catch (IOException exception) {
             return null;
         }
@@ -355,33 +432,42 @@ public final class AnswerGrouper {
 
     // Names the failed tests, such as "Failed tests 1, 2 and 4".
     private static String failedTitle(String tests) {
-        List<String> numbers = new ArrayList<>();
-        for (int index = 0; index < tests.length(); index++) {
-            if (tests.charAt(index) == FAILED) {
-                numbers.add(String.valueOf(index + 1));
-            }
+        List<String> numbers = failedNumbers(tests);
+        if (numbers.isEmpty()) {
+            return FAILED_MANY;
         }
         if (numbers.size() == 1) {
             return FAILED_ONE + numbers.get(0);
         }
-        String title = FAILED_MANY;
-        for (int index = 0; index < numbers.size(); index++) {
-            if (index == numbers.size() - 1) {
-                title += " and ";
-            } else if (index > 0) {
-                title += ", ";
+
+        // All but the last number between commas, then "and" the last
+        int lastIndex = numbers.size() - 1;
+        List<String> allButLast = numbers.subList(0, lastIndex);
+        String last = numbers.get(lastIndex);
+        return FAILED_MANY + TextUtils.join(NUMBER_SEPARATOR, allButLast)
+                + LAST_NUMBER_SEPARATOR + last;
+    }
+
+    // Returns the numbers of the failed tests, in order.
+    private static List<String> failedNumbers(String tests) {
+        List<String> numbers = new ArrayList<>();
+        for (int index = 0; index < tests.length(); index++) {
+            if (tests.charAt(index) == FAILED) {
+                int testNumber = index + FIRST_TEST_NUMBER;
+                numbers.add(String.valueOf(testNumber));
             }
-            title += numbers.get(index);
         }
-        return title;
+        return numbers;
     }
 
     // Says whether a student has a flag of a type about a question.
     private static boolean hasFlag(Submission submission, Question question,
             AnomalyType type) {
         for (Anomaly anomaly : submission.getAnomalies()) {
-            if (anomaly.getType() == type
-                    && isAbout(anomaly, submission, question)) {
+            if (anomaly.getType() != type) {
+                continue;
+            }
+            if (isAbout(anomaly, submission, question)) {
                 return true;
             }
         }
@@ -393,20 +479,32 @@ public final class AnswerGrouper {
     private static boolean hasUnfixedFlag(Submission submission,
             Question question, AnomalyType type) {
         for (Anomaly anomaly : submission.getAnomalies()) {
-            FixStatus status = anomaly.getFixStatus();
-            if (anomaly.getType() == type && status != FixStatus.APPLIED
-                    && status != FixStatus.APPROVED
-                    && isAbout(anomaly, submission, question)) {
+            if (anomaly.getType() != type) {
+                continue;
+            }
+            if (isFixed(anomaly)) {
+                continue;
+            }
+            if (isAbout(anomaly, submission, question)) {
                 return true;
             }
         }
         return false;
     }
 
+    // Says whether a flag's fix was applied or kept.
+    private static boolean isFixed(Anomaly anomaly) {
+        FixStatus status = anomaly.getFixStatus();
+        boolean applied = status == FixStatus.APPLIED;
+        boolean approved = status == FixStatus.APPROVED;
+        return applied || approved;
+    }
+
     // Says whether a text names a question's id or file name.
     private static boolean namesQuestion(String text, Question question) {
-        return namesWord(text, question.getId())
-                || namesWord(text, question.getFileName());
+        boolean namesId = namesWord(text, question.getId());
+        boolean namesFile = namesWord(text, question.getFileName());
+        return namesId || namesFile;
     }
 
     // Says whether a text names another question than the one given.
@@ -414,8 +512,13 @@ public final class AnswerGrouper {
             Submission submission, Question question) {
         for (QuestionResult result : submission.getQuestionResults()) {
             Question other = result.getQuestion();
-            if (other != null && !other.getId().equals(question.getId())
-                    && namesQuestion(text, other)) {
+            if (other == null) {
+                continue;
+            }
+            if (other.getId().equals(question.getId())) {
+                continue;
+            }
+            if (namesQuestion(text, other)) {
                 return true;
             }
         }
@@ -424,45 +527,71 @@ public final class AnswerGrouper {
 
     // Returns a flag's message and suggested action as one text.
     private static String textOf(Anomaly anomaly) {
-        return anomaly.getMessage() + " " + anomaly.getSuggestedAction();
+        return anomaly.getMessage() + TEXT_SEPARATOR
+                + anomaly.getSuggestedAction();
     }
 
     // Says whether a text holds a name as a whole word: no letter, digit
     // or underscore right before or after it.
     private static boolean namesWord(String text, String name) {
-        if (text == null || name == null || name.isEmpty()) {
+        boolean nothing = text == null || name == null;
+        if (nothing) {
+            return false;
+        }
+        if (name.isEmpty()) {
             return false;
         }
         int start = text.indexOf(name);
         while (start >= 0) {
             int end = start + name.length();
-            boolean startsWord = start == 0
-                    || !isWordChar(text.charAt(start - 1));
-            boolean endsWord = end == text.length()
-                    || !isWordChar(text.charAt(end));
-            if (startsWord && endsWord) {
+            if (isWholeWord(text, start, end)) {
                 return true;
             }
-            start = text.indexOf(name, start + 1);
+            int next = start + 1;
+            start = text.indexOf(name, next);
         }
         return false;
     }
 
+    // Says whether the text from start up to end is a whole word: no
+    // word character right before or after it.
+    private static boolean isWholeWord(String text, int start, int end) {
+        if (start > 0) {
+            int before = start - 1;
+            if (isWordChar(text.charAt(before))) {
+                return false;
+            }
+        }
+        if (end < text.length()) {
+            return !isWordChar(text.charAt(end));
+        }
+        return true;
+    }
+
     // Says whether a character can be part of a word.
     private static boolean isWordChar(char character) {
-        return Character.isLetterOrDigit(character) || character == '_';
+        boolean letterOrDigit = Character.isLetterOrDigit(character);
+        return letterOrDigit || character == UNDERSCORE;
     }
 
     // Returns a student's result for a question, or null.
     private static QuestionResult findResult(Submission submission,
             Question question) {
         for (QuestionResult result : submission.getQuestionResults()) {
-            if (result.getQuestion() != null && result.getQuestion().getId()
-                    .equals(question.getId())) {
+            if (isFor(result, question)) {
                 return result;
             }
         }
         return null;
+    }
+
+    // Says whether a result is for a question.
+    private static boolean isFor(QuestionResult result, Question question) {
+        Question resultQuestion = result.getQuestion();
+        if (resultQuestion == null) {
+            return false;
+        }
+        return resultQuestion.getId().equals(question.getId());
     }
 
     // Returns the student with a username in a run, or null.

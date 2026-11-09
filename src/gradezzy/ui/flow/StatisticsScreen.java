@@ -106,10 +106,10 @@ public class StatisticsScreen extends FlowScreen {
 
     // The two views
     private final SectionView sectionView;
+    private final CompareView compareView = new CompareView();
 
     // The largest answer groups of the run shown, under the charts
     private final CommonMistakesSection commonMistakes;
-    private final CompareView compareView = new CompareView();
 
     // The runs of the section in the Run picker; the first is the one in
     // use, the others are earlier runs, newest first

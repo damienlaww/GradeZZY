@@ -222,7 +222,10 @@ public class AnswerGroup {
      * @return true when it was checked and no student joined since
      */
     public boolean isChecked() {
-        return !checkedUsernames.isEmpty() && countNewSinceChecked() == 0;
+        if (checkedUsernames.isEmpty()) {
+            return false;
+        }
+        return countNewSinceChecked() == 0;
     }
 
     /**

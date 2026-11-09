@@ -36,6 +36,7 @@ import gradezzy.stats.AnswerGrouper;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.ReviewDecision;
+import gradezzy.util.TextUtils;
 
 /**
  * The actions on one answer group.
@@ -46,6 +47,10 @@ public class AnswerGroupActions {
 
     // The width of the sheets' text
     private static final double SHEET_WIDTH = 520.0;
+
+    // The width of a sheet: its text with a gap on each side
+    private static final double SHEET_BODY_WIDTH = SHEET_WIDTH + Parts.GAP
+            + Parts.GAP;
 
     // The height of a student's row in the mark sheet
     private static final double ROW_HEIGHT = 48.0;
@@ -61,6 +66,38 @@ public class AnswerGroupActions {
 
     // The gap between a field's name and the field
     private static final double LABEL_GAP = 4.0;
+
+    // Comes between a mark and the most it can be, such as "3 / 5"
+    private static final String MARK_SEPARATOR = " / ";
+
+    // Shown in place of a mark when there is none
+    private static final String NO_MARK = "-";
+
+    // Starts each student of the check sheet's list
+    private static final String BULLET = "• ";
+
+    // Comes before a sentence added to the end of another
+    private static final String SENTENCE_SEPARATOR = " ";
+
+    // Comes between the question and the mistake, such as "Q2b, failed
+    // tests 3 and 5"
+    private static final String QUESTION_SEPARATOR = ", ";
+
+    // Comes between a student and their open items
+    private static final String ITEMS_SEPARATOR = ": ";
+
+    // Comes between two open items of a student
+    private static final String ITEM_SEPARATOR = ", ";
+
+    // Put around a student's username after the name
+    private static final String OPEN_BRACKET = " (";
+    private static final String CLOSE_BRACKET = ")";
+
+    // Where the first letter of a title ends
+    private static final int FIRST_LETTER_END = 1;
+
+    // The one change a group mark change adds to each student
+    private static final int ONE_CHANGE = 1;
 
     // The window, for the sheets and notices
     private final FlowWindow window;
@@ -104,8 +141,10 @@ public class AnswerGroupActions {
         Button save = Parts.primary("Save name");
         save.setOnAction(event -> saveName(group, field));
         field.setOnAction(event -> saveName(group, field));
-        showSheet(new Node[] {Parts.title("Name this mistake"), about,
-            field("Name", field), buttons(cancel, save)});
+        Label title = Parts.title("Name this mistake");
+        VBox nameField = field("Name", field);
+        HBox buttonRow = buttons(cancel, save);
+        showSheet(new Node[] {title, about, nameField, buttonRow});
         field.requestFocus();
     }
 
@@ -131,32 +170,24 @@ public class AnswerGroupActions {
      */
     public void changeMark(AnswerGroup group) {
         GradingRun run = window.getState().getRun();
+        // There is no question when there is no run
         Question question = questionOf(run, group);
-        if (run == null || question == null) {
+        if (question == null) {
             return;
         }
         String questionId = question.getId();
         int count = group.getUsernames().size();
         List<String> listed = new ArrayList<>(group.getUsernames());
-
-        PlainTable table = new PlainTable(ROW_HEIGHT);
-        table.getStyleClass().add("compact");
-        table.addColumn("Student", PlainTable.GROW, Pos.CENTER_LEFT);
-        table.addColumn(questionId + " now", MARK_COLUMN, Pos.CENTER_RIGHT);
-        for (String username : listed) {
-            Submission submission = findSubmission(run, username);
-            table.addRow(new Node[] {studentCell(submission, username),
-                new Label(markNow(submission, questionId) + " / "
-                + Parts.mark(question.getMaxScore()))});
-        }
+        PlainTable table = createMarkTable(run, listed, question);
 
         TextField mark = new TextField();
         mark.setId("group-mark");
         mark.setPrefWidth(MARK_WIDTH);
         mark.setMaxWidth(MARK_WIDTH);
         mark.setAccessibleText("New mark");
-        HBox markRow = Parts.row(Parts.GAP_SMALL, new Node[] {mark,
-            Parts.muted("out of " + Parts.mark(question.getMaxScore()))});
+        Label outOf = Parts.muted("out of "
+                + Parts.mark(question.getMaxScore()));
+        HBox markRow = Parts.row(Parts.GAP_SMALL, new Node[] {mark, outOf});
         markRow.setAlignment(Pos.CENTER_LEFT);
         TextField reason = new TextField();
         reason.setId("group-reason");
@@ -174,11 +205,34 @@ public class AnswerGroupActions {
         Button save = Parts.primary("Change " + Parts.plural(count, "mark"));
         save.setOnAction(event -> saveMarks(run, group, listed, question,
                 mark, reason, problem));
-        showSheet(new Node[] {Parts.title("Change the " + questionId
-            + " mark of " + Parts.plural(count, "student")), about, table,
-            field("New mark", markRow), field("Reason", reason), problem,
-            buttons(cancel, save)});
+        Label title = Parts.title("Change the " + questionId + " mark of "
+                + Parts.plural(count, "student"));
+        VBox markField = field("New mark", markRow);
+        VBox reasonField = field("Reason", reason);
+        HBox buttonRow = buttons(cancel, save);
+        showSheet(new Node[] {title, about, table, markField, reasonField,
+            problem, buttonRow});
         mark.requestFocus();
+    }
+
+    // Builds the table of the listed students with their mark of the
+    // question now.
+    private PlainTable createMarkTable(GradingRun run, List<String> listed,
+            Question question) {
+        String questionId = question.getId();
+        String maxMark = Parts.mark(question.getMaxScore());
+        PlainTable table = new PlainTable(ROW_HEIGHT);
+        table.getStyleClass().add("compact");
+        table.addColumn("Student", PlainTable.GROW, Pos.CENTER_LEFT);
+        table.addColumn(questionId + " now", MARK_COLUMN, Pos.CENTER_RIGHT);
+        for (String username : listed) {
+            Submission submission = findSubmission(run, username);
+            Node student = studentCell(submission, username);
+            Label markLabel = new Label(markNow(submission, questionId)
+                    + MARK_SEPARATOR + maxMark);
+            table.addRow(new Node[] {student, markLabel});
+        }
+        return table;
     }
 
     // Checks the form, then changes the mark of each listed student who
@@ -206,20 +260,24 @@ public class AnswerGroupActions {
                     question.getId());
             ActionResult result = backend.adjustScore(run, submission,
                     question.getId(), newMark, why);
-            ScoreAdjustment made = findNew(changesOf(run, submission,
-                    question.getId()), before);
-            if (result.isDone() && made != null) {
+            List<ScoreAdjustment> after = changesOf(run, submission,
+                    question.getId());
+            ScoreAdjustment made = findNew(after, before);
+            boolean saved = result.isDone() && made != null;
+            if (saved) {
+                int countAfter = before.size() + ONE_CHANGE;
                 changed.add(submission);
                 changes.add(made);
-                counts.add(Integer.valueOf(before.size() + 1));
+                counts.add(Integer.valueOf(countAfter));
             } else if (firstProblem.isEmpty()) {
-                firstProblem = " " + result.getMessage();
+                firstProblem = SENTENCE_SEPARATOR + result.getMessage();
             }
         }
         window.closeSheet();
+        int leftCount = listed.size() - still.size();
         String message = "Changed the mark of "
                 + Parts.plural(changed.size(), "student") + "."
-                + leftOut(listed.size() - still.size()) + firstProblem;
+                + leftOut(leftCount) + firstProblem;
         if (changed.isEmpty()) {
             window.notify(message);
         } else {
@@ -233,16 +291,13 @@ public class AnswerGroupActions {
     // newest change of the question, and says how many were left.
     private void undoMarks(GradingRun run, List<Submission> changed,
             List<ScoreAdjustment> changes, List<Integer> counts) {
-        DashboardBackend backend = window.getBackend();
         int putBack = 0;
         int left = 0;
         for (int index = 0; index < changed.size(); index++) {
+            Submission submission = changed.get(index);
             ScoreAdjustment change = changes.get(index);
-            List<ScoreAdjustment> now = changesOf(run, changed.get(index),
-                    change.getQuestionId());
-            if (now.contains(change)
-                    && now.size() == counts.get(index).intValue()
-                    && backend.undoAdjustment(run, change).isDone()) {
+            int count = counts.get(index).intValue();
+            if (putBackOne(run, submission, change, count)) {
                 putBack++;
             } else {
                 left++;
@@ -252,11 +307,29 @@ public class AnswerGroupActions {
         if (left == 1) {
             message += " 1 was changed again since and was left.";
         } else if (left > 1) {
-            message += " " + left + " were changed again since and were "
-                    + "left.";
+            message += SENTENCE_SEPARATOR + left + " were changed again "
+                    + "since and were left.";
         }
         window.notify(message);
         onChanged.run();
+    }
+
+    // Puts back one group mark change when it is still the student's
+    // newest change of the question: the student has the count of
+    // changes the group change left. Says whether it was put back.
+    private boolean putBackOne(GradingRun run, Submission submission,
+            ScoreAdjustment change, int count) {
+        List<ScoreAdjustment> now = changesOf(run, submission,
+                change.getQuestionId());
+        if (!now.contains(change)) {
+            return false;
+        }
+        if (now.size() != count) {
+            return false;
+        }
+        ActionResult result = window.getBackend().undoAdjustment(run,
+                change);
+        return result.isDone();
     }
 
     // ------------------------------------------------------------ check
@@ -272,8 +345,9 @@ public class AnswerGroupActions {
      */
     public void check(AnswerGroup group) {
         GradingRun run = window.getState().getRun();
+        // There is no question when there is no run
         Question question = questionOf(run, group);
-        if (run == null || question == null) {
+        if (question == null) {
             return;
         }
         if (group.isChecked()) {
@@ -284,15 +358,20 @@ public class AnswerGroupActions {
             return;
         }
         List<String> listed = new ArrayList<>(group.getUsernames());
+        VBox content = createCheckContent(run, group, listed, question);
+        window.confirm("Mark this group as checked?", content, "Mark "
+                + listed.size() + " as checked",
+                () -> confirmCheck(run, group, listed, question));
+    }
+
+    // Builds what the check sheet says: what is checked, then each
+    // listed student with their open items of the question.
+    private VBox createCheckContent(GradingRun run, AnswerGroup group,
+            List<String> listed, Question question) {
         VBox content = new VBox(Parts.GAP_SMALL);
         Label about = Parts.muted(describe(group) + ". The group is marked "
                 + "as checked. No mark changes, and you can undo it:");
-        int openCount = 0;
-        for (String username : listed) {
-            openCount += openItems(findSubmission(run, username),
-                    question).size();
-        }
-        if (openCount > 0) {
+        if (countOpenItems(run, listed, question) > 0) {
             about.setText(describe(group) + ". These " + question.getId()
                     + " items are marked as checked, compile errors "
                     + "included. Their rows will show as checked. No mark "
@@ -300,12 +379,22 @@ public class AnswerGroupActions {
         }
         content.getChildren().add(wrapped(about));
         for (String username : listed) {
-            content.getChildren().add(wrapped(new Label("• "
-                    + describeStudent(run, username, question))));
+            Label line = new Label(BULLET
+                    + describeStudent(run, username, question));
+            content.getChildren().add(wrapped(line));
         }
-        window.confirm("Mark this group as checked?", content, "Mark "
-                + listed.size() + " as checked",
-                () -> confirmCheck(run, group, listed, question));
+        return content;
+    }
+
+    // Counts the open items of a question of the listed students.
+    private int countOpenItems(GradingRun run, List<String> listed,
+            Question question) {
+        int openCount = 0;
+        for (String username : listed) {
+            Submission submission = findSubmission(run, username);
+            openCount += openItems(submission, question).size();
+        }
+        return openCount;
     }
 
     // Marks the group as checked, and checks the open items of this
@@ -317,18 +406,20 @@ public class AnswerGroupActions {
         List<String> still = stillInGroup(run, group, listed);
         List<Anomaly> decided = new ArrayList<>();
         for (String username : still) {
-            for (Anomaly anomaly : openItems(findSubmission(run, username),
-                    question)) {
-                if (backend.setDecision(anomaly,
-                        ReviewDecision.REVIEWED).isDone()) {
+            Submission submission = findSubmission(run, username);
+            for (Anomaly anomaly : openItems(submission, question)) {
+                ActionResult decision = backend.setDecision(anomaly,
+                        ReviewDecision.REVIEWED);
+                if (decision.isDone()) {
                     decided.add(anomaly);
                 }
             }
         }
         ActionResult result = backend.setAnswerGroupChecked(run, current,
                 true);
-        window.notify(result.getMessage() + leftOut(listed.size()
-                - still.size()), "Undo",
+        int leftCount = listed.size() - still.size();
+        String message = result.getMessage() + leftOut(leftCount);
+        window.notify(message, "Undo",
                 () -> undoCheck(run, current, decided));
         onChanged.run();
     }
@@ -342,8 +433,9 @@ public class AnswerGroupActions {
                 backend.setDecision(anomaly, ReviewDecision.OPEN);
             }
         }
-        ActionResult result = backend.setAnswerGroupChecked(run,
-                findCurrent(run, group), false);
+        AnswerGroup current = findCurrent(run, group);
+        ActionResult result = backend.setAnswerGroupChecked(run, current,
+                false);
         window.notify(result.getMessage());
         onChanged.run();
     }
@@ -356,16 +448,25 @@ public class AnswerGroupActions {
         if (submission == null) {
             return open;
         }
-        DashboardBackend backend = window.getBackend();
         for (Anomaly anomaly : submission.getAnomalies()) {
-            if (anomaly.getFixStatus() != FixStatus.APPLIED
-                    && backend.needsReview(anomaly)
-                    && AnswerGrouper.isAbout(anomaly, submission,
-                    question)) {
+            if (isOpenItem(anomaly, submission, question)) {
                 open.add(anomaly);
             }
         }
         return open;
+    }
+
+    // Says whether an item of a student waits for a look and is about a
+    // question; a fix waiting for Keep or Reject does not count.
+    private boolean isOpenItem(Anomaly anomaly, Submission submission,
+            Question question) {
+        if (anomaly.getFixStatus() == FixStatus.APPLIED) {
+            return false;
+        }
+        if (!window.getBackend().needsReview(anomaly)) {
+            return false;
+        }
+        return AnswerGrouper.isAbout(anomaly, submission, question);
     }
 
     // Names a student with the open items of a question, such as "KAI
@@ -375,7 +476,8 @@ public class AnswerGroupActions {
         Submission submission = findSubmission(run, username);
         String text = username;
         if (submission != null) {
-            text = Students.name(submission) + " (" + username + ")";
+            text = Students.name(submission) + OPEN_BRACKET + username
+                    + CLOSE_BRACKET;
         }
         List<String> items = new ArrayList<>();
         for (Anomaly anomaly : openItems(submission, question)) {
@@ -384,7 +486,8 @@ public class AnswerGroupActions {
         if (items.isEmpty()) {
             return text;
         }
-        return text + ": " + String.join(", ", items);
+        return text + ITEMS_SEPARATOR + TextUtils.join(ITEM_SEPARATOR,
+                items);
     }
 
     // ---------------------------------------------------------- compare
@@ -409,17 +512,25 @@ public class AnswerGroupActions {
         if (students.isEmpty()) {
             return;
         }
-        window.showSheet(CodeSheet.create(window, students.get(0),
-                group.getQuestionId(), null, students));
+        Submission first = students.get(0);
+        Node sheet = CodeSheet.create(window, first, group.getQuestionId(),
+                null, students);
+        window.showSheet(sheet);
     }
 
     // ---------------------------------------------------------- helpers
 
     // Names the question and mistake, such as "Q2b, failed tests 3 and 5".
     private static String describe(AnswerGroup group) {
-        String title = group.getTitle();
-        return group.getQuestionId() + ", " + title.substring(0, 1)
-                .toLowerCase() + title.substring(1);
+        String title = lowerFirst(group.getTitle());
+        return group.getQuestionId() + QUESTION_SEPARATOR + title;
+    }
+
+    // Returns a text with its first letter in lower case.
+    private static String lowerFirst(String text) {
+        String first = text.substring(0, FIRST_LETTER_END);
+        String rest = text.substring(FIRST_LETTER_END);
+        return first.toLowerCase() + rest;
     }
 
     // Says how many listed students were left out because they moved out
@@ -428,13 +539,15 @@ public class AnswerGroupActions {
         if (count == 0) {
             return "";
         }
-        return " " + Parts.plural(count, "student") + " left out: graded "
-                + "again since and no longer in the group.";
+        return SENTENCE_SEPARATOR + Parts.plural(count, "student")
+                + " left out: graded again since and no longer in the "
+                + "group.";
     }
 
     // Returns the group as it is now, or the given one if it is gone.
     private AnswerGroup findCurrent(GradingRun run, AnswerGroup group) {
-        for (AnswerGroup now : window.getBackend().listAnswerGroups(run)) {
+        List<AnswerGroup> groups = window.getBackend().listAnswerGroups(run);
+        for (AnswerGroup now : groups) {
             if (now.getKey().equals(group.getKey())) {
                 return now;
             }
@@ -462,8 +575,9 @@ public class AnswerGroupActions {
     private List<ScoreAdjustment> changesOf(GradingRun run,
             Submission submission, String questionId) {
         List<ScoreAdjustment> found = new ArrayList<>();
-        for (ScoreAdjustment change : window.getBackend().listAdjustments(
-                run, submission)) {
+        List<ScoreAdjustment> all = window.getBackend().listAdjustments(run,
+                submission);
+        for (ScoreAdjustment change : all) {
             if (change.getQuestionId().equals(questionId)) {
                 found.add(change);
             }
@@ -485,15 +599,23 @@ public class AnswerGroupActions {
     // Returns a student's mark of a question now, such as "3".
     private static String markNow(Submission submission, String questionId) {
         if (submission == null) {
-            return "-";
+            return NO_MARK;
         }
         for (QuestionResult result : submission.getQuestionResults()) {
-            if (result.getQuestion() != null
-                    && result.getQuestion().getId().equals(questionId)) {
+            if (isFor(result, questionId)) {
                 return Parts.mark(result.getScore());
             }
         }
-        return "-";
+        return NO_MARK;
+    }
+
+    // Says whether a result is for the question with an id.
+    private static boolean isFor(QuestionResult result, String questionId) {
+        Question question = result.getQuestion();
+        if (question == null) {
+            return false;
+        }
+        return question.getId().equals(questionId);
     }
 
     // Shows a student's name with the username under it.
@@ -511,7 +633,10 @@ public class AnswerGroupActions {
 
     // Returns the question of a group in a run, or null.
     private static Question questionOf(GradingRun run, AnswerGroup group) {
-        if (run == null || run.getAssessment() == null) {
+        if (run == null) {
+            return null;
+        }
+        if (run.getAssessment() == null) {
             return null;
         }
         for (Question question : run.getAssessment().getQuestions()) {
@@ -539,7 +664,7 @@ public class AnswerGroupActions {
     // Shows a sheet holding the given parts, one under another.
     private void showSheet(Node[] parts) {
         VBox body = new VBox(Parts.GAP, parts);
-        body.setPrefWidth(SHEET_WIDTH + Parts.GAP * 2);
+        body.setPrefWidth(SHEET_BODY_WIDTH);
         body.getStyleClass().add("confirm");
         window.showSheet(body);
     }
@@ -567,8 +692,9 @@ public class AnswerGroupActions {
 
     // Shows a problem under the fields, or hides it when empty.
     private static void showProblem(Label problem, String message) {
+        boolean shown = !message.isEmpty();
         problem.setText(message);
-        problem.setVisible(!message.isEmpty());
-        problem.setManaged(!message.isEmpty());
+        problem.setVisible(shown);
+        problem.setManaged(shown);
     }
 }

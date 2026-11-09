@@ -28,6 +28,7 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
+import gradezzy.util.TextUtils;
 
 /**
  * Lists the answer groups of a run, question by question.
@@ -61,6 +62,15 @@ public class MistakesView {
     // The quotes around a mistake's name
     private static final String OPEN_QUOTE = "“";
     private static final String CLOSE_QUOTE = "”";
+
+    // The header of a column that needs no words
+    private static final String NO_HEADER = "";
+
+    // Comes between the student count and the names of the students
+    private static final String COUNT_SEPARATOR = ": ";
+
+    // Comes between the names of two students
+    private static final String NAME_SEPARATOR = ", ";
 
     // The window, for the backend and the run
     private final FlowWindow window;
@@ -99,12 +109,13 @@ public class MistakesView {
         scroll.getStyleClass().addAll("edge-to-edge", "mistakes-view");
         list.getStyleClass().add("mistakes-list");
         scroll.widthProperty().addListener((observable, before, after)
-                -> widthChanged(after.doubleValue()));
+                -> widthChanged(after));
     }
 
     // Draws the list again with the other column widths when the view
     // becomes narrower or wider than NARROW_VIEW.
-    private void widthChanged(double width) {
+    private void widthChanged(Number newWidth) {
+        double width = newWidth.doubleValue();
         boolean nowNarrow = width > 0 && width < NARROW_VIEW;
         if (nowNarrow != narrow) {
             narrow = nowNarrow;
@@ -156,28 +167,40 @@ public class MistakesView {
                     + "passed all its tests."));
             return;
         }
+        summary = summaryOf(groups);
+        addTables(run, groups);
+        scroll.setVvalue(place);
+    }
+
+    // Sums up the groups, such as "31 answers lost marks, in 22 groups.
+    // Decide each group once."
+    private String summaryOf(List<AnswerGroup> groups) {
         int answers = 0;
         for (AnswerGroup group : groups) {
             answers += group.getUsernames().size();
         }
-        summary = Parts.plural(answers, "answer") + " lost marks, in "
+        return Parts.plural(answers, "answer") + " lost marks, in "
                 + Parts.plural(groups.size(), "group") + ". Decide each "
                 + "group once.";
+    }
 
+    // Adds a header and a table of groups for each question to the list.
+    private void addTables(GradingRun run, List<AnswerGroup> groups) {
         String question = null;
         PlainTable table = null;
         for (AnswerGroup group : groups) {
             if (!group.getQuestionId().equals(question)) {
                 question = group.getQuestionId();
                 table = createTable();
-                list.getChildren().addAll(questionHeader(question, groups),
-                        table);
+                HBox header = questionHeader(question, groups);
+                list.getChildren().addAll(header, table);
             }
-            table.addRow(new Node[] {mistakeCell(group),
-                studentsCell(run, group), stateCell(group),
-                actionsCell(group)});
+            Node mistake = mistakeCell(group);
+            Node students = studentsCell(run, group);
+            Node state = stateCell(group);
+            Node buttons = actionsCell(group);
+            table.addRow(new Node[] {mistake, students, state, buttons});
         }
-        scroll.setVvalue(place);
     }
 
     // Builds the table of one question's groups.
@@ -186,11 +209,11 @@ public class MistakesView {
         table.addColumn("Mistake", PlainTable.GROW, Pos.CENTER_LEFT);
         table.addColumn("Students", studentsWidth(), Pos.CENTER_LEFT);
         if (narrow) {
-            table.addColumn("", NARROW_STATE_WIDTH, Pos.CENTER_LEFT);
+            table.addColumn(NO_HEADER, NARROW_STATE_WIDTH, Pos.CENTER_LEFT);
         } else {
-            table.addColumn("", STATE_WIDTH, Pos.CENTER_LEFT);
+            table.addColumn(NO_HEADER, STATE_WIDTH, Pos.CENTER_LEFT);
         }
-        table.addColumn("", ACTIONS_WIDTH, Pos.CENTER_RIGHT);
+        table.addColumn(NO_HEADER, ACTIONS_WIDTH, Pos.CENTER_RIGHT);
         return table;
     }
 
@@ -203,9 +226,10 @@ public class MistakesView {
                 count++;
             }
         }
-        HBox header = Parts.row(Parts.GAP_SMALL, new Node[] {
-            Parts.title(question), Parts.muted(Parts.plural(count,
-            "group"))});
+        Label title = Parts.title(question);
+        Label groupCount = Parts.muted(Parts.plural(count, "group"));
+        HBox header = Parts.row(Parts.GAP_SMALL,
+                new Node[] {title, groupCount});
         header.setAlignment(Pos.BASELINE_LEFT);
         return header;
     }
@@ -230,26 +254,33 @@ public class MistakesView {
         for (String username : group.getUsernames()) {
             names.add(nameOf(run, username));
         }
-        Label who = new Label(Parts.plural(group.getUsernames().size(),
-                "student") + ": " + String.join(", ", names));
+        int size = group.getUsernames().size();
+        Label who = new Label(Parts.plural(size, "student")
+                + COUNT_SEPARATOR + TextUtils.join(NAME_SEPARATOR, names));
         who.setWrapText(true);
-        who.setMaxWidth(studentsWidth() - Parts.GAP);
+        double maxWidth = studentsWidth() - Parts.GAP;
+        who.setMaxWidth(maxWidth);
         VBox box = new VBox(LINE_GAP, who);
-        int same = group.countSameShape();
-        if (same > 0) {
-            String text = "Same code shape";
-            if (same < group.getUsernames().size()) {
-                text = same + " of " + group.getUsernames().size()
-                        + " have the same code shape";
-            }
-            Label shape = Parts.muted(text);
-            shape.getStyleClass().add("small-text");
-            Parts.tipNode(shape, "Their code is the same except for the "
-                    + "names they chose, so one look covers them.");
-            box.getChildren().add(shape);
+        if (group.countSameShape() > 0) {
+            box.getChildren().add(sameShapeLabel(group));
         }
         box.setAlignment(Pos.CENTER_LEFT);
         return box;
+    }
+
+    // Says how many students of a group share the same code shape.
+    private Label sameShapeLabel(AnswerGroup group) {
+        int same = group.countSameShape();
+        int size = group.getUsernames().size();
+        String text = "Same code shape";
+        if (same < size) {
+            text = same + " of " + size + " have the same code shape";
+        }
+        Label shape = Parts.muted(text);
+        shape.getStyleClass().add("small-text");
+        Parts.tipNode(shape, "Their code is the same except for the "
+                + "names they chose, so one look covers them.");
+        return shape;
     }
 
     // Shows Checked, how many joined since, or To check.

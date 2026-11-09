@@ -41,6 +41,13 @@ public class AnswerGroupService implements AnswerGroupSource {
     // What a line break is replaced with
     private static final String SPACE = " ";
 
+    // The name of a group with no name yet
+    private static final String NO_LABEL = "";
+
+    // The title given to the group made only to work out a note's key,
+    // which does not use it
+    private static final String NO_TITLE = "";
+
     // The store decisions are saved to, or null when there is none
     private final ResultRepository repository;
 
@@ -111,8 +118,9 @@ public class AnswerGroupService implements AnswerGroupSource {
             clean = label.replaceAll(LINE_BREAK, SPACE).trim();
         }
         AnswerGroupNote before = noteOf(run, group);
-        save(run, new AnswerGroupNote(group.getQuestionId(),
-                group.getPattern(), clean, before.getCheckedUsernames()));
+        AnswerGroupNote after = new AnswerGroupNote(group.getQuestionId(),
+                group.getPattern(), clean, before.getCheckedUsernames());
+        save(run, after);
         group.setLabel(clean);
     }
 
@@ -158,8 +166,10 @@ public class AnswerGroupService implements AnswerGroupSource {
      * @return true when a store is set and results are saved
      */
     public boolean isSaving() {
-        return repository != null
-                && config.getBoolean(ConfigKeys.DATABASE_ENABLED);
+        if (repository == null) {
+            return false;
+        }
+        return config.getBoolean(ConfigKeys.DATABASE_ENABLED);
     }
 
     // Returns a run's notes, reading them from the store the first time.
@@ -171,18 +181,33 @@ public class AnswerGroupService implements AnswerGroupSource {
             return notes;
         }
         notes = new HashMap<>();
-        if (isSaving() && !id.isEmpty()) {
-            try {
-                for (AnswerGroupNote note
-                        : repository.listAnswerGroupNotes(id)) {
-                    notes.put(keyOf(note), note);
-                }
-            } catch (PersistenceException exception) {
-                saveProblem = exception.getMessage();
-            }
+        if (canSave(id)) {
+            readNotes(id, notes);
         }
         byRun.put(id, notes);
         return notes;
+    }
+
+    // Reads a run's saved notes into the map, by group key. If they
+    // cannot be read, the reason becomes the save problem.
+    private void readNotes(String id, Map<String, AnswerGroupNote> notes) {
+        try {
+            List<AnswerGroupNote> saved = repository.listAnswerGroupNotes(id);
+            for (AnswerGroupNote note : saved) {
+                notes.put(keyOf(note), note);
+            }
+        } catch (PersistenceException exception) {
+            saveProblem = exception.getMessage();
+        }
+    }
+
+    // Says whether the notes of a run with this id are saved: results
+    // are saved and the run has an id.
+    private boolean canSave(String id) {
+        if (!isSaving()) {
+            return false;
+        }
+        return !id.isEmpty();
     }
 
     // Returns the note of a group, or an empty one.
@@ -190,7 +215,7 @@ public class AnswerGroupService implements AnswerGroupSource {
         AnswerGroupNote note = notesOf(run).get(group.getKey());
         if (note == null) {
             return new AnswerGroupNote(group.getQuestionId(),
-                    group.getPattern(), "", null);
+                    group.getPattern(), NO_LABEL, null);
         }
         return note;
     }
@@ -205,7 +230,7 @@ public class AnswerGroupService implements AnswerGroupSource {
         }
         saveProblem = "";
         String id = runIdOf(run);
-        if (!isSaving() || id.isEmpty()) {
+        if (!canSave(id)) {
             return;
         }
         try {
@@ -217,8 +242,9 @@ public class AnswerGroupService implements AnswerGroupSource {
 
     // Returns the key of a note, the same as its group's key.
     private static String keyOf(AnswerGroupNote note) {
-        return new AnswerGroup(note.getQuestionId(), note.getPattern(), "")
-                .getKey();
+        AnswerGroup group = new AnswerGroup(note.getQuestionId(),
+                note.getPattern(), NO_TITLE);
+        return group.getKey();
     }
 
     // Returns a run's id, or "" when it has none.

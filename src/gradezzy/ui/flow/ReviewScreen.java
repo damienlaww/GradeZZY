@@ -291,8 +291,9 @@ public class ReviewScreen extends FlowScreen {
         panel.setVisible(false);
         panel.setManaged(false);
 
-        mistakes = new MistakesView(window, new AnswerGroupActions(window,
-                () -> groupsChanged()));
+        AnswerGroupActions groupActions = new AnswerGroupActions(window,
+                () -> groupsChanged());
+        mistakes = new MistakesView(window, groupActions);
         createFilters();
         createModeBar();
         createSearch();
@@ -635,14 +636,24 @@ public class ReviewScreen extends FlowScreen {
         guide.setVisible(!showGroups);
         guide.setManaged(!showGroups);
         if (showGroups) {
-            closePanel();
-            tools.getChildren().setAll(modeBar, mistakesSummary,
-                    Parts.grow());
-            main.getChildren().set(place, mistakes.getView());
-            VBox.setVgrow(mistakes.getView(), Priority.ALWAYS);
-            refreshMistakes();
+            showGroupsAt(place);
             return;
         }
+        showTableAt(place);
+    }
+
+    // Puts the answer groups and their summary in place of the table and
+    // the filters, at a place of the page.
+    private void showGroupsAt(int place) {
+        closePanel();
+        tools.getChildren().setAll(modeBar, mistakesSummary, Parts.grow());
+        main.getChildren().set(place, mistakes.getView());
+        VBox.setVgrow(mistakes.getView(), Priority.ALWAYS);
+        refreshMistakes();
+    }
+
+    // Puts the table and the filters back, at a place of the page.
+    private void showTableAt(int place) {
         tools.getChildren().setAll(modeBar, filterBar, Parts.grow(), search);
         main.getChildren().set(place, tableFrame);
     }

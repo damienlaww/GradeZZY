@@ -100,7 +100,8 @@ public class CommonMistakesExporter implements Exporter {
     @Override
     public void export(GradingRun gradingRun, Path outputFile)
             throws ExportException {
-        if (gradingRun == null || outputFile == null) {
+        boolean missing = gradingRun == null || outputFile == null;
+        if (missing) {
             throw new ExportException(
                     "Nothing to export: the grading run or file is missing.");
         }
@@ -108,7 +109,8 @@ public class CommonMistakesExporter implements Exporter {
         List<String> lines = new ArrayList<>();
         lines.add(TextUtils.joinCsvLine(HEADER));
         for (AnswerGroup group : source.listGroups(gradingRun)) {
-            lines.add(TextUtils.joinCsvLine(toRow(gradingRun, group)));
+            List<String> row = toRow(gradingRun, group);
+            lines.add(TextUtils.joinCsvLine(row));
         }
         String output = TextUtils.join(LINE_ENDING, lines) + LINE_ENDING;
 

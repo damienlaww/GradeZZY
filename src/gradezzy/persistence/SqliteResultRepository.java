@@ -865,9 +865,10 @@ public class SqliteResultRepository implements ResultRepository {
                 } else {
                     statement = connection.prepareStatement(
                             UPSERT_GROUP_NOTE);
+                    String checked = TextUtils.join(NAME_SEPARATOR,
+                            note.getCheckedUsernames());
                     statement.setString(4, note.getLabel());
-                    statement.setString(5, TextUtils.join(NAME_SEPARATOR,
-                            note.getCheckedUsernames()));
+                    statement.setString(5, checked);
                 }
                 statement.setString(1, runId);
                 statement.setString(2, note.getQuestionId());
@@ -904,11 +905,7 @@ public class SqliteResultRepository implements ResultRepository {
                 statement.setString(1, runId);
                 rows = statement.executeQuery();
                 while (rows.next()) {
-                    notes.add(new AnswerGroupNote(
-                            rows.getString("question_id"),
-                            rows.getString("pattern"),
-                            rows.getString("label"),
-                            splitNames(rows.getString("checked_usernames"))));
+                    notes.add(readGroupNote(rows));
                 }
             } finally {
                 closeQuery(rows, statement);
@@ -921,10 +918,24 @@ public class SqliteResultRepository implements ResultRepository {
         return notes;
     }
 
+    // Reads the answer group note on the current row.
+    private AnswerGroupNote readGroupNote(ResultSet rows)
+            throws SQLException {
+        String questionId = rows.getString("question_id");
+        String pattern = rows.getString("pattern");
+        String label = rows.getString("label");
+        String saved = rows.getString("checked_usernames");
+        List<String> checked = splitNames(saved);
+        return new AnswerGroupNote(questionId, pattern, label, checked);
+    }
+
     // Splits the saved checked usernames; none when empty or null.
     private List<String> splitNames(String saved) {
         List<String> names = new ArrayList<>();
-        if (saved == null || saved.isEmpty()) {
+        if (saved == null) {
+            return names;
+        }
+        if (saved.isEmpty()) {
             return names;
         }
         String[] parts = saved.split(NAME_SEPARATOR);
