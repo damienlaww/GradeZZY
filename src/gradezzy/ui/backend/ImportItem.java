@@ -14,6 +14,8 @@ import java.util.List;
 
 /**
  * One chosen input file or folder.
+ *
+ * <p>Tier: MUST.
  */
 public class ImportItem {
 

@@ -26,12 +26,15 @@ import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.FixStatus;
 import gradezzy.model.Submission;
+import gradezzy.util.AnswerFolderRule;
 import gradezzy.util.FileUtils;
 
 /**
  * Corrects a wrong folder hierarchy: adds a missing username folder,
  * moves question folders up out of an extra folder, or makes the missing
  * question folders for answer files left loose.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class FolderHierarchyFixer extends AbstractFixer {
 
@@ -46,6 +49,10 @@ public class FolderHierarchyFixer extends AbstractFixer {
     // Follows them instead when the upload was a folder unzipped by hand
     private static final String AT_THE_TOP_OF_FOLDER =
             " at the top of the uploaded folder";
+
+    // Starts the hidden name a question folder has for a moment while it
+    // is moved out of, or back into, a folder of its own name
+    private static final String STEP_PREFIX = ".gradezzy-moving-";
 
     // The ending of a compiled file. The provided ones are copied into
     // the new folders from the starter, so the student's are not moved
@@ -99,6 +106,10 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
 
         if (anomaly.getType() == AnomalyType.MISSING_QUESTION_FOLDER) {
+            Path outerFolder = findOuterFolderOf(submission, anomaly);
+            if (outerFolder != null) {
+                return outerFolder;
+            }
             Path extraFolder = findExtraFolderOf(submission, anomaly);
             if (extraFolder != null) {
                 return extraFolder;
@@ -107,8 +118,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
 
         String username = submission.getUsername();
-        if (Files.exists(workingCopy.resolve(username),
-                LinkOption.NOFOLLOW_LINKS)) {
+        Path usernameFolder = workingCopy.resolve(username);
+        if (Files.exists(usernameFolder, LinkOption.NOFOLLOW_LINKS)) {
             throw new FixException("A " + username + " folder already "
                     + "exists, so the folders were left where they are.");
         }
@@ -140,6 +151,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
 
         if (anomaly.getType() == AnomalyType.MISSING_WRAPPER_FOLDER) {
             return addUsernameFolder(submission, anomaly);
+        } else if (findOuterFolderOf(submission, anomaly) != null) {
+            return moveOutOfItself(submission, anomaly, pathToChange);
         } else if (findExtraFolderOf(submission, anomaly) != null) {
             return moveUp(submission, anomaly, pathToChange);
         }
@@ -179,11 +192,36 @@ public class FolderHierarchyFixer extends AbstractFixer {
         String folderName = findMissingFolderName(submission, anomaly,
                 contentRoot, folderNames);
         Path extraFolder = findExtraFolder(contentRoot, folderNames);
-        if (folderName == null || extraFolder == null
-                || !canMoveUp(folderName, contentRoot, extraFolder)) {
+        boolean cannotMoveUp = folderName == null || extraFolder == null
+                || !canMoveUp(folderName, contentRoot,
+                        findChainEnd(extraFolder, folderNames));
+        if (cannotMoveUp) {
             return null;
         }
         return extraFolder;
+    }
+
+    // Finds the question folder of the anomaly when it holds only a folder
+    // of its own name, as when Q1 was dragged into Q1, or returns null.
+    private Path findOuterFolderOf(Submission submission,
+            Anomaly anomaly) throws FixException {
+        List<String> folderNames = readFolderNames(config);
+        Path contentRoot = findContentRoot(submission.getWorkingCopyPath(),
+                submission.getUsername(), folderNames);
+        if (contentRoot == null) {
+            return null;
+        }
+
+        String folderName = findMissingFolderName(submission, anomaly,
+                contentRoot, folderNames);
+        if (folderName == null) {
+            return null;
+        }
+        Path outerFolder = findExact(listFolders(contentRoot), folderName);
+        if (findNestedQuestionFolder(outerFolder, folderName) == null) {
+            return null;
+        }
+        return outerFolder;
     }
 
     // Finds the folder that holds the answer file of the anomaly's
@@ -290,11 +328,15 @@ public class FolderHierarchyFixer extends AbstractFixer {
         return names;
     }
 
-    // Says whether a question folder is in the extra folder only.
+    // Says whether a question folder is only at the end of the extra
+    // folder's chain, and not in the content root.
     private boolean canMoveUp(String folderName, Path contentRoot,
-            Path extraFolder) throws FixException {
+            Path chainEnd) throws FixException {
+        if (chainEnd == null) {
+            return false;
+        }
         return findIgnoringCase(listFolders(contentRoot), folderName) == null
-                && findByName(listFolders(extraFolder), folderName) != null;
+                && findByName(listFolders(chainEnd), folderName) != null;
     }
 
     // Moves the visible top-level entries into a new username folder.
@@ -354,8 +396,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
                     + " folder is no longer there, so nothing was moved.");
         }
 
-        moveEntries(listEntries(usernameFolder, true), usernameFolder,
-                workingCopy);
+        List<Path> entries = listEntries(usernameFolder, true);
+        moveEntries(entries, usernameFolder, workingCopy);
         try {
             Files.delete(usernameFolder);
         } catch (IOException exception) {
@@ -365,21 +407,23 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
     }
 
-    // Moves every question folder up out of the extra folder at once.
+    // Moves every question folder up out of the extra folder, or the
+    // chain of folders it starts, at once.
     private FixRecord moveUp(Submission submission, Anomaly anomaly,
             Path extraFolder) throws FixException {
         Path workingCopy = submission.getWorkingCopyPath();
         Path contentRoot = extraFolder.getParent();
         List<String> folderNames = readFolderNames(config);
+        Path chainEnd = findChainEnd(extraFolder, folderNames);
         List<Anomaly> sameMove = findSameMove(submission, anomaly,
-                contentRoot, extraFolder, folderNames);
+                contentRoot, chainEnd, folderNames);
 
         List<Path> pathsBefore = new ArrayList<>();
         List<Path> pathsAfter = new ArrayList<>();
         List<String> namesBefore = new ArrayList<>();
         for (String folderName : folderNames) {
-            if (canMoveUp(folderName, contentRoot, extraFolder)) {
-                Path questionFolder = findByName(listFolders(extraFolder),
+            if (canMoveUp(folderName, contentRoot, chainEnd)) {
+                Path questionFolder = findByName(listFolders(chainEnd),
                         folderName);
                 pathsBefore.add(questionFolder);
                 pathsAfter.add(contentRoot.resolve(folderName));
@@ -392,12 +436,12 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
 
         moveFolders(pathsBefore, pathsAfter);
-        boolean removed = removeIfEmpty(extraFolder);
+        boolean removed = removeEmptyChain(chainEnd, extraFolder);
         submission.getAnomalies().removeAll(sameMove);
 
         String description = describeMove(namesBefore, namesAfter,
-                extraFolder, removed);
-        String valueBefore = showFolder(workingCopy, extraFolder)
+                showFolder(contentRoot, chainEnd), removed);
+        String valueBefore = showFolder(workingCopy, chainEnd)
                 + joinNames(namesBefore);
         String valueAfter = showFolder(workingCopy, contentRoot)
                 + joinNames(namesAfter);
@@ -409,13 +453,13 @@ public class FolderHierarchyFixer extends AbstractFixer {
 
     // Finds the other missing folder problems this move also fixes.
     private List<Anomaly> findSameMove(Submission submission,
-            Anomaly anomaly, Path contentRoot, Path extraFolder,
+            Anomaly anomaly, Path contentRoot, Path chainEnd,
             List<String> folderNames) throws FixException {
         List<Anomaly> sameMove = new ArrayList<>();
         for (Anomaly other : submission.getAnomalies()) {
             boolean movedToo = isOtherMissingFolder(other, anomaly)
                     && isMovedToo(submission, other, contentRoot,
-                    extraFolder, folderNames);
+                    chainEnd, folderNames);
             if (movedToo) {
                 sameMove.add(other);
             }
@@ -432,20 +476,22 @@ public class FolderHierarchyFixer extends AbstractFixer {
 
     // Says whether the folder another problem is about moves up too.
     private boolean isMovedToo(Submission submission, Anomaly other,
-            Path contentRoot, Path extraFolder, List<String> folderNames)
+            Path contentRoot, Path chainEnd, List<String> folderNames)
             throws FixException {
         String folderName = findMissingFolderName(submission, other,
                 contentRoot, folderNames);
         return folderName != null
-                && canMoveUp(folderName, contentRoot, extraFolder);
+                && canMoveUp(folderName, contentRoot, chainEnd);
     }
 
-    // Says in words what moveUp did.
+    // Says in words what moveUp did. The extra folders are shown from the
+    // content root down, such as src/ or jy/Desktop/ping.lee.2023/.
     private String describeMove(List<String> namesBefore,
-            List<String> namesAfter, Path extraFolder, boolean removed) {
+            List<String> namesAfter, String extraFolders, boolean removed) {
+        int pathEnd = extraFolders.length() - FOLDER_SEPARATOR.length();
+        String folderPath = extraFolders.substring(0, pathEnd);
         String description = "Moved " + joinNames(namesBefore)
-                + " up out of the extra " + extraFolder.getFileName()
-                + " folder";
+                + " up out of the extra " + folderPath + " folder";
         if (!namesBefore.equals(namesAfter)) {
             description += ", named " + joinNames(namesAfter);
         }
@@ -457,7 +503,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
         return description;
     }
 
-    // Moves the question folders back into the extra folder.
+    // Moves the question folders back down where they were: into the
+    // extra folder, or to the end of its chain, which is made again.
     private void moveBackDown(FixRecord fixRecord) throws FixException {
         if (!(fixRecord instanceof FolderMoveRecord)) {
             throw new FixException("This fix did not keep the folders it "
@@ -485,20 +532,123 @@ public class FolderHierarchyFixer extends AbstractFixer {
             movedFolders.add(movedFolder);
         }
 
-        Path extraName = fixRecord.getOriginalPath().getFileName();
-        Path extraFolder = contentRoot.resolve(extraName);
+        // Where the folders were, below the content root of that time
+        List<Path> pathsBefore = moveRecord.getPathsBefore();
+        Path placeBefore = pathsBefore.get(0).getParent();
+        Path relativePlace = fixRecord.getFixedPath().relativize(placeBefore);
+        if (isInsideItself(relativePlace, movedFolders)) {
+            moveBackInside(movedFolders.get(0), contentRoot, relativePlace,
+                    pathsBefore.get(0).getFileName());
+            return;
+        }
+
+        Path extraFolder = contentRoot.resolve(relativePlace);
         try {
             Files.createDirectories(extraFolder);
         } catch (IOException exception) {
-            throw new FixException("Could not make the " + extraName
+            throw new FixException("Could not make the " + relativePlace
                     + " folder again: " + exception.getMessage(), exception);
         }
 
         List<Path> targets = new ArrayList<>();
-        for (Path pathBefore : moveRecord.getPathsBefore()) {
+        for (Path pathBefore : pathsBefore) {
             targets.add(extraFolder.resolve(pathBefore.getFileName()));
         }
         moveFolders(movedFolders, targets);
+    }
+
+    // Says whether a fix moved one question folder up out of a folder of
+    // its own name, such as Q1/Q1.
+    private boolean isInsideItself(Path relativePlace,
+            List<Path> movedFolders) {
+        boolean oneFolderOneLevel = movedFolders.size() == 1
+                && relativePlace.getNameCount() == 1;
+        if (!oneFolderOneLevel) {
+            return false;
+        }
+
+        String placeName = relativePlace.toString();
+        String movedName = movedFolders.get(0).getFileName().toString();
+        return placeName.equalsIgnoreCase(movedName);
+    }
+
+    // Moves a question folder back into a folder of its own name: through
+    // a hidden step name, because the outer folder takes its name.
+    private void moveBackInside(Path movedFolder, Path contentRoot,
+            Path outerName, Path innerName) throws FixException {
+        String stepName = STEP_PREFIX + movedFolder.getFileName();
+        Path step = contentRoot.resolve(stepName);
+        Path outerFolder = contentRoot.resolve(outerName);
+        moveFolder(movedFolder, step);
+        try {
+            Files.createDirectory(outerFolder);
+        } catch (IOException exception) {
+            FixException failure = new FixException("Could not make the "
+                    + outerName + " folder again: " + exception.getMessage(),
+                    exception);
+            List<Path> stepList = singleList(step);
+            putBack(stepList, singleList(movedFolder), stepList.size(),
+                    failure);
+            throw failure;
+        }
+        moveFolder(step, outerFolder.resolve(innerName));
+    }
+
+    // Moves a question folder up out of a folder of its own name, such as
+    // Q1/Q1, through a hidden step name, because both have one name. The
+    // outer folder is then removed with the compiled files it held.
+    private FixRecord moveOutOfItself(Submission submission, Anomaly anomaly,
+            Path outerFolder) throws FixException {
+        Path workingCopy = submission.getWorkingCopyPath();
+        Path contentRoot = outerFolder.getParent();
+        String folderName = outerFolder.getFileName().toString();
+        Path innerFolder = findNestedQuestionFolder(outerFolder, folderName);
+        Path innerName = innerFolder.getFileName();
+        Path step = contentRoot.resolve(STEP_PREFIX + folderName);
+        Path target = contentRoot.resolve(folderName);
+
+        moveFolder(outerFolder, step);
+        try {
+            moveFolder(step.resolve(innerName), target);
+        } catch (FixException exception) {
+            List<Path> stepList = singleList(step);
+            putBack(stepList, singleList(outerFolder), stepList.size(),
+                    exception);
+            throw exception;
+        }
+        // Only compiled files can be left, such as the provided class
+        // files, which FixStage copies into the moved folder again
+        removeLeftOver(step);
+
+        String shownBefore = showFolder(workingCopy, outerFolder)
+                + innerName;
+        String shownAfter = showFolder(workingCopy, contentRoot)
+                + folderName;
+        String description = "Moved " + innerName + " up out of the "
+                + folderName + " folder it was inside.";
+        return new FolderMoveRecord(anomaly, NAME, description, workingCopy,
+                outerFolder, contentRoot, shownBefore, shownAfter,
+                singleList(outerFolder.resolve(innerName)),
+                singleList(target));
+    }
+
+    // Returns a new list holding one path.
+    private List<Path> singleList(Path path) {
+        List<Path> paths = new ArrayList<>();
+        paths.add(path);
+        return paths;
+    }
+
+    // Removes the folders of a chain that are empty after a move, from its
+    // end up to the extra folder, and says whether the extra folder went.
+    private boolean removeEmptyChain(Path chainEnd, Path extraFolder) {
+        Path folder = chainEnd;
+        boolean removed = removeIfEmpty(folder);
+        while (removed && !folder.equals(extraFolder)) {
+            folder = folder.getParent();
+            removed = removeIfEmpty(folder);
+        }
+        return removed && folder.equals(extraFolder);
     }
 
     // Makes every missing question folder whose answer file is loose in
@@ -689,34 +839,30 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
     }
 
-    // Returns the one folder that is not a question folder but holds one.
+    // Returns the one folder of the content root that leads to question
+    // folders, by the rule the validators use.
     private Path findExtraFolder(Path contentRoot,
             List<String> folderNames) throws FixException {
-        List<Path> extraFolders = new ArrayList<>();
-        for (Path folder : listFolders(contentRoot)) {
-            String name = folder.getFileName().toString();
-            if (!isQuestionFolderName(name, folderNames)
-                    && holdsQuestionFolder(listFolders(folder),
-                    folderNames)) {
-                extraFolders.add(folder);
-            }
+        try {
+            return AnswerFolderRule.findExtraFolder(contentRoot, folderNames);
+        } catch (IOException exception) {
+            throw new FixException("Could not list "
+                    + contentRoot.getFileName() + ": "
+                    + exception.getMessage(), exception);
         }
-
-        if (extraFolders.size() != 1) {
-            return null;
-        }
-        return extraFolders.get(0);
     }
 
-    // Says whether a name is a question folder name, in any case.
-    private boolean isQuestionFolderName(String name,
-            List<String> folderNames) {
-        for (String folderName : folderNames) {
-            if (folderName.equalsIgnoreCase(name)) {
-                return true;
-            }
+    // Returns the folder at the end of the extra folder's chain that holds
+    // the question folders, the extra folder itself when it holds them.
+    private Path findChainEnd(Path extraFolder, List<String> folderNames)
+            throws FixException {
+        try {
+            return AnswerFolderRule.findChainEnd(extraFolder, folderNames);
+        } catch (IOException exception) {
+            throw new FixException("Could not list "
+                    + extraFolder.getFileName() + ": "
+                    + exception.getMessage(), exception);
         }
-        return false;
     }
 
     // Moves folders or files to new paths, putting them back if a move
@@ -738,7 +884,7 @@ public class FolderHierarchyFixer extends AbstractFixer {
             int movedCount, FixException failure) {
         for (int i = 0; i < movedCount; i++) {
             try {
-                Files.move(targets.get(i), folders.get(i));
+                FileUtils.moveWithRetry(targets.get(i), folders.get(i));
             } catch (IOException exception) {
                 failure.addSuppressed(exception);
             }
@@ -755,10 +901,22 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
 
         try {
-            Files.move(folder, target);
+            FileUtils.moveWithRetry(folder, target);
         } catch (IOException exception) {
             throw new FixException("Could not move " + folder.getFileName()
                     + ": " + exception.getMessage(), exception);
+        }
+    }
+
+    // Removes the hidden step folder and the compiled files left in it.
+    // One that cannot be removed is harmless: no check or grading looks
+    // at a hidden folder.
+    private boolean removeLeftOver(Path stepFolder) {
+        try {
+            FileUtils.deleteDirectory(stepFolder);
+            return true;
+        } catch (IOException exception) {
+            return false;
         }
     }
 
@@ -791,7 +949,7 @@ public class FolderHierarchyFixer extends AbstractFixer {
         try {
             for (Path entry : entries) {
                 Path target = to.resolve(entry.getFileName());
-                Files.move(entry, target);
+                FileUtils.moveWithRetry(entry, target);
                 moved.add(target);
             }
         } catch (IOException exception) {
@@ -806,7 +964,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
             IOException failure) {
         for (Path entry : moved) {
             try {
-                Files.move(entry, from.resolve(entry.getFileName()));
+                Path original = from.resolve(entry.getFileName());
+                FileUtils.moveWithRetry(entry, original);
             } catch (IOException exception) {
                 failure.addSuppressed(exception);
             }

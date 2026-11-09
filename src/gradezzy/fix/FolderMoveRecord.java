@@ -18,6 +18,8 @@ import gradezzy.model.Anomaly;
 /**
  * A fix record that also keeps each question folder or file that was
  * moved, and each question folder the fix made.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class FolderMoveRecord extends FixRecord {
 
@@ -120,8 +122,8 @@ public class FolderMoveRecord extends FixRecord {
         for (int i = 0; i < pathsAfter.size(); i++) {
             Path movedFolder = pathsAfter.get(i);
             if (pathAfter.startsWith(movedFolder)) {
-                return pathsBefore.get(i).resolve(
-                        movedFolder.relativize(pathAfter));
+                Path insideMoved = movedFolder.relativize(pathAfter);
+                return pathsBefore.get(i).resolve(insideMoved);
             }
         }
         return pathAfter;

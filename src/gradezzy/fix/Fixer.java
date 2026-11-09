@@ -15,6 +15,8 @@ import gradezzy.model.Submission;
 
 /**
  * One automatic correction of a common submission error.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public interface Fixer {
 

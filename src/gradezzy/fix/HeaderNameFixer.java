@@ -23,9 +23,12 @@ import gradezzy.model.AnomalyType;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.util.TextUtils;
+import gradezzy.validation.HeaderNameValidator;
 
 /**
  * Writes the student's name and email into a blank file header.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class HeaderNameFixer extends AbstractFixer {
 
@@ -130,27 +133,23 @@ public class HeaderNameFixer extends AbstractFixer {
         String original = new String(originalBytes, charset);
         String withName = fillValue(original, nameLabel, name);
         String filled = fillValue(withName, emailLabel, email);
-        if (filled.equals(original) || !hasValue(filled, nameLabel)
-                || !hasValue(filled, emailLabel)) {
+        boolean notCompleted = filled.equals(original)
+                || !hasValue(filled, nameLabel)
+                || !hasValue(filled, emailLabel);
+        if (notCompleted) {
             throw new FixException("The header of " + relativePath
                     + " could not be completed from the roster, so it was "
                     + "left for you to fill in.");
         }
 
         String written = name + " and " + email;
-        String before = showValue(original, nameLabel)
-                + VALUE_SEPARATOR + showValue(original, emailLabel);
-        String after = showValue(filled, nameLabel)
-                + VALUE_SEPARATOR + showValue(filled, emailLabel);
         if (withName.equals(original)) {
             written = email;
-            before = showValue(original, emailLabel);
-            after = showValue(filled, emailLabel);
         } else if (filled.equals(withName)) {
             written = name;
-            before = showValue(original, nameLabel);
-            after = showValue(filled, nameLabel);
         }
+        String before = showChanged(original, original, withName, filled);
+        String after = showChanged(filled, original, withName, filled);
 
         Path backupPath = backup(submission, file);
         writeFile(file, filled, charset);
@@ -171,10 +170,10 @@ public class HeaderNameFixer extends AbstractFixer {
     public void undo(FixRecord fixRecord) throws FixException {
         Path backupPath = fixRecord.getBackupPath();
         Path fixedPath = fixRecord.getFixedPath();
+        String folderName = fixedPath.getParent().getFileName().toString();
+        String fileName = fixedPath.getFileName().toString();
         Path file = findFile(fixRecord.getWorkingCopy(),
-                fixRecord.getAnomaly().getUsername(),
-                fixedPath.getParent().getFileName().toString(),
-                fixedPath.getFileName().toString());
+                fixRecord.getAnomaly().getUsername(), folderName, fileName);
 
         try {
             Files.copy(backupPath, file,
@@ -228,6 +227,21 @@ public class HeaderNameFixer extends AbstractFixer {
                 + text.substring(lineEnd);
     }
 
+    // Shows in one text the header lines the fix changed: the name line,
+    // the email line or both, as they read in the given text.
+    private String showChanged(String text, String original,
+            String withName, String filled) {
+        String nameLabel = config.getString(ConfigKeys.HEADER_NAME_LABEL);
+        String emailLabel = config.getString(ConfigKeys.HEADER_EMAIL_LABEL);
+        if (withName.equals(original)) {
+            return showValue(text, emailLabel);
+        } else if (filled.equals(withName)) {
+            return showValue(text, nameLabel);
+        }
+        return showValue(text, nameLabel) + VALUE_SEPARATOR
+                + showValue(text, emailLabel);
+    }
+
     // Shows one header line from its label on, such as Name: (blank).
     private String showValue(String text, String label) {
         int valueStart = findValueStart(text, label);
@@ -235,8 +249,8 @@ public class HeaderNameFixer extends AbstractFixer {
             return label + SPACE + BLANK_VALUE;
         }
 
-        String value = text.substring(valueStart,
-                findLineEnd(text, valueStart)).trim();
+        int lineEnd = findLineEnd(text, valueStart);
+        String value = text.substring(valueStart, lineEnd).trim();
         if (value.isEmpty()) {
             value = BLANK_VALUE;
         }
@@ -249,21 +263,23 @@ public class HeaderNameFixer extends AbstractFixer {
         if (valueStart < 0) {
             return false;
         }
-        return !TextUtils.isBlank(text.substring(valueStart,
-                findLineEnd(text, valueStart)));
+        int lineEnd = findLineEnd(text, valueStart);
+        String value = text.substring(valueStart, lineEnd);
+        return !TextUtils.isBlank(value);
     }
 
-    // Returns where the value after the label starts, or -1 if none.
+    // Returns where the value after the label starts, or -1 if none. The
+    // label matches as the validator reads it, so Name : counts too.
     private int findValueStart(String text, String label) {
         int scanLines = config.getInt(ConfigKeys.HEADER_SCAN_LINES);
         int lineStart = 0;
         for (int lineNumber = 0; lineNumber < scanLines
                 && lineStart < text.length(); lineNumber++) {
             int lineEnd = findLineEnd(text, lineStart);
-            int labelPosition = text.substring(lineStart, lineEnd)
-                    .indexOf(label);
-            if (labelPosition >= 0) {
-                return lineStart + labelPosition + label.length();
+            String line = text.substring(lineStart, lineEnd);
+            int valueStart = HeaderNameValidator.findValueStart(line, label);
+            if (valueStart >= 0) {
+                return lineStart + valueStart;
             }
             lineStart = lineEnd + 1;
         }

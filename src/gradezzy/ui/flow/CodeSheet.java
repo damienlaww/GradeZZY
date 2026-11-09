@@ -45,6 +45,8 @@ import gradezzy.ui.backend.Capability;
 
 /**
  * Builds the code and test output sheet.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class CodeSheet {
 
@@ -94,6 +96,40 @@ public final class CodeSheet {
     // The students are counted from 1, one more than their index
     private static final int FIRST_STUDENT_NUMBER = 1;
 
+    // The width of one digit of the line numbers, in IBM Plex Mono 12px
+    private static final double DIGIT_WIDTH = 7.5;
+
+    // The space around the line numbers, left and right together
+    private static final double GUTTER_PADDING = 26.0;
+
+    // The gap between the title row, the issue and the panels
+    private static final double BODY_GAP = Parts.GAP + Parts.GAP_SMALL;
+
+    // Comes between a mark and the most it can be, such as "3 / 5"
+    private static final String OUT_OF = " / ";
+
+    // Comes between the parts of a question's grey line
+    private static final String DETAIL_DOT = "  ·  ";
+
+    // Separates the folder and the file of an answer's path
+    private static final String PATH_SEPARATOR = "/";
+
+    // Ends each line of the code and of the line numbers
+    private static final String LINE_END = "\n";
+
+    // Tells split to keep empty lines at the end, so each one is counted
+    private static final int KEEP_EMPTY_LINES = -1;
+
+    // Formats a line number right-aligned to a width put between these
+    private static final String NUMBER_FORMAT_START = "%";
+    private static final String NUMBER_FORMAT_END = "d";
+
+    // The extra line after the last number
+    private static final String EXTRA_LINE = " ";
+
+    // The name of the thread that runs a question's tests again
+    private static final String RERUN_THREAD = "gradezzy-rerun";
+
     // The window that shows the sheet
     private final FlowWindow window;
 
@@ -102,12 +138,6 @@ public final class CodeSheet {
 
     // The answer file of the question shown
     private final TextArea code = new TextArea();
-
-    // The width of one digit of the line numbers, in IBM Plex Mono 12px
-    private static final double DIGIT_WIDTH = 7.5;
-
-    // The space around the line numbers, left and right together
-    private static final double GUTTER_PADDING = 26.0;
 
     // The line numbers beside the code, scrolled with it
     private final TextArea lineNumbers = new TextArea();
@@ -223,24 +253,7 @@ public final class CodeSheet {
 
     // Builds the sheet and shows a question.
     private Node build(String questionId) {
-        Button close = new Button();
-        close.setGraphic(Parts.icon(Parts.CLOSE, CLOSE_SIZE));
-        close.getStyleClass().addAll("flat", "icon-button");
-        close.setOnAction(event -> window.closeSheet());
-        Parts.tip(close, "Close");
-        Label subtitle = Parts.muted("The files after any fixes; the "
-                + "original zip is unchanged. Pick a question on the left.");
-        subtitle.getStyleClass().add("small-text");
-        VBox titles = new VBox(Parts.GAP_TINY, Parts.title(
-                Students.name(submission) + ": code and test output"),
-                subtitle);
-        HBox top = Parts.row(Parts.GAP,
-                new Node[] {titles, Parts.grow(), close});
-        if (group.size() >= MIN_STEPPED_GROUP) {
-            // The stepper goes just before the close button
-            int closePlace = top.getChildren().size() - 1;
-            top.getChildren().add(closePlace, createStepper());
-        }
+        HBox top = createTop();
 
         // Each panel keeps a gap from the line between them, so the code
         // and the output read as two separate boxes
@@ -256,7 +269,7 @@ public final class CodeSheet {
         HBox middle = new HBox(COLUMN_GAP, createQuestionList(), panels);
         VBox.setVgrow(middle, Priority.ALWAYS);
 
-        VBox body = new VBox(Parts.GAP + Parts.GAP_SMALL, top, middle);
+        VBox body = new VBox(BODY_GAP, top, middle);
         if (issue != null) {
             body.getChildren().add(1, issue);
         }
@@ -266,6 +279,30 @@ public final class CodeSheet {
                 -> fitToScene(body, after));
         selectFirst(questionId);
         return body;
+    }
+
+    // Builds the title row: the titles, the stepper of an answer group
+    // and the close button.
+    private HBox createTop() {
+        Button close = new Button();
+        close.setGraphic(Parts.icon(Parts.CLOSE, CLOSE_SIZE));
+        close.getStyleClass().addAll("flat", "icon-button");
+        close.setOnAction(event -> window.closeSheet());
+        Parts.tip(close, "Close");
+        Label subtitle = Parts.muted("The files after any fixes; the "
+                + "original zip is unchanged. Pick a question on the left.");
+        subtitle.getStyleClass().add("small-text");
+        Label title = Parts.title(Students.name(submission)
+                + ": code and test output");
+        VBox titles = new VBox(Parts.GAP_TINY, title, subtitle);
+        HBox top = Parts.row(Parts.GAP,
+                new Node[] {titles, Parts.grow(), close});
+        if (group.size() >= MIN_STEPPED_GROUP) {
+            // The stepper goes just before the close button
+            int closePlace = top.getChildren().size() - 1;
+            top.getChildren().add(closePlace, createStepper());
+        }
+        return top;
     }
 
     // Builds Previous, "Student 2 of 3" and Next, which step through the
@@ -345,14 +382,14 @@ public final class CodeSheet {
         String detail = "Not graded";
         Tone tone = Tone.NEUTRAL;
         if (result != null) {
-            detail = Parts.mark(result.getScore()) + " / "
+            detail = Parts.mark(result.getScore()) + OUT_OF
                     + Parts.mark(question.getMaxScore());
             int all = result.getTestCaseResults().size();
             if (all > 0) {
-                detail += "  ·  " + countPassed(result) + " of " + all
+                detail += DETAIL_DOT + countPassed(result) + " of " + all
                         + " tests";
             } else if (Students.didNotCompile(result)) {
-                detail += "  ·  did not compile";
+                detail += DETAIL_DOT + "did not compile";
             }
             tone = toneOf(result.getScore(), question.getMaxScore());
         }
@@ -405,15 +442,16 @@ public final class CodeSheet {
     // Shows one number per line of the code, right-aligned, and sizes
     // the column to the widest number.
     private void showLineNumbers(String text) {
-        int lines = text.split("\n", -1).length;
+        int lines = text.split(LINE_END, KEEP_EMPTY_LINES).length;
         int digits = String.valueOf(lines).length();
+        String format = NUMBER_FORMAT_START + digits + NUMBER_FORMAT_END;
         String numbers = "";
         for (int line = 1; line <= lines; line++) {
-            numbers += String.format("%" + digits + "d", line) + "\n";
+            numbers += String.format(format, line) + LINE_END;
         }
         // One more line, so the numbers still reach the last line when
         // the code has a horizontal scroll bar
-        numbers += " ";
+        numbers += EXTRA_LINE;
         lineNumbers.setText(numbers);
         double width = digits * DIGIT_WIDTH + GUTTER_PADDING;
         lineNumbers.setMinWidth(width);
@@ -536,7 +574,8 @@ public final class CodeSheet {
         rerun.setDisable(false);
         rerun.setText("Run tests again");
 
-        String path = question.getFolderName() + "/" + question.getFileName();
+        String path = question.getFolderName() + PATH_SEPARATOR
+                + question.getFileName();
         file.setText(path);
         String text = window.getBackend().readSourceFile(submission, path);
         if (text == null || text.isEmpty()) {
@@ -552,8 +591,9 @@ public final class CodeSheet {
         String out = "No output was recorded for " + questionId + ". The "
                 + "question may not have been graded, for example because "
                 + "its file is missing.";
-        if (result != null && result.getOutput() != null
-                && !result.getOutput().isEmpty()) {
+        boolean hasOutput = result != null && result.getOutput() != null
+                && !result.getOutput().isEmpty();
+        if (hasOutput) {
             out = result.getOutput();
         }
         showOutput(result, "From grading", Tone.NEUTRAL, out);
@@ -581,7 +621,7 @@ public final class CodeSheet {
                 + "the tests. This takes as long as grading one question.");
         task.setOnSucceeded(event -> rerunDone(task));
         task.setOnFailed(event -> rerunFailed(task));
-        Thread worker = new Thread(task, "gradezzy-rerun");
+        Thread worker = new Thread(task, RERUN_THREAD);
         worker.setDaemon(true);
         worker.start();
     }
@@ -615,8 +655,9 @@ public final class CodeSheet {
         }
         finishRun();
         String reason = "The tests could not be run.";
-        if (task.getException() != null
-                && task.getException().getMessage() != null) {
+        boolean hasReason = task.getException() != null
+                && task.getException().getMessage() != null;
+        if (hasReason) {
             reason = task.getException().getMessage();
         }
         showOutput(null, "Could not run", Tone.BAD, reason);

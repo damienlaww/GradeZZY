@@ -41,6 +41,10 @@ public final class JavaTokenizer {
     // The text that ends a line
     private static final String NEW_LINE = "\n";
 
+    // The characters that end a line, which also end an open literal
+    private static final char LINE_FEED = '\n';
+    private static final char CARRIAGE_RETURN = '\r';
+
     // The quote around a string literal
     private static final char DOUBLE_QUOTE = '"';
 
@@ -223,31 +227,54 @@ public final class JavaTokenizer {
         return markerStart + marker.length();
     }
 
-    // Returns where a string or char literal ends, after its closing quote.
+    // Returns where a string or char literal ends, after its closing
+    // quote. A literal left open stops at the end of its line, as javac
+    // stops it, so it does not swallow the rest of the file.
     private static int findLiteralEnd(String source, int start) {
         char quote = source.charAt(start);
         int end = start + ONE_CHARACTER;
 
         while (isInsideLiteral(source, end, quote)) {
-            if (source.charAt(end) == BACKSLASH) {
+            int next = end + ONE_CHARACTER;
+            boolean escapes = source.charAt(end) == BACKSLASH
+                    && !isLineEnd(source, next);
+            if (escapes) {
                 end++;
             }
 
             end++;
         }
 
-        int afterQuote = end + ONE_CHARACTER;
-        return Math.min(afterQuote, source.length());
+        boolean closed = end < source.length()
+                && source.charAt(end) == quote;
+        if (!closed) {
+            return Math.min(end, source.length());
+        }
+        return end + ONE_CHARACTER;
     }
 
     // Says whether a position is still inside a literal: before the end
-    // of the source and not its closing quote.
+    // of the source and of its line, and not its closing quote.
     private static boolean isInsideLiteral(String source, int position,
             char quote) {
         if (position >= source.length()) {
             return false;
         }
+        if (isLineEnd(source, position)) {
+            return false;
+        }
         return source.charAt(position) != quote;
+    }
+
+    // Says whether the character at a position ends a line.
+    private static boolean isLineEnd(String source, int position) {
+        if (position >= source.length()) {
+            return false;
+        }
+        char character = source.charAt(position);
+        boolean lineFeed = character == LINE_FEED;
+        boolean carriageReturn = character == CARRIAGE_RETURN;
+        return lineFeed || carriageReturn;
     }
 
     // Returns where a number such as 42, 3.14 or 10L ends.

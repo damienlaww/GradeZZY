@@ -28,6 +28,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * Compares submissions by the tokens of their source code.
+ *
+ * <p>Tier: COULD. Owner: Jun Sheng.
  */
 public class TokenSimilarityDetector implements SimilarityDetector {
 
@@ -131,14 +133,14 @@ public class TokenSimilarityDetector implements SimilarityDetector {
                 Set<String> firstAnswer = answers.get(i);
                 Set<String> secondAnswer = answers.get(j);
                 double score = jaccard(firstAnswer, secondAnswer);
+                boolean enoughCode = firstAnswer.size() >= MIN_OWN_TRIGRAMS
+                        && secondAnswer.size() >= MIN_OWN_TRIGRAMS;
 
-                if (firstAnswer.size() >= MIN_OWN_TRIGRAMS
-                        && secondAnswer.size() >= MIN_OWN_TRIGRAMS
-                        && score >= threshold) {
-                    pairs.add(new SimilarityPair(
-                            submissions.get(i).getUsername(),
-                            submissions.get(j).getUsername(),
-                            question.getId(), score));
+                if (enoughCode && score >= threshold) {
+                    String firstUsername = submissions.get(i).getUsername();
+                    String secondUsername = submissions.get(j).getUsername();
+                    pairs.add(new SimilarityPair(firstUsername,
+                            secondUsername, question.getId(), score));
                 }
             }
         }
@@ -220,8 +222,9 @@ public class TokenSimilarityDetector implements SimilarityDetector {
         Set<String> trigrams = new HashSet<>();
 
         for (int i = 0; i + TRIGRAM_LENGTH <= tokens.size(); i++) {
-            trigrams.add(TextUtils.join(TOKEN_SEPARATOR,
-                    tokens.subList(i, i + TRIGRAM_LENGTH)));
+            int end = i + TRIGRAM_LENGTH;
+            List<String> trigram = tokens.subList(i, end);
+            trigrams.add(TextUtils.join(TOKEN_SEPARATOR, trigram));
         }
 
         return trigrams;
@@ -253,11 +256,21 @@ public class TokenSimilarityDetector implements SimilarityDetector {
             SimilarityPair newPair) {
         int position = 0;
 
-        while (position < pairs.size() && pairs.get(position).getSimilarity()
-                >= newPair.getSimilarity()) {
+        while (isAtLeastAsSimilar(pairs, position, newPair)) {
             position++;
         }
 
         pairs.add(position, newPair);
+    }
+
+    // Says whether there is a pair at a position and it is at least as
+    // similar as the new pair, so the new pair goes after it.
+    private boolean isAtLeastAsSimilar(List<SimilarityPair> pairs,
+            int position, SimilarityPair newPair) {
+        if (position >= pairs.size()) {
+            return false;
+        }
+        double similarity = pairs.get(position).getSimilarity();
+        return similarity >= newPair.getSimilarity();
     }
 }

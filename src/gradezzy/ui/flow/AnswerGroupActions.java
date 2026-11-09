@@ -67,7 +67,7 @@ public class AnswerGroupActions {
     private static final int NAME_COLUMNS = 32;
 
     // The gap between a field's name and the field
-    private static final double LABEL_GAP = 4.0;
+    private static final double LABEL_GAP = Parts.GAP_TINY;
 
     // Comes between a mark and the most it can be, such as "3 / 5"
     private static final String MARK_SEPARATOR = " / ";
@@ -84,6 +84,10 @@ public class AnswerGroupActions {
     // Comes between the question and the mistake, such as "Q2b, failed
     // tests 3 and 5"
     private static final String QUESTION_SEPARATOR = ", ";
+
+    // Comes between the mistake and its count of students, such as
+    // "Q2b, failed tests 3 and 5, 4 students"
+    private static final String COUNT_SEPARATOR = ", ";
 
     // Comes between a student and their open items
     private static final String ITEMS_SEPARATOR = ": ";
@@ -140,10 +144,11 @@ public class AnswerGroupActions {
         field.setPrefColumnCount(NAME_COLUMNS);
         field.setPromptText("For example: uses < instead of <=");
         field.setAccessibleText("Name of the mistake");
-        Label about = wrapped(Parts.muted(describe(group) + ", "
+        String aboutText = describe(group) + COUNT_SEPARATOR
                 + Parts.plural(group.getUsernames().size(), "student")
                 + ". The name shows on the group, in the common mistakes "
-                + "export and in each student's JSON."));
+                + "export and in each student's JSON.";
+        Label about = wrapped(Parts.muted(aboutText));
         Button cancel = Parts.secondary("Cancel", () -> window.closeSheet());
         Button save = Parts.primary("Save name");
         save.setOnAction(event -> saveName(group, field));
@@ -205,9 +210,10 @@ public class AnswerGroupActions {
         wrapped(problem);
         showProblem(problem, "");
 
-        Label about = wrapped(Parts.muted(group.getTitle() + ". Every "
-                + "student below gets the same new mark for " + questionId
-                + ", with the same reason. You can undo it."));
+        String aboutText = group.getTitle() + ". Every student below gets "
+                + "the same new mark for " + questionId + ", with the same "
+                + "reason. You can undo it.";
+        Label about = wrapped(Parts.muted(aboutText));
         Button cancel = Parts.secondary("Cancel", () -> window.closeSheet());
         Button save = Parts.primary("Change " + Parts.plural(count, "mark"));
         save.setOnAction(event -> saveMarks(run, group, listed, question,
@@ -282,6 +288,15 @@ public class AnswerGroupActions {
         }
         window.closeSheet();
         int leftCount = listed.size() - still.size();
+        notifyMarks(run, leftCount, firstProblem, changed, changes, counts);
+        onChanged.run();
+    }
+
+    // Says how many marks the group change made, with one Undo for all
+    // of them when it made any.
+    private void notifyMarks(GradingRun run, int leftCount,
+            String firstProblem, List<Submission> changed,
+            List<ScoreAdjustment> changes, List<Integer> counts) {
         String saving = "";
         if (!changed.isEmpty()) {
             saving = window.getBackend().describeMarkSaving();
@@ -291,11 +306,10 @@ public class AnswerGroupActions {
                 + leftOut(leftCount) + firstProblem + saving;
         if (changed.isEmpty()) {
             window.notify(message);
-        } else {
-            window.notify(message, "Undo",
-                    () -> undoMarks(run, changed, changes, counts));
+            return;
         }
-        onChanged.run();
+        window.notify(message, "Undo",
+                () -> undoMarks(run, changed, changes, counts));
     }
 
     // Puts back each group mark change that is still the student's
@@ -510,8 +524,8 @@ public class AnswerGroupActions {
         if (items.isEmpty()) {
             return text;
         }
-        return text + ITEMS_SEPARATOR + TextUtils.join(ITEM_SEPARATOR,
-                items);
+        String joined = TextUtils.join(ITEM_SEPARATOR, items);
+        return text + ITEMS_SEPARATOR + joined;
     }
 
     // ---------------------------------------------------------- compare

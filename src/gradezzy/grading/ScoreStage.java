@@ -87,9 +87,10 @@ public class ScoreStage implements GradingStage {
         }
 
         for (Question question : assessment.getQuestions()) {
-            if (TesterFile.findFor(context.getTesters(),
-                    question.getId()) == null
-                    && question.getMaxScore() > 0) {
+            boolean noTester = TesterFile.findFor(context.getTesters(),
+                    question.getId()) == null;
+            boolean worthMarks = question.getMaxScore() > 0;
+            if (noTester && worthMarks) {
                 flagMissingTester(submission, question, context);
             }
 

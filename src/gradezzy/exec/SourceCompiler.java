@@ -37,6 +37,12 @@ public class SourceCompiler {
         "-J-Dsun.stdout.encoding=UTF-8", "-J-Dsun.stderr.encoding=UTF-8"
     };
 
+    // javac writes its messages in English whatever the computer's
+    // language, so "error: " can be found in them and grouped by Statistics
+    private static final String[] ENGLISH_OPTIONS = {
+        "-J-Duser.language=en", "-J-Duser.country=US"
+    };
+
     // The application settings
     private final AppConfig config;
 
@@ -69,8 +75,11 @@ public class SourceCompiler {
         }
 
         List<String> command = new ArrayList<>();
-        command.add(config.getString(ConfigKeys.JAVAC_COMMAND));
+        // The bare word javac means the javac of the JDK running GradeZZY
+        command.add(JdkCommand.resolve(
+                config.getString(ConfigKeys.JAVAC_COMMAND)));
         command.addAll(Arrays.asList(UTF8_OUTPUT_OPTIONS));
+        command.addAll(Arrays.asList(ENGLISH_OPTIONS));
         command.add(CLASSPATH_OPTION);
         command.add(CURRENT_FOLDER);
         command.addAll(sourceFileNames);

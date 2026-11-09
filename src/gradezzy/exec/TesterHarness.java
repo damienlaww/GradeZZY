@@ -41,6 +41,21 @@ public final class TesterHarness {
      */
     public static final String FINISHED_LINE = "GradeZZY: tester finished";
 
+    /**
+     * The marked line printed just before a run ends with CRASH_EXIT_CODE.
+     * A student's System.exit(3) never prints it, so TesterRunner can tell
+     * that exit from a real crash of the tester.
+     */
+    public static final String CRASHED_LINE = "GradeZZY: tester crashed";
+
+    /**
+     * The marked line printed instead of CRASHED_LINE when the case to
+     * skip threw outside the tester's try block, so the tester stopped
+     * there and the cases after it were not run.
+     */
+    public static final String SKIP_FAILED_LINE =
+            "GradeZZY: skipped case stopped the tester";
+
     // Exit code of a run that reached the end of the tester
     private static final int SUCCESS_EXIT_CODE = 0;
 
@@ -66,6 +81,12 @@ public final class TesterHarness {
     // Milliseconds in a second
     private static final long MILLIS_PER_SECOND = 1000;
 
+    // The most causes of a crash looked through for a skipped case
+    private static final int MAX_CAUSE_DEPTH = 100;
+
+    // The name of the method that starts the tester
+    private static final String MAIN_METHOD = "main";
+
     // Position of the tester class name in the arguments
     private static final int TESTER_ARGUMENT = 0;
 
@@ -87,6 +108,32 @@ public final class TesterHarness {
     }
 
     /**
+     * Says whether a tester line is the header of a test case: the header
+     * marker, then optional spaces, then a digit, as in "Test 1: ..." or
+     * "Test1:". A banner such as "Testing compress" is not a header.
+     * TrustedPrintStream and TesterOutputScoreParser both use this, so
+     * they count the same cases.
+     *
+     * @param line the line, without its line break
+     * @param headerMarker the setting grading.test.header.marker
+     * @return true if the line starts a test case
+     */
+    public static boolean isCaseHeader(String line, String headerMarker) {
+        String text = line.trim();
+        if (!text.startsWith(headerMarker)) {
+            return false;
+        }
+
+        int index = headerMarker.length();
+        while (index < text.length()
+                && Character.isWhitespace(text.charAt(index))) {
+            index++;
+        }
+        return index < text.length()
+                && Character.isDigit(text.charAt(index));
+    }
+
+    /**
      * Reads the token, then runs the tester named in the first argument.
      *
      * @param args the tester class name, the most bytes of student output
@@ -101,8 +148,9 @@ public final class TesterHarness {
         // Started before any student code, and a daemon, so it never
         // keeps the program alive by itself
         long limitSeconds = Long.parseLong(args[TIME_LIMIT_ARGUMENT]);
-        Thread watchdog = new Thread(new HarnessWatchdog(
-                (limitSeconds + GRACE_SECONDS) * MILLIS_PER_SECOND));
+        long watchdogMillis = (limitSeconds + GRACE_SECONDS)
+                * MILLIS_PER_SECOND;
+        Thread watchdog = new Thread(new HarnessWatchdog(watchdogMillis));
         watchdog.setDaemon(true);
         watchdog.start();
 
@@ -115,17 +163,13 @@ public final class TesterHarness {
         // code runs later, after the marking stream is in place
         Class<?> tester = Class.forName(args[TESTER_ARGUMENT], false,
                 TesterHarness.class.getClassLoader());
-        List<Integer> skippedCases = new ArrayList<>();
-        for (int index = FIRST_SKIPPED_ARGUMENT; index < args.length;
-                index++) {
-            skippedCases.add(Integer.valueOf(args[index]));
-        }
+        List<Integer> skippedCases = readSkippedCases(args);
         TrustedPrintStream trusted = new TrustedPrintStream(System.out,
                 token, Thread.currentThread(), tester, studentLimit,
                 args[HEADER_MARKER_ARGUMENT], skippedCases);
         System.setOut(trusted);
 
-        Method testerMain = tester.getMethod("main", String[].class);
+        Method testerMain = tester.getMethod(MAIN_METHOD, String[].class);
         try {
             testerMain.invoke(null, (Object) new String[0]);
         } catch (InvocationTargetException exception) {
@@ -135,6 +179,9 @@ public final class TesterHarness {
             endAfterCrash(trusted, error);
         }
 
+        // A last line the tester printed with print, with no line break
+        // after it, such as its total
+        trusted.endPendingLine();
         trusted.printMarked(FINISHED_LINE);
         trusted.flush();
         // halt, not exit: student threads or shutdown hooks cannot keep
@@ -143,9 +190,28 @@ public final class TesterHarness {
     }
 
     /**
+     * Reads the numbers of the test cases to skip, which follow the other
+     * arguments.
+     *
+     * @param args the arguments of the harness
+     * @return the test cases to skip, counted from 1
+     */
+    private static List<Integer> readSkippedCases(String[] args) {
+        List<Integer> skippedCases = new ArrayList<>();
+        for (int index = FIRST_SKIPPED_ARGUMENT; index < args.length;
+                index++) {
+            skippedCases.add(Integer.valueOf(args[index]));
+        }
+        return skippedCases;
+    }
+
+    /**
      * Ends the run after the tester threw: prints the stack trace as java
-     * would, then ends with CRASH_EXIT_CODE, so the case it crashed in can
-     * be skipped and the tester run again.
+     * would, then a marked line saying why, then ends with
+     * CRASH_EXIT_CODE. After CRASHED_LINE the case it crashed in can be
+     * skipped and the tester run again. After SKIP_FAILED_LINE the case
+     * was already being skipped and the skip itself stopped the tester,
+     * because its header is printed outside the case's try block.
      *
      * @param trusted the marking stream
      * @param problem what the tester threw
@@ -153,8 +219,35 @@ public final class TesterHarness {
     private static void endAfterCrash(TrustedPrintStream trusted,
             Throwable problem) {
         problem.printStackTrace();
+        trusted.endPendingLine();
+        if (causedBySkip(problem)) {
+            trusted.printMarked(SKIP_FAILED_LINE);
+        } else {
+            trusted.printMarked(CRASHED_LINE);
+        }
         trusted.flush();
         Runtime.getRuntime().halt(CRASH_EXIT_CODE);
+    }
+
+    /**
+     * Says whether a SkippedCaseException is the problem or one of its
+     * causes, so the skip itself, not student code, ended the tester.
+     *
+     * @param problem what the tester threw
+     * @return true if a skip caused it
+     */
+    private static boolean causedBySkip(Throwable problem) {
+        Throwable cause = problem;
+        int depth = 0;
+        // The depth limit stops a chain of causes that loops back on itself
+        while (cause != null && depth < MAX_CAUSE_DEPTH) {
+            if (cause instanceof SkippedCaseException) {
+                return true;
+            }
+            cause = cause.getCause();
+            depth++;
+        }
+        return false;
     }
 
     /**

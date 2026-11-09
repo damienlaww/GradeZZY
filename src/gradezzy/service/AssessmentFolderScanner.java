@@ -58,6 +58,9 @@ public final class AssessmentFolderScanner {
     // wrapped in one more folder
     private static final int ONLY_FOLDER = 1;
 
+    // The lower-case letters at the end of an id, such as the a of Q1a
+    private static final String ID_LETTERS = "[a-z]+$";
+
     // Not used: every method is static.
     private AssessmentFolderScanner() {
     }
@@ -201,11 +204,13 @@ public final class AssessmentFolderScanner {
         }
         for (Path file : files) {
             String name = file.getFileName().toString();
-            if (!Files.isRegularFile(file)
-                    || !name.toLowerCase(Locale.ROOT).endsWith(CLASS)) {
+            boolean isClassFile = Files.isRegularFile(file)
+                    && name.toLowerCase(Locale.ROOT).endsWith(CLASS);
+            if (!isClassFile) {
                 continue;
             }
-            String base = name.substring(0, name.length() - CLASS.length());
+            int baseLength = name.length() - CLASS.length();
+            String base = name.substring(0, baseLength);
             if (!Files.exists(file.resolveSibling(base + JAVA))) {
                 found.add(name);
             }
@@ -225,8 +230,10 @@ public final class AssessmentFolderScanner {
     public static List<String> findStarterFolderNames(Path starterFolder,
             List<String> questionFolders) {
         List<String> found = new ArrayList<>();
-        if (starterFolder == null || !Files.isDirectory(starterFolder)
-                || starterFolder.getFileName() == null) {
+        boolean noFolder = starterFolder == null
+                || !Files.isDirectory(starterFolder)
+                || starterFolder.getFileName() == null;
+        if (noFolder) {
             return found;
         }
         List<Path> children = null;
@@ -244,8 +251,10 @@ public final class AssessmentFolderScanner {
                 folders.add(child);
             }
         }
-        if (folders.size() == ONLY_FOLDER && !isQuestionFolder(
-                folders.get(0).getFileName().toString(), questionFolders)) {
+        boolean oneOtherFolder = folders.size() == ONLY_FOLDER
+                && !isQuestionFolder(folders.get(0).getFileName()
+                        .toString(), questionFolders);
+        if (oneOtherFolder) {
             found.add(folders.get(0).getFileName().toString());
         } else {
             found.add(starterFolder.getFileName().toString());
@@ -269,8 +278,10 @@ public final class AssessmentFolderScanner {
     public static List<Question> findQuestions(Path testersFolder,
             String testerSuffix, Path starterFolder) {
         List<Question> found = new ArrayList<>();
-        if (testersFolder == null || !Files.isDirectory(testersFolder)
-                || testerSuffix == null || testerSuffix.isEmpty()) {
+        boolean noTesters = testersFolder == null
+                || !Files.isDirectory(testersFolder)
+                || testerSuffix == null || testerSuffix.isEmpty();
+        if (noTesters) {
             return found;
         }
         String ending = testerSuffix + JAVA;
@@ -283,15 +294,19 @@ public final class AssessmentFolderScanner {
         TreeSet<String> ids = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         for (Path file : files) {
             String name = file.getFileName().toString();
-            if (Files.isRegularFile(file) && name.endsWith(ending)
-                    && name.length() > ending.length()) {
-                ids.add(name.substring(0, name.length() - ending.length()));
+            boolean isTester = Files.isRegularFile(file)
+                    && name.endsWith(ending)
+                    && name.length() > ending.length();
+            if (isTester) {
+                int idLength = name.length() - ending.length();
+                ids.add(name.substring(0, idLength));
             }
         }
         for (String id : ids) {
-            found.add(new Question(id, folderOf(id, starterFolder),
-                    id + JAVA, readMaxScore(testersFolder.resolve(id
-                    + ending))));
+            String folderName = folderOf(id, starterFolder);
+            Path tester = testersFolder.resolve(id + ending);
+            double maxScore = readMaxScore(tester);
+            found.add(new Question(id, folderName, id + JAVA, maxScore));
         }
         return found;
     }
@@ -311,12 +326,14 @@ public final class AssessmentFolderScanner {
     private static String folderOf(String id, Path starterFolder) {
         for (Path file : listOrEmpty(starterFolder)) {
             Path parent = file.getParent();
-            if (file.getFileName().toString().equalsIgnoreCase(id + JAVA)
-                    && parent != null && !parent.equals(starterFolder)) {
+            String name = file.getFileName().toString();
+            boolean isAnswerInFolder = name.equalsIgnoreCase(id + JAVA)
+                    && parent != null && !parent.equals(starterFolder);
+            if (isAnswerInFolder) {
                 return parent.getFileName().toString();
             }
         }
-        String folder = id.replaceAll("[a-z]+$", "");
+        String folder = id.replaceAll(ID_LETTERS, "");
         if (folder.isEmpty()) {
             return id;
         }
@@ -360,9 +377,11 @@ public final class AssessmentFolderScanner {
             children = Files.newDirectoryStream(folder);
             for (Path child : children) {
                 found.add(child);
-                if (depth > 1 && Files.isDirectory(child,
-                        LinkOption.NOFOLLOW_LINKS)) {
-                    found.addAll(listChildren(child, depth - 1));
+                boolean goDeeper = depth > OWN_FILES_DEPTH
+                        && Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS);
+                if (goDeeper) {
+                    int deeper = depth - 1;
+                    found.addAll(listChildren(child, deeper));
                 }
             }
         } finally {

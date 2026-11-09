@@ -11,6 +11,8 @@ package gradezzy.ui.backend;
 
 /**
  * A backend feature used by the user interface.
+ *
+ * <p>Tier: MUST.
  */
 public enum Capability {
 

@@ -15,6 +15,8 @@ import java.nio.file.Path;
 /**
  * Checks what the instructor picks before it is used. No method throws
  * an exception, whatever it is given; null is always invalid.
+ *
+ * <p>Tier: MUST. Owner: Seth.
  */
 public final class InputValidator {
 

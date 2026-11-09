@@ -183,25 +183,39 @@ public class RandomInputChecker {
 
         List<String> sentences = new ArrayList<>();
         if (different > 0) {
-            sentences.add(question.getId() + ": " + different + " of "
-                    + compared + " random inputs give a different answer "
-                    + "from the model answer, for example "
-                    + TextUtils.join(EXAMPLE_SEPARATOR, examples) + ".");
+            sentences.add(describeDifferences(question, different,
+                    compared, examples));
         }
         if (!notCalled.isEmpty()) {
-            // The same program compiled with the model answer, so the
-            // folder holds a changed method or a class named like one of
-            // Java's own, which could be there to dodge this check
-            sentences.add(question.getId() + ": "
-                    + TextUtils.join(EXAMPLE_SEPARATOR, notCalled)
-                    + " could not be called with random inputs here, "
-                    + "though it can in the model answer. Check that the "
-                    + "method is as the question asks.");
+            sentences.add(describeNotCalled(question, notCalled));
         }
         if (sentences.isEmpty()) {
             return null;
         }
         return TextUtils.join(SENTENCE_SEPARATOR, sentences);
+    }
+
+    // Says how many of the compared inputs gave a different answer, with
+    // the examples.
+    private String describeDifferences(Question question, int different,
+            int compared, List<String> examples) {
+        return question.getId() + ": " + different + " of " + compared
+                + " random inputs give a different answer from the model "
+                + "answer, for example "
+                + TextUtils.join(EXAMPLE_SEPARATOR, examples) + ".";
+    }
+
+    // Names the methods that could not be called in the student's folder.
+    // The same program compiled with the model answer, so the folder
+    // holds a changed method or a class named like one of Java's own,
+    // which could be there to dodge this check.
+    private String describeNotCalled(Question question,
+            List<String> notCalled) {
+        return question.getId() + ": "
+                + TextUtils.join(EXAMPLE_SEPARATOR, notCalled)
+                + " could not be called with random inputs here, "
+                + "though it can in the model answer. Check that the "
+                + "method is as the question asks.";
     }
 
     // Names a method with its parameter types, such as
@@ -260,12 +274,8 @@ public class RandomInputChecker {
         if (answerFile == null) {
             return;
         }
-        ModelAnswerCopy.make(modelAnswers, starterDirectory, question,
-                modelFolder);
-        List<String> sourceNames = new ArrayList<>();
-        sourceNames.add(question.getFileName());
-        ProcessResult compiled = compiler.compile(modelFolder, sourceNames);
-        if (compiled.getExitCode() != COMPILED) {
+        boolean compiled = copyAndCompile(question, modelFolder);
+        if (!compiled) {
             return;
         }
 
@@ -280,6 +290,26 @@ public class RandomInputChecker {
         String source = FileUtils.readText(answerFile);
         List<MethodSignature> methods = signatureReader.read(source,
                 classNameOf(question), starterSource);
+        addChecks(methods, modelFolder, checks);
+    }
+
+    // Copies a question's model answer into a folder and compiles it
+    // there. Returns true when it compiled.
+    private boolean copyAndCompile(Question question, Path modelFolder)
+            throws IOException, ProcessExecutionException {
+        ModelAnswerCopy.make(modelAnswers, starterDirectory, question,
+                modelFolder);
+        List<String> sourceNames = new ArrayList<>();
+        sourceNames.add(question.getFileName());
+        ProcessResult compiled = compiler.compile(modelFolder, sourceNames);
+        return compiled.getExitCode() == COMPILED;
+    }
+
+    // Makes the inputs of each method and runs the model answer on them,
+    // adding a check for each method the model answer could be called
+    // with.
+    private void addChecks(List<MethodSignature> methods, Path modelFolder,
+            List<MethodCheck> checks) throws ProcessExecutionException {
         int count = config.getInt(ConfigKeys.RANDOM_INPUTS_COUNT);
         for (MethodSignature method : methods) {
             List<List<String>> inputs = inputMaker.make(method, count);
@@ -428,14 +458,20 @@ public class RandomInputChecker {
     }
 
     // Says whether two texts are decimal numbers close enough to be the
-    // same answer.
+    // same answer. An infinite expected answer must be matched exactly,
+    // since any margin around it would hold every number.
     private boolean areCloseNumbers(String expectedText, String actualText) {
         try {
             double expected = Double.parseDouble(expectedText);
             double actual = Double.parseDouble(actualText);
+            if (Double.isInfinite(expected)) {
+                return expected == actual;
+            }
+
             double scale = Math.max(SMALLEST_SCALE, Math.abs(expected));
             double margin = scale * RELATIVE_MARGIN;
-            return Math.abs(expected - actual) <= margin;
+            double difference = expected - actual;
+            return Math.abs(difference) <= margin;
         } catch (NumberFormatException exception) {
             return false;
         }
@@ -450,8 +486,8 @@ public class RandomInputChecker {
             return;
         }
         MethodSignature method = check.getMethod();
-        String call = makeReadable(method.describeCall(
-                check.getInputs().get(index)));
+        List<String> arguments = check.getInputs().get(index);
+        String call = makeReadable(method.describeCall(arguments));
         String got = "returned " + showResult(method, actual.getText());
         if (actual.hasThrown()) {
             got = "threw " + actual.getText();

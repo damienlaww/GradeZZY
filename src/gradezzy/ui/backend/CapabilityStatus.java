@@ -11,6 +11,8 @@ package gradezzy.ui.backend;
 
 /**
  * How ready a backend feature is.
+ *
+ * <p>Tier: MUST.
  */
 public enum CapabilityStatus {
 

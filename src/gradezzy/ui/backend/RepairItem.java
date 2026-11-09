@@ -13,6 +13,8 @@ import gradezzy.model.FixStatus;
 
 /**
  * One validation finding and its proposed repair.
+ *
+ * <p>Tier: MUST.
  */
 public class RepairItem {
 

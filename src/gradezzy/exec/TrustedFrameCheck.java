@@ -71,13 +71,15 @@ class TrustedFrameCheck implements Consumer<StackWalker.StackFrame> {
      */
     private boolean isTrustedClass(Class<?> type) {
         ClassLoader loader = type.getClassLoader();
-        if (loader == null
-                || loader == ClassLoader.getPlatformClassLoader()) {
+        boolean javaClass = loader == null
+                || loader == ClassLoader.getPlatformClassLoader();
+        if (javaClass) {
             return true;
         }
         Class<?> host = type.getNestHost();
+        boolean testerOrHarness = host == tester || isHarnessClass(type);
         return loader == TesterHarness.class.getClassLoader()
-                && (host == tester || isHarnessClass(type));
+                && testerOrHarness;
     }
 
     /**

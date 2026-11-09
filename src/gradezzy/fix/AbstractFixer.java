@@ -24,10 +24,14 @@ import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.FixStatus;
 import gradezzy.model.Submission;
+import gradezzy.util.AnswerFolderRule;
 import gradezzy.util.FileUtils;
+import gradezzy.util.TextUtils;
 
 /**
  * Shared code for all fixers.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public abstract class AbstractFixer implements Fixer {
 
@@ -195,8 +199,9 @@ public abstract class AbstractFixer implements Fixer {
      * @return the folder name, such as Q1
      */
     protected String readFolderName(AppConfig config, String questionId) {
-        return config.getString(ConfigKeys.QUESTION_PREFIX + questionId
-                + ConfigKeys.QUESTION_FOLDER_SUFFIX);
+        String key = ConfigKeys.QUESTION_PREFIX + questionId
+                + ConfigKeys.QUESTION_FOLDER_SUFFIX;
+        return config.getString(key);
     }
 
     /**
@@ -207,8 +212,9 @@ public abstract class AbstractFixer implements Fixer {
      * @return the file name, such as Q1a.java
      */
     protected String readFileName(AppConfig config, String questionId) {
-        return config.getString(ConfigKeys.QUESTION_PREFIX + questionId
-                + ConfigKeys.QUESTION_FILE_SUFFIX);
+        String key = ConfigKeys.QUESTION_PREFIX + questionId
+                + ConfigKeys.QUESTION_FILE_SUFFIX;
+        return config.getString(key);
     }
 
     /**
@@ -231,30 +237,47 @@ public abstract class AbstractFixer implements Fixer {
 
     /**
      * Finds the folder that holds the question folders, by the rule the
-     * validators use: the top of the working copy when a question folder
-     * is there, else the folder named after the username, else the only
-     * folder there is, else the only top folder that holds a question
-     * folder, so an extra folder such as bin is ignored.
+     * validators and grading use (AnswerFolderRule): the one place that
+     * holds question folders, directly or through extra folders, else the
+     * folder named after the username, else the only folder there is.
      *
      * @param workingCopy the working copy
      * @param username the student's username
      * @param folderNames the question folder names
-     * @return the folder, or null if there is no single candidate
+     * @return the folder, or null if there is none or several places
+     *         hold question folders
      * @throws FixException if the working copy cannot be listed
      */
     protected Path findContentRoot(Path workingCopy, String username,
             List<String> folderNames) throws FixException {
-        List<Path> topFolders = listFolders(workingCopy);
-        Path usernameFolder = findExact(topFolders, username);
-
-        if (holdsQuestionFolder(topFolders, folderNames)) {
-            return workingCopy;
-        } else if (usernameFolder != null) {
-            return usernameFolder;
-        } else if (topFolders.size() == 1) {
-            return topFolders.get(0);
+        try {
+            return AnswerFolderRule.findContentRoot(workingCopy, username,
+                    folderNames);
+        } catch (IOException exception) {
+            throw new FixException("Could not list "
+                    + workingCopy.getFileName() + ": "
+                    + exception.getMessage(), exception);
         }
-        return findOnlyHolder(topFolders, folderNames);
+    }
+
+    /**
+     * Finds a question folder dragged into its own folder, such as Q1/Q1.
+     *
+     * @param questionFolder the question folder, or null
+     * @param folderName the question folder name
+     * @return the inner folder, or null when the folder is not like that
+     * @throws FixException if the folder cannot be listed
+     */
+    protected Path findNestedQuestionFolder(Path questionFolder,
+            String folderName) throws FixException {
+        try {
+            return AnswerFolderRule.findNestedQuestionFolder(questionFolder,
+                    folderName);
+        } catch (IOException exception) {
+            throw new FixException("Could not list "
+                    + questionFolder.getFileName() + ": "
+                    + exception.getMessage(), exception);
+        }
     }
 
     /**
@@ -283,15 +306,15 @@ public abstract class AbstractFixer implements Fixer {
      * @return the names joined
      */
     protected String joinNames(List<String> names) {
-        String joined = names.get(0);
         int last = names.size() - 1;
-        for (int i = 1; i < last; i++) {
-            joined += LIST_SEPARATOR + names.get(i);
+        String lastName = names.get(last);
+        if (last == 0) {
+            return lastName;
         }
-        if (last > 0) {
-            joined += LAST_SEPARATOR + names.get(last);
-        }
-        return joined;
+
+        List<String> allButLast = names.subList(0, last);
+        return TextUtils.join(LIST_SEPARATOR, allButLast) + LAST_SEPARATOR
+                + lastName;
     }
 
     /**
@@ -332,9 +355,10 @@ public abstract class AbstractFixer implements Fixer {
 
     /**
      * Finds the question folder a MISSING_QUESTION_FOLDER anomaly is about.
-     * The validator reports the absent folders in question order, and a
+     * The validator reports the absent folders, and those dragged into a
+     * folder of their own name such as Q1/Q1, in question order, and a
      * fixed one is back in place, so the anomaly's place among the unfixed
-     * ones is its place among the folders still absent.
+     * ones is its place among the folders still absent or nested.
      *
      * @param submission the submission
      * @param anomaly the anomaly
@@ -349,7 +373,10 @@ public abstract class AbstractFixer implements Fixer {
         List<Path> folders = listFolders(contentRoot);
         List<String> stillAbsent = new ArrayList<>();
         for (String folderName : folderNames) {
-            if (findExact(folders, folderName) == null) {
+            Path folder = findExact(folders, folderName);
+            boolean unusable = folder == null
+                    || findNestedQuestionFolder(folder, folderName) != null;
+            if (unusable) {
                 stillAbsent.add(folderName);
             }
         }
@@ -358,8 +385,12 @@ public abstract class AbstractFixer implements Fixer {
         for (Anomaly other : submission.getAnomalies()) {
             if (other.getId().equals(anomaly.getId())) {
                 return pickAt(stillAbsent, place);
-            } else if (other.getType() == AnomalyType.MISSING_QUESTION_FOLDER
-                    && other.getFixStatus() != FixStatus.APPLIED) {
+            }
+
+            boolean unfixedMissingFolder = other.getType()
+                    == AnomalyType.MISSING_QUESTION_FOLDER
+                    && other.getFixStatus() != FixStatus.APPLIED;
+            if (unfixedMissingFolder) {
                 place++;
             }
         }
@@ -380,8 +411,10 @@ public abstract class AbstractFixer implements Fixer {
             String start = readFolderName(config, questionId)
                     + FOLDER_SEPARATOR + readFileName(config, questionId)
                     + PATH_END;
-            if (message.length() >= start.length() && message.substring(0,
-                    start.length()).equalsIgnoreCase(start)) {
+            boolean startsWithPath = message.length() >= start.length()
+                    && message.substring(0, start.length())
+                            .equalsIgnoreCase(start);
+            if (startsWithPath) {
                 return questionId;
             }
         }
@@ -400,8 +433,9 @@ public abstract class AbstractFixer implements Fixer {
 
         try {
             for (Path child : readFolder(folder)) {
-                if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
-                        && !isHidden(child)) {
+                boolean visibleFolder = Files.isDirectory(child,
+                        LinkOption.NOFOLLOW_LINKS) && !isHidden(child);
+                if (visibleFolder) {
                     folders.add(child);
                 }
             }
@@ -532,52 +566,18 @@ public abstract class AbstractFixer implements Fixer {
             }
 
             if (targetExists) {
-                Path step = from.resolveSibling(from.getFileName()
-                        + CASE_RENAME_SUFFIX);
-                Files.move(from, step);
-                Files.move(step, to);
+                String stepName = from.getFileName() + CASE_RENAME_SUFFIX;
+                Path step = from.resolveSibling(stepName);
+                FileUtils.moveWithRetry(from, step);
+                FileUtils.moveWithRetry(step, to);
             } else {
-                Files.move(from, to);
+                FileUtils.moveWithRetry(from, to);
             }
         } catch (IOException exception) {
             throw new FixException("Could not rename "
                     + from.getFileName() + " to " + to.getFileName() + ": "
                     + exception.getMessage(), exception);
         }
-    }
-
-    /**
-     * Says whether any of the folders is named like a question folder, in
-     * any case, as the validators check.
-     *
-     * @param folders the folders to search
-     * @param folderNames the question folder names
-     * @return true if one of them is named like a question folder
-     */
-    protected boolean holdsQuestionFolder(List<Path> folders,
-            List<String> folderNames) {
-        for (String folderName : folderNames) {
-            if (findIgnoringCase(folders, folderName) != null) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Returns the only folder that holds a question folder, or null.
-    private Path findOnlyHolder(List<Path> folders,
-            List<String> folderNames) throws FixException {
-        List<Path> holders = new ArrayList<>();
-        for (Path folder : folders) {
-            if (holdsQuestionFolder(listFolders(folder), folderNames)) {
-                holders.add(folder);
-            }
-        }
-
-        if (holders.size() != 1) {
-            return null;
-        }
-        return holders.get(0);
     }
 
     // Returns the name at a place in the list, or null past its end.

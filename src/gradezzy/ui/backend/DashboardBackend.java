@@ -36,6 +36,8 @@ import gradezzy.stats.StatisticsSummary;
 
 /**
  * The backend as the screens see it.
+ *
+ * <p>Tier: MUST.
  */
 public interface DashboardBackend {
 
@@ -391,12 +393,12 @@ public interface DashboardBackend {
             return ActionResult.failed("Choose a student first.");
         }
         boolean changed = ZeroChecks.set(submission, checked);
+        String detail = submission.getUsername() + ACTIVITY_DETAIL_SEPARATOR
+                + ZERO_CHECK_WORDS;
         if (changed && checked) {
-            recordActivity(ReviewDecision.AUDIT_CHECKED,
-                    submission.getUsername() + ": " + ZERO_CHECK_WORDS);
+            recordActivity(ReviewDecision.AUDIT_CHECKED, detail);
         } else if (changed) {
-            recordActivity(ReviewDecision.AUDIT_TAKEN_BACK,
-                    submission.getUsername() + ": " + ZERO_CHECK_WORDS);
+            recordActivity(ReviewDecision.AUDIT_TAKEN_BACK, detail);
         }
         if (checked) {
             return ActionResult.done("Marked the 0 of "
@@ -409,6 +411,9 @@ public interface DashboardBackend {
 
     /** The activity log's words for a 0 nothing flagged. */
     String ZERO_CHECK_WORDS = "graded with 0 marks";
+
+    /** Comes between a username and what was done in the activity log. */
+    String ACTIVITY_DETAIL_SEPARATOR = ": ";
 
     /**
      * Says whether an anomaly still waits for the instructor.
@@ -585,8 +590,8 @@ public interface DashboardBackend {
             recordActivity(MISTAKE_NAME_REMOVED, where);
             message = "Removed the name of the mistake.";
         } else {
-            recordActivity(MISTAKE_NAMED, where + GROUP_LABEL_SEPARATOR
-                    + group.getLabel());
+            String named = where + GROUP_LABEL_SEPARATOR + group.getLabel();
+            recordActivity(MISTAKE_NAMED, named);
         }
         return ActionResult.done(message + unsavedNote(service));
     }
@@ -816,9 +821,10 @@ public interface DashboardBackend {
         if (section == null || section.getSectionCode() == null) {
             return getSetting(ConfigKeys.SCORE_SHEET_FILE);
         }
-        String own = ExportFolders.exact(getSetting(
-                ConfigKeys.SCORE_SHEET_BY_SECTION), ExportFolders.keyOf(
-                section.getModuleCode(), section.getSectionCode()));
+        String bySection = getSetting(ConfigKeys.SCORE_SHEET_BY_SECTION);
+        String key = ExportFolders.keyOf(section.getModuleCode(),
+                section.getSectionCode());
+        String own = ExportFolders.exact(bySection, key);
         if (own.isEmpty()) {
             return getSetting(ConfigKeys.SCORE_SHEET_FILE);
         }
@@ -837,9 +843,9 @@ public interface DashboardBackend {
         if (section == null) {
             return folder;
         }
-        return ExportFolders.resolve(folder, getSetting(
-                ConfigKeys.OUTPUT_DIR_BY_SECTION), section.getModuleCode(),
-                section.getSectionCode());
+        String bySection = getSetting(ConfigKeys.OUTPUT_DIR_BY_SECTION);
+        return ExportFolders.resolve(folder, bySection,
+                section.getModuleCode(), section.getSectionCode());
     }
 
     /**

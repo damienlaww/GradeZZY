@@ -23,6 +23,8 @@ import gradezzy.model.Submission;
  * Applies fixes and lets the instructor approve or undo them.
  *
  * <p>Shared by every grading thread, so each public method is synchronized.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class FixManager {
 
@@ -97,8 +99,8 @@ public class FixManager {
         forgetFixesOf(submission.getUsername());
         failureReasons.remove(submission.getUsername());
         skippedFixKeys.remove(submission.getUsername());
-        return applyTo(submission,
-                new ArrayList<>(submission.getAnomalies()), rejectedKeys);
+        List<Anomaly> anomalies = new ArrayList<>(submission.getAnomalies());
+        return applyTo(submission, anomalies, rejectedKeys);
     }
 
     /**
@@ -320,8 +322,9 @@ public class FixManager {
 
             FixRecord fixRecord = fixer.apply(submission, anomaly);
             if (fixRecord != null) {
-                fixRecord.setFixKey(makeKey(fixer.getName(), submission,
-                        fixRecord.getOriginalPath()));
+                String fixKey = makeKey(fixer.getName(), submission,
+                        fixRecord.getOriginalPath());
+                fixRecord.setFixKey(fixKey);
             }
             return fixRecord;
         } catch (FixException exception) {
@@ -363,8 +366,8 @@ public class FixManager {
         Path uploadedPath = path;
         for (int i = fixRecords.size() - 1; i >= 0; i--) {
             FixRecord earlier = fixRecords.get(i);
-            if (earlier.getAnomaly().getUsername().equals(
-                    submission.getUsername())) {
+            String earlierUsername = earlier.getAnomaly().getUsername();
+            if (earlierUsername.equals(submission.getUsername())) {
                 uploadedPath = earlier.findPathBefore(uploadedPath);
             }
         }

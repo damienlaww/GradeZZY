@@ -14,6 +14,8 @@ import gradezzy.model.AuditEntry;
 
 /**
  * Compares two activity log entries by when they happened.
+ *
+ * <p>Tier: SHOULD.
  */
 public class AuditEntryNewestFirstComparator
         implements Comparator<AuditEntry> {

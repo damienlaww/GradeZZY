@@ -58,6 +58,12 @@ public class ExportService {
     // as 3_OF_6
     private static final String OF_SEPARATOR = "_OF_";
 
+    // Comes between a file name and its extension
+    private static final String EXTENSION_DOT = ".";
+
+    // Comes between two format names in an error message
+    private static final String LIST_SEPARATOR = ", ";
+
     // The registered exporters
     private final List<Exporter> exporters = new ArrayList<>();
 
@@ -173,7 +179,9 @@ public class ExportService {
         }
 
         int total = gradingRun.getSubmissions().size();
-        if (scope == null || scope.isEmpty() || scope.size() >= total) {
+        boolean wholeRun = scope == null || scope.isEmpty()
+                || scope.size() >= total;
+        if (wholeRun) {
             return export(gradingRun, formatName, outputDirectory);
         }
 
@@ -214,6 +222,17 @@ public class ExportService {
             throw new ExportException("No output folder was given.");
         }
 
+        createFolder(outputDirectory);
+
+        String fileName = createFileName(gradingRun, exporter, nameExtra);
+        Path outputFile = outputDirectory.resolve(fileName);
+        writeThenMove(gradingRun, exporter, outputFile);
+
+        return outputFile;
+    }
+
+    // Creates the output folder if it is missing.
+    private void createFolder(Path outputDirectory) throws ExportException {
         try {
             Files.createDirectories(outputDirectory);
         } catch (IOException exception) {
@@ -221,12 +240,15 @@ public class ExportService {
                     + outputDirectory + " could not be created: "
                     + exception.getMessage(), exception);
         }
+    }
 
-        Path outputFile = outputDirectory.resolve(
-                createFileName(gradingRun, exporter, nameExtra));
-
-        Path tempFile = outputFile.resolveSibling(outputFile.getFileName()
-                + TEMP_SUFFIX);
+    // Has the exporter write a temporary file beside the output file,
+    // then moves it into place, so a failed export keeps the earlier
+    // file.
+    private void writeThenMove(GradingRun gradingRun, Exporter exporter,
+            Path outputFile) throws ExportException {
+        String tempName = outputFile.getFileName() + TEMP_SUFFIX;
+        Path tempFile = outputFile.resolveSibling(tempName);
 
         try {
             // A file left by an earlier failed export would hide an
@@ -255,8 +277,6 @@ public class ExportService {
             // Only does something when writing or moving failed
             deleteQuietly(tempFile);
         }
-
-        return outputFile;
     }
 
     /**
@@ -294,13 +314,7 @@ public class ExportService {
         if (scoreSheetFile == null) {
             scoreSheetFile = findSectionSheet(gradingRun);
         }
-
-        List<Student> roster = null;
-        try {
-            roster = new RosterReader(config).readRoster(scoreSheetFile);
-        } catch (IngestException exception) {
-            throw new ExportException(exception.getMessage(), exception);
-        }
+        List<Student> roster = readRoster(scoreSheetFile);
 
         Map<String, Submission> submissionsByUsername =
                 indexByUsername(gradingRun.getSubmissions());
@@ -319,7 +333,26 @@ public class ExportService {
             }
         }
 
-        // In upload order, each student once
+        addNotOnSheet(gradingRun, sheetUsernames, summary);
+        return summary;
+    }
+
+    // Reads the students of a score sheet with RosterReader.
+    private List<Student> readRoster(Path scoreSheetFile)
+            throws ExportException {
+        List<Student> roster = null;
+        try {
+            roster = new RosterReader(config).readRoster(scoreSheetFile);
+        } catch (IngestException exception) {
+            throw new ExportException(exception.getMessage(), exception);
+        }
+        return roster;
+    }
+
+    // Adds the submissions that match no row of the sheet, in upload
+    // order, each student once.
+    private void addNotOnSheet(GradingRun gradingRun,
+            List<String> sheetUsernames, ScoreSheetSummary summary) {
         List<String> listed = new ArrayList<>();
         for (Submission submission : gradingRun.getSubmissions()) {
             String key = submission.getUsername().toLowerCase(Locale.ROOT);
@@ -328,7 +361,6 @@ public class ExportService {
                 summary.getNotOnSheet().add(submission.getUsername());
             }
         }
-        return summary;
     }
 
     // The score sheet of a run's section, or the one for everyone, for a
@@ -381,7 +413,8 @@ public class ExportService {
         }
         name = name + exporter.getFormatName();
 
-        return makeSafe(name) + "." + makeSafe(exporter.getFileExtension());
+        return makeSafe(name) + EXTENSION_DOT
+                + makeSafe(exporter.getFileExtension());
     }
 
     // Keeps letters, digits, dashes and underscores, so a code
@@ -412,6 +445,6 @@ public class ExportService {
             names.add(exporter.getFormatName());
         }
 
-        return TextUtils.join(", ", names);
+        return TextUtils.join(LIST_SEPARATOR, names);
     }
 }

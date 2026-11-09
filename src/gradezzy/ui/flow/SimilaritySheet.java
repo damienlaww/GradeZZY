@@ -28,6 +28,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * Builds the sheet that compares a similar pair.
+ *
+ * <p>Tier: COULD.
  */
 public final class SimilaritySheet {
 
@@ -89,10 +91,11 @@ public final class SimilaritySheet {
             return body;
         }
         SimilarCode code = new SimilarCode(detail);
-        HBox names = new HBox(Parts.GAP,
-                side(first, detail.getFirstFile(), code.describeSide(true)),
-                side(second, detail.getSecondFile(),
-                code.describeSide(false)));
+        VBox firstSide = side(first, detail.getFirstFile(),
+                code.describeSide(true));
+        VBox secondSide = side(second, detail.getSecondFile(),
+                code.describeSide(false));
+        HBox names = new HBox(Parts.GAP, firstSide, secondSide);
         body.getChildren().addAll(code.createLegend(), names,
                 code.getView(), leftOut(detail));
         return body;
@@ -111,7 +114,7 @@ public final class SimilaritySheet {
         if (percent > RED_ABOVE_PERCENT) {
             tone = Tone.BAD;
         }
-        return Parts.pill(percent + "% similar", tone);
+        return Parts.pill(percent + Parts.PERCENT_SIGN + " similar", tone);
     }
 
     /**

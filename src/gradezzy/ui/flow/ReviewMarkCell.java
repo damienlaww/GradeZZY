@@ -16,8 +16,13 @@ import gradezzy.model.Submission;
 
 /**
  * A mark, grey when zero, a dash when there is none.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ReviewMarkCell extends TableCell<Submission, Double> {
+
+    // Shown when there is no mark
+    private static final String NO_MARK = "-";
 
     // True for the bold total column
     private final boolean bold;
@@ -47,7 +52,7 @@ public class ReviewMarkCell extends TableCell<Submission, Double> {
             return;
         }
         if (mark == null) {
-            setText("-");
+            setText(NO_MARK);
             getStyleClass().add("zero");
             return;
         }

@@ -14,6 +14,7 @@ package gradezzy.ui.flow;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.NumberBinding;
@@ -73,6 +74,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * The Review step.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ReviewScreen extends FlowScreen {
 
@@ -126,7 +129,7 @@ public class ReviewScreen extends FlowScreen {
     private static final double SEARCH_MIN_WIDTH = 140.0;
 
     // The gap between the heading and the line under it
-    private static final double HEADING_GAP = 4.0;
+    private static final double HEADING_GAP = Parts.GAP_TINY;
 
     // The size of the search icon
     private static final double SEARCH_ICON_SIZE = 14.0;
@@ -170,6 +173,25 @@ public class ReviewScreen extends FlowScreen {
 
     // Separates the names in one line of a sheet
     private static final String NAME_SEPARATOR = ", ";
+
+    // Comes between a student and their fix or flag in a sheet, such as
+    // "ana.lee.2024: Fixed the package line"
+    private static final String ITEM_SEPARATOR = ": ";
+
+    // Comes between a question and where its file is, in its tip
+    private static final String QUESTION_SEPARATOR = ": ";
+
+    // Comes before the most marks under a column's name, such as "/ 5"
+    private static final String OUT_OF = "/ ";
+
+    // Comes between a skipped file's name and why it could not be opened
+    private static final String FAILURE_SEPARATOR = ". ";
+
+    // The separator between parts of the line under the heading
+    private static final String DOT = " · ";
+
+    // Comes before a sentence added to the end of another
+    private static final String SENTENCE_SEPARATOR = " ";
 
     // Ends the first sentence of an outcome, which titles its summary
     private static final String SENTENCE_END = ". ";
@@ -264,6 +286,7 @@ public class ReviewScreen extends FlowScreen {
     // Says how to open a student and what ticking does, or, once any are
     // ticked, how many are ticked for export
     private final HBox guide = Parts.row(Parts.GAP_SMALL);
+
     // One note per problem every student shares, above the table
     private final VBox sharedBanner = new VBox(Parts.GAP_SMALL);
 
@@ -338,28 +361,8 @@ public class ReviewScreen extends FlowScreen {
         banner.setMinWidth(0);
         sharedBanner.getStyleClass().addAll("banner", "warn");
 
-        filterBar = createFilterBar();
-        tools.getChildren().setAll(modeBar, filterBar, Parts.grow(), search);
-        tools.setAlignment(Pos.CENTER_LEFT);
-        VBox.setMargin(tools, new Insets(Parts.GAP_TINY, 0, 0, 0));
-
-        VBox header = new VBox(HEADING_GAP, Parts.heading(
-                "Review the results"), subtitle);
-        guide.getStyleClass().add("review-guide");
-        createRegradeBand();
-        main.getChildren().addAll(header, tools, guide, regradeBand, banner,
-                sharedBanner, tableFrame);
-        main.getStyleClass().add("review-main");
-        VBox.setVgrow(tableFrame, Priority.ALWAYS);
-        HBox.setHgrow(main, Priority.ALWAYS);
-        main.setMinWidth(0);
-
-        empty.getChildren().addAll(Parts.heading("Nothing to review yet"),
-                Parts.subtitle("Grade a section first, or open an earlier "
-                + "run from History."),
-                Parts.link("Go to Set up", () -> window.show(Step.SET_UP)));
-        empty.getStyleClass().add("empty-state");
-        empty.setAlignment(Pos.CENTER);
+        createMain();
+        createEmptyState();
 
         view.getChildren().addAll(main, panel);
         view.getStyleClass().add("review-view");
@@ -401,14 +404,15 @@ public class ReviewScreen extends FlowScreen {
             questionColumns.clear();
             addQuestionColumns(graded);
         }
-        header(totalColumn, "Total", "/ " + Parts.mark(graded.getMaxTotal()),
-                "Out of " + Parts.mark(graded.getMaxTotal()) + ", the sum "
-                + "of the question marks.");
+        String maxTotal = Parts.mark(graded.getMaxTotal());
+        header(totalColumn, "Total", OUT_OF + maxTotal, "Out of " + maxTotal
+                + ", the sum of the question marks.");
         rows.setAll(run.getSubmissions());
         rows.addAll(findSkippedRows(run));
         rows.addAll(findMissingRows(run));
-        if (panel.getSubmission() != null
-                && !rows.contains(panel.getSubmission())) {
+        boolean panelRowGone = panel.getSubmission() != null
+                && !rows.contains(panel.getSubmission());
+        if (panelRowGone) {
             closePanel();
         }
         boolean grouping = getBackend().supports(Capability.ANSWER_GROUPS);
@@ -482,12 +486,46 @@ public class ReviewScreen extends FlowScreen {
 
     // ------------------------------------------------------------ build
 
+    // Puts the heading, the tools, the notes and the table one under
+    // another in the left part.
+    private void createMain() {
+        filterBar = createFilterBar();
+        tools.getChildren().setAll(modeBar, filterBar, Parts.grow(), search);
+        tools.setAlignment(Pos.CENTER_LEFT);
+        VBox.setMargin(tools, new Insets(Parts.GAP_TINY, 0, 0, 0));
+
+        Label heading = Parts.heading("Review the results");
+        VBox header = new VBox(HEADING_GAP, heading, subtitle);
+        guide.getStyleClass().add("review-guide");
+        createRegradeBand();
+        main.getChildren().addAll(header, tools, guide, regradeBand, banner,
+                sharedBanner, tableFrame);
+        main.getStyleClass().add("review-main");
+        VBox.setVgrow(tableFrame, Priority.ALWAYS);
+        HBox.setHgrow(main, Priority.ALWAYS);
+        main.setMinWidth(0);
+    }
+
+    // Builds what shows instead of the table when there is no run.
+    private void createEmptyState() {
+        Label title = Parts.heading("Nothing to review yet");
+        Label hint = Parts.subtitle("Grade a section first, or open an "
+                + "earlier run from History.");
+        Node setUpLink = Parts.link("Go to Set up",
+                () -> getWindow().show(Step.SET_UP));
+        empty.getChildren().addAll(title, hint, setUpLink);
+        empty.getStyleClass().add("empty-state");
+        empty.setAlignment(Pos.CENTER);
+    }
+
     // Returns one "Could not open" row per skipped file of an ungraded user.
     private List<Submission> findSkippedRows(GradingRun run) {
         List<ImportItem> files = getState().getSkippedFiles(run);
         int graded = run.getSubmissions().size();
-        if (run == skippedRowsRun && files.size() == skippedRowsFiles
-                && graded == skippedRowsGraded) {
+        boolean unchanged = run == skippedRowsRun
+                && files.size() == skippedRowsFiles
+                && graded == skippedRowsGraded;
+        if (unchanged) {
             return skippedRows;
         }
         skippedRows.clear();
@@ -513,7 +551,7 @@ public class ReviewScreen extends FlowScreen {
                 item.getPath());
         row.setStatus(SubmissionStatus.FAILED);
         row.setIngestFailure(ResultState.COULD_NOT_OPEN_PREFIX
-                + item.getName() + ". " + item.getMessage());
+                + item.getName() + FAILURE_SEPARATOR + item.getMessage());
         return row;
     }
 
@@ -560,14 +598,18 @@ public class ReviewScreen extends FlowScreen {
         return row;
     }
 
-    // Returns the skipped file row of a student, by username or file name.
+    // Returns the skipped file row of a student, by username or file
+    // name, matched as Export counts it.
     private Submission findSkippedRowOf(Student student) {
-        String username = student.getUsername().toLowerCase();
+        String username = student.getUsername();
+        String prefixPattern = getBackend().getSetting(
+                ConfigKeys.ZIP_NAME_PREFIX_PATTERN);
         for (Submission row : skippedRows) {
-            String shown = row.getUsername().toLowerCase();
-            if (shown.equals(username)) {
+            String shown = row.getUsername();
+            if (shown.equalsIgnoreCase(username)) {
                 return row;
-            } else if (isNameless(row) && shown.contains(username)) {
+            } else if (isNameless(row) && ExportScreen.isNameOf(shown,
+                    username, prefixPattern)) {
                 return row;
             }
         }
@@ -737,7 +779,20 @@ public class ReviewScreen extends FlowScreen {
         table.setColumnResizePolicy(
                 TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
         table.setRowFactory(tableView -> new ReviewRow(table));
+        createColumns();
 
+        SortedList<Submission> sorted = new SortedList<>(filtered);
+        sorted.comparatorProperty().bind(table.comparatorProperty());
+        table.setItems(sorted);
+        table.getSelectionModel().selectedItemProperty().addListener(
+                (observable, before, after) -> showStudent(after));
+        fitFrameHeight(sorted);
+        roundTableCorners();
+    }
+
+    // Builds the tick, student, total, status and arrow columns, in that
+    // order.
+    private void createColumns() {
         TableColumn<Submission, Submission> tick = new TableColumn<>();
         tickAllBox.setOnAction(event -> tickAll(tickAllBox.isSelected()));
         tickAllBox.setAccessibleText("Tick every student shown");
@@ -782,27 +837,26 @@ public class ReviewScreen extends FlowScreen {
         table.getColumns().add(total);
         table.getColumns().add(status);
         table.getColumns().add(open);
+    }
 
-        SortedList<Submission> sorted = new SortedList<>(filtered);
-        sorted.comparatorProperty().bind(table.comparatorProperty());
-        table.setItems(sorted);
-        table.getSelectionModel().selectedItemProperty().addListener(
-                (observable, before, after) -> showStudent(after));
-
-        // The box ends at the last row, or fills the space and scrolls.
-        // Only an empty table keeps room for its message.
+    // Makes the box end at the last row, or fill the space and scroll.
+    // Only an empty table keeps room for its message.
+    private void fitFrameHeight(SortedList<Submission> sorted) {
+        double headerAndBorders = HEADER_HEIGHT + BORDERS;
         NumberBinding fitted = Bindings.size(sorted).multiply(ROW_HEIGHT)
-                .add(HEADER_HEIGHT + BORDERS);
+                .add(headerAndBorders);
         NumberBinding shown = Bindings.when(Bindings.isEmpty(sorted))
                 .then(MIN_TABLE_HEIGHT).otherwise(fitted);
         tableFrame.maxHeightProperty().bind(shown);
         tableFrame.minHeightProperty().bind(Bindings.min(shown,
                 MIN_TABLE_HEIGHT));
         table.setMinHeight(0);
+    }
 
-        // The frame draws the rounded border, so nothing clips it; the
-        // table inside is clipped a little smaller, so the header and
-        // the last row have round corners too
+    // Puts the table in its frame. The frame draws the rounded border, so
+    // nothing clips it; the table inside is clipped a little smaller, so
+    // the header and the last row have round corners too.
+    private void roundTableCorners() {
         tableFrame.getChildren().add(table);
         tableFrame.getStyleClass().add("table-frame");
         Rectangle corners = new Rectangle();
@@ -918,14 +972,14 @@ public class ReviewScreen extends FlowScreen {
         int index = FIRST_QUESTION_COLUMN;
         for (Question question : assessment.getQuestions()) {
             TableColumn<Submission, Double> column = new TableColumn<>();
-            column.setUserData(question.getId());
-            header(column, question.getId(), "/ " + Parts.mark(
-                    question.getMaxScore()), question.getId() + ": "
-                    + question.getFileName() + " in the "
-                    + question.getFolderName() + " folder, out of "
-                    + Parts.mark(question.getMaxScore()) + ".");
-            fixMarkWidth(column, QUESTION_WIDTH);
             String id = question.getId();
+            String maxMark = Parts.mark(question.getMaxScore());
+            String tip = id + QUESTION_SEPARATOR + question.getFileName()
+                    + " in the " + question.getFolderName()
+                    + " folder, out of " + maxMark + ".";
+            column.setUserData(id);
+            header(column, id, OUT_OF + maxMark, tip);
+            fixMarkWidth(column, QUESTION_WIDTH);
             column.setCellValueFactory(cell -> questionMarkOf(cell, id));
             column.setCellFactory(tableColumn -> new ReviewMarkCell(false));
             column.getStyleClass().add("centred");
@@ -978,18 +1032,20 @@ public class ReviewScreen extends FlowScreen {
 
         // The same figures as Export and Statistics: graded students only
         String average = "";
-        MarkStats stats = MarkStats.of(rows,
-                run.getAssessment().getMaxTotal(),
-                MarkStats.parsePassPercent(getBackend().getSetting(
-                ConfigKeys.PASS_MARK_PERCENT)));
+        double maxTotal = run.getAssessment().getMaxTotal();
+        String passSetting = getBackend().getSetting(
+                ConfigKeys.PASS_MARK_PERCENT);
+        double passPercent = MarkStats.parsePassPercent(passSetting);
+        MarkStats stats = MarkStats.of(rows, maxTotal, passPercent);
         if (!stats.isEmpty()) {
-            average = " · average " + Parts.mark(Math.round(
-                    stats.getMean() * ONE_DECIMAL) / ONE_DECIMAL)
+            double roundedMean = Math.round(stats.getMean() * ONE_DECIMAL)
+                    / ONE_DECIMAL;
+            average = DOT + "average " + Parts.mark(roundedMean)
                     + " out of " + Parts.mark(stats.getMaxTotal())
                     + ", of " + stats.getCount() + " graded";
         }
-        subtitle.setText(run.getSection().getModuleCode() + " · "
-                + run.getSection().getSectionCode() + " · "
+        subtitle.setText(run.getSection().getModuleCode() + DOT
+                + run.getSection().getSectionCode() + DOT
                 + run.getAssessment().getName() + average);
 
         fitStatusColumn();
@@ -1006,13 +1062,14 @@ public class ReviewScreen extends FlowScreen {
         Font font = Font.font(PILL_FONT, FontWeight.BOLD, PILL_FONT_SIZE);
         double widest = 0;
         for (Submission submission : rows) {
-            Text text = new Text(Students.pill(submission, getBackend())
-                    .getText());
+            String words = Students.pill(submission, getBackend()).getText();
+            Text text = new Text(words);
             text.setFont(font);
             widest = Math.max(widest, text.getLayoutBounds().getWidth());
         }
+        double needed = Math.ceil(widest + PILL_EXTRA);
         double width = Math.max(STATUS_MIN_WIDTH, Math.min(STATUS_WIDTH,
-                Math.ceil(widest + PILL_EXTRA)));
+                needed));
         statusColumn.setMinWidth(width);
         statusColumn.setPrefWidth(width);
         statusColumn.setMaxWidth(width);
@@ -1030,10 +1087,11 @@ public class ReviewScreen extends FlowScreen {
         for (Submission submission : rows) {
             // A file rejected on loading, such as one with no username,
             // or a zip that could not be unpacked, cannot be retried
-            if (Students.state(submission, getBackend())
+            boolean retriable = Students.state(submission, getBackend())
                     == ResultState.COULD_NOT_GRADE
                     && submission.getIngestFailure() == null
-                    && !ResultState.isRejectedUpload(submission)) {
+                    && !ResultState.isRejectedUpload(submission);
+            if (retriable) {
                 couldNot++;
             }
         }
@@ -1062,10 +1120,11 @@ public class ReviewScreen extends FlowScreen {
             text.setWrapText(true);
             text.setMinWidth(0);
             HBox.setHgrow(text, Priority.ALWAYS);
-            HBox note = Parts.row(Parts.GAP, new Node[] {Parts.pill(
-                    "Every graded student", Tone.WARN), text});
-            if (isSharedOpen(anomaly)
-                    && getBackend().supports(Capability.FLAG_REVIEW)) {
+            Label everyone = Parts.pill("Every graded student", Tone.WARN);
+            HBox note = Parts.row(Parts.GAP, new Node[] {everyone, text});
+            boolean canCheck = isSharedOpen(anomaly)
+                    && getBackend().supports(Capability.FLAG_REVIEW);
+            if (canCheck) {
                 note.getChildren().add(Parts.link("Mark as checked",
                         () -> markSharedChecked(anomaly)));
             }
@@ -1090,8 +1149,10 @@ public class ReviewScreen extends FlowScreen {
         }
 
         for (Anomaly anomaly : graded.get(0).getAnomalies()) {
-            if (anomaly.getType() == AnomalyType.INTERNAL_ERROR
-                    && isOnEvery(anomaly, graded)) {
+            boolean everyHasIt = anomaly.getType()
+                    == AnomalyType.INTERNAL_ERROR
+                    && isOnEvery(anomaly, graded);
+            if (everyHasIt) {
                 shared.add(anomaly);
             }
         }
@@ -1112,8 +1173,9 @@ public class ReviewScreen extends FlowScreen {
     private void markSharedChecked(Anomaly shared) {
         int marked = 0;
         for (Anomaly anomaly : findSharedCopies(shared)) {
-            if (getBackend().setDecision(anomaly,
-                    ReviewDecision.REVIEWED).isDone()) {
+            ActionResult result = getBackend().setDecision(anomaly,
+                    ReviewDecision.REVIEWED);
+            if (result.isDone()) {
                 marked++;
             }
         }
@@ -1128,9 +1190,9 @@ public class ReviewScreen extends FlowScreen {
         List<Anomaly> copies = new ArrayList<>();
         for (Submission submission : rows) {
             for (Anomaly anomaly : submission.getAnomalies()) {
-                if (anomaly.getType() == shared.getType()
-                        && anomaly.getMessage().equals(
-                                shared.getMessage())) {
+                boolean sameProblem = anomaly.getType() == shared.getType()
+                        && anomaly.getMessage().equals(shared.getMessage());
+                if (sameProblem) {
                     copies.add(anomaly);
                 }
             }
@@ -1151,8 +1213,9 @@ public class ReviewScreen extends FlowScreen {
     // Says whether a student has a problem of the same type and words.
     private boolean hasSameProblem(Submission submission, Anomaly anomaly) {
         for (Anomaly other : submission.getAnomalies()) {
-            if (other.getType() == anomaly.getType()
-                    && other.getMessage().equals(anomaly.getMessage())) {
+            boolean sameProblem = other.getType() == anomaly.getType()
+                    && other.getMessage().equals(anomaly.getMessage());
+            if (sameProblem) {
                 return true;
             }
         }
@@ -1181,7 +1244,7 @@ public class ReviewScreen extends FlowScreen {
 
     // Applies the filter buttons and the search text.
     private void applyFilter() {
-        String text = search.getText().trim().toLowerCase();
+        String text = search.getText().trim().toLowerCase(Locale.ROOT);
         boolean onlyReview = reviewButton.isSelected();
         boolean onlyFailed = failedButton.isSelected();
         boolean onlyMissing = missingButton.isSelected();
@@ -1208,21 +1271,30 @@ public class ReviewScreen extends FlowScreen {
         if (onlyMissing && !ResultState.isNoSubmission(submission)) {
             return false;
         }
-        if (onlyReview && !StatusCounts.needsLook(submission,
-                getBackend())) {
+        boolean hiddenByReview = onlyReview
+                && !StatusCounts.needsLook(submission, getBackend());
+        if (hiddenByReview) {
             return false;
         }
-        // A file that could not be opened shows only under All
-        if (onlyFailed && (ResultState.isSkippedFile(submission)
-                || !StatusCounts.isNotFullyGraded(Students.state(
-                submission, getBackend())))) {
+        if (onlyFailed && !showsAsNotFullyGraded(submission)) {
             return false;
         }
         if (text.isEmpty()) {
             return true;
         }
-        return Students.name(submission).toLowerCase().contains(text)
-                || submission.getUsername().toLowerCase().contains(text);
+        String name = Students.name(submission).toLowerCase(Locale.ROOT);
+        String username = submission.getUsername().toLowerCase(Locale.ROOT);
+        return name.contains(text) || username.contains(text);
+    }
+
+    // Says whether a student shows under Not fully graded. A file that
+    // could not be opened shows only under All.
+    private boolean showsAsNotFullyGraded(Submission submission) {
+        if (ResultState.isSkippedFile(submission)) {
+            return false;
+        }
+        ResultState state = Students.state(submission, getBackend());
+        return StatusCounts.isNotFullyGraded(state);
     }
 
     // Returns the note shown when no student passes the filter.
@@ -1253,11 +1325,10 @@ public class ReviewScreen extends FlowScreen {
             panel.setVisible(false);
             panel.setManaged(false);
             if (ResultState.isSkippedFile(submission)) {
-                getWindow().confirm(Students.SKIPPED_WORDS,
-                        describeMadeRow(submission) + " Choose a new copy "
-                        + "of the zip on Set up, then grade it.",
-                        "Replace file", () -> getWindow().show(
-                        Step.SET_UP));
+                String about = describeMadeRow(submission) + " Choose a "
+                        + "new copy of the zip on Set up, then grade it.";
+                getWindow().confirm(Students.SKIPPED_WORDS, about,
+                        "Replace file", () -> getWindow().show(Step.SET_UP));
             } else {
                 getWindow().notify(describeMadeRow(submission));
             }
@@ -1393,7 +1464,7 @@ public class ReviewScreen extends FlowScreen {
         }
         int ticked = getState().getSelected().size();
         if (ticked > 0) {
-            text = text + " " + Parts.plural(ticked, "student")
+            text = text + SENTENCE_SEPARATOR + Parts.plural(ticked, "student")
                     + " ticked.";
         }
         return text;
@@ -1459,22 +1530,35 @@ public class ReviewScreen extends FlowScreen {
     private List<RepairItem> openRepairs() {
         List<RepairItem> open = new ArrayList<>();
         GradingRun run = getState().getRun();
-        if (run == null
-                || !getBackend().supports(Capability.REPAIR_DECISIONS)) {
+        boolean noDecisions = run == null
+                || !getBackend().supports(Capability.REPAIR_DECISIONS);
+        if (noDecisions) {
             return open;
         }
         List<Submission> scope = getState().getSelected();
         for (RepairItem repair : getBackend().listRepairs(run)) {
-            Anomaly anomaly = repair.getAnomaly();
-            // A fix being undone in the background is left to that job
-            if (anomaly.getFixStatus() == FixStatus.APPLIED
-                    && !repair.isBlocked()
-                    && !getState().isFixInProgress(anomaly)
-                    && (scope.isEmpty() || isTicked(anomaly.getUsername()))) {
+            if (isWaitingFix(repair, scope)) {
                 open.add(repair);
             }
         }
         return open;
+    }
+
+    // Says whether a fix still waits for Keep or Reject and belongs to a
+    // ticked student, or to anyone when none is ticked.
+    private boolean isWaitingFix(RepairItem repair, List<Submission> scope) {
+        Anomaly anomaly = repair.getAnomaly();
+        if (anomaly.getFixStatus() != FixStatus.APPLIED) {
+            return false;
+        }
+        if (repair.isBlocked()) {
+            return false;
+        }
+        // A fix being undone in the background is left to that job
+        if (getState().isFixInProgress(anomaly)) {
+            return false;
+        }
+        return scope.isEmpty() || isTicked(anomaly.getUsername());
     }
 
     // Says whether the student with a username is ticked.
@@ -1498,22 +1582,16 @@ public class ReviewScreen extends FlowScreen {
                 + "kept and their marks stay as they are now:");
         about.setWrapText(true);
         content.getChildren().add(about);
-        int listed = 0;
+        List<String> entries = new ArrayList<>();
         for (RepairItem repair : open) {
-            if (listed == MAX_LISTED_FIXES) {
-                content.getChildren().add(Parts.muted("and "
-                        + (open.size() - listed) + " more"));
-                break;
-            }
             Anomaly anomaly = repair.getAnomaly();
-            Label line = new Label("• " + anomaly.getUsername() + ": "
+            entries.add(anomaly.getUsername() + ITEM_SEPARATOR
                     + Problems.fixedTitle(anomaly.getType()));
-            line.setWrapText(true);
-            content.getChildren().add(line);
-            listed++;
         }
-        getWindow().confirm("Keep all " + Parts.plural(open.size(),
-                "fix", "fixes") + "?", content, "Keep all",
+        addLines(content, entries, MAX_LISTED_FIXES);
+        String title = "Keep all " + Parts.plural(open.size(), "fix",
+                "fixes") + "?";
+        getWindow().confirm(title, content, "Keep all",
                 () -> approveAll(open));
     }
 
@@ -1531,9 +1609,10 @@ public class ReviewScreen extends FlowScreen {
                 continue;
             }
             for (Anomaly anomaly : submission.getAnomalies()) {
-                if (anomaly.getFixStatus() != FixStatus.APPLIED
+                boolean checkable = anomaly.getFixStatus() != FixStatus.APPLIED
                         && ReviewRules.canCheckAll(anomaly.getType())
-                        && getBackend().needsReview(anomaly)) {
+                        && getBackend().needsReview(anomaly);
+                if (checkable) {
                     open.add(anomaly);
                 }
             }
@@ -1556,19 +1635,12 @@ public class ReviewScreen extends FlowScreen {
                 + "time:");
         about.setWrapText(true);
         content.getChildren().add(about);
-        int listed = 0;
+        List<String> entries = new ArrayList<>();
         for (Anomaly anomaly : flags) {
-            if (listed == MAX_LISTED_FIXES) {
-                content.getChildren().add(Parts.muted("and "
-                        + (flags.size() - listed) + " more"));
-                break;
-            }
-            Label line = new Label("• " + anomaly.getUsername() + ": "
+            entries.add(anomaly.getUsername() + ITEM_SEPARATOR
                     + Problems.title(anomaly.getType()));
-            line.setWrapText(true);
-            content.getChildren().add(line);
-            listed++;
         }
+        addLines(content, entries, MAX_LISTED_FIXES);
         getWindow().confirm("Mark all "
                 + Parts.plural(flags.size(), "flag") + " as checked?",
                 content, "Mark all as checked", () -> checkAll(flags));
@@ -1578,8 +1650,9 @@ public class ReviewScreen extends FlowScreen {
     private void checkAll(List<Anomaly> flags) {
         List<Anomaly> done = new ArrayList<>();
         for (Anomaly anomaly : flags) {
-            if (getBackend().setDecision(anomaly,
-                    ReviewDecision.REVIEWED).isDone()) {
+            ActionResult result = getBackend().setDecision(anomaly,
+                    ReviewDecision.REVIEWED);
+            if (result.isDone()) {
                 done.add(anomaly);
             }
         }
@@ -1594,9 +1667,7 @@ public class ReviewScreen extends FlowScreen {
     private void uncheckAll(List<Anomaly> flags) {
         int reopened = 0;
         for (Anomaly anomaly : flags) {
-            if (getBackend().getDecision(anomaly) == ReviewDecision.REVIEWED
-                    && getBackend().setDecision(anomaly,
-                    ReviewDecision.OPEN).isDone()) {
+            if (reopenChecked(anomaly)) {
                 reopened++;
             }
         }
@@ -1606,21 +1677,33 @@ public class ReviewScreen extends FlowScreen {
         refreshStatuses();
     }
 
+    // Puts one flag back to be checked when it is still marked as checked,
+    // and says whether it was put back.
+    private boolean reopenChecked(Anomaly anomaly) {
+        if (getBackend().getDecision(anomaly) != ReviewDecision.REVIEWED) {
+            return false;
+        }
+        ActionResult result = getBackend().setDecision(anomaly,
+                ReviewDecision.OPEN);
+        return result.isDone();
+    }
+
     // Approves every waiting fix.
     private void approveAll(List<RepairItem> open) {
         List<RepairItem> kept = new ArrayList<>();
         for (RepairItem repair : open) {
-            if (getBackend().approveRepair(repair).isDone()) {
+            ActionResult result = getBackend().approveRepair(repair);
+            if (result.isDone()) {
                 kept.add(repair);
             }
         }
         int approved = kept.size();
+        String message = "Kept " + Parts.plural(approved, "fix", "fixes")
+                + ".";
         if (getBackend().supports(Capability.REPAIR_DECISION_UNDO)) {
-            getWindow().notify("Kept " + Parts.plural(approved, "fix",
-                    "fixes") + ".", "Undo", () -> unkeepAll(kept));
+            getWindow().notify(message, "Undo", () -> unkeepAll(kept));
         } else {
-            getWindow().notify("Kept " + Parts.plural(approved, "fix",
-                    "fixes") + ".");
+            getWindow().notify(message);
         }
         panel.refresh();
         refreshStatuses();
@@ -1709,18 +1792,22 @@ public class ReviewScreen extends FlowScreen {
     // Adds one line per entry to a sheet, up to MAX_LISTED_STUDENTS, then
     // says how many more there are.
     private void addLines(VBox content, List<String> entries) {
-        int listed = 0;
-        for (String entry : entries) {
-            if (listed == MAX_LISTED_STUDENTS) {
-                int more = entries.size() - listed;
-                content.getChildren().add(Parts.muted("and " + more
-                        + " more"));
-                return;
-            }
-            Label line = new Label(BULLET + entry);
+        addLines(content, entries, MAX_LISTED_STUDENTS);
+    }
+
+    // Adds one line per entry to a sheet, up to the most given, then says
+    // how many more there are.
+    private void addLines(VBox content, List<String> entries, int most) {
+        int shownCount = Math.min(entries.size(), most);
+        for (int index = 0; index < shownCount; index++) {
+            Label line = new Label(BULLET + entries.get(index));
             line.setWrapText(true);
             content.getChildren().add(line);
-            listed++;
+        }
+        int more = entries.size() - shownCount;
+        if (more > 0) {
+            content.getChildren().add(Parts.muted("and " + more
+                    + " more"));
         }
     }
 
@@ -1757,7 +1844,8 @@ public class ReviewScreen extends FlowScreen {
             return;
         }
         int total = tickedJob.countStudents();
-        int done = Math.max(0, (int) tickedJob.getWorkDone());
+        int workDone = (int) tickedJob.getWorkDone();
+        int done = Math.max(0, workDone);
         regradeCount.setText("Grading " + Parts.plural(total,
                 "ticked student") + " again: " + done + " of " + total
                 + " done");
@@ -1846,8 +1934,8 @@ public class ReviewScreen extends FlowScreen {
         if (names.isEmpty()) {
             return;
         }
-        Label line = Parts.muted(start + TextUtils.join(NAME_SEPARATOR,
-                names) + ".");
+        String joined = TextUtils.join(NAME_SEPARATOR, names);
+        Label line = Parts.muted(start + joined + ".");
         line.setWrapText(true);
         content.getChildren().add(line);
     }
@@ -1860,8 +1948,8 @@ public class ReviewScreen extends FlowScreen {
         for (Submission submission : rows) {
             for (Anomaly anomaly : submission.getAnomalies()) {
                 boolean isFix = anomaly.getFixStatus() == FixStatus.APPLIED;
-                if (getBackend().needsReview(anomaly)
-                        && ((isFix && fixes) || (!isFix && flags))) {
+                boolean canDecide = (isFix && fixes) || (!isFix && flags);
+                if (getBackend().needsReview(anomaly) && canDecide) {
                     count++;
                 }
             }

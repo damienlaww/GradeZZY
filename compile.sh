@@ -18,7 +18,11 @@ cd "$(dirname "$0")" || exit 1
 # Pick the JavaFX jars that match this computer.
 case "$(uname -s)" in
     Darwin)
-        if [ "$(uname -m)" = "arm64" ]; then
+        # Ask the JDK, not the shell: an Intel JDK on an Apple silicon Mac
+        # (or a shell under Rosetta) needs the other JavaFX folder.
+        JAVA_ARCH=$(java -XshowSettings:properties -version 2>&1 \
+            | sed -n 's/^ *os.arch = //p')
+        if [ "$JAVA_ARCH" = "aarch64" ]; then
             JAVAFX_DIR="lib/javafx/mac-aarch64"
         else
             JAVAFX_DIR="lib/javafx/mac"
@@ -61,12 +65,12 @@ mkdir -p classes
 
 if [ "$1" = "core" ]; then
     # No JavaFX and no jar on the classpath: proves the core stands alone.
-    javac -encoding UTF-8 -d classes $CORE_SOURCES || exit 1
+    javac --release 25 -encoding UTF-8 -d classes $CORE_SOURCES || exit 1
     echo "Compiled the grading core into classes/ (no JavaFX)."
     exit 0
 fi
 
-javac -encoding UTF-8 -d classes \
+javac --release 25 -encoding UTF-8 -d classes \
     --module-path "$JAVAFX_DIR" \
     --add-modules javafx.controls,javafx.fxml \
     -cp "lib/*" \

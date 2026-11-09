@@ -20,6 +20,8 @@ import javafx.scene.layout.VBox;
 
 /**
  * One group of settings: its card, its entry in the list and its rows.
+ *
+ * <p>Tier: SHOULD.
  */
 public class SettingsGroup {
 

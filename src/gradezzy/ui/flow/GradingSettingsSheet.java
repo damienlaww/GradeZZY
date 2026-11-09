@@ -26,6 +26,8 @@ import gradezzy.ui.backend.Capability;
 
 /**
  * Builds the sheet that changes the grading settings over Set up.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class GradingSettingsSheet {
 

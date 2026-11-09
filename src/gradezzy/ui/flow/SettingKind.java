@@ -10,6 +10,8 @@ package gradezzy.ui.flow;
 
 /**
  * The kind of control a setting gets.
+ *
+ * <p>Tier: SHOULD.
  */
 public enum SettingKind {
     /** A wide text field. */

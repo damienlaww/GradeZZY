@@ -24,6 +24,8 @@ import javafx.scene.layout.VBox;
 
 /**
  * A read-only table built from rows of nodes.
+ *
+ * <p>Tier: SHOULD.
  */
 public class PlainTable extends VBox {
 
@@ -77,8 +79,8 @@ public class PlainTable extends VBox {
         alignments.add(alignment);
         Label label = new Label(title);
         label.getStyleClass().add("plain-header-text");
-        header.getChildren().add(cell(header.getChildren().size(),
-                label));
+        int column = header.getChildren().size();
+        header.getChildren().add(cell(column, label));
     }
 
     /**

@@ -23,6 +23,8 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * A background task that lists the students with no submission.
+ *
+ * <p>Tier: SHOULD.
  */
 public class MissingStudentsLookup extends Task<List<Student>> {
 

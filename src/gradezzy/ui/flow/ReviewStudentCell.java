@@ -19,8 +19,13 @@ import gradezzy.model.Submission;
 
 /**
  * The student's name above the username.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ReviewStudentCell extends TableCell<Submission, Submission> {
+
+    // The line break between the name and the username in the tooltip
+    private static final String LINE_END = "\n";
 
     /**
      * Creates an empty cell.
@@ -44,8 +49,9 @@ public class ReviewStudentCell extends TableCell<Submission, Submission> {
             return;
         }
         // The whole name, for a name too long for the column
-        setTooltip(new Tooltip(Students.name(submission) + "\n"
-                + submission.getUsername()));
+        String tipText = Students.name(submission) + LINE_END
+                + submission.getUsername();
+        setTooltip(new Tooltip(tipText));
         Label name = Parts.strong(Students.name(submission));
         Label username = Parts.muted(submission.getUsername());
         username.getStyleClass().add("small-text");

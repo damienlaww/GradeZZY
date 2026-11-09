@@ -148,7 +148,8 @@ public class QuestionStrength {
         }
         int caught = tried - countSurvived();
         double share = (double) caught / tried;
-        return Math.round(share * PERCENT);
+        double percent = share * PERCENT;
+        return Math.round(percent);
     }
 
     /**

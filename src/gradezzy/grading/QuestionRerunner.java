@@ -130,17 +130,19 @@ public class QuestionRerunner {
     // checks that it holds the answer and the tester.
     private Path prepareCopy(Submission submission, Assessment assessment,
             Question question) throws GradingException {
-        if (submission.getWorkingCopyPath() == null
-                || !Files.isDirectory(submission.getWorkingCopyPath(),
-                        LinkOption.NOFOLLOW_LINKS)) {
+        Path workingCopy = submission.getWorkingCopyPath();
+        boolean noWorkingCopy = workingCopy == null
+                || !Files.isDirectory(workingCopy, LinkOption.NOFOLLOW_LINKS);
+        if (noWorkingCopy) {
             throw new GradingException("This student has no working copy, "
                     + "so there is nothing to run. Grade the student again "
                     + "first.");
         }
         Path folder = null;
         try {
-            if (QuestionFolderFinder.find(submission, assessment,
-                    question) == null) {
+            Path questionFolder = QuestionFolderFinder.find(submission,
+                    assessment, question);
+            if (questionFolder == null) {
                 throw new GradingException("The " + question.getFolderName()
                         + " folder is missing from this student's files.");
             }
@@ -150,8 +152,8 @@ public class QuestionRerunner {
             throw new GradingException("The question folder could not be "
                     + "copied: " + exception.getMessage(), exception);
         }
-        if (!Files.isRegularFile(folder.resolve(question.getFileName()),
-                LinkOption.NOFOLLOW_LINKS)) {
+        Path answer = folder.resolve(question.getFileName());
+        if (!Files.isRegularFile(answer, LinkOption.NOFOLLOW_LINKS)) {
             throw new GradingException(question.getFileName() + " is "
                     + "missing from this student's " + question.getFolderName()
                     + " folder.");
@@ -167,14 +169,16 @@ public class QuestionRerunner {
             throw new GradingException("The tester folder of this run is "
                     + "not known, so the tests cannot run.");
         }
-        Path tester = testersDirectory.resolve(testerClass + JAVA_EXTENSION);
+        String testerFileName = testerClass + JAVA_EXTENSION;
+        Path tester = testersDirectory.resolve(testerFileName);
         if (!Files.isRegularFile(tester, LinkOption.NOFOLLOW_LINKS)) {
-            throw new GradingException(testerClass + JAVA_EXTENSION
-                    + " is not in the tester folder " + testersDirectory
-                    + ", so the tests cannot run.");
+            throw new GradingException(testerFileName + " is not in the "
+                    + "tester folder " + testersDirectory + ", so the tests "
+                    + "cannot run.");
         }
         try {
-            Files.copy(tester, folder.resolve(testerClass + JAVA_EXTENSION),
+            Path installed = folder.resolve(testerFileName);
+            Files.copy(tester, installed,
                     StandardCopyOption.REPLACE_EXISTING);
             new TesterInstaller(config).copyDataFiles(testersDirectory,
                     folder);

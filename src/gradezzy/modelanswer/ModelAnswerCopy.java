@@ -35,6 +35,7 @@ public final class ModelAnswerCopy {
 
     // Only static methods; never created
     private ModelAnswerCopy() {
+        // Nothing to set up
     }
 
     /**

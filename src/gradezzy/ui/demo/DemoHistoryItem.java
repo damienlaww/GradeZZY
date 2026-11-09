@@ -13,6 +13,8 @@ import gradezzy.model.GradingRun;
 
 /**
  * One run on the Runs tab with its backup.
+ *
+ * <p>Tier: COULD.
  */
 public class DemoHistoryItem {
 

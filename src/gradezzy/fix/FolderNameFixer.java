@@ -18,6 +18,8 @@ import gradezzy.model.Submission;
 
 /**
  * Renames a wrongly named top folder to the student's username.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class FolderNameFixer extends AbstractFixer {
 
@@ -74,8 +76,11 @@ public class FolderNameFixer extends AbstractFixer {
         if (contentRoot == null) {
             throw new FixException("Could not tell which top folder holds "
                     + "the question folders, so nothing was renamed.");
-        } else if (contentRoot.equals(workingCopy)
-                || contentRoot.getFileName().toString().equals(username)) {
+        }
+
+        boolean namedRight = contentRoot.equals(workingCopy)
+                || contentRoot.getFileName().toString().equals(username);
+        if (namedRight) {
             return null;
         }
         return contentRoot;

@@ -40,20 +40,29 @@ public final class ExportFolders {
     // A module or section code: letters, digits and dashes
     private static final String CODE_PATTERN = "[A-Za-z0-9-]+";
 
-    // Where who an entry is for, and its folder, sit in an entry
+    // Where who an entry is for sits in an entry
     private static final int WHO = 0;
+
+    // Where the folder sits in an entry
     private static final int FOLDER = 1;
 
     // The most parts who an entry is for can have: module and section
     private static final int MAX_WHO_PARTS = 2;
 
-    // A percent sign, and how encode writes it
+    // A percent sign
     private static final String PERCENT = "%";
+
+    // How encode writes a percent sign
     private static final String ENCODED_PERCENT = "%25";
 
-    // How encode writes the entry separator, and its lowercase form
+    // How encode writes the entry separator
     private static final String ENCODED_SEPARATOR = "%3B";
+
+    // The lowercase form of the encoded entry separator
     private static final String ENCODED_SEPARATOR_LOWER = "%3b";
+
+    // The split limit that keeps empty parts, so "CS102/" has two parts
+    private static final int KEEP_EMPTY_PARTS = -1;
 
     // Not used: every method is static.
     private ExportFolders() {
@@ -163,8 +172,10 @@ public final class ExportFolders {
         List<String[]> kept = new ArrayList<>();
         for (String[] entry : read(folders)) {
             String lower = entry[WHO].toLowerCase(Locale.ROOT);
-            if (!lower.equals(module)
-                    && !lower.startsWith(module + SECTION_SEPARATOR)) {
+            String sectionStart = module + SECTION_SEPARATOR;
+            boolean otherModule = !lower.equals(module)
+                    && !lower.startsWith(sectionStart);
+            if (otherModule) {
                 kept.add(entry);
             }
         }
@@ -242,14 +253,15 @@ public final class ExportFolders {
      */
     public static Path findOwnScoreSheet(AppConfig config, String moduleCode,
             String sectionCode) {
-        if (moduleCode == null || sectionCode == null
-                || !config.hasKey(ConfigKeys.SCORE_SHEET_BY_SECTION)) {
+        boolean noOwnSheet = moduleCode == null || sectionCode == null
+                || !config.hasKey(ConfigKeys.SCORE_SHEET_BY_SECTION);
+        if (noOwnSheet) {
             return null;
         }
 
-        String own = exact(config.getString(
-                ConfigKeys.SCORE_SHEET_BY_SECTION),
-                keyOf(moduleCode, sectionCode));
+        String sheets = config.getString(ConfigKeys.SCORE_SHEET_BY_SECTION);
+        String who = keyOf(moduleCode, sectionCode);
+        String own = exact(sheets, who);
         if (own.isEmpty()) {
             return null;
         }
@@ -281,11 +293,12 @@ public final class ExportFolders {
             return "";
         }
         int equals = entry.indexOf(VALUE_SEPARATOR);
-        if (equals <= 0 || entry.substring(equals + 1).trim().isEmpty()) {
+        int folderStart = equals + 1;
+        if (equals <= 0 || entry.substring(folderStart).trim().isEmpty()) {
             return "Write each folder as CS102/G1=folder, separated by ;.";
         }
         String who = entry.substring(0, equals).trim();
-        String[] parts = who.split(SECTION_SEPARATOR, -1);
+        String[] parts = who.split(SECTION_SEPARATOR, KEEP_EMPTY_PARTS);
         if (parts.length > MAX_WHO_PARTS) {
             return "Name a module, or a module and a section, such as "
                     + "CS102/G1.";
@@ -308,8 +321,10 @@ public final class ExportFolders {
         for (String entry : value.split(ENTRY_SEPARATOR)) {
             int equals = entry.indexOf(VALUE_SEPARATOR);
             if (equals > 0) {
+                int folderStart = equals + 1;
                 String who = entry.substring(0, equals).trim();
-                String folder = decode(entry.substring(equals + 1).trim());
+                String written = entry.substring(folderStart).trim();
+                String folder = decode(written);
                 if (!who.isEmpty() && !folder.isEmpty()) {
                     putEntry(entries, who, folder);
                 }

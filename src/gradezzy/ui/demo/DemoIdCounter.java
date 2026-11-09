@@ -10,8 +10,13 @@ package gradezzy.ui.demo;
 
 /**
  * Hands out unique anomaly ids.
+ *
+ * <p>Tier: COULD.
  */
 public class DemoIdCounter {
+
+    // The pattern of an anomaly id: A- and the count in four digits
+    private static final String ID_FORMAT = "A-%04d";
 
     // The number of ids handed out so far
     private int count = 0;
@@ -30,6 +35,6 @@ public class DemoIdCounter {
      */
     public String next() {
         count++;
-        return String.format("A-%04d", count);
+        return String.format(ID_FORMAT, count);
     }
 }
