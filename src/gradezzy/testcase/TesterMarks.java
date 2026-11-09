@@ -80,19 +80,15 @@ public final class TesterMarks {
     }
 
     /**
-     * Adds up the largest marks of a tester: the most that a number of
+     * Adds up the largest of a tester's marks: the most that a number of
      * passed cases can be worth, whichever cases they were.
      *
-     * @param testerSource the tester's .java file
+     * @param caseMarks the tester's marks, as readCaseMarks gives them
      * @param passes the number of passed cases
      * @return the sum of the largest marks, one per passed case
-     * @throws IOException if the file cannot be read
      */
-    public static double readBestMarks(Path testerSource, int passes)
-            throws IOException {
-        List<Double> marks = new ArrayList<>();
-        countMarks(readCode(testerSource), fileNameOf(testerSource),
-                new ArrayList<>(), marks);
+    public static double sumLargest(List<Double> caseMarks, int passes) {
+        List<Double> marks = new ArrayList<>(caseMarks);
         Collections.sort(marks, Collections.reverseOrder());
 
         double total = 0.0;
@@ -100,6 +96,24 @@ public final class TesterMarks {
             total += marks.get(index);
         }
         return total;
+    }
+
+    /**
+     * Lists the number of every {@code score += <number>;} statement in a
+     * tester, in the order they appear. In the provided testers each test
+     * case has one such statement, so the first number is what case 1 is
+     * worth, the second what case 2 is worth, and so on.
+     *
+     * @param testerSource the tester's .java file
+     * @return the marks in the order they appear; empty when there are none
+     * @throws IOException if the file cannot be read
+     */
+    public static List<Double> readCaseMarks(Path testerSource)
+            throws IOException {
+        List<Double> marks = new ArrayList<>();
+        countMarks(readCode(testerSource), fileNameOf(testerSource),
+                new ArrayList<>(), marks);
+        return marks;
     }
 
     /**

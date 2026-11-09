@@ -35,6 +35,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
@@ -42,6 +43,7 @@ import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.Submission;
 import gradezzy.model.TestCaseResult;
+import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
@@ -429,7 +431,8 @@ public class StudentPanel extends ScrollPane {
             code.getStyleClass().add("small-text");
             details.getChildren().add(code);
         }
-        if (backend.supports(Capability.RETRY_QUESTION)) {
+        boolean regrading = window.getState().isRegrading(submission);
+        if (backend.supports(Capability.RETRY_QUESTION) && !regrading) {
             Hyperlink retry = Parts.link("Grade " + question.getId()
                     + " again", () -> askRetryQuestion(backend, question));
             retry.getStyleClass().add("small-text");
@@ -568,7 +571,7 @@ public class StudentPanel extends ScrollPane {
         } else if (backend.needsReview(anomaly)) {
             tag = Parts.pill("Could not fix", Tone.BAD);
         }
-        VBox card = createCard(tag, title, anomaly);
+        VBox card = createCard(tag, title, describeFinding(anomaly));
 
         String before = repair.getOriginalValue();
         if (backend.supports(Capability.REPAIR_VALUES) && before != null
@@ -614,6 +617,16 @@ public class StudentPanel extends ScrollPane {
         addOpenCode(buttons, anomaly);
         addButtons(card, buttons);
         return card;
+    }
+
+    // Says what a fix did once it is made, such as the folder's new name,
+    // else what the student had wrong.
+    private String describeFinding(Anomaly anomaly) {
+        String done = anomaly.describeFix();
+        if (!done.isEmpty()) {
+            return done;
+        }
+        return anomaly.getMessage();
     }
 
     // Adds Open code to a card, opening the code sheet on the question
@@ -915,12 +928,13 @@ public class StudentPanel extends ScrollPane {
             tag = Parts.pill("Flag", Tone.WARN);
         }
         VBox card = createCard(tag, Problems.title(anomaly.getType()),
-                anomaly);
+                anomaly.getMessage());
         if (open) {
             addAdvice(card, anomaly);
         }
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         if (!backend.supports(Capability.FLAG_REVIEW)) {
+            addCompare(buttons, anomaly, backend);
             addOpenCode(buttons, anomaly);
             addButtons(card, buttons);
             return card;
@@ -938,17 +952,45 @@ public class StudentPanel extends ScrollPane {
         } else if (decision != ReviewDecision.OPEN) {
             buttons.getChildren().add(undoButton(backend, anomaly));
         }
+        addCompare(buttons, anomaly, backend);
         addOpenCode(buttons, anomaly);
         addButtons(card, buttons);
         return card;
     }
 
+    // Adds Compare to a Similar code flag, opening both students' answers
+    // to the flagged question side by side.
+    private void addCompare(HBox buttons, Anomaly anomaly,
+            DashboardBackend backend) {
+        GradingRun run = window.getState().getRun();
+        boolean canCompare = anomaly.getType() == AnomalyType.SIMILAR_CODE
+                && run != null
+                && backend.supports(Capability.SIMILARITY_DETAIL);
+        if (!canCompare) {
+            return;
+        }
+        SimilarityPair pair = backend.findSimilarPair(run, anomaly);
+        if (pair == null) {
+            return;
+        }
+        Button compare = Parts.small("Compare",
+                () -> openCompare(run, pair));
+        Parts.tip(compare, "Show " + pair.getQuestionId() + " of both "
+                + "students side by side, with the same lines marked.");
+        buttons.getChildren().add(compare);
+    }
+
+    // Opens the sheet that compares a similar pair.
+    private void openCompare(GradingRun run, SimilarityPair pair) {
+        window.showSheet(SimilaritySheet.create(window, run, pair));
+    }
+
     // Builds a card with its tag, title and detail.
-    private VBox createCard(Label tag, String titleText, Anomaly anomaly) {
+    private VBox createCard(Label tag, String titleText, String detailText) {
         Label title = Parts.strong(titleText);
         title.setWrapText(true);
-        Label detail = Parts.muted(Problems.shortenPaths(
-                anomaly.getMessage(), submission));
+        Label detail = Parts.muted(Problems.shortenPaths(detailText,
+                submission));
         detail.setWrapText(true);
         detail.getStyleClass().add("small-text");
         VBox text = new VBox(LINE_GAP, title, detail);
@@ -1000,11 +1042,23 @@ public class StudentPanel extends ScrollPane {
             links.getChildren().add(Parts.link("Open code and test output",
                     () -> openCode()));
         }
-        if (backend.supports(Capability.RETRY_SUBMISSION)) {
+        if (window.getState().isRegrading(submission)) {
+            links.getChildren().add(createRegradeNote());
+        } else if (backend.supports(Capability.RETRY_SUBMISSION)) {
             links.getChildren().add(Parts.link("Grade this student again",
                     () -> askRetrySubmission(backend)));
         }
         return links;
+    }
+
+    // Says, in place of the Grade again links, that the student is being
+    // graded again in the background.
+    private Label createRegradeNote() {
+        Label note = Parts.muted("Grading again in the background. This "
+                + "can take a minute; you can keep reviewing.");
+        note.getStyleClass().add("small-text");
+        note.setWrapText(true);
+        return note;
     }
 
     // ---------------------------------------------------------- actions
@@ -1019,8 +1073,10 @@ public class StudentPanel extends ScrollPane {
     // Asks before grading the shown student again.
     private void askRetrySubmission(DashboardBackend backend) {
         window.confirm("Grade " + Students.name(submission) + " again?",
-                "Their marks are replaced by the new result.",
-                "Grade again", () -> retrySubmission(backend));
+                "Their marks are replaced by the new result. Marks you set "
+                + "by hand are kept; fixes are made again and wait for you "
+                + "to keep them.", "Grade again",
+                () -> retrySubmission(backend));
     }
 
     // Asks before grading one question of the shown student again.
@@ -1028,7 +1084,8 @@ public class StudentPanel extends ScrollPane {
             Question question) {
         window.confirm("Grade " + question.getId() + " again?", "The mark "
                 + "for " + question.getId() + " is replaced by the new "
-                + "result.", "Grade again",
+                + "result. Other marks, fixes and flags stay, and a mark "
+                + "you set by hand is kept.", "Grade again",
                 () -> retryQuestion(backend, question));
     }
 
@@ -1042,22 +1099,50 @@ public class StudentPanel extends ScrollPane {
     }
 
     /**
-     * Grades the shown student again from the start.
+     * Grades the shown student again from the start. Live mode runs the
+     * testers, so it grades on a background thread.
      *
      * @param backend the backend that grades
      */
     private void retrySubmission(DashboardBackend backend) {
-        applyRegrade(backend.retrySubmission(submission));
+        if (backend.isDemo()) {
+            applyRegrade(backend.retrySubmission(
+                    window.getState().getRun(), submission));
+            return;
+        }
+        startRegradeJob(new RegradeJob(backend, window.getState().getRun(),
+                submission));
     }
 
     /**
-     * Grades one question of the shown student again.
+     * Grades one question of the shown student again. Live mode runs the
+     * tester, so it grades on a background thread.
      *
      * @param backend the backend that grades
      * @param question the question
      */
     private void retryQuestion(DashboardBackend backend, Question question) {
-        applyRegrade(backend.retryQuestion(submission, question.getId()));
+        if (backend.isDemo()) {
+            applyRegrade(backend.retryQuestion(window.getState().getRun(),
+                    submission, question.getId()));
+            return;
+        }
+        startRegradeJob(new RegradeJob(backend, window.getState().getRun(),
+                submission, question.getId()));
+    }
+
+    // Starts grading again in the background; the panel says so until it
+    // ends. Only one such job runs at a time. The job forgets an earlier
+    // export of the run itself.
+    private void startRegradeJob(RegradeJob job) {
+        // The outcome is always told, as the instructor may have moved on
+        if (job.startOnce(window.getState(), result -> apply(result, true),
+                null)) {
+            changed();
+            return;
+        }
+        window.notify("Wait until grading again or undoing a fix has "
+                + "finished.");
     }
 
     /**

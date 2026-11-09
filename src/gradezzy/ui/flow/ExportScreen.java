@@ -46,6 +46,7 @@ import gradezzy.model.SubmissionStatus;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.report.AnomalyReportExporter;
 import gradezzy.report.AuditLogExporter;
+import gradezzy.report.CommonMistakesExporter;
 import gradezzy.report.JsonExporter;
 import gradezzy.report.StudentReportExporter;
 import gradezzy.service.ClassFileMatch;
@@ -141,6 +142,10 @@ public class ExportScreen extends FlowScreen {
     // Also write the activity log
     private final CheckBox activityLog = new CheckBox(
             "Also save the activity log");
+
+    // Also write one CSV row per answer group
+    private final CheckBox commonMistakes = new CheckBox(
+            "Also save the common mistakes, one row per group");
 
     // Where the files are saved
     private final Label savedTo = Parts.muted("");
@@ -323,6 +328,9 @@ public class ExportScreen extends FlowScreen {
         tickedRow.getChildren().addAll(tickedOnly, tickedReason);
         VBox choices = new VBox(CHOICE_GAP, everyone, tickedRow,
                 json, problemReport, studentReport, activityLog);
+        if (getBackend().supports(Capability.ANSWER_GROUPS)) {
+            choices.getChildren().add(commonMistakes);
+        }
         choices.getStyleClass().add("export-choices");
 
         Label about = Parts.muted("Your score sheet with each student's "
@@ -1066,8 +1074,7 @@ public class ExportScreen extends FlowScreen {
         Label question = Parts.muted(pair.getQuestionId());
         question.setMinWidth(Label.USE_PREF_SIZE);
         Node grow = Parts.grow();
-        Label similar = Parts.pill(Math.round(pair.getSimilarity()
-                * PERCENT) + "% similar", Tone.WARN);
+        Label similar = SimilaritySheet.similarityPill(pair);
         HBox row = Parts.row(Parts.GAP,
                 new Node[] {names, question, grow, similar});
         if (getBackend().supports(Capability.SIMILARITY_DETAIL)) {
@@ -1189,6 +1196,9 @@ public class ExportScreen extends FlowScreen {
         if (activityLog.isSelected()) {
             formats.add(AuditLogExporter.FORMAT_NAME);
         }
+        if (commonMistakes.isSelected()) {
+            formats.add(CommonMistakesExporter.FORMAT_NAME);
+        }
         return formats;
     }
 
@@ -1207,6 +1217,9 @@ public class ExportScreen extends FlowScreen {
         }
         if (activityLog.isSelected()) {
             files.add("the activity log");
+        }
+        if (commonMistakes.isSelected()) {
+            files.add("the common mistakes");
         }
         if (files.isEmpty()) {
             return "";

@@ -128,6 +128,10 @@ public final class Parts {
     /** A plus sign: add something. */
     public static final String PLUS = "M12 5v14M5 12h14";
 
+    /** A pencil: rename or edit something. */
+    public static final String PENCIL = "M4 20h4L19 9a2.1 2.1 0 0 0-4-4"
+            + "L4 16zM13.5 6.5l4 4";
+
     /** The widest a paragraph in a sheet may be. */
     public static final double TEXT_WIDTH = 420.0;
 
@@ -726,8 +730,9 @@ public final class Parts {
         }
     }
 
-    // Builds a tip that shows quickly and wraps.
-    private static Tooltip tooltip(String text) {
+    // Builds a tip that shows quickly and wraps. CompareView also uses
+    // it, to change a tip's text as a chip is turned on and off.
+    static Tooltip tooltip(String text) {
         Tooltip tip = new Tooltip(text);
         tip.setShowDelay(TIP_DELAY);
         tip.setShowDuration(TIP_DURATION);

@@ -85,8 +85,9 @@ public class PlainTable extends VBox {
      * Adds a row under the others. Pass one node per column.
      *
      * @param cells the content of each column, left to right
+     * @return the row, so a caller can make it clickable
      */
-    public void addRow(Node[] cells) {
+    public HBox addRow(Node[] cells) {
         HBox row = new HBox();
         row.getStyleClass().add("plain-row");
         row.setAlignment(Pos.CENTER_LEFT);
@@ -96,6 +97,7 @@ public class PlainTable extends VBox {
             row.getChildren().add(cell(i, cells[i]));
         }
         rows.getChildren().add(row);
+        return row;
     }
 
     /**

@@ -48,6 +48,15 @@ public class SubmissionLoader {
     // A browser's copy number at the end of a name, such as " (1)"
     private static final String COPY_NUMBER_PATTERN = "\\s*\\(\\d+\\)$";
 
+    // The words Windows adds to a copied file, in any case, with any copy
+    // number after them: " - Copy" or " - Copy (2)"
+    private static final String WINDOWS_COPY_PATTERN =
+            "(?i)\\s+-\\s+copy(\\s*\\(\\d+\\))?$";
+
+    // The copy number of " - Copy" with no number: Windows numbers the
+    // next copy (2)
+    private static final int FIRST_WINDOWS_COPY = 1;
+
     // Matches every character that is not a digit
     private static final String NON_DIGIT_PATTERN = "\\D";
 
@@ -296,9 +305,11 @@ public class SubmissionLoader {
 
     /**
      * Works out the username from a zip file or folder name by removing the
-     * configured prefix, the .zip ending and a browser's copy number, so
-     * "2023-2024-ping.lee.2023 (1).zip" gives "ping.lee.2023". The window
-     * calls this too, so both show the same username.
+     * configured prefix, the .zip ending, a browser's copy number and the
+     * words Windows adds to a copy, in lower case as on the roster, so
+     * "2023-2024-ping.lee.2023 (1).zip", "2023-2024-PING.LEE.2023.ZIP" and
+     * "2023-2024-ping.lee.2023 - Copy.zip" all give "ping.lee.2023". The
+     * window calls this too, so both show the same username.
      *
      * @param zipFileName the zip file or folder name
      * @return the username, or an empty string if none is found
@@ -309,15 +320,58 @@ public class SubmissionLoader {
         }
         String username = removeZipExtension(zipFileName.replaceFirst(
                 config.getString(ConfigKeys.ZIP_NAME_PREFIX_PATTERN), ""));
-        // A second download of the same file is saved as "name (1).zip"
-        return username.trim().replaceFirst(COPY_NUMBER_PATTERN, "").trim();
+        return removeCopyMarks(username).toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Says whether a file or folder name ends with the words Windows adds
+     * to a copy, such as "ella.fong.2025 - Copy.zip".
+     *
+     * @param fileName the zip file or folder name
+     * @return true if the name is a Windows copy name
+     */
+    public static boolean isWindowsCopyName(String fileName) {
+        if (fileName == null) {
+            return false;
+        }
+        String name = removeCopyNumber(removeZipEnding(fileName));
+        return !name.replaceFirst(WINDOWS_COPY_PATTERN, "").equals(name);
+    }
+
+    // Removes every copy mark from the end of a name: a browser's "(1)"
+    // and a Windows " - Copy", in either order, as "name (1) - Copy".
+    private static String removeCopyMarks(String name) {
+        String previous = "";
+        String current = name.trim();
+        while (!current.equals(previous)) {
+            previous = current;
+            current = removeCopyNumber(current);
+            current = current.replaceFirst(WINDOWS_COPY_PATTERN, "").trim();
+        }
+        return current;
+    }
+
+    // Removes a browser's copy number, such as " (1)", from a name.
+    private static String removeCopyNumber(String name) {
+        return name.trim().replaceFirst(COPY_NUMBER_PATTERN, "").trim();
+    }
+
+    // Removes a .zip ending, in any case, without reading any setting.
+    private static String removeZipEnding(String fileName) {
+        String name = fileName.trim();
+        if (name.toLowerCase(Locale.ROOT).endsWith(ZIP_EXTENSION)) {
+            int nameEnd = name.length() - ZIP_EXTENSION.length();
+            name = name.substring(0, nameEnd);
+        }
+        return name.trim();
     }
 
     /**
      * Reads the copy number a browser adds to a second download, such as
      * 1 for "2023-2024-ping.lee.2023 (1).zip", by the same rule grading
      * uses to choose one file per student: the highest number is the
-     * newest download and is graded. The window calls this too.
+     * newest download and is graded. A Windows copy counts the same way:
+     * " - Copy" is 1 and " - Copy (2)" is 2. The window calls this too.
      *
      * @param fileName the zip file or folder name
      * @return the copy number, or 0 when the name has none
@@ -326,12 +380,11 @@ public class SubmissionLoader {
         if (fileName == null) {
             return NO_COPY_NUMBER;
         }
-        String name = fileName;
-        if (name.toLowerCase(Locale.ROOT).endsWith(ZIP_EXTENSION)) {
-            name = name.substring(0, name.length() - ZIP_EXTENSION.length());
-        }
-        name = name.trim();
+        String name = removeZipEnding(fileName);
         String original = name.replaceFirst(COPY_NUMBER_PATTERN, "");
+        if (original.equals(name) && isWindowsCopyName(name)) {
+            return FIRST_WINDOWS_COPY;
+        }
         if (original.equals(name)) {
             return NO_COPY_NUMBER;
         }
@@ -596,6 +649,7 @@ public class SubmissionLoader {
             Submission keeper = kept.get(
                     submission.getUsername().toLowerCase(Locale.ROOT));
             if (keeper == submission) {
+                warnWindowsCopy(submission);
                 submissions.add(submission);
             } else {
                 warnDuplicate(keeper, submission.getOriginalPath());
@@ -642,7 +696,7 @@ public class SubmissionLoader {
     // uploads a fixed version gets it saved as "name (1).zip"; for two
     // files of the same name in two chosen folders, the newer one, or on
     // a tie the one chosen later, as a late batch replaces an earlier
-    // result; else a username already in lower case, as on the roster.
+    // result; else a file name in lower case, as usernames are.
     private boolean isPreferred(Submission candidate, Submission current) {
         Path candidatePath = candidate.getOriginalPath();
         Path currentPath = current.getOriginalPath();
@@ -655,8 +709,8 @@ public class SubmissionLoader {
             return readModifiedMillis(candidatePath)
                     >= readModifiedMillis(currentPath);
         }
-        return isLowerCase(candidate.getUsername())
-                && !isLowerCase(current.getUsername());
+        return isLowerCase(fileNameOf(candidatePath))
+                && !isLowerCase(fileNameOf(currentPath));
     }
 
     // Says whether two different files share a name and were found in
@@ -689,9 +743,24 @@ public class SubmissionLoader {
         }
     }
 
-    // Says whether a username has no capital letter.
-    private boolean isLowerCase(String username) {
-        return username.equals(username.toLowerCase(Locale.ROOT));
+    // Says whether a name has no capital letter.
+    private boolean isLowerCase(String name) {
+        return name.equals(name.toLowerCase(Locale.ROOT));
+    }
+
+    // Tells the instructor that the graded file has a Windows copy name,
+    // so the student may have a newer or an older file.
+    private void warnWindowsCopy(Submission kept) {
+        String keptName = fileNameOf(kept.getOriginalPath());
+        if (!isWindowsCopyName(keptName)) {
+            return;
+        }
+        kept.addAnomaly(new Anomaly(ANOMALY_ID_PREFIX + UUID.randomUUID(),
+                AnomalyType.DUPLICATE_SUBMISSION, Severity.WARNING,
+                kept.getUsername(), keptName + " is a copy made by Windows "
+                + "(\" - Copy\" in its name). It was graded as "
+                + kept.getUsername() + ".", "Check that this copy is the "
+                + "student's latest work."));
     }
 
     // Tells the instructor, on the graded submission, which file of the

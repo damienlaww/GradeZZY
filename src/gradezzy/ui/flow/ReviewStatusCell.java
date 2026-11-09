@@ -68,8 +68,7 @@ public class ReviewStatusCell extends TableCell<Submission, Submission> {
             if (backend.needsReview(anomaly)) {
                 open++;
                 if (listed < MAX_LISTED) {
-                    items += BULLET + kindOf(anomaly)
-                            + anomaly.getMessage();
+                    items += BULLET + kindOf(anomaly) + wordsOf(anomaly);
                     listed++;
                 }
             }
@@ -89,7 +88,18 @@ public class ReviewStatusCell extends TableCell<Submission, Submission> {
                 + "question's tests.";
     }
 
-    // Names whether an item is a fix to approve or a flag to look at.
+    // Returns the words listed for an item that waits for a decision.
+    private String wordsOf(Anomaly anomaly) {
+        // A fix waiting for approval says what it did, such as the new
+        // folder name, rather than what was wrong
+        String done = anomaly.describeFix();
+        if (!done.isEmpty()) {
+            return done;
+        }
+        return anomaly.getMessage();
+    }
+
+    // Says whether an item is a fix to approve or a flag.
     private String kindOf(Anomaly anomaly) {
         if (anomaly.getFixStatus() == FixStatus.APPLIED) {
             return "Fix to approve: ";

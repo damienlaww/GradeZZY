@@ -1091,6 +1091,89 @@
     -fx-stroke-width: 0;
 }
 
+/* The Similar code sheet: both students' files in one box, each in its
+   own pane that scrolls sideways, while the two scroll up and down
+   together. Long lines do not wrap. A line that is in both files is red
+   with a red bar on its left; starter code is grey. */
+.similar-code {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 6px;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 6px;
+    -fx-padding: 8px 0;
+}
+
+.similar-pane,
+.similar-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
+/* Only a left border, so both panes keep the same height */
+.similar-column-right {
+    -fx-border-color: -color-border-muted;
+    -fx-border-width: 0 0 0 1px;
+}
+
+.code-line {
+    -fx-padding: 0 12px 0 0;
+}
+
+.code-line.same {
+    -fx-background-color: -color-danger-subtle;
+}
+
+.line-number,
+.line-code {
+    -fx-font-family: "IBM Plex Mono";
+    -fx-font-size: 12px;
+}
+
+/* The number stays at the left while the code scrolls under it, so it
+   has a solid background and carries the red bar. */
+.line-number {
+    -fx-min-width: 40px;
+    -fx-pref-width: 40px;
+    -fx-alignment: top-right;
+    -fx-padding: 0 12px 0 9px;
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 0 3px;
+    -fx-background-color: -color-bg-subtle;
+    -fx-text-fill: -color-fg-subtle;
+}
+
+/* The red is see-through in the dark theme, so it is laid over the
+   box's own colour to hide the code under the number. */
+.code-line.same .line-number {
+    -fx-background-color: -color-bg-subtle, -color-danger-subtle;
+    -fx-border-color: -color-danger-emphasis;
+}
+
+.code-line.starter .line-code,
+.starter-tag {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.starter-tag {
+    -fx-font-size: 11px;
+    -fx-padding: 0 0 0 8px;
+}
+
+.legend-swatch {
+    -fx-min-width: 12px;
+    -fx-min-height: 12px;
+    -fx-max-width: 12px;
+    -fx-max-height: 12px;
+    -fx-background-radius: 3px;
+}
+
+.legend-swatch.same {
+    -fx-background-color: -color-danger-emphasis;
+}
+
+.legend-swatch.starter {
+    -fx-background-color: -color-fg-muted;
+}
+
 /* The questions on the left: each a row with a dot, the id, and the
    mark and tests in grey; the picked one is tinted. */
 .code-question {
@@ -1426,7 +1509,8 @@
     -fx-fill: -color-fg-default;
 }
 
-/* Compare sections: chips, curves and the table. */
+/* Section chips on Settings take their height from here; their colours
+   and padding are set again under Settings below. */
 .section-chip {
     -fx-background-color: -color-bg-default;
     -fx-background-radius: 999px;
@@ -1438,45 +1522,82 @@
     -fx-padding: 0 4px 0 12px;
 }
 
-.section-chip.alone {
-    -fx-padding: 0 12px;
-}
-
-.chip-remove {
-    -fx-background-color: transparent;
-    -fx-border-color: transparent;
+/* Compare sections: the Sections field, curves and the table. Each
+   section is a toggle chip with a round mark: an empty ring when off,
+   filled with the section's colour and ticked when on. The ring of a
+   chip that is on takes the same colour. The theme's blue is not used
+   for a chip that is on. */
+.compare-chip {
+    -fx-background-color: -color-border-default, -color-bg-default;
+    -fx-background-insets: 0, 1px;
     -fx-background-radius: 999px;
-    -fx-padding: 4px;
-}
-
-.chip-remove:hover {
-    -fx-background-color: -color-bg-subtle;
-}
-
-.add-chip {
-    -fx-background-color: transparent;
-    -fx-background-radius: 999px;
-    -fx-border-color: -color-border-default;
-    -fx-border-style: segments(4, 3);
-    -fx-border-radius: 999px;
+    -fx-text-fill: -color-fg-default;
     -fx-min-height: 28px;
     -fx-pref-height: 28px;
     -fx-max-height: 28px;
-    -fx-padding: 0 12px;
+    -fx-padding: 0 12px 0 8px;
+    -fx-graphic-text-gap: 8px;
+    -fx-cursor: hand;
 }
 
-.add-chip > .label {
-    -fx-text-fill: -color-fg-muted;
-    -fx-padding: 0;
+.compare-chip:hover {
+    -fx-background-color: -color-border-default, -color-bg-subtle;
 }
 
-.add-chip > .arrow-button {
-    -fx-padding: 0;
+/* Keyboard focus: a blue ring and an underlined name */
+.compare-chip:focused {
+    -fx-background-color: -color-accent-emphasis, -color-bg-default;
+    -fx-background-insets: 0, 2px;
+    -fx-underline: true;
 }
 
-.add-chip > .arrow-button > .arrow {
-    -fx-padding: 0;
-    -fx-shape: null;
+.compare-chip:selected,
+.compare-chip:selected:focused {
+    -fx-background-insets: 0, 2px;
+    -fx-text-fill: -color-fg-default;
+}
+
+.compare-chip.series-1:selected {
+    -fx-background-color: series-one, -color-bg-default;
+}
+
+.compare-chip.series-2:selected {
+    -fx-background-color: series-two, -color-bg-default;
+}
+
+.compare-chip.series-3:selected {
+    -fx-background-color: series-three, -color-bg-default;
+}
+
+.compare-chip:disabled {
+    -fx-opacity: 0.45;
+}
+
+.chip-mark {
+    -fx-stroke-width: 0;
+}
+
+.chip-mark.off {
+    -fx-fill: transparent;
+    -fx-stroke: -color-fg-subtle;
+    -fx-stroke-width: 1.5;
+}
+
+.chip-mark.series-1 {
+    -fx-fill: series-one;
+}
+
+.chip-mark.series-2 {
+    -fx-fill: series-two;
+}
+
+.chip-mark.series-3 {
+    -fx-fill: series-three;
+}
+
+.chip-tick .icon {
+    -fx-stroke: -color-fg-emphasis;
+    -fx-stroke-width: 3;
 }
 
 .series-dot,
@@ -1697,6 +1818,17 @@
     -fx-background-color: -color-accent-subtle;
     -fx-background-radius: 10px;
     -fx-padding: 8px 12px;
+}
+
+/* While the ticked students are graded again: how far it is and a bar,
+   in line with the words of the band above. No fill, as it is not a
+   status; the bar's track is a shade darker so it shows on the page. */
+.regrade-band {
+    -fx-padding: 0 12px;
+}
+
+.regrade-band .score-track {
+    -fx-background-color: -color-border-muted;
 }
 
 /* ---- explanation of a "?" ---- */

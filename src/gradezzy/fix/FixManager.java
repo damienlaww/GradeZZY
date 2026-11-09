@@ -143,6 +143,7 @@ public class FixManager {
                 }
                 if (fixRecord != null) {
                     anomaly.setFixStatus(FixStatus.APPLIED);
+                    anomaly.setFixDescription(fixRecord.getDescription());
                     forgetFailure(anomaly);
                     fixRecords.add(fixRecord);
                     applied.add(fixRecord);

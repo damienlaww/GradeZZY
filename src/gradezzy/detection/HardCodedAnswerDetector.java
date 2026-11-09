@@ -29,8 +29,11 @@ public class HardCodedAnswerDetector implements Detector {
      */
     public static final String NAME = "Hard-coded answer";
 
-    // The fewest literal branches in one method that raise a flag
-    private static final int MIN_LITERAL_BRANCHES = 3;
+    // The fewest literal branches in one method that raise a flag. A
+    // starter's main often has only two examples, so two branches that
+    // pick them out are enough; no honest answer in samples/e2e or
+    // samples/lab-test-2 has two
+    private static final int MIN_LITERAL_BRANCHES = 2;
 
     // Values honest code compares with all the time, so they do not count
     private static final String[] COMMON_VALUES = {"0", "1", "-1"};
@@ -109,11 +112,18 @@ public class HardCodedAnswerDetector implements Detector {
         List<Anomaly> flags = new ArrayList<>();
 
         for (Question question : assessment.getQuestions()) {
-            String studentText = JavaSourceText.readStudentFile(submission,
-                    assessment, question);
+            List<String> fileNames = JavaSourceText.listSourceFiles(question);
 
-            if (studentText != null) {
-                checkMethods(flags, submission, question, studentText);
+            for (String fileName : fileNames) {
+                String studentText = JavaSourceText.readStudentFile(
+                        submission, assessment, question, fileName);
+                String fileDescription = JavaSourceText.describeFile(
+                        question, fileName);
+
+                if (studentText != null) {
+                    checkMethods(flags, submission, fileDescription,
+                            studentText);
+                }
             }
         }
 
@@ -122,7 +132,7 @@ public class HardCodedAnswerDetector implements Detector {
 
     // Flags each answer method, overloads too, with too many literal branches.
     private void checkMethods(List<Anomaly> flags, Submission submission,
-            Question question, String studentText) {
+            String fileDescription, String studentText) {
         String code = JavaSourceText.removeComments(studentText);
 
         for (String methodName : JavaSourceText.findAnswerMethodNames(code)) {
@@ -132,7 +142,7 @@ public class HardCodedAnswerDetector implements Detector {
 
                 if (literalBranches >= MIN_LITERAL_BRANCHES) {
                     flags.add(createFlag(submission,
-                            JavaSourceText.describeFile(question) + ": "
+                            fileDescription + ": "
                             + methodName + " has " + literalBranches
                             + " if or case branches that compare a value "
                             + "with a fixed literal, so it may be "

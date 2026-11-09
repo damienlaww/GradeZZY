@@ -170,11 +170,42 @@ public class WorkingCopyManager {
                 starter = Path.of(config.getString(ConfigKeys.STARTER_DIR));
             }
             if (assessment != null) {
-                copyProvidedClassFiles(workingCopy, starter, assessment,
-                        provided);
+                copyFromStarter(workingCopy, starter, assessment, provided);
             }
         } catch (IOException exception) {
             throw new UncheckedIOException("Could not remove student "
+                    + "class files: " + exception.getMessage(), exception);
+        }
+    }
+
+    /**
+     * Copies each provided class file the starter folder holds into every
+     * matching question folder of the working copy, as
+     * removeStudentClassFiles does, without deleting anything. FixStage
+     * calls it after a fix made or moved question folders, so a folder
+     * made by a fix gets its provided class files too.
+     *
+     * <p>Tier: MUST.
+     *
+     * @param workingCopy the working copy
+     * @param assessment the assessment, whose questions name the folders
+     * @param starterDirectory the starter folder chosen for the batch, or
+     *        null for paths.starter.dir
+     * @throws UncheckedIOException if a file cannot be copied or the
+     *         working copy is outside the configured working folder
+     */
+    public void copyProvidedClassFiles(Path workingCopy,
+            Assessment assessment, Path starterDirectory) {
+        Path starter = starterDirectory;
+        if (starter == null) {
+            starter = Path.of(config.getString(ConfigKeys.STARTER_DIR));
+        }
+        try {
+            requireWorkingChild(workingCopy);
+            copyFromStarter(workingCopy, starter, assessment,
+                    config.getList(ConfigKeys.PROVIDED_CLASS_FILES));
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Could not copy the provided "
                     + "class files: " + exception.getMessage(), exception);
         }
     }
@@ -265,7 +296,7 @@ public class WorkingCopyManager {
 
     // Copies each provided class file the starter folder holds into the
     // matching question folders of the working copy.
-    private void copyProvidedClassFiles(Path workingCopy, Path starter,
+    private void copyFromStarter(Path workingCopy, Path starter,
             Assessment assessment, List<String> provided)
             throws IOException {
         List<String> folderNames = new ArrayList<>();

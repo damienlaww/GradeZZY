@@ -3,7 +3,8 @@
  *
  * Purpose: What the guided window remembers while the instructor moves
  * between steps: the class, the chosen files, the run and how far the
- * instructor has got.
+ * instructor has got, and the assessment and sections compared on
+ * Statistics.
  *
  * Where it fits: FlowWindow owns one; every screen reads and changes it.
  * It holds no JavaFX objects, so it is plain data.
@@ -51,6 +52,11 @@ public class FlowState {
     // and it grades one student again at a time.
     private final List<Anomaly> fixesInProgress = new ArrayList<>();
 
+    // The students a background job still has to grade again (a whole
+    // student or one question), the one being graded now first, or none.
+    // Only one such job runs at a time.
+    private final List<Submission> regradesInProgress = new ArrayList<>();
+
     // How many times grading has started, so a screen can tell that the
     // results may have changed since it last looked
     private int gradingCount = 0;
@@ -60,6 +66,13 @@ public class FlowState {
 
     // The assessment open in Settings, or null for the one in use
     private String settingsAssessment = null;
+
+    // The assessment compared on Statistics, or null for the default
+    private String statisticsAssessment = null;
+
+    // The sections compared on Statistics, in the order they were
+    // turned on
+    private final List<String> statisticsSections = new ArrayList<>();
 
     // The students chosen on Export when only some are exported
     private final List<Submission> exportPicked = new ArrayList<>();
@@ -369,6 +382,37 @@ public class FlowState {
     }
 
     /**
+     * Records the students a background job still has to grade again,
+     * the one being graded now first.
+     *
+     * @param students the students, or none once the job has ended
+     */
+    public void setRegradesInProgress(List<Submission> students) {
+        regradesInProgress.clear();
+        regradesInProgress.addAll(students);
+    }
+
+    /**
+     * Says whether a background job is grading students again now.
+     *
+     * @return true while a job still has a student to grade
+     */
+    public boolean isRegrading() {
+        return !regradesInProgress.isEmpty();
+    }
+
+    /**
+     * Says whether a student is being graded again now, or waits for
+     * their turn in the background job.
+     *
+     * @param submission the student
+     * @return true while the job still has the student to grade
+     */
+    public boolean isRegrading(Submission submission) {
+        return regradesInProgress.contains(submission);
+    }
+
+    /**
      * Records that a run's score sheet was exported.
      *
      * @param gradingRun the run
@@ -466,5 +510,40 @@ public class FlowState {
      */
     public void setSettingsAssessment(String name) {
         settingsAssessment = name;
+    }
+
+    /**
+     * Returns the assessment compared on the Statistics tab.
+     *
+     * <p>Tier: SHOULD. Owner: Jing Yuan.
+     *
+     * @return its name, or null when none has been chosen
+     */
+    public String getStatisticsAssessment() {
+        return statisticsAssessment;
+    }
+
+    /**
+     * Remembers the assessment compared on the Statistics tab, so it is
+     * still chosen after One section or another tab.
+     *
+     * <p>Tier: SHOULD. Owner: Jing Yuan.
+     *
+     * @param name its name, or null for the default
+     */
+    public void setStatisticsAssessment(String name) {
+        statisticsAssessment = name;
+    }
+
+    /**
+     * Returns the sections compared on the Statistics tab. The list is
+     * the one kept here, so changing it changes what is remembered.
+     *
+     * <p>Tier: SHOULD. Owner: Jing Yuan.
+     *
+     * @return the section codes, in the order they were turned on
+     */
+    public List<String> getStatisticsSections() {
+        return statisticsSections;
     }
 }

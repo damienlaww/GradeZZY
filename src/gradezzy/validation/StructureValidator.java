@@ -10,6 +10,8 @@
 package gradezzy.validation;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +32,11 @@ public class StructureValidator extends AbstractValidator {
      * The name shown in the anomaly log.
      */
     public static final String NAME = "Folder structure";
+
+    // How the top of an upload is named in a message: a ZIP file, or a
+    // folder unzipped by hand
+    private static final String ZIP_TOP = "the ZIP file";
+    private static final String FOLDER_TOP = "the uploaded folder";
 
     /**
      * Creates a new structure validator.
@@ -88,8 +95,9 @@ public class StructureValidator extends AbstractValidator {
         if (contentRoot.equals(workingCopy)) {
             anomalies.add(createAnomaly(submission,
                     AnomalyType.MISSING_WRAPPER_FOLDER, Severity.INFO,
-                    "The question folders were at the top of the ZIP file "
-                    + "instead of inside a " + username + " folder."));
+                    "The question folders were at the top of "
+                    + describeUpload(submission) + " instead of inside a "
+                    + "folder named " + username + "."));
         } else if (!topName.equals(username)) {
             anomalies.add(createAnomaly(submission,
                     AnomalyType.WRONG_FOLDER_NAME, Severity.WARNING,
@@ -144,20 +152,52 @@ public class StructureValidator extends AbstractValidator {
         }
     }
 
-    // Returns the only folder of the content root when it holds question
-    // folders one level too deep, or null.
+    // Returns the one folder of the content root that is not a question
+    // folder but holds question folders one level too deep, such as src
+    // beside out in an IntelliJ project, or null when there is none or
+    // more than one. FolderHierarchyFixer moves the folders by the same
+    // rule.
     private Path findExtraFolder(List<Path> folders, Assessment assessment)
             throws IOException {
-        if (folders.size() != 1) {
-            return null;
+        List<String> folderNames = getQuestionFolderNames(assessment);
+        List<Path> holders = new ArrayList<>();
+
+        for (Path folder : folders) {
+            String name = folder.getFileName().toString();
+            boolean questionFolder = isQuestionFolderName(name, folderNames);
+            if (!questionFolder
+                    && holdsQuestionFolder(listFolders(folder), assessment)) {
+                holders.add(folder);
+            }
         }
 
-        Path inner = folders.get(0);
-
-        if (!holdsQuestionFolder(listFolders(inner), assessment)) {
+        if (holders.size() != 1) {
             return null;
         }
-        return inner;
+        return holders.get(0);
+    }
+
+    // Says whether a folder name is a question folder name, in any case.
+    private boolean isQuestionFolderName(String name,
+            List<String> folderNames) {
+        for (String folderName : folderNames) {
+            if (folderName.equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Names the top of the upload: a ZIP file, or a folder unzipped by
+    // hand.
+    private String describeUpload(Submission submission) {
+        Path upload = submission.getOriginalPath();
+        boolean folder = upload != null
+                && Files.isDirectory(upload, LinkOption.NOFOLLOW_LINKS);
+        if (folder) {
+            return FOLDER_TOP;
+        }
+        return ZIP_TOP;
     }
 
     // Lists the absent question folders that sit in the extra folder.

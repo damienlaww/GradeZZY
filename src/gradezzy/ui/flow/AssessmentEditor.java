@@ -96,11 +96,9 @@ public final class AssessmentEditor {
     private final TextField testers = new TextField();
     private final TextField starter = new TextField();
 
-
     // Whether each folder can be used
     private final HBox testersStatus = Parts.row(0);
     private final HBox starterStatus = Parts.row(0);
-
 
     // The lists that come with the folders
     private final TextField classFiles = new TextField();
@@ -117,7 +115,6 @@ public final class AssessmentEditor {
 
     // Says which fields were filled in from the chosen folders
     private final Label filledNote = new Label();
-
 
     // Says what is wrong with the form
     private final Label problem = new Label();
@@ -238,7 +235,6 @@ public final class AssessmentEditor {
         problem.getStyleClass().add("field-problem");
         problem.setWrapText(true);
         show(problem, false);
-
 
         if (inline) {
             // Inside a page: the page scrolls, and Revert reloads it
@@ -392,7 +388,7 @@ public final class AssessmentEditor {
     // Adds a question row filled from a question.
     private void addQuestion(Question question) {
         QuestionFields fields = new QuestionFields(question,
-                () -> readAllMarks());
+                () -> questionChanged());
         fields.setOnRemove(() -> removeQuestion(fields));
         questions.add(fields);
         questionRows.getChildren().add(fields.getRow());
@@ -410,6 +406,36 @@ public final class AssessmentEditor {
         questions.remove(fields);
         questionRows.getChildren().remove(fields.getRow());
         updateTotal();
+        checkStarterAgain();
+    }
+
+    // Reads the marks and checks the starter folder again after a
+    // question's id, folder or file changed.
+    private void questionChanged() {
+        readAllMarks();
+        checkStarterAgain();
+    }
+
+    // Checks the starter folder against the questions now in the form,
+    // so its status is right before the assessment is saved.
+    private void checkStarterAgain() {
+        checkFolder(starter, starterStatus, InputKind.STARTER);
+    }
+
+    // Returns the questions in the form that have an id, folder and
+    // file, for checking the starter folder.
+    private List<Question> formQuestions() {
+        List<Question> filled = new ArrayList<>();
+        for (QuestionFields fields : questions) {
+            boolean complete = !fields.getId().isEmpty()
+                    && !fields.getFolder().isEmpty()
+                    && !fields.getFile().isEmpty();
+            if (complete) {
+                filled.add(new Question(fields.getId(), fields.getFolder(),
+                        fields.getFile(), fields.getMaxScore()));
+            }
+        }
+        return filled;
     }
 
     // Reads one question's maximum mark from its tester in the chosen
@@ -513,15 +539,23 @@ public final class AssessmentEditor {
         String text = field.getText().trim();
         if (text.isEmpty()) {
             status.getChildren().add(smallMuted("Not chosen yet."));
+            folderChanged(kind, text, null);
             return;
         }
         ImportItem item = null;
         try {
-            item = window.getBackend().inspect(kind, Path.of(text));
+            if (kind == InputKind.STARTER) {
+                // The questions in the form, saved or not
+                item = window.getBackend().inspectStarter(Path.of(text),
+                        formQuestions());
+            } else {
+                item = window.getBackend().inspect(kind, Path.of(text));
+            }
         } catch (RuntimeException exception) {
             // A path with characters this computer does not allow
             status.getChildren().add(Parts.pill("Cannot be used",
                     Tone.BAD));
+            folderChanged(kind, text, null);
             return;
         }
         Label pill = null;
@@ -537,53 +571,182 @@ public final class AssessmentEditor {
         note.setMinWidth(0);
         status.setSpacing(Parts.GAP_SMALL);
         status.getChildren().addAll(pill, note);
-        // Only a folder the instructor chose or changed fills the fields;
-        // opening a saved assessment leaves it exactly as it was saved
-        if (item.getState() != ImportState.INVALID && !opening
-                && !text.equals(lastFilled.get(kind))) {
-            lastFilled.put(kind, text);
-            fillFromFolder(kind, Path.of(text));
+        Path usable = null;
+        if (item.getState() != ImportState.INVALID) {
+            usable = Path.of(text);
+        }
+        folderChanged(kind, text, usable);
+    }
+
+    // Updates the fields when the instructor chose or changed a folder.
+    // Opening a saved assessment leaves it exactly as it was saved, and
+    // leaving a field without changing it does nothing.
+    private void folderChanged(InputKind kind, String text, Path usable) {
+        if (opening || text.equals(lastFilled.get(kind))) {
+            return;
+        }
+        Path previous = existingFolder(lastFilled.get(kind));
+        lastFilled.put(kind, text);
+        fillFromFolder(kind, previous, usable);
+        if (kind == InputKind.TESTERS) {
+            // The new tester folder may have added or removed questions
+            checkStarterAgain();
         }
     }
 
-    // Fills the data files, provided class files and unrenamed folder
-    // names from a chosen folder. Names found are added to what is
-    // there; nothing typed is removed. A note under the fields says
-    // what was added.
-    private void fillFromFolder(InputKind kind, Path folder) {
-        List<String> added = new ArrayList<>();
-        if (kind == InputKind.TESTERS) {
-            int found = addQuestionsFrom(folder);
-            if (found > 0) {
-                added.add(Parts.plural(found, "question"));
+    // Returns the folder a path names when it exists, or null.
+    private Path existingFolder(String text) {
+        if (text == null || text.isEmpty()) {
+            return null;
+        }
+        try {
+            Path folder = Path.of(text);
+            if (Files.isDirectory(folder)) {
+                return folder;
             }
-            int count = addTo(dataFiles,
-                    AssessmentFolderScanner.findDataFiles(folder));
-            if (count > 0) {
-                added.add(Parts.plural(count, "tester data file"));
+            return null;
+        } catch (RuntimeException exception) {
+            // A path with characters this computer does not allow
+            return null;
+        }
+    }
+
+    // Brings the questions, data files, provided class files and
+    // unrenamed folder names in line with a newly chosen folder. Names
+    // the previous folder supplied that the new one lacks are removed,
+    // names the new one has are added, and names the instructor typed
+    // are kept. Either folder may be null. A note under the fields says
+    // what changed.
+    private void fillFromFolder(InputKind kind, Path previous, Path folder) {
+        List<String> added = new ArrayList<>();
+        List<String> removed = new ArrayList<>();
+        if (kind == InputKind.TESTERS) {
+            List<String> oldIds = questionIds(previous);
+            List<String> newIds = questionIds(folder);
+            note(removed, removeQuestionsFrom(oldIds, newIds), "question");
+            List<String> oldData = AssessmentFolderScanner.findDataFiles(
+                    previous);
+            List<String> newData = AssessmentFolderScanner.findDataFiles(
+                    folder);
+            note(removed, removeFrom(dataFiles, oldData, newData),
+                    "tester data file");
+            if (folder != null) {
+                note(added, addQuestionsFrom(folder), "question");
+                note(added, addTo(dataFiles, newData), "tester data file");
             }
         } else if (kind == InputKind.STARTER) {
-            int classes = addTo(classFiles,
-                    AssessmentFolderScanner.findProvidedClassFiles(folder));
-            if (classes > 0) {
-                added.add(Parts.plural(classes, "provided class file"));
-            }
             List<String> questionFolders = new ArrayList<>();
             for (QuestionFields fields : questions) {
                 questionFolders.add(fields.getFolder());
             }
-            int names = addTo(placeholders, AssessmentFolderScanner
-                    .findStarterFolderNames(folder, questionFolders));
-            if (names > 0) {
-                added.add(Parts.plural(names, "unrenamed folder name"));
+            List<String> oldClasses = AssessmentFolderScanner
+                    .findProvidedClassFiles(previous);
+            List<String> newClasses = AssessmentFolderScanner
+                    .findProvidedClassFiles(folder);
+            note(removed, removeFrom(classFiles, oldClasses, newClasses),
+                    "provided class file");
+            List<String> oldNames = AssessmentFolderScanner
+                    .findStarterFolderNames(previous, questionFolders);
+            List<String> newNames = AssessmentFolderScanner
+                    .findStarterFolderNames(folder, questionFolders);
+            note(removed, removeFrom(placeholders, oldNames, newNames),
+                    "unrenamed folder name");
+            if (folder != null) {
+                note(added, addTo(classFiles, newClasses),
+                        "provided class file");
+                note(added, addTo(placeholders, newNames),
+                        "unrenamed folder name");
             }
         }
-        if (added.isEmpty()) {
+        if (added.isEmpty() && removed.isEmpty()) {
             return;
         }
-        filledNote.setText("Filled in from the folder: "
-                + TextUtils.join(", ", added) + ". Check them below.");
+        List<String> parts = new ArrayList<>();
+        if (!added.isEmpty()) {
+            parts.add("added " + TextUtils.join(", ", added));
+        }
+        if (!removed.isEmpty()) {
+            parts.add("removed " + TextUtils.join(", ", removed)
+                    + " from the previous folder");
+        }
+        filledNote.setText("Updated from the folder: "
+                + TextUtils.join("; ", parts) + ". Check them below.");
         show(filledNote, true);
+    }
+
+    // Adds "count noun(s)" to a list of changes when count is above 0.
+    private void note(List<String> changes, int count, String noun) {
+        if (count > 0) {
+            changes.add(Parts.plural(count, noun));
+        }
+    }
+
+    // Returns the ids of the questions a tester folder holds; empty when
+    // the folder is null or cannot be read.
+    private List<String> questionIds(Path folder) {
+        List<String> ids = new ArrayList<>();
+        if (folder == null) {
+            return ids;
+        }
+        String suffix = window.getBackend().getSetting(
+                ConfigKeys.TESTER_CLASS_SUFFIX);
+        List<Question> found = AssessmentFolderScanner.findQuestions(folder,
+                suffix, null);
+        for (Question question : found) {
+            ids.add(question.getId());
+        }
+        return ids;
+    }
+
+    // Removes the question rows whose id came from the previous tester
+    // folder and is not in the new one, ignoring case. Keeps one empty
+    // row when none are left. Returns how many were removed.
+    private int removeQuestionsFrom(List<String> oldIds,
+            List<String> newIds) {
+        int removedCount = 0;
+        for (QuestionFields fields : new ArrayList<>(questions)) {
+            String id = fields.getId().trim();
+            if (containsIgnoreCase(oldIds, id)
+                    && !containsIgnoreCase(newIds, id)) {
+                removeQuestion(fields);
+                removedCount++;
+            }
+        }
+        if (questions.isEmpty()) {
+            addQuestion(null);
+            updateTotal();
+        }
+        return removedCount;
+    }
+
+    // Removes from a field the names the previous folder supplied that
+    // the new folder does not have, ignoring case. Returns how many were
+    // removed.
+    private int removeFrom(TextField field, List<String> oldNames,
+            List<String> newNames) {
+        List<String> items = splitList(field.getText());
+        List<String> kept = new ArrayList<>();
+        for (String item : items) {
+            if (!containsIgnoreCase(oldNames, item)
+                    || containsIgnoreCase(newNames, item)) {
+                kept.add(item);
+            }
+        }
+        int removedCount = items.size() - kept.size();
+        if (removedCount > 0) {
+            field.setText(joinList(kept));
+        }
+        return removedCount;
+    }
+
+    // Whether a list holds a name, ignoring case.
+    private boolean containsIgnoreCase(List<String> names, String name) {
+        for (String each : names) {
+            if (each.equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Adds one question per tester the form does not list yet, with its

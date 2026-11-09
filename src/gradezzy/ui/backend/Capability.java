@@ -248,16 +248,18 @@ public enum Capability {
     /** Runs the tester of one question again. */
     RETRY_QUESTION("Retry one question",
             "Runs one question's tester again without touching other "
-            + "marks.", "Jing Yuan, Zach", null, CapabilityStatus.PROPOSED,
-            "Run the tester of one question again and replace only that "
-            + "question's result."),
+            + "marks.", "Jing Yuan, Zach", "GradingService.regradeQuestion",
+            CapabilityStatus.WORKS_NOW, "Nothing; only that question's "
+            + "result and the total change, and a mark set by hand is "
+            + "kept."),
 
     /** Grades one chosen submission again. */
     RETRY_SUBMISSION("Retry one submission",
             "Grades one student's submission again from the start.",
-            "Jing Yuan", null, CapabilityStatus.PROPOSED,
-            "Grade one chosen submission again, even when it did not "
-            + "fail."),
+            "Jing Yuan", "GradingService.regradeSubmission",
+            CapabilityStatus.WORKS_NOW, "Nothing; it also grades the "
+            + "students ticked on Review again. A refused upload stays "
+            + "refused, and a mark set by hand is kept."),
 
     /** Changes a mark by hand. */
     SCORE_ADJUSTMENT("Adjust a mark by hand",
@@ -279,6 +281,13 @@ public enum Capability {
             "Shows how long each question's tester took to run.", "Zach",
             null, CapabilityStatus.PROPOSED,
             "Record how long each tester ran in QuestionResult."),
+
+    /** Groups the students who lost marks the same way. */
+    ANSWER_GROUPS("Answer groups",
+            "Groups the students who lost marks the same way, to mark "
+            + "each mistake once.", "Jing Yuan",
+            "AnswerGroupService.listGroups", CapabilityStatus.WORKS_NOW,
+            "Nothing; names and checks are saved with the run."),
 
     /** A report for one student. */
     STUDENT_REPORT_EXPORT("Export one student's report",

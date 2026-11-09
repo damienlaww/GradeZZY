@@ -37,7 +37,8 @@ public class AnomalyReportExporter implements Exporter {
 
     // The header row, in the order of the values in each row
     private static final String[] HEADER = {"Username", "Type",
-        "Severity", "Message", "Suggested Action", "Fix Status"};
+        "Severity", "Message", "Suggested Action", "Fix Status",
+        "Fix Made"};
 
     // CSV files end each row with CRLF so spreadsheets read them cleanly
     private static final String LINE_ENDING = "\r\n";
@@ -115,6 +116,8 @@ public class AnomalyReportExporter implements Exporter {
         row.add(textOf(anomaly.getMessage()));
         row.add(textOf(anomaly.getSuggestedAction()));
         row.add(textOf(anomaly.getFixStatus()));
+        // What an applied or approved fix did, such as the new folder name
+        row.add(textOf(anomaly.describeFix()));
         return row;
     }
 

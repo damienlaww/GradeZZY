@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.geometry.Insets;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.StackPane;
@@ -235,6 +236,22 @@ public class FlowCheck {
             }
             review.showNeedsReview();
             shoot(scene, tag, "5r-needs-review");
+            // Answer groups: the Mistakes view and one group's mark sheet
+            if (backend.supports(
+                    gradezzy.ui.backend.Capability.ANSWER_GROUPS)) {
+                review.showMistakes();
+                shoot(scene, tag, "5m-mistakes");
+                java.util.List<gradezzy.model.AnswerGroup> groups =
+                        backend.listAnswerGroups(reviewRun);
+                if (!groups.isEmpty() && backend.supports(
+                        gradezzy.ui.backend.Capability.SCORE_ADJUSTMENT)) {
+                    new gradezzy.ui.flow.AnswerGroupActions(window,
+                            () -> { }).changeMark(groups.get(0));
+                    shoot(scene, tag, "5m2-mistake-mark");
+                    window.closeSheet();
+                }
+                review.showStudents();
+            }
         }
 
         // marking1: the bottom of Set up, the typed test cases sheet,
@@ -276,6 +293,13 @@ public class FlowCheck {
                 Step.EXPORT);
         if (export.openSimilarPair(0)) {
             shoot(scene, tag, "5e-similar-code");
+            Button nextPart = SceneFinder.button(window.getRoot(),
+                    "Next same part");
+            if (nextPart != null) {
+                nextPart.fire();
+                nextPart.fire();
+                shoot(scene, tag, "5e-similar-code-next");
+            }
             window.closeSheet();
         }
         backend.saveSettings(java.util.Map.of(similarKey, "false"));
@@ -313,27 +337,32 @@ public class FlowCheck {
                 InputKind.SUBMISSION);
         gradezzy.grading.ProgressListener quiet =
                 new gradezzy.grading.ProgressListener() {
+            /** Shows nothing when the run starts. */
             @Override
             public void onRunStarted(int totalSubmissions) {
                 // nothing to show
             }
 
+            /** Shows nothing when a submission starts. */
             @Override
             public void onSubmissionStarted(Submission submission) {
                 // nothing to show
             }
 
+            /** Shows nothing when a stage starts. */
             @Override
             public void onStageStarted(Submission submission,
                     String stageName) {
                 // nothing to show
             }
 
+            /** Shows nothing when a submission finishes. */
             @Override
             public void onSubmissionFinished(Submission submission) {
                 // nothing to show
             }
 
+            /** Shows nothing when the run finishes. */
             @Override
             public void onRunFinished(GradingRun gradingRun) {
                 // nothing to show
@@ -341,11 +370,13 @@ public class FlowCheck {
         };
         gradezzy.ui.backend.RunCallback done =
                 new gradezzy.ui.backend.RunCallback() {
+            /** Leaves the graded run with the backend. */
             @Override
             public void onFinished(GradingRun gradingRun) {
                 // the backend keeps the run
             }
 
+            /** Prints why a sample section was not graded. */
             @Override
             public void onFailed(String message) {
                 System.out.println("Sample section not graded: " + message);

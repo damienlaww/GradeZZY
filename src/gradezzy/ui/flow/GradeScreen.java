@@ -96,8 +96,6 @@ public class GradeScreen extends FlowScreen
     private static final DateTimeFormatter WHEN =
             DateTimeFormatter.ofPattern("d MMM, HH:mm");
 
-
-
     // The rows of the "So far" card, top to bottom
     private static final int GRADED = 0;
     private static final int REVIEW = 1;

@@ -4,6 +4,8 @@
  * Purpose: Changes a question's mark by hand, with a reason, and takes
  * the change back. Each change is kept with the earlier mark, and saved
  * with the run when results are saved, so it is there after a restart.
+ * Grading a student or a question again from Review puts the marks set by
+ * hand back on the new results (keepAfterRegrade).
  *
  * Where it fits: LiveBackend calls it from Review's Adjust sheet and the
  * Undo of a changed mark. The student's total, Statistics and Export all
@@ -179,6 +181,92 @@ public class ScoreAdjustmentService {
             }
         }
         return found;
+    }
+
+    /**
+     * Lists the marks a student has set by hand now: the newest change of
+     * each question that still describes its result. Take this list
+     * before grading the student again, and pass it to keepAfterRegrade.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param run the run
+     * @param submission the student
+     * @return the newest change of each changed question, in the order
+     *         the questions were first changed
+     */
+    public synchronized List<ScoreAdjustment> listNewest(GradingRun run,
+            Submission submission) {
+        List<ScoreAdjustment> newest = new ArrayList<>();
+        List<String> questionIds = new ArrayList<>();
+        for (ScoreAdjustment change : list(run, submission.getUsername())) {
+            String questionId = change.getQuestionId();
+            int place = questionIds.indexOf(questionId);
+            if (place < 0) {
+                questionIds.add(questionId);
+                newest.add(change);
+            } else {
+                newest.set(place, change);
+            }
+        }
+        return newest;
+    }
+
+    /**
+     * Puts the marks set by hand back after a student, or one question of
+     * the student, was graded again, so grading again never undoes the
+     * instructor's decision. For each change, the question's new result
+     * gets the mark set by hand, and the change is kept with the new
+     * grader's mark as its earlier mark, so Undo gives the mark the files
+     * earn now. A question with no result after grading (the student
+     * could not be graded) keeps nothing, as before.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param run the run the student is in
+     * @param submission the student, graded again
+     * @param handMarks the changes from listNewest, taken before grading
+     * @return the changes kept, one per question
+     */
+    public synchronized List<ScoreAdjustment> keepAfterRegrade(
+            GradingRun run, Submission submission,
+            List<ScoreAdjustment> handMarks) {
+        List<ScoreAdjustment> kept = new ArrayList<>();
+        for (ScoreAdjustment change : handMarks) {
+            String questionId = change.getQuestionId();
+            QuestionResult result = findResult(submission, questionId);
+            // The old changes of the question describe the old result
+            dropQuestion(run, submission.getUsername(), questionId);
+            if (result != null) {
+                ScoreAdjustment again = new ScoreAdjustment(
+                        submission.getUsername(), questionId,
+                        result.getScore(), change.getNewScore(),
+                        change.getReason(), change.getSavedAt());
+                result.setScore(change.getNewScore());
+                changesOf(run).add(again);
+                resultOf.put(again, result);
+                kept.add(again);
+            }
+        }
+        saveKept(run, submission, kept);
+        return kept;
+    }
+
+    // Saves the student's marks and each change kept after grading again.
+    private void saveKept(GradingRun run, Submission submission,
+            List<ScoreAdjustment> kept) {
+        saveProblem = "";
+        if (kept.isEmpty() || !isSaving() || run.getId() == null) {
+            return;
+        }
+        try {
+            repository.saveSubmission(run.getId(), submission);
+            for (ScoreAdjustment change : kept) {
+                repository.saveAdjustment(run.getId(), change);
+            }
+        } catch (PersistenceException exception) {
+            saveProblem = exception.getMessage();
+        }
     }
 
     /**

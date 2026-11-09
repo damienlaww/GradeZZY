@@ -886,14 +886,13 @@ public class ClassFileMatcher {
     private List<String> findCalls(List<String> tokens, String className) {
         List<String> calls = new ArrayList<>();
         Set<String> seen = new HashSet<>();
+        // The two tokens before the current one, empty at the start
+        String twoBefore = "";
+        String before = "";
         for (int index = 0; index + 1 < tokens.size(); index++) {
             String name = tokens.get(index);
-            String before = "";
-            if (index > 0) {
-                before = tokens.get(index - 1);
-            }
-            boolean onClass = before.equals(".") && index > 1
-                    && tokens.get(index - 2).equals(className);
+            boolean onClass = before.equals(".")
+                    && twoBefore.equals(className);
             if (tokens.get(index + 1).equals("(") && isName(name)
                     && !isNotCall(name) && !name.equals(MAIN_METHOD)
                     && !before.equals("new")
@@ -901,6 +900,8 @@ public class ClassFileMatcher {
                     && seen.add(name)) {
                 calls.add(name);
             }
+            twoBefore = before;
+            before = name;
         }
         return calls;
     }

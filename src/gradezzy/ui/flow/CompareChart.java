@@ -75,7 +75,6 @@ public class CompareChart extends Region {
     // How far a label sits from what it labels
     private static final double LABEL_GAP = 6.0;
 
-
     // The gap kept between two names moved apart
     private static final double NAME_SPACING = 2.0;
 
@@ -91,6 +90,9 @@ public class CompareChart extends Region {
 
     // The figures of each section
     private final List<MarkStats> stats = new ArrayList<>();
+
+    // True when the totals are percentages of each run's maximum
+    private boolean percent = false;
 
     // The size last drawn, so the chart only redraws when it changes
     private double drawnWidth = -1;
@@ -122,6 +124,20 @@ public class CompareChart extends Region {
             names.add(newNames.get(index));
             stats.add(newStats.get(index));
         }
+        drawnWidth = -1;
+        requestLayout();
+    }
+
+    /**
+     * Says whether the totals drawn are percentages of each run's
+     * maximum, which names the bottom axis to match.
+     *
+     * <p>Tier: SHOULD. Owner: Jing Yuan.
+     *
+     * @param newPercent true for percentages, false for marks
+     */
+    public void setPercent(boolean newPercent) {
+        percent = newPercent;
         drawnWidth = -1;
         requestLayout();
     }
@@ -323,8 +339,11 @@ public class CompareChart extends Region {
     // Names the two axes.
     private void drawAxisNames(double max, double left, double plotWidth,
             double top, double plotHeight, double height) {
-        Text across = addText("Total mark out of " + Parts.mark(max),
-                "chart-note");
+        String acrossName = "Total mark out of " + Parts.mark(max);
+        if (percent) {
+            acrossName = "Total mark as a percentage of the maximum";
+        }
+        Text across = addText(acrossName, "chart-note");
         across.setLayoutX(left + plotWidth / 2
                 - across.getLayoutBounds().getWidth() / 2);
         across.setLayoutY(height - across.getLayoutBounds().getHeight()

@@ -585,7 +585,7 @@ How the flags work (never a change of mark):
   comments and spaces, is still the starter's body. Every overload of the
   method is checked. A wholly unchanged file is left to the untouched
   check when that check is on.
-- `HardCodedAnswerDetector` flags an answer method with 3 or more `if` or
+- `HardCodedAnswerDetector` flags an answer method with 2 or more `if` or
   `case` branches that compare a value with a fixed literal, such as
   `s.equals("cat")` or `s.contains("cat")`. Common values (0, 1 and -1),
   separators with no letter or digit (such as `","` or `""`) and a
@@ -911,7 +911,7 @@ by this section.
 | One-line lambdas `event -> exportResults()` | 26 files in `ui` | Button handlers, table cells and callbacks. | Short for a small class that implements the handler interface (like `AgeComparator implements Comparator`) and whose one method calls `exportResults()`. Every lambda is one line that calls one method. |
 | `Runnable`, `Consumer` | `ui.flow` (`ActionBar`, `Parts`, `StepBar`, `TabBar`, ...), `exec.TrustedFrameCheck` | The type of a lambda parameter, for example "what to do when this button is pressed". | Interfaces with one method, so a screen can pass "run this later" to another class. |
 | `java.nio.file` (`Path`, `Paths`, `Files`, `DirectoryStream`, `StandardCopyOption`, `LinkOption`) | About 60 files | Every file and folder the system reads, copies, moves or writes. | `Path` is a file or folder location (like `File`); `Files` has static methods to read, copy, move and list them, and can refuse to follow links. |
-| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.UndoFixJob`, `ui.flow.SetUpScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.StudentPanel`, `ui.flow.RunsScreen`, `ui.flow.CodeSheet`, `ui.flow.HomeScreen`, `ui.flow.ScoreSheetSearch`, `ui.flow.ScoreSheetChange` | Grading (with the similar code check at the end of `GradingTask`), checking chosen files, the class files and the tester folder, reading the score sheet for students with no submission, grading a question again, exports, backups, and undoing a fix or applying a rejected one again (each grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
+| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.UndoFixJob`, `ui.flow.RegradeJob`, `ui.flow.SetUpScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.StudentPanel`, `ui.flow.RunsScreen`, `ui.flow.CodeSheet`, `ui.flow.HomeScreen`, `ui.flow.ScoreSheetSearch`, `ui.flow.ScoreSheetChange` | Grading (with the similar code check at the end of `GradingTask`), checking chosen files, the class files and the tester folder, reading the score sheet for students with no submission, grading a question again, grading one student, one question or the ticked students again, exports, backups, and undoing a fix or applying a rejected one again (each grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread, and the review decisions on flags. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
 | Parallel grading: `Thread`, `Runnable`, `synchronized` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream` | Grades `exec.thread.count` submissions at the same time. | Each `GradingWorker` takes the next submission from the `SubmissionHandout`; `synchronized` lets only one thread at a time touch shared data. |
@@ -935,7 +935,8 @@ by this section.
 | `java.util.regex.Pattern`, `matches`, `replaceFirst` | `service.SettingsService`, `ingest.SubmissionLoader`, `ingest.ZipExtractor.isSafeEntry` | The zip name setting is itself a pattern; unsafe Windows file names are a pattern too. | A pattern describes a family of strings, such as "2023-2024-" followed by a username. |
 | `split("\\R")` | `grading.CompileStage`, `grading.TesterOutputScoreParser`, `exec.TesterRunner`, `exec.TrustedPrintStream` | Splits program output into lines whatever the line ending. | `split` as taught; `\R` means "any kind of line break". |
 | `StandardCharsets.ISO_8859_1` | `testcase.TesterMarks` | Opens a tester file whatever encoding it was saved in, to read its `score +=` lines. | A way of turning bytes into characters that accepts every byte, so a tester saved in Windows-1252 still opens. |
-| `Collections.reverseOrder()` | `testcase.TesterMarks` | Sorts a tester's case marks from largest to smallest, to find the most a number of passed cases can be worth. | `Collections.sort` as taught, given a comparator that puts the larger number first. |
+| `StandardCharsets.UTF_16LE`, `UTF_16BE` | `util.TextUtils` (used by `fix.EncodingFixer` and `validation.HeaderNameValidator`) | Reads a source file Notepad saved as "Unicode" (UTF-16), so it can be saved again as UTF-8 and compiled. | Names for the two byte orders of UTF-16; the first two bytes of the file (its byte order mark) say which one it is. |
+| `Collections.reverseOrder()` | `testcase.TesterMarks` | Sorts a tester's case marks from largest to smallest, to find the most a number of passed cases can be worth when its cases cannot be matched to its marks one for one. | `Collections.sort` as taught, given a comparator that puts the larger number first. |
 | `java.time` (`LocalDateTime`, `DateTimeFormatter`) | `model`, `persistence`, `report.AuditLogExporter`, `service`, `ui.demo` | Run and audit times. | The current date and time, and how to print it. |
 | `java.util.Random` | `ui.demo.DemoData` | Synthetic marks for `--demo`, always from the same seed. | Gives the same "random" numbers every time, so the demo looks the same. |
 
@@ -1107,10 +1108,22 @@ implemented. `[x]` means it works now.
   (`service.ScoreAdjustmentService`, `ui.flow.AdjustMarkSheet`): a mark
   outside 0 to the question's maximum or a blank reason is refused, only
   the newest change of a question can be undone, changes are saved and
-  shown in the export, and grading the question again drops them
+  shown in the export. Grading the student or the question again from
+  Review keeps them (`ScoreAdjustmentService.keepAfterRegrade`); undoing
+  a fix, which grades the student again, still drops them
+- [x] Grade one student, one question, or the ticked students again from
+  Review (`GradingService.regradeSubmission`, `regradeQuestion`,
+  `ui.flow.RegradeJob`). One question is compiled and run again in the
+  student's working copy, and only its result, its compile or tester
+  problems and the total change; other marks, fixes and flags stay.
+  "Grade N ticked students again" asks once, runs one background job
+  with a progress bar and ends with a summary of whose totals changed.
+  A refused upload stays refused, a mark set by hand is kept, and each
+  student gets a line in the activity log with the old and new marks
 - [x] Audit log, exportable (`service.AuditService`,
   `report.AuditLogExporter`; the log records grading started, cancelled,
-  retried and resumed, fixes approved and undone, settings saved,
+  retried and resumed, students and questions graded again with their
+  old and new marks, fixes approved and undone, settings saved,
   backups made and restored, and exports; History shows it, and Export
   saves it with "Also save the activity log")
 - [x] Individual student report, exportable

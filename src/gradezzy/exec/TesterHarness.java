@@ -66,14 +66,21 @@ public final class TesterHarness {
     // Milliseconds in a second
     private static final long MILLIS_PER_SECOND = 1000;
 
-    // Positions of the arguments TesterRunner passes, in order
+    // Position of the tester class name in the arguments
     private static final int TESTER_ARGUMENT = 0;
+
+    // Position of the most bytes of student output to pass on
     private static final int STUDENT_LIMIT_ARGUMENT = 1;
+
+    // Position of the time limit in seconds
     private static final int TIME_LIMIT_ARGUMENT = 2;
+
+    // Position of the start of a test case's header line
     private static final int HEADER_MARKER_ARGUMENT = 3;
 
     // Where the numbers of the test cases to skip start in the arguments
-    private static final int FIRST_SKIPPED_ARGUMENT = 4;
+    private static final int FIRST_SKIPPED_ARGUMENT =
+            HEADER_MARKER_ARGUMENT + 1;
 
     // Utility class: never created
     private TesterHarness() {
@@ -122,9 +129,10 @@ public final class TesterHarness {
         try {
             testerMain.invoke(null, (Object) new String[0]);
         } catch (InvocationTargetException exception) {
-            exception.getCause().printStackTrace();
-            trusted.flush();
-            Runtime.getRuntime().halt(CRASH_EXIT_CODE);
+            endAfterCrash(trusted, exception.getCause());
+        } catch (ExceptionInInitializerError error) {
+            // Static code in the student's class threw while it loaded
+            endAfterCrash(trusted, error);
         }
 
         trusted.printMarked(FINISHED_LINE);
@@ -132,6 +140,21 @@ public final class TesterHarness {
         // halt, not exit: student threads or shutdown hooks cannot keep
         // the process alive or print after the tester has finished
         Runtime.getRuntime().halt(SUCCESS_EXIT_CODE);
+    }
+
+    /**
+     * Ends the run after the tester threw: prints the stack trace as java
+     * would, then ends with CRASH_EXIT_CODE, so the case it crashed in can
+     * be skipped and the tester run again.
+     *
+     * @param trusted the marking stream
+     * @param problem what the tester threw
+     */
+    private static void endAfterCrash(TrustedPrintStream trusted,
+            Throwable problem) {
+        problem.printStackTrace();
+        trusted.flush();
+        Runtime.getRuntime().halt(CRASH_EXIT_CODE);
     }
 
     /**

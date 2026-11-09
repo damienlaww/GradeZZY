@@ -17,6 +17,7 @@ import gradezzy.config.ExportFolders;
 import gradezzy.grading.GradingException;
 import gradezzy.grading.ProgressListener;
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnswerGroup;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
@@ -29,6 +30,7 @@ import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.plagiarism.SimilarityPair;
+import gradezzy.service.AnswerGroupService;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.stats.StatisticsSummary;
 
@@ -170,6 +172,20 @@ public interface DashboardBackend {
     ImportItem inspect(InputKind kind, Path path);
 
     /**
+     * Checks a starter folder against the given questions instead of the
+     * assessment in use, so the assessment form can check its questions
+     * before they are saved.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param folder the chosen starter folder
+     * @param questions the questions to look for, each with its folder
+     *        and file
+     * @return the checked item
+     */
+    ImportItem inspectStarter(Path folder, List<Question> questions);
+
+    /**
      * Lists what is wrong with a tester folder before grading: questions
      * with no tester, data files that are missing and testers that do not
      * compile with the starter code. It compiles, so it takes seconds.
@@ -298,21 +314,29 @@ public interface DashboardBackend {
     List<Student> listMissingStudents(GradingRun gradingRun);
 
     /**
-     * Runs one question's tester again and replaces only that result.
+     * Runs one question's tester again and replaces only that result and
+     * the total. Other marks, fixes and flags stay, and a mark set by hand
+     * is kept. In live mode it compiles and runs the tester, so call it
+     * off the window's thread (RegradeJob does).
      *
+     * @param run the run the student is in, as shown on Review
      * @param submission the student
      * @param questionId the question, such as Q1a
      * @return what happened
      */
-    ActionResult retryQuestion(Submission submission, String questionId);
+    ActionResult retryQuestion(GradingRun run, Submission submission,
+            String questionId);
 
     /**
-     * Grades one submission again from the start.
+     * Grades one submission again from the start. A refused upload stays
+     * refused, and a mark set by hand is kept. In live mode it runs every
+     * tester, so call it off the window's thread (RegradeJob does).
      *
+     * @param run the run the student is in, as shown on Review
      * @param submission the student
      * @return what happened
      */
-    ActionResult retrySubmission(Submission submission);
+    ActionResult retrySubmission(GradingRun run, Submission submission);
 
     // ------------------------------------------------- anomalies, repairs
 
@@ -509,6 +533,193 @@ public interface DashboardBackend {
      */
     List<ScoreAdjustment> listAdjustments(GradingRun run,
             Submission submission);
+
+    // --------------------------------------------------- answer groups
+
+    /**
+     * Returns the service that keeps the names and checks of answer
+     * groups: the saved one live, a session-only one in the demo.
+     *
+     * <p>Tier: COULD.
+     *
+     * @return the service
+     */
+    AnswerGroupService getAnswerGroupService();
+
+    /**
+     * Lists the answer groups of a run: the students who lost marks the
+     * same way on a question, with the names and checks of the marker.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param run the run, or null
+     * @return the groups, in question order, largest first
+     */
+    default List<AnswerGroup> listAnswerGroups(GradingRun run) {
+        return getAnswerGroupService().listGroups(run);
+    }
+
+    /**
+     * Names the mistake of an answer group, or removes the name, and
+     * logs it in the activity log.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param run the run the group belongs to
+     * @param group the group
+     * @param label the name; blank removes it
+     * @return what happened
+     */
+    default ActionResult nameAnswerGroup(GradingRun run, AnswerGroup group,
+            String label) {
+        boolean chosen = run != null && group != null;
+        if (!chosen) {
+            return ActionResult.failed("Choose a group first.");
+        }
+        AnswerGroupService service = getAnswerGroupService();
+        service.setLabel(run, group, label);
+        String where = group.getQuestionId() + GROUP_WORD_SEPARATOR
+                + group.getTitle();
+        String message = "Named the mistake.";
+        if (group.getLabel().isEmpty()) {
+            recordActivity(MISTAKE_NAME_REMOVED, where);
+            message = "Removed the name of the mistake.";
+        } else {
+            recordActivity(MISTAKE_NAMED, where + GROUP_LABEL_SEPARATOR
+                    + group.getLabel());
+        }
+        return ActionResult.done(message + unsavedNote(service));
+    }
+
+    /**
+     * Marks an answer group as checked, keeping who is in it now, or
+     * takes the check back, and logs it in the activity log. It changes
+     * no mark and no flag.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param run the run the group belongs to
+     * @param group the group
+     * @param checked true to check it
+     * @return what happened
+     */
+    default ActionResult setAnswerGroupChecked(GradingRun run,
+            AnswerGroup group, boolean checked) {
+        List<String> students = null;
+        if (checked && group != null) {
+            students = group.getUsernames();
+        }
+        return setAnswerGroupChecked(run, group, students);
+    }
+
+    /**
+     * Marks an answer group as checked for the students the marker saw,
+     * or takes the check back, and logs it in the activity log. A
+     * student now in the group who is not among them shows as new. It
+     * changes no mark and no flag.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param run the run the group belongs to
+     * @param group the group
+     * @param students the students checked; null or empty takes the
+     *        check back
+     * @return what happened
+     */
+    default ActionResult setAnswerGroupChecked(GradingRun run,
+            AnswerGroup group, List<String> students) {
+        boolean chosen = run != null && group != null;
+        if (!chosen) {
+            return ActionResult.failed("Choose a group first.");
+        }
+        boolean checked = students != null && !students.isEmpty();
+        AnswerGroupService service = getAnswerGroupService();
+        service.setChecked(run, group, students);
+        String where = group.getQuestionId() + GROUP_WORD_SEPARATOR
+                + group.getTitle();
+        String message = "Marked the group as checked.";
+        if (checked) {
+            recordActivity(GROUP_CHECKED, where);
+        } else {
+            recordActivity(GROUP_CHECK_TAKEN_BACK, where);
+            message = "The group waits for a look again.";
+        }
+        return ActionResult.done(message + unsavedNote(service));
+    }
+
+    /**
+     * Says, after a decision about a group, that it was not saved.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param service the service that tried to save it
+     * @return "" when it was saved, else a sentence that starts with a
+     *         space
+     */
+    default String unsavedNote(AnswerGroupService service) {
+        // The demo saves nothing, and says so on its own
+        if (isDemo()) {
+            return "";
+        }
+        return service.describeSaving();
+    }
+
+    /**
+     * Says, after marks were changed by hand, whether they were saved,
+     * as a sentence to add to a notice about several changes.
+     *
+     * <p>Tier: COULD.
+     *
+     * @return "" when they were saved; else a sentence starting with a
+     *         space
+     */
+    default String describeMarkSaving() {
+        return "";
+    }
+
+    /**
+     * The activity log's words for a mistake that was named.
+     *
+     * <p>Tier: COULD.
+     */
+    String MISTAKE_NAMED = "Mistake named";
+
+    /**
+     * The activity log's words for a name that was removed.
+     *
+     * <p>Tier: COULD.
+     */
+    String MISTAKE_NAME_REMOVED = "Mistake name removed";
+
+    /**
+     * The activity log's words for a group marked as checked.
+     *
+     * <p>Tier: COULD.
+     */
+    String GROUP_CHECKED = "Group checked";
+
+    /**
+     * The activity log's words for a group check taken back.
+     *
+     * <p>Tier: COULD.
+     */
+    String GROUP_CHECK_TAKEN_BACK = "Group check taken back";
+
+    /**
+     * Comes between a group's question and its title in the activity
+     * log, such as "Q2b Failed test 3".
+     *
+     * <p>Tier: COULD.
+     */
+    String GROUP_WORD_SEPARATOR = " ";
+
+    /**
+     * Comes between a group and the name of its mistake in the activity
+     * log.
+     *
+     * <p>Tier: COULD.
+     */
+    String GROUP_LABEL_SEPARATOR = ": ";
 
     // ---------------------------------------------------------- export
 
@@ -723,6 +934,19 @@ public interface DashboardBackend {
      * @return the pairs, most similar first
      */
     List<SimilarityPair> checkSimilarity(GradingRun gradingRun);
+
+    /**
+     * Reads the pair a Similar code flag is about, so Compare can open
+     * from the flag.
+     *
+     * <p>Tier: COULD. Owner: Jing Yuan.
+     *
+     * @param gradingRun the run the flag belongs to
+     * @param anomaly the flag
+     * @return the pair, or null when the anomaly is not a Similar code
+     *         flag of the run
+     */
+    SimilarityPair findSimilarPair(GradingRun gradingRun, Anomaly anomaly);
 
     /**
      * Returns the evidence for one similar pair.

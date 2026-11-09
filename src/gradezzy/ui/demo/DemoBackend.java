@@ -36,6 +36,7 @@ import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.model.TestCaseResult;
 import gradezzy.plagiarism.SimilarityPair;
+import gradezzy.service.AnswerGroupService;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.service.ServiceRegistry;
@@ -54,6 +55,7 @@ import gradezzy.ui.backend.ReviewRules;
 import gradezzy.ui.backend.RunCallback;
 import gradezzy.ui.backend.RunRecord;
 import gradezzy.ui.backend.SimilarityDetail;
+import gradezzy.util.TextUtils;
 
 /**
  * The backend used in demo mode.
@@ -68,6 +70,9 @@ public final class DemoBackend implements DashboardBackend {
 
     // The file of the sample similar pair
     private static final String SIMILAR_FILE = "Q2/Q2a.java";
+
+    // The text that ends a line of the sample code
+    private static final String LINE_END = "\n";
 
     // The first number given to a run started in demo mode
     private static final int FIRST_NEW_RUN = 25;
@@ -104,8 +109,11 @@ public final class DemoBackend implements DashboardBackend {
     // The application settings, read but never written
     private final AppConfig config;
 
-    // The assessment in use, built from the configuration and changed
-    // when another sample assessment is chosen
+    // Keeps answer group names and checks until the demo closes
+    private final AnswerGroupService answerGroups;
+
+    // The assessment in use: the sample assessment, changed when another
+    // sample assessment is chosen
     private Assessment assessment;
 
     // The sample saved assessments, kept for this session only
@@ -162,7 +170,11 @@ public final class DemoBackend implements DashboardBackend {
     public DemoBackend(ServiceRegistry services) {
         this.services = services;
         this.config = services.getConfig();
-        this.assessment = new AssessmentFactory(config).create();
+        this.answerGroups = new AnswerGroupService(null, config);
+        // The sample assessment, not the configured one, so the sample
+        // marks fit its questions whatever config.properties names
+        this.assessment = DemoData.sampleAssessment().toAssessment(
+                new AssessmentFactory(config).getDefaultModuleCode());
 
         Section section = sampleSection();
         sampleRun = DemoData.buildCurrentRun(assessment, section,
@@ -298,7 +310,8 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Returns the assessment built from the configuration.
+     * Returns the sample assessment, or the sample assessment chosen
+     * since.
      */
     @Override
     public Assessment getAssessment() {
@@ -410,6 +423,15 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public Path getConfiguredPath(InputKind kind) {
         return null;
+    }
+
+    /**
+     * Judges the sample starter folder as inspect does, whatever the
+     * questions. No file is opened.
+     */
+    @Override
+    public ImportItem inspectStarter(Path folder, List<Question> questions) {
+        return inspect(InputKind.STARTER, folder);
     }
 
     /**
@@ -603,7 +625,7 @@ public final class DemoBackend implements DashboardBackend {
      * any other question keeps its result.
      */
     @Override
-    public ActionResult retryQuestion(Submission submission,
+    public ActionResult retryQuestion(GradingRun run, Submission submission,
             String questionId) {
         QuestionResult result = findResult(submission, questionId);
         if (result == null) {
@@ -638,7 +660,8 @@ public final class DemoBackend implements DashboardBackend {
      * Grades one submission again from the start.
      */
     @Override
-    public ActionResult retrySubmission(Submission submission) {
+    public ActionResult retrySubmission(GradingRun run,
+            Submission submission) {
         if (DemoData.indexOf(submission.getUsername()) < 0) {
             return ActionResult.done("Graded " + submission.getUsername()
                     + " again. The result did not change.");
@@ -1023,6 +1046,14 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
+     * Returns the demo's own answer group service, which saves nothing.
+     */
+    @Override
+    public AnswerGroupService getAnswerGroupService() {
+        return answerGroups;
+    }
+
+    /**
      * Adds a line to the demo's activity log.
      *
      * @param action what was done
@@ -1178,11 +1209,10 @@ public final class DemoBackend implements DashboardBackend {
                 + ". Results graded with it are kept.");
     }
 
-    // Saves the configured assessment and a shorter second one, so the
-    // demo can switch between two.
+    // Saves the sample assessment and a shorter second one, so the demo
+    // can switch between two.
     private void seedAssessments() {
-        SavedAssessment current = services.getAssessmentLibrary()
-                .readCurrent();
+        SavedAssessment current = DemoData.sampleAssessment();
         addSorted(current);
         SavedAssessment second = current.copy();
         second.setName(SECOND_ASSESSMENT);
@@ -1246,6 +1276,29 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
+     * Returns the sample pair for a Similar code flag of one of its two
+     * students.
+     */
+    @Override
+    public SimilarityPair findSimilarPair(GradingRun gradingRun,
+            Anomaly anomaly) {
+        boolean similarFlag = anomaly != null
+                && anomaly.getType() == AnomalyType.SIMILAR_CODE;
+        if (!similarFlag) {
+            return null;
+        }
+        String username = anomaly.getUsername();
+        for (SimilarityPair pair : listSimilarPairs(gradingRun)) {
+            boolean ofStudent = pair.getFirstUsername().equals(username)
+                    || pair.getSecondUsername().equals(username);
+            if (ofStudent) {
+                return pair;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Returns synthetic excerpts and the files left out of the comparison.
      */
     @Override
@@ -1256,18 +1309,55 @@ public final class DemoBackend implements DashboardBackend {
         excluded.add("Q2aTester.java (tester)");
         excluded.add("DataException.class (provided class)");
         excluded.add("personstester.txt, studentstester.txt (tester data)");
-        String excerpt = "for (int i = 0; i < items.length; i++) {\n"
-                + "    if (items[i].getScore() > best) {\n"
-                + "        best = items[i].getScore();\n"
-                + "    }\n"
-                + "}\n";
-        String renamed = "for (int k = 0; k < list.length; k++) {\n"
-                + "    if (list[k].getScore() > top) {\n"
-                + "        top = list[k].getScore();\n"
-                + "    }\n"
-                + "}\n";
+        String starter = joinLines(new String[] {
+                "import java.util.*;",
+                "",
+                "public class Q2a {",
+                "    public static double getHighest(Person[] items) {",
+                "        // Write your code here",
+                "        return 0;",
+                "    }",
+                "}"});
+        String excerpt = joinLines(new String[] {
+                "import java.util.*;",
+                "",
+                "public class Q2a {",
+                "    public static double getHighest(Person[] items) {",
+                "        double best = 0;",
+                "        // loop through every person",
+                "        for (int i = 0; i < items.length; i++) {",
+                "            if (items[i].getScore() > best) {",
+                "                best = items[i].getScore();",
+                "            }",
+                "        }",
+                "        System.out.println(\"done\");",
+                "        return best;",
+                "    }",
+                "}"});
+        String copied = joinLines(new String[] {
+                "import java.util.*;",
+                "",
+                "public class Q2a {",
+                "    public static double getHighest(Person[] items) {",
+                "        double best = 0;",
+                "        for (int i = 0; i < items.length; i++) {",
+                "            if (items[i].getScore() > best) {",
+                "                best = items[i].getScore();",
+                "            }",
+                "        }",
+                "        if (best < 0) {",
+                "            best = 0;",
+                "        }",
+                "        return best;",
+                "    }",
+                "}"});
         return new SimilarityDetail(pair, SIMILAR_FILE, SIMILAR_FILE,
-                excerpt, renamed, excluded);
+                excerpt, copied, starter, excluded);
+    }
+
+    // Joins lines of sample code, each ended by a line end.
+    private static String joinLines(String[] lines) {
+        return TextUtils.join(LINE_END, lines) + LINE_END;
     }
 
     /**

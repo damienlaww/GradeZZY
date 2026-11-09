@@ -3,8 +3,8 @@
  *
  * Purpose: Checks that source files follow the naming convention.
  *
- * Where it fits: Finds files that exist but are misnamed, for example q1a.java
- * or Q1A.java.
+ * Where it fits: Finds files that exist but are misnamed, for example q1a.java,
+ * Q1A.java or Q1a.java.txt, so CaseNameFixer can rename them.
  */
 package gradezzy.validation;
 
@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
@@ -23,7 +24,10 @@ import gradezzy.model.Submission;
 /**
  * Checks that source files follow the naming convention. A file counts as
  * misnamed when its name matches the required name only if case is
- * ignored. Java needs the exact name, so such a file would not compile.
+ * ignored, or when it is the required name with an ending added, such as
+ * Q1a.java.txt from Notepad. Java needs the exact name, so such a file
+ * would not compile. The answer file of each question is checked, and so
+ * are the other files the starter has for it, such as GoldMember.java.
  */
 public class FileNameValidator extends AbstractValidator {
 
@@ -31,6 +35,12 @@ public class FileNameValidator extends AbstractValidator {
      * The name shown in the anomaly log.
      */
     public static final String NAME = "File names";
+
+    // Starts the ending a program such as Notepad adds to a file name
+    private static final String EXTENSION_START = ".";
+
+    // Separates the folder and the file in a message
+    private static final String FOLDER_SEPARATOR = "/";
 
     /**
      * Creates a new file name validator.
@@ -56,7 +66,8 @@ public class FileNameValidator extends AbstractValidator {
         }
     }
 
-    // Compares the files in each question folder with the expected name.
+    // Compares the files in each question folder with the expected names:
+    // the answer file first, then the starter's other files.
     private List<Anomaly> checkNames(Submission submission,
             Assessment assessment) throws IOException {
         List<Anomaly> anomalies = new ArrayList<>();
@@ -68,40 +79,72 @@ public class FileNameValidator extends AbstractValidator {
 
         for (Question question : assessment.getQuestions()) {
             Path folder = findQuestionFolder(contentRoot, question);
-            Path misnamed = null;
 
-            if (folder != null) {
-                misnamed = findMisnamed(folder, question);
+            if (folder == null) {
+                continue;
             }
 
-            if (misnamed != null) {
-                anomalies.add(createAnomaly(submission,
-                        AnomalyType.WRONG_FILE_NAME, Severity.WARNING,
-                        describe(question, misnamed)));
+            List<Path> files = listFiles(folder);
+            List<String> wantedNames = new ArrayList<>();
+            wantedNames.add(question.getFileName());
+            wantedNames.addAll(question.getExtraFileNames());
+
+            for (String wantedName : wantedNames) {
+                Path misnamed = findMisnamed(files, wantedName);
+
+                if (misnamed != null) {
+                    anomalies.add(createAnomaly(submission,
+                            AnomalyType.WRONG_FILE_NAME, Severity.WARNING,
+                            describe(question, misnamed, wantedName)));
+                }
             }
         }
 
         return anomalies;
     }
 
-    // Returns the file whose name differs from the required one only in
-    // case, or null when the right name is there or nothing is close.
-    private Path findMisnamed(Path folder,
-            Question question) throws IOException {
-        List<Path> files = listFiles(folder);
-
-        if (findExact(files, question.getFileName()) != null) {
+    // Returns the file whose name differs from the wanted one only in case,
+    // else one named like it with an ending added, such as .txt. Returns
+    // null when the right name is there or nothing is close.
+    private Path findMisnamed(List<Path> files, String wantedName) {
+        if (findExact(files, wantedName) != null) {
             return null;
         }
 
-        return findIgnoringCase(files, question.getFileName());
+        Path wrongCase = findIgnoringCase(files, wantedName);
+        if (wrongCase != null) {
+            return wrongCase;
+        }
+
+        return findWithEnding(files, wantedName);
+    }
+
+    // Returns the file whose name is the wanted name, in any case, with an
+    // ending added after a dot, such as Q1a.java.txt, or null.
+    private Path findWithEnding(List<Path> files, String wantedName) {
+        String start = wantedName.toLowerCase(Locale.ROOT) + EXTENSION_START;
+
+        for (Path file : files) {
+            String fileName = file.getFileName().toString().toLowerCase(
+                    Locale.ROOT);
+
+            boolean hasEnding = fileName.startsWith(start)
+                    && fileName.length() > start.length();
+            if (hasEnding) {
+                return file;
+            }
+        }
+
+        return null;
     }
 
     // Names the wrong and the right file, from the student's folder.
-    private String describe(Question question, Path misnamed) {
+    // CaseNameFixer reads the right name back from this message.
+    private String describe(Question question, Path misnamed,
+            String wantedName) {
         String folderName = question.getFolderName();
 
         return folderName + "/" + misnamed.getFileName() + " should be named "
-                + folderName + "/" + question.getFileName() + ".";
+                + folderName + FOLDER_SEPARATOR + wantedName + ".";
     }
 }

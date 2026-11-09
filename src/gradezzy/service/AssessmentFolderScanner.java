@@ -1,13 +1,14 @@
 /*
  * File: AssessmentFolderScanner.java
  *
- * Purpose: Reads a tester folder and a starter folder and works out three
+ * Purpose: Reads a tester folder and a starter folder and works out the
  * lists an assessment needs: the data files the testers read, the class
- * files given without source, and the starter folder names a student may
- * forget to rename.
+ * files given without source, the starter folder names a student may
+ * forget to rename, and the other source files of each question.
  *
  * Where it fits: The assessment editor calls it after a folder is chosen,
- * so these fields fill in by themselves. It only reads; nothing changes.
+ * so these fields fill in by themselves, and GradingService calls it for
+ * each question's other source files. It only reads the folders.
  */
 package gradezzy.service;
 
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.TreeSet;
 
+import gradezzy.model.Assessment;
 import gradezzy.model.Question;
 import gradezzy.testcase.TesterMarks;
 import gradezzy.util.FileUtils;
@@ -41,8 +43,78 @@ public final class AssessmentFolderScanner {
     // How deep the starter folder is searched for class files
     private static final int MAX_DEPTH = 6;
 
+    // How deep to look for a folder's own files, not its subfolders'
+    private static final int OWN_FILES_DEPTH = 1;
+
     // Not used: every method is static.
     private AssessmentFolderScanner() {
+    }
+
+    /**
+     * Fills in each question's other source files from the starter
+     * folder: the .java files in the question's folder that are not the
+     * answer file of any question, such as GoldMember.java next to
+     * Q3.java. A folder shared by several questions, such as Q2 with
+     * Q2a.java and Q2b.java, gives its other files to the first of them,
+     * so each file is checked once. Earlier names are replaced, and
+     * nothing is added when the starter folder cannot be read.
+     *
+     * @param assessment the assessment whose questions are filled in
+     * @param starterFolder the starter folder, or null
+     */
+    public static void fillExtraFiles(Assessment assessment,
+            Path starterFolder) {
+        List<String> answerFiles = new ArrayList<>();
+        for (Question question : assessment.getQuestions()) {
+            question.getExtraFileNames().clear();
+            String answerFile = question.getFileName().toLowerCase(
+                    Locale.ROOT);
+            answerFiles.add(answerFile);
+        }
+        boolean hasStarter = starterFolder != null
+                && Files.isDirectory(starterFolder);
+        if (!hasStarter) {
+            return;
+        }
+
+        List<String> foldersDone = new ArrayList<>();
+        for (Question question : assessment.getQuestions()) {
+            String folderName = question.getFolderName().toLowerCase(
+                    Locale.ROOT);
+            if (foldersDone.contains(folderName)) {
+                continue;
+            }
+            foldersDone.add(folderName);
+            Path folder = starterFolder.resolve(question.getFolderName());
+            for (String name : listJavaFiles(folder)) {
+                String lowerName = name.toLowerCase(Locale.ROOT);
+                if (!answerFiles.contains(lowerName)) {
+                    question.getExtraFileNames().add(name);
+                }
+            }
+        }
+    }
+
+    // Lists the names of the .java files directly in a folder, sorted;
+    // empty when there is no such folder or it cannot be read.
+    private static List<String> listJavaFiles(Path folder) {
+        TreeSet<String> names = new TreeSet<>();
+        if (!Files.isDirectory(folder)) {
+            return new ArrayList<>(names);
+        }
+        try {
+            for (Path file : listChildren(folder, OWN_FILES_DEPTH)) {
+                String name = file.getFileName().toString();
+                boolean isJavaFile = Files.isRegularFile(file)
+                        && name.endsWith(JAVA);
+                if (isJavaFile) {
+                    names.add(name);
+                }
+            }
+        } catch (IOException exception) {
+            names.clear();
+        }
+        return new ArrayList<>(names);
     }
 
     /**

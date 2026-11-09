@@ -95,6 +95,12 @@ public enum AnomalyType {
     HARD_CODED_ANSWER,
 
     /**
+     * A file header names another student, by email or by name. Flag
+     * only, never penalise.
+     */
+    COPIED_HEADER,
+
+    /**
      * The code is very similar to another student's.
      */
     SIMILAR_CODE,

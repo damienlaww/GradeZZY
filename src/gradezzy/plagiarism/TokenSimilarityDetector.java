@@ -1,7 +1,8 @@
 /*
  * File: TokenSimilarityDetector.java
  *
- * Purpose: Compares submissions by the tokens of their source code.
+ * Purpose: Compares submissions by the tokens of their source code,
+ * split by JavaTokenizer.
  *
  * Where it fits: Used by PlagiarismService.
  */
@@ -48,30 +49,6 @@ public class TokenSimilarityDetector implements SimilarityDetector {
 
     // The similarity of two texts that share nothing
     private static final double NO_SIMILARITY = 0.0;
-
-    // The text that starts a comment running to the end of the line
-    private static final String LINE_COMMENT = "//";
-
-    // The text that starts a comment running to BLOCK_COMMENT_END
-    private static final String BLOCK_COMMENT_START = "/*";
-
-    // The text that ends a block comment
-    private static final String BLOCK_COMMENT_END = "*/";
-
-    // The text that ends a line
-    private static final String NEW_LINE = "\n";
-
-    // The quote around a string literal
-    private static final char DOUBLE_QUOTE = '"';
-
-    // The quote around a char literal
-    private static final char SINGLE_QUOTE = '\'';
-
-    // The character that escapes the next one inside a literal
-    private static final char BACKSLASH = '\\';
-
-    // The point inside a decimal number such as 3.14
-    private static final char DECIMAL_POINT = '.';
 
     // The application settings
     private final AppConfig config;
@@ -170,16 +147,20 @@ public class TokenSimilarityDetector implements SimilarityDetector {
     }
 
     // Reads each student's trigrams for a question, minus the starter's.
+    // The question's other source files, such as GoldMember.java, count
+    // as part of its answer.
     private List<Set<String>> readNewCode(List<Submission> submissions,
             Assessment assessment, Question question, Path starter) {
-        Path starterFile = starter.resolve(question.getFolderName())
-                .resolve(question.getFileName());
-        Set<String> starterTrigrams = readTrigrams(starterFile);
+        Path starterFolder = starter.resolve(question.getFolderName());
+        Set<String> starterTrigrams = readQuestionTrigrams(starterFolder,
+                question);
         List<Set<String>> answers = new ArrayList<>();
 
         for (Submission submission : submissions) {
-            Set<String> answer = readTrigrams(findStudentFile(submission,
-                    assessment, question));
+            Path studentFolder = findStudentFolder(submission, assessment,
+                    question);
+            Set<String> answer = readQuestionTrigrams(studentFolder,
+                    question);
 
             answer.removeAll(starterTrigrams);
             answers.add(answer);
@@ -188,18 +169,30 @@ public class TokenSimilarityDetector implements SimilarityDetector {
         return answers;
     }
 
-    // Finds a student's file for a question, or returns null if it is missing.
-    private Path findStudentFile(Submission submission, Assessment assessment,
-            Question question) {
+    // Reads the trigrams of every file the student writes for a question
+    // in one folder, or none when the folder is missing.
+    private Set<String> readQuestionTrigrams(Path folder, Question question) {
+        Set<String> trigrams = new HashSet<>();
+        if (folder == null) {
+            return trigrams;
+        }
+
+        Path answerFile = folder.resolve(question.getFileName());
+        trigrams.addAll(readTrigrams(answerFile));
+        for (String extraFile : question.getExtraFileNames()) {
+            Path extraPath = folder.resolve(extraFile);
+            trigrams.addAll(readTrigrams(extraPath));
+        }
+        return trigrams;
+    }
+
+    // Finds a student's folder for a question, or returns null if it is
+    // missing.
+    private Path findStudentFolder(Submission submission,
+            Assessment assessment, Question question) {
         try {
-            Path folder = QuestionFolderFinder.find(submission, assessment,
+            return QuestionFolderFinder.find(submission, assessment,
                     question);
-
-            if (folder == null) {
-                return null;
-            }
-
-            return folder.resolve(question.getFileName());
         } catch (IOException exception) {
             return null;
         }
@@ -223,7 +216,7 @@ public class TokenSimilarityDetector implements SimilarityDetector {
 
     // Collects every run of TRIGRAM_LENGTH tokens in a row as one string.
     private Set<String> buildTrigrams(String source) {
-        List<String> tokens = splitIntoTokens(source);
+        List<String> tokens = JavaTokenizer.split(source);
         Set<String> trigrams = new HashSet<>();
 
         for (int i = 0; i + TRIGRAM_LENGTH <= tokens.size(); i++) {
@@ -253,104 +246,6 @@ public class TokenSimilarityDetector implements SimilarityDetector {
                 - sharedCount;
 
         return (double) sharedCount / unionCount;
-    }
-
-    // Splits source code into tokens, skipping spaces and comments.
-    private List<String> splitIntoTokens(String source) {
-        List<String> tokens = new ArrayList<>();
-        int start = 0;
-
-        while (start < source.length()) {
-            int end = findPieceEnd(source, start);
-            String piece = source.substring(start, end);
-
-            if (isToken(piece)) {
-                tokens.add(piece);
-            }
-
-            start = end;
-        }
-
-        return tokens;
-    }
-
-    // Returns where the token, space or comment starting at start ends.
-    private int findPieceEnd(String source, int start) {
-        char first = source.charAt(start);
-
-        if (source.startsWith(LINE_COMMENT, start)) {
-            return findEndAfter(source, NEW_LINE, start);
-        } else if (source.startsWith(BLOCK_COMMENT_START, start)) {
-            return findEndAfter(source, BLOCK_COMMENT_END,
-                    start + BLOCK_COMMENT_START.length());
-        } else if (first == DOUBLE_QUOTE || first == SINGLE_QUOTE) {
-            return findLiteralEnd(source, start);
-        } else if (Character.isDigit(first)) {
-            return findNumberEnd(source, start);
-        } else if (Character.isJavaIdentifierStart(first)) {
-            return findWordEnd(source, start);
-        }
-
-        return start + 1;
-    }
-
-    // Returns the position just after the next marker, or the source end.
-    private int findEndAfter(String source, String marker, int from) {
-        int markerStart = source.indexOf(marker, from);
-
-        if (markerStart < 0) {
-            return source.length();
-        }
-
-        return markerStart + marker.length();
-    }
-
-    // Returns where a string or char literal ends, after its closing quote.
-    private int findLiteralEnd(String source, int start) {
-        char quote = source.charAt(start);
-        int end = start + 1;
-
-        while (end < source.length() && source.charAt(end) != quote) {
-            if (source.charAt(end) == BACKSLASH) {
-                end++;
-            }
-
-            end++;
-        }
-
-        return Math.min(end + 1, source.length());
-    }
-
-    // Returns where a number such as 42, 3.14 or 10L ends.
-    private int findNumberEnd(String source, int start) {
-        int end = start + 1;
-
-        while (end < source.length()
-                && (Character.isLetterOrDigit(source.charAt(end))
-                || source.charAt(end) == DECIMAL_POINT)) {
-            end++;
-        }
-
-        return end;
-    }
-
-    // Returns where a name or keyword ends.
-    private int findWordEnd(String source, int start) {
-        int end = start + 1;
-
-        while (end < source.length()
-                && Character.isJavaIdentifierPart(source.charAt(end))) {
-            end++;
-        }
-
-        return end;
-    }
-
-    // Says whether a piece of source is a token, not a space or a comment.
-    private boolean isToken(String piece) {
-        return !Character.isWhitespace(piece.charAt(0))
-                && !piece.startsWith(LINE_COMMENT)
-                && !piece.startsWith(BLOCK_COMMENT_START);
     }
 
     // Adds a pair before the first pair with a lower similarity.

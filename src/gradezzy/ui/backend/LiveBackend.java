@@ -53,6 +53,8 @@ import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.report.ExportException;
 import gradezzy.report.ScoreFormatter;
 import gradezzy.service.AnomalyService;
+import gradezzy.service.AnswerGroupService;
+import gradezzy.service.AssessmentFolderScanner;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.ClassFileMatch;
@@ -64,6 +66,7 @@ import gradezzy.service.UndoResult;
 import gradezzy.stats.StatisticsFilter;
 import gradezzy.stats.StatisticsSummary;
 import gradezzy.testcase.TestCase;
+import gradezzy.testcase.TesterMarks;
 import gradezzy.testcase.TestCaseSource;
 import gradezzy.testcase.TesterGenerator;
 import gradezzy.testcase.TypedTestCaseSource;
@@ -72,6 +75,7 @@ import gradezzy.ui.GradingTask;
 import gradezzy.ui.GradingTaskKind;
 import gradezzy.util.FileUtils;
 import gradezzy.util.InputValidator;
+import gradezzy.util.TextUtils;
 
 /**
  * The backend that calls the real services.
@@ -92,23 +96,22 @@ public class LiveBackend implements DashboardBackend {
     // folder, and one wrapper folder around it
     private static final int SOURCE_SEARCH_DEPTH = 3;
 
-    // How PlagiarismService writes a Similar code flag: its id is
-    // SIMILAR-<run>/<student>/<other student>/<question>, and its message
-    // starts "<question> is <percent>% similar"
-    private static final String SIMILAR_ID_PREFIX = "SIMILAR-";
-    private static final String SIMILAR_ID_SEPARATOR = "/";
-    private static final int SIMILAR_ID_PARTS = 3;
-    private static final int STUDENT_PART = 0;
-    private static final int OTHER_STUDENT_PART = 1;
-    private static final int QUESTION_PART = 2;
-    private static final String SIMILAR_MESSAGE_MIDDLE = " is ";
-    private static final String PERCENT_SIGN = "%";
+    // The activity log actions of grading a student or a question again
+    private static final String STUDENT_GRADED_AGAIN = "Student graded again";
+    private static final String QUESTION_GRADED_AGAIN =
+            "Question graded again";
 
-    // Turns a percentage into a similarity from 0 to 1
-    private static final double PERCENT = 100.0;
+    // Shown for a student or question that has no mark
+    private static final String NOT_GRADED = "not graded";
+
+    // Separates the questions in a list of kept marks
+    private static final String LIST_SEPARATOR = ", ";
 
     // Every service of the application
     private final ServiceRegistry services;
+
+    // Comes between two sentences of a notice
+    private static final String SENTENCE_GAP = " ";
 
     // The application settings
     private final AppConfig config;
@@ -338,8 +341,9 @@ public class LiveBackend implements DashboardBackend {
 
     /**
      * Checks the path with InputValidator and its file name. Student zips
-     * and folders are checked with SubmissionPreview, and a starter folder
-     * for the starter file of each question.
+     * and folders are checked with SubmissionPreview, a starter folder
+     * for the starter file of each question of the assessment in use, and
+     * a tester folder for the testers it holds.
      */
     @Override
     public ImportItem inspect(InputKind kind, Path path) {
@@ -364,7 +368,10 @@ public class LiveBackend implements DashboardBackend {
             return unreadable(kind, path);
         }
         if (kind == InputKind.STARTER) {
-            return inspectStarter(path);
+            return checkStarter(path, assessment.getQuestions());
+        }
+        if (kind == InputKind.TESTERS) {
+            return inspectTesters(path);
         }
         return new ImportItem(kind, path, "", ImportState.ACCEPTED,
                 "Folder found.");
@@ -547,9 +554,9 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Starts GradingService.startGrading in a GradingTask. A starter
-     * folder that cannot be used is not passed, so grading uses the one
-     * in Settings, as its row on Set up says.
+     * Starts GradingService.startGrading in a GradingTask. When no usable
+     * starter folder is chosen, the one in Settings is passed, as its row
+     * on Set up says, so the run records the folder it used.
      */
     @Override
     public void startGrading(ImportBatch batch, Section section,
@@ -637,20 +644,169 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet: no service retries one question.
+     * Calls GradingService.regradeQuestion, which compiles and runs only
+     * that question again and saves the run, then puts a mark set by hand
+     * back with ScoreAdjustmentService.keepAfterRegrade. It runs a
+     * tester, so call it off the window's thread, as RegradeJob does.
+     * The activity log keeps the old and new marks.
      */
     @Override
-    public ActionResult retryQuestion(Submission submission,
+    public ActionResult retryQuestion(GradingRun run, Submission submission,
             String questionId) {
-        return ActionResult.notConnected(Capability.RETRY_QUESTION);
+        String refused = explainNoRegrade(run, submission);
+        if (refused != null) {
+            return ActionResult.failed(refused);
+        }
+
+        ScoreAdjustmentService adjustments =
+                services.getScoreAdjustmentService();
+        List<ScoreAdjustment> handMarks = findHandMark(
+                adjustments.listNewest(run, submission), questionId);
+        String markBefore = describeMark(submission, questionId);
+        String totalBefore = describeTotal(submission);
+        try {
+            services.getGradingService().regradeQuestion(run, submission,
+                    questionId, null);
+        } catch (GradingException exception) {
+            return ActionResult.failed(exception.getMessage());
+        } finally {
+            forgetSavedRuns();
+        }
+        rememberFoundNow(submission);
+        List<ScoreAdjustment> kept = adjustments.keepAfterRegrade(run,
+                submission, handMarks);
+
+        String markAfter = describeMark(submission, questionId);
+        String totalAfter = describeTotal(submission);
+        String keptWords = describeKept(kept);
+        String change = submission.getUsername() + " " + questionId + ": "
+                + markBefore + " to " + markAfter + ", total " + totalBefore
+                + " to " + totalAfter + "." + keptWords;
+        recordActivity(QUESTION_GRADED_AGAIN,
+                AuditEntry.withReference(change, run.getId()));
+        return ActionResult.done("Graded " + questionId + " of "
+                + submission.getUsername() + " again: " + markBefore
+                + " to " + markAfter + ". Total " + totalAfter + ". Other "
+                + "marks did not change." + keptWords);
     }
 
     /**
-     * Returns Not connected yet: no service retries one submission.
+     * Calls GradingService.regradeSubmission, which grades the student
+     * again from the upload and saves the run, then puts the marks set by
+     * hand back with ScoreAdjustmentService.keepAfterRegrade. It runs
+     * every tester, so call it off the window's thread, as RegradeJob
+     * does. An upload that was refused stays refused. The activity log
+     * keeps the old and new totals.
      */
     @Override
-    public ActionResult retrySubmission(Submission submission) {
-        return ActionResult.notConnected(Capability.RETRY_SUBMISSION);
+    public ActionResult retrySubmission(GradingRun run,
+            Submission submission) {
+        String refused = explainNoRegrade(run, submission);
+        if (refused != null) {
+            return ActionResult.failed(refused);
+        }
+
+        ScoreAdjustmentService adjustments =
+                services.getScoreAdjustmentService();
+        List<ScoreAdjustment> handMarks = adjustments.listNewest(run,
+                submission);
+        String totalBefore = describeTotal(submission);
+        try {
+            services.getGradingService().regradeSubmission(run, submission,
+                    null);
+        } catch (GradingException exception) {
+            return ActionResult.failed(exception.getMessage());
+        } finally {
+            forgetSavedRuns();
+        }
+        rememberFoundNow(submission);
+        List<ScoreAdjustment> kept = adjustments.keepAfterRegrade(run,
+                submission, handMarks);
+
+        String totalAfter = describeTotal(submission);
+        String keptWords = describeKept(kept);
+        String change = submission.getUsername() + ": " + totalBefore
+                + " to " + totalAfter + "." + keptWords;
+        recordActivity(STUDENT_GRADED_AGAIN,
+                AuditEntry.withReference(change, run.getId()));
+        return ActionResult.done("Graded " + submission.getUsername()
+                + " again. Total " + totalBefore + " to " + totalAfter + "."
+                + keptWords);
+    }
+
+    // Says why a student cannot be graded again, or returns null when
+    // they can. An upload that was refused stays refused: grading the
+    // same file again cannot help.
+    private String explainNoRegrade(GradingRun run, Submission submission) {
+        if (submission == null || run == null) {
+            return "Choose a student of a graded run first.";
+        }
+        boolean refused = submission.getIngestFailure() != null
+                || ResultState.isRejectedUpload(submission);
+        if (refused) {
+            return "The upload of " + submission.getUsername() + " was "
+                    + "refused, so it stays refused and was not graded "
+                    + "again. Choose a new copy of the zip on Set up.";
+        }
+        return null;
+    }
+
+    // Keeps only the mark set by hand for one question.
+    private List<ScoreAdjustment> findHandMark(
+            List<ScoreAdjustment> handMarks, String questionId) {
+        List<ScoreAdjustment> found = new ArrayList<>();
+        for (ScoreAdjustment change : handMarks) {
+            if (change.getQuestionId().equals(questionId)) {
+                found.add(change);
+            }
+        }
+        return found;
+    }
+
+    // Says which marks set by hand were kept, such as " Kept the mark set
+    // by hand for Q2b (4).", or "" when none was.
+    private String describeKept(List<ScoreAdjustment> kept) {
+        if (kept.isEmpty()) {
+            return "";
+        }
+        List<String> marks = new ArrayList<>();
+        for (ScoreAdjustment change : kept) {
+            marks.add(change.getQuestionId() + " ("
+                    + ScoreFormatter.format(change.getNewScore()) + ")");
+        }
+        String words = " Kept the mark set by hand for ";
+        if (kept.size() > 1) {
+            words = " Kept the marks set by hand for ";
+        }
+        return words + TextUtils.join(LIST_SEPARATOR, marks) + ".";
+    }
+
+    // The total of a student for a message, or "not graded".
+    private String describeTotal(Submission submission) {
+        if (!ResultState.hasTotal(submission)) {
+            return NOT_GRADED;
+        }
+        return ScoreFormatter.format(submission.getTotalScore());
+    }
+
+    // The mark of one question of a student, or "not graded".
+    private String describeMark(Submission submission, String questionId) {
+        for (QuestionResult result : submission.getQuestionResults()) {
+            Question question = result.getQuestion();
+            if (question != null && question.getId().equals(questionId)) {
+                return ScoreFormatter.format(result.getScore());
+            }
+        }
+        return NOT_GRADED;
+    }
+
+    // Remembers the problems a student was given when graded again in
+    // this session, so a failed undo of one of their fixes is explained
+    // right.
+    private void rememberFoundNow(Submission submission) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            anomaliesFoundNow.add(anomaly.getId());
+        }
     }
 
     /**
@@ -1115,6 +1271,19 @@ public class LiveBackend implements DashboardBackend {
         }
     }
 
+    /**
+     * Says whether the marks changed by hand were saved, from
+     * ScoreAdjustmentService.
+     */
+    @Override
+    public String describeMarkSaving() {
+        String said = adjustmentSaved("");
+        if (said.isEmpty()) {
+            return "";
+        }
+        return SENTENCE_GAP + said;
+    }
+
     // Starts the message about a changed mark: the given word when it was
     // saved, else that it lasts only until GradeZZY closes, and why.
     private String adjustmentSaved(String savedWord) {
@@ -1229,6 +1398,7 @@ public class LiveBackend implements DashboardBackend {
         } catch (RuntimeException exception) {
             // A restore that failed half way may still have changed them
             forgetSavedRuns();
+            services.getAnswerGroupService().forgetAll();
             return ActionResult.failed("The restore of "
                     + backupFile.getFileName() + " did not finish ("
                     + exception.getMessage() + "). Check the History tab "
@@ -1240,6 +1410,7 @@ public class LiveBackend implements DashboardBackend {
         runsBySection.clear();
         decisions.clear();
         services.getScoreAdjustmentService().forgetAll();
+        services.getAnswerGroupService().forgetAll();
         forgetSavedRuns();
         if (Capability.RESTORE.getStatus() != CapabilityStatus.WORKS_NOW) {
             return ActionResult.notConnected(Capability.RESTORE);
@@ -1456,30 +1627,31 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Reads the pairs back from the run's Similar code flags, so nothing
-     * is checked again and a saved run shows the pairs it was saved with.
+     * Returns the service that saves answer group names and checks with
+     * the run.
+     */
+    @Override
+    public AnswerGroupService getAnswerGroupService() {
+        return services.getAnswerGroupService();
+    }
+
+    /**
+     * Calls PlagiarismService.listPairs, which reads the pairs back from
+     * the run's Similar code flags, so nothing is checked again and a
+     * saved run shows the pairs it was saved with.
      */
     @Override
     public List<SimilarityPair> listSimilarPairs(GradingRun gradingRun) {
-        List<SimilarityPair> pairs = new ArrayList<>();
-        if (gradingRun == null) {
-            return pairs;
-        }
+        return services.getPlagiarismService().listPairs(gradingRun);
+    }
 
-        String idStart = SIMILAR_ID_PREFIX + gradingRun.getId()
-                + SIMILAR_ID_SEPARATOR;
-        // Both students of a pair hold a flag, so each pair is kept once
-        List<String> pairKeys = new ArrayList<>();
-        for (Submission submission : gradingRun.getSubmissions()) {
-            for (Anomaly anomaly : submission.getAnomalies()) {
-                SimilarityPair pair = readSimilarFlag(anomaly, idStart);
-                if (pair != null && !pairKeys.contains(pairKey(pair))) {
-                    pairKeys.add(pairKey(pair));
-                    insertBySimilarity(pairs, pair);
-                }
-            }
-        }
-        return pairs;
+    /**
+     * Calls PlagiarismService.readPair, the one place a flag is read.
+     */
+    @Override
+    public SimilarityPair findSimilarPair(GradingRun gradingRun,
+            Anomaly anomaly) {
+        return services.getPlagiarismService().readPair(gradingRun, anomaly);
     }
 
     /**
@@ -1495,63 +1667,6 @@ public class LiveBackend implements DashboardBackend {
         // The check saves the run, so saved copies of it are stale
         forgetSavedRuns();
         return pairs;
-    }
-
-    // Reads the pair a Similar code flag of the run names, or returns
-    // null for any other anomaly or a flag that cannot be read.
-    private SimilarityPair readSimilarFlag(Anomaly anomaly, String idStart) {
-        if (anomaly.getType() != AnomalyType.SIMILAR_CODE
-                || !anomaly.getId().startsWith(idStart)) {
-            return null;
-        }
-
-        String[] parts = anomaly.getId().substring(idStart.length())
-                .split(SIMILAR_ID_SEPARATOR);
-        if (parts.length != SIMILAR_ID_PARTS) {
-            return null;
-        }
-
-        String questionId = parts[QUESTION_PART];
-        String message = anomaly.getMessage();
-        String start = questionId + SIMILAR_MESSAGE_MIDDLE;
-        int end = message.indexOf(PERCENT_SIGN);
-        if (!message.startsWith(start) || end < start.length()) {
-            return null;
-        }
-
-        try {
-            int percent = Integer.parseInt(message.substring(
-                    start.length(), end));
-            return new SimilarityPair(parts[STUDENT_PART],
-                    parts[OTHER_STUDENT_PART], questionId,
-                    percent / PERCENT);
-        } catch (NumberFormatException exception) {
-            return null;
-        }
-    }
-
-    // Names a pair the same way whichever student comes first.
-    private String pairKey(SimilarityPair pair) {
-        String first = pair.getFirstUsername();
-        String second = pair.getSecondUsername();
-        if (first.compareTo(second) > 0) {
-            return pair.getQuestionId() + SIMILAR_ID_SEPARATOR + second
-                    + SIMILAR_ID_SEPARATOR + first;
-        }
-        return pair.getQuestionId() + SIMILAR_ID_SEPARATOR + first
-                + SIMILAR_ID_SEPARATOR + second;
-    }
-
-    // Adds a pair after every pair at least as similar, so the list stays
-    // most similar first.
-    private void insertBySimilarity(List<SimilarityPair> pairs,
-            SimilarityPair pair) {
-        int place = 0;
-        while (place < pairs.size()
-                && pairs.get(place).getSimilarity() >= pair.getSimilarity()) {
-            place++;
-        }
-        pairs.add(place, pair);
     }
 
     /**
@@ -1585,23 +1700,51 @@ public class LiveBackend implements DashboardBackend {
             return null;
         }
 
+        String starterCode = readStarterCode(gradingRun, question);
         return new SimilarityDetail(pair, file, file, firstCode,
-                secondCode, listLeftOut(gradingRun, question));
+                secondCode, starterCode,
+                listLeftOut(gradingRun, question, starterCode));
     }
 
-    // Lists what the check leaves out of a question: the starter file's
-    // code, and every other file in the question folder.
-    private List<String> listLeftOut(GradingRun gradingRun,
-            Question question) {
+    // Returns where a question's starter file is, whether or not it
+    // exists.
+    private Path findStarterFile(GradingRun gradingRun, Question question) {
         Path starter = gradingRun.getStarterDirectory();
         if (starter == null) {
             starter = configuredPath(InputKind.STARTER);
         }
-
-        List<String> leftOut = new ArrayList<>();
-        Path starterFile = starter.resolve(question.getFolderName())
+        return starter.resolve(question.getFolderName())
                 .resolve(question.getFileName());
-        if (Files.isRegularFile(starterFile)) {
+    }
+
+    // Reads a question's starter file, or returns "" when it is missing
+    // or cannot be read.
+    private String readStarterCode(GradingRun gradingRun,
+            Question question) {
+        Path starterFile = findStarterFile(gradingRun, question);
+        if (!Files.isRegularFile(starterFile)) {
+            return "";
+        }
+
+        try {
+            return FileUtils.readText(starterFile);
+        } catch (IOException exception) {
+            return "";
+        }
+    }
+
+    // Lists what the check leaves out of a question: the starter file's
+    // code, and every other file in the question folder. A starter file
+    // that could not be read is named, so the instructor knows why no
+    // line is greyed.
+    private List<String> listLeftOut(GradingRun gradingRun,
+            Question question, String starterCode) {
+        List<String> leftOut = new ArrayList<>();
+        Path starterFile = findStarterFile(gradingRun, question);
+        if (starterCode.isEmpty()) {
+            leftOut.add("Could not read a starter file at " + starterFile
+                    + ", so starter lines are not greyed");
+        } else {
             leftOut.add(starterFile.toString() + " (starter code, taken "
                     + "out before comparing)");
         }
@@ -1663,12 +1806,31 @@ public class LiveBackend implements DashboardBackend {
         return unreadable(InputKind.SUBMISSION, path);
     }
 
+    /**
+     * Checks that the folder can be read, then that it holds the starter
+     * file of each of the given questions.
+     */
+    @Override
+    public ImportItem inspectStarter(Path folder, List<Question> questions) {
+        if (!InputValidator.isReadableDirectory(folder)) {
+            return unreadable(InputKind.STARTER, folder);
+        }
+        return checkStarter(folder, questions);
+    }
+
     // Checks that a starter folder holds each question's starter file,
     // which the untouched and empty answer checks compare answers with.
-    private ImportItem inspectStarter(Path folder) {
+    // With no questions there is nothing to look for yet.
+    private ImportItem checkStarter(Path folder, List<Question> questions) {
+        if (questions.isEmpty()) {
+            return new ImportItem(InputKind.STARTER, folder, "",
+                    ImportState.ACCEPTED, "Folder found. Its starter files "
+                    + "are checked once there are questions.");
+        }
+
         List<String> missingFiles = new ArrayList<>();
         List<String> missingIds = new ArrayList<>();
-        for (Question question : assessment.getQuestions()) {
+        for (Question question : questions) {
             Path file = folder.resolve(question.getFolderName())
                     .resolve(question.getFileName());
             if (!InputValidator.isReadableFile(file)) {
@@ -1682,7 +1844,7 @@ public class LiveBackend implements DashboardBackend {
             return new ImportItem(InputKind.STARTER, folder, "",
                     ImportState.ACCEPTED, "Holds the starter file of every "
                     + "question.");
-        } else if (missingFiles.size() == assessment.getQuestions().size()) {
+        } else if (missingFiles.size() == questions.size()) {
             return new ImportItem(InputKind.STARTER, folder, "",
                     ImportState.INVALID, "None of the starter files, such "
                     + "as " + missingFiles.get(0) + ", is in this folder, "
@@ -1697,6 +1859,44 @@ public class LiveBackend implements DashboardBackend {
                 ImportState.WARNING, joinWords(missingFiles) + verb
                 + " not in this folder, so untouched or empty answers to "
                 + joinWords(missingIds) + " will not be flagged.");
+    }
+
+    // Checks that a tester folder holds testers, with the scan that fills
+    // in an assessment's questions, so the folder's status and the
+    // questions found always agree. A tester with no marks to read is a
+    // warning, because its question would be worth nothing.
+    private ImportItem inspectTesters(Path folder) {
+        String testerSuffix = config.getString(
+                ConfigKeys.TESTER_CLASS_SUFFIX);
+        List<Question> found = AssessmentFolderScanner.findQuestions(folder,
+                testerSuffix, null);
+        if (found.isEmpty()) {
+            return new ImportItem(InputKind.TESTERS, folder, "",
+                    ImportState.INVALID, "No tester files, such as "
+                    + firstTesterName() + ", are in this folder. Choose "
+                    + "the folder that holds the testers.");
+        }
+
+        List<String> ids = new ArrayList<>();
+        List<String> unmarked = new ArrayList<>();
+        for (Question question : found) {
+            ids.add(question.getId());
+            boolean noMarks = question.getMaxScore() <= TesterMarks.UNKNOWN;
+            if (noMarks) {
+                unmarked.add(question.getId());
+            }
+        }
+        int testerCount = found.size();
+        String holds = "Holds " + testerCount + " tester"
+                + plural(testerCount) + ": " + joinWords(ids) + ".";
+        if (unmarked.isEmpty()) {
+            return new ImportItem(InputKind.TESTERS, folder, "",
+                    ImportState.ACCEPTED, holds);
+        }
+        return new ImportItem(InputKind.TESTERS, folder, "",
+                ImportState.WARNING, holds + " No marks could be read from "
+                + "the tester of " + joinWords(unmarked) + ", so type "
+                + "them in.");
     }
 
     // Says what grading does instead of using a starter folder that
@@ -1721,14 +1921,20 @@ public class LiveBackend implements DashboardBackend {
                 second.toAbsolutePath().normalize());
     }
 
-    // Returns the chosen starter folder, or null when none is chosen or
-    // it cannot be used, so grading uses the one in Settings.
+    // Returns the chosen starter folder, else the one in Settings, so the
+    // run records the folder it was graded with. Returns null when
+    // neither can be used.
     private Path findUsableStarter(ImportBatch batch) {
         List<ImportItem> starters = batch.getItems(InputKind.STARTER);
-        if (starters.isEmpty() || !starters.get(0).getState().isUsable()) {
-            return null;
+        if (!starters.isEmpty() && starters.get(0).getState().isUsable()) {
+            return starters.get(0).getPath();
         }
-        return starters.get(0).getPath();
+
+        Path configured = configuredPath(InputKind.STARTER);
+        if (inspect(InputKind.STARTER, configured).getState().isUsable()) {
+            return configured;
+        }
+        return null;
     }
 
     // Returns the item for a path InputValidator could not read. A path
