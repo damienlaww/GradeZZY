@@ -34,6 +34,7 @@ public class PersistStage implements GradingStage {
     // Start of the id of the warning added when saving fails
     private static final String ID_PREFIX = "persist-";
 
+    // What the instructor can do when the marks could not be saved
     private static final String SAVE_FAILED_ACTION = "Export the results "
             + "before closing the app, then check database.file in the "
             + "settings.";

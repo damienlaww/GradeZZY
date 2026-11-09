@@ -11,6 +11,7 @@ package gradezzy.grading;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -66,6 +67,14 @@ public class ExecuteStage implements GradingStage {
     // What the instructor can do about a total its cases do not support
     private static final String TOTAL_TOO_HIGH_ACTION =
             "Read the code on Review: it may change the tester's score.";
+
+    // What the instructor can do about a tester whose output was not
+    // fully recognised, or whose total is more than the question's maximum
+    private static final String CHECK_OUTPUT_ACTION = "Read the test "
+            + "output on Review and change the mark if it is wrong.";
+
+    // Separates the reasons in one message
+    private static final String REASON_SEPARATOR = "; ";
 
     // What the instructor can do about files changed before a tester ran
     private static final String FILES_CHANGED_ACTION = "Read the code on "
@@ -205,19 +214,25 @@ public class ExecuteStage implements GradingStage {
             int runNumber = runLogs.size() + FIRST_NUMBER;
             runLogs.add(labelRun(runNumber, run, stoppedCase,
                     parsed.getOutput()));
-            result.setOutput(fitRunLogs(runLogs, context.getConfig().getInt(
-                    ConfigKeys.MAX_OUTPUT_CHARACTERS)));
+            int maxCharacters = context.getConfig().getInt(
+                    ConfigKeys.MAX_OUTPUT_CHARACTERS);
+            result.setOutput(fitRunLogs(runLogs, maxCharacters));
         }
         copyCases(parsed, skippedCases, result);
-        result.setScore(scoreOf(submission, tester, question, parsed, run));
-        reportOutcome(submission, context, question, firstRun, parsed,
+        Double printedTotal = scoreParser.readTotal(run);
+        result.setScore(scoreOf(submission, tester, question, parsed,
+                result, printedTotal, run, skippedCases));
+        reportOutcome(submission, context, question, firstRun, run, result,
                 skippedCases, stoppedCase, outOfMemory);
+        reportUnrecognised(submission, context, question, run, result,
+                printedTotal, skippedCases);
     }
 
     /**
      * Copies the test cases of the last run into the question's result.
-     * A skipped case is shown as skipped, not as the "Failed -> Exception"
-     * the tester printed for it.
+     * A skipped case is shown as skipped and failed, not as the "Failed ->
+     * Exception" the tester printed for it, nor as the "Passed" a tester
+     * prints when it expects an exception and catches the skip.
      *
      * @param parsed the parsed last run
      * @param skippedCases the cases that were skipped
@@ -238,40 +253,86 @@ public class ExecuteStage implements GradingStage {
 
     /**
      * Works out a question's score from its last run. A run that did not
-     * finish never printed its total, so the marks of its passed cases
-     * are added up. A run that finished printed its total, which is kept
-     * unless it is more than the passed cases earn: student code can set
-     * the tester's score field by reflection.
+     * finish never printed its total, and a total that is not a number
+     * cannot be read, so the marks of the passed cases are added up. A
+     * total above the question's maximum is cut to it and flagged. A
+     * total is kept unless it is more than the passed cases earn: student
+     * code can set the tester's score field by reflection, and a tester
+     * that expects an exception counts a skipped case as passed. Only
+     * when no case printed a verdict at all, so nothing can check it, is
+     * the total kept as it is; reportUnrecognised flags that.
      *
      * @param submission the submission, which gets a flag if the printed
      *        total is too high
      * @param tester the tester of the question
      * @param question the question
-     * @param parsed the parsed last run
+     * @param parsed the parsed last run, as the tester printed it
+     * @param result the question's result, with skipped cases failed
+     * @param printedTotal the total the last run printed, or null
      * @param run the last run
+     * @param skippedCases the cases that were skipped
      * @return the score
      */
     private double scoreOf(Submission submission, TesterFile tester,
-            Question question, QuestionResult parsed, ProcessResult run) {
-        boolean finished = !run.isTimedOut()
-                && run.getExitCode() == SUCCESS_EXIT_CODE;
-        double earned = marksEarned(tester, question, parsed, finished);
-        if (!finished) {
+            Question question, QuestionResult parsed, QuestionResult result,
+            Double printedTotal, ProcessResult run,
+            List<Integer> skippedCases) {
+        boolean finished = finishedNormally(run);
+        double earned = marksEarned(submission, tester, question, result,
+                finished);
+        if (!finished || printedTotal == null) {
             return Math.min(earned, question.getMaxScore());
         }
 
-        int caseCount = parsed.getTestCaseResults().size();
-        boolean totalBelieved = caseCount == 0
-                || parsed.getScore() <= earned + SCORE_TOLERANCE;
+        double total = capAtMaximum(submission, question, printedTotal);
+        boolean nothingToCheck = !hasVerdict(result) && skippedCases.isEmpty();
+        boolean totalBelieved = nothingToCheck
+                || total <= earned + SCORE_TOLERANCE;
         if (totalBelieved) {
-            return parsed.getScore();
+            return total;
         }
+
+        // The tester's own count, with the skipped cases it caught as
+        // passed, explains the total: no flag, the skip message says why
+        double earnedAsPrinted = marksEarned(submission, tester, question,
+                parsed, finished);
+        boolean skipCounted = !skippedCases.isEmpty()
+                && total <= earnedAsPrinted + SCORE_TOLERANCE;
+        if (!skipCounted) {
+            addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
+                    + question.getId() + " tester printed a total of "
+                    + printedTotal + ", but only " + passCount(result)
+                    + " of " + result.getTestCaseResults().size()
+                    + " case(s) passed, so " + earned + " was given.",
+                    TOTAL_TOO_HIGH_ACTION);
+        }
+        return earned;
+    }
+
+    /**
+     * Cuts a printed total to the question's maximum, and flags a total
+     * above it: the maximum read from the tester may be wrong, as with a
+     * tester that adds its marks in a helper method called once per case.
+     *
+     * @param submission the submission, which gets the flag
+     * @param question the question
+     * @param printedTotal the total the tester printed
+     * @return the total, at most the question's maximum
+     */
+    private double capAtMaximum(Submission submission, Question question,
+            double printedTotal) {
+        double maxScore = question.getMaxScore();
+        if (printedTotal <= maxScore + SCORE_TOLERANCE) {
+            return printedTotal;
+        }
+
         addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
                 + question.getId() + " tester printed a total of "
-                + parsed.getScore() + ", but only " + passCount(parsed)
-                + " of " + caseCount + " case(s) passed, so " + earned
-                + " was given.", TOTAL_TOO_HIGH_ACTION);
-        return earned;
+                + printedTotal + ", more than the question's maximum of "
+                + maxScore + ", so " + maxScore + " was given. The maximum "
+                + "is read from the tester's score lines and may be wrong "
+                + "for this tester.", CHECK_OUTPUT_ACTION);
+        return maxScore;
     }
 
     /**
@@ -282,17 +343,21 @@ public class ExecuteStage implements GradingStage {
      * @param context the context
      * @param question the question
      * @param firstRun the first run of the tester
-     * @param parsed the parsed last run
+     * @param lastRun the last run of the tester
+     * @param result the question's result, with skipped cases failed
      * @param skippedCases the cases that were skipped
      * @param stoppedCase the case the last run stopped in, or NO_CASE
      * @param outOfMemory true when a run printed OutOfMemoryError
      */
     private void reportOutcome(Submission submission, GradingContext context,
-            Question question, ProcessResult firstRun, QuestionResult parsed,
-            List<Integer> skippedCases, int stoppedCase,
-            boolean outOfMemory) {
-        String outcome = passCount(parsed) + " case(s) passed and their "
-                + "marks are kept." + describeSkipped(skippedCases)
+            Question question, ProcessResult firstRun, ProcessResult lastRun,
+            QuestionResult result, List<Integer> skippedCases,
+            int stoppedCase, boolean outOfMemory) {
+        boolean skipFailed =
+                lastRun.getExitCode() == TesterRunner.SKIP_FAILED_EXIT_CODE;
+        String outcome = passCount(result) + " case(s) passed and their "
+                + "marks are kept." + describeSkipped(skippedCases, skipFailed)
+                + describeSkipFailed(skippedCases, skipFailed)
                 + describeNotRun(stoppedCase);
         if (firstRun.isTimedOut()) {
             long limitSeconds = context.getConfig().getLong(
@@ -309,7 +374,7 @@ public class ExecuteStage implements GradingStage {
                     + question.getId() + " tester did not reach its end: "
                     + "the program was ended early, for example by "
                     + "System.exit in " + question.getFileName() + ". "
-                    + passCount(parsed) + " case(s) passed before it ended. "
+                    + passCount(result) + " case(s) passed before it ended. "
                     + "A run that ends early never prints the tester's "
                     + "total, so these passes could not be checked against "
                     + "it.", EARLY_EXIT_ACTION);
@@ -335,6 +400,108 @@ public class ExecuteStage implements GradingStage {
         }
     }
 
+    /**
+     * Flags a run that ended normally but whose output was not fully
+     * recognised, so marks may be missing with no other flag: its last
+     * line is not a total, it printed no case GradeZZY recognises, or a
+     * case has no verdict, as when student code replaces System.out and
+     * hides the tester's later lines.
+     *
+     * @param submission the submission
+     * @param context the context
+     * @param question the question
+     * @param lastRun the last run of the tester
+     * @param result the question's result, with its score set
+     * @param printedTotal the total the last run printed, or null
+     * @param skippedCases the cases that were skipped
+     */
+    private void reportUnrecognised(Submission submission,
+            GradingContext context, Question question, ProcessResult lastRun,
+            QuestionResult result, Double printedTotal,
+            List<Integer> skippedCases) {
+        if (!finishedNormally(lastRun)) {
+            return;
+        }
+
+        List<String> reasons = new ArrayList<>();
+        if (printedTotal == null) {
+            reasons.add("its last line is not a total GradeZZY can read, so "
+                    + "each passed case was given what its own score line in "
+                    + "the tester gives");
+        }
+        if (result.getTestCaseResults().isEmpty()) {
+            String headerMarker = context.getConfig().getString(
+                    ConfigKeys.TEST_HEADER_MARKER);
+            reasons.add("it printed no test case GradeZZY recognises (a \""
+                    + headerMarker + " 1\" header, or a verdict line)");
+        }
+        List<String> missing = listMissingVerdicts(result, skippedCases);
+        if (!missing.isEmpty()) {
+            reasons.add("case(s) " + TextUtils.join(NAME_SEPARATOR, missing)
+                    + " printed no verdict that GradeZZY recognises");
+        }
+        if (reasons.isEmpty()) {
+            return;
+        }
+
+        addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
+                + question.getId() + " tester's output was not fully "
+                + "recognised: " + TextUtils.join(REASON_SEPARATOR, reasons)
+                + ". " + question.getId() + " was given " + result.getScore()
+                + "; marks may be missing.", CHECK_OUTPUT_ACTION);
+    }
+
+    /**
+     * Lists the cases that have no verdict and were not skipped.
+     *
+     * @param result the question's result
+     * @param skippedCases the cases that were skipped
+     * @return the numbers of those cases, as text
+     */
+    private List<String> listMissingVerdicts(QuestionResult result,
+            List<Integer> skippedCases) {
+        List<String> missing = new ArrayList<>();
+        for (TestCaseResult testCase : result.getTestCaseResults()) {
+            boolean noVerdict = TesterOutputScoreParser.NOT_FINISHED.equals(
+                    testCase.getDetail());
+            boolean skipped = skippedCases.contains(
+                    testCase.getTestNumber());
+            if (noVerdict && !skipped) {
+                missing.add(String.valueOf(testCase.getTestNumber()));
+            }
+        }
+        return missing;
+    }
+
+    /**
+     * Says whether any case of a result printed a pass or fail verdict.
+     *
+     * @param result the question's result
+     * @return true if at least one case has a verdict
+     */
+    private boolean hasVerdict(QuestionResult result) {
+        for (TestCaseResult testCase : result.getTestCaseResults()) {
+            boolean noVerdict = TesterOutputScoreParser.NOT_FINISHED.equals(
+                    testCase.getDetail())
+                    || SkippedCaseException.SKIPPED_MESSAGE.equals(
+                            testCase.getDetail());
+            if (!noVerdict) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Says whether a run reached the end of the tester by itself.
+     *
+     * @param run the run
+     * @return true if it was not stopped and exited normally
+     */
+    private boolean finishedNormally(ProcessResult run) {
+        return !run.isTimedOut() && run.getExitCode() == SUCCESS_EXIT_CODE;
+    }
+
     // Says whether a run of the tester stopped because student code used
     // more memory than exec.max.memory.mb allows.
     private boolean ranOutOfMemory(ProcessResult run) {
@@ -358,37 +525,77 @@ public class ExecuteStage implements GradingStage {
             List<Integer> skippedCases) {
         List<TestCaseResult> cases = parsed.getTestCaseResults();
         boolean crashed = run.getExitCode() == TesterHarness.CRASH_EXIT_CODE;
-        if ((!run.isTimedOut() && !crashed) || cases.isEmpty()) {
+        boolean stopped = run.isTimedOut() || crashed;
+        if (!stopped || cases.isEmpty()) {
             return NO_CASE;
         }
 
-        TestCaseResult lastCase = cases.get(cases.size() - 1);
-        if (!TesterOutputScoreParser.NOT_FINISHED.equals(lastCase.getDetail())
-                || skippedCases.contains(lastCase.getTestNumber())) {
+        int lastIndex = cases.size() - 1;
+        TestCaseResult lastCase = cases.get(lastIndex);
+        boolean finishedCase = !TesterOutputScoreParser.NOT_FINISHED.equals(
+                lastCase.getDetail());
+        boolean alreadySkipped = skippedCases.contains(
+                lastCase.getTestNumber());
+        if (finishedCase || alreadySkipped) {
             return NO_CASE;
         }
         return lastCase.getTestNumber();
     }
 
     /**
-     * Says which cases were skipped, for the end of a message.
+     * Says which cases were skipped, for the end of a message. When the
+     * last skip itself stopped the tester, that case is left out here and
+     * described by describeSkipFailed.
      *
      * @param skippedCases the cases skipped
+     * @param skipFailed true if the last run stopped at the last skip
      * @return a sentence with a space in front, or empty if none were
      */
-    private String describeSkipped(List<Integer> skippedCases) {
-        if (skippedCases.isEmpty()) {
+    private String describeSkipped(List<Integer> skippedCases,
+            boolean skipFailed) {
+        int skipsThatWorked = skippedCases.size();
+        if (skipFailed) {
+            skipsThatWorked--;
+        }
+        if (skipsThatWorked <= 0) {
             return "";
         }
 
         List<String> numbers = new ArrayList<>();
-        for (Integer skippedCase : skippedCases) {
-            numbers.add(String.valueOf(skippedCase));
+        for (int index = 0; index < skipsThatWorked; index++) {
+            numbers.add(String.valueOf(skippedCases.get(index)));
         }
         return " Case(s) " + TextUtils.join(NAME_SEPARATOR, numbers)
                 + " stopped the tester (a hang or a crash), so they got "
                 + "no marks and the tester was run again for the cases "
                 + "after them.";
+    }
+
+    /**
+     * Says that the tester could not skip a case, for the end of a
+     * message. The tester prints the case's header outside the case's try
+     * block, so the skip stopped the whole tester and the cases after it
+     * were never run.
+     *
+     * @param skippedCases the cases skipped
+     * @param skipFailed true if the last run stopped at the last skip
+     * @return a sentence with a space in front, or empty if the skip
+     *         worked
+     */
+    private String describeSkipFailed(List<Integer> skippedCases,
+            boolean skipFailed) {
+        if (!skipFailed || skippedCases.isEmpty()) {
+            return "";
+        }
+
+        int lastIndex = skippedCases.size() - 1;
+        int failedCase = skippedCases.get(lastIndex);
+        return " Case " + failedCase + " stopped the tester, and when it "
+                + "was run again the tester could not skip case "
+                + failedCase + " (it prints the case's header outside the "
+                + "case's try block), so the cases after it were not run. "
+                + "Case " + failedCase + " and the cases after it got no "
+                + "marks. Check them by hand.";
     }
 
     /**
@@ -422,6 +629,8 @@ public class ExecuteStage implements GradingStage {
             label += ": stopped at the time limit in case " + stoppedCase;
         } else if (stoppedCase != NO_CASE) {
             label += ": crashed in case " + stoppedCase;
+        } else if (run.getExitCode() == TesterRunner.SKIP_FAILED_EXIT_CODE) {
+            label += ": stopped where it skipped a case";
         }
         return "--- " + label + " ---" + LINE_END + log;
     }
@@ -438,9 +647,11 @@ public class ExecuteStage implements GradingStage {
      * @return the joined logs
      */
     private String fitRunLogs(List<String> runLogs, int maxCharacters) {
-        String lastLog = runLogs.get(runLogs.size() - 1);
+        // Every run but the last; also the index of the last run
         int earlierRuns = runLogs.size() - 1;
-        int share = (maxCharacters - lastLog.length()) / earlierRuns;
+        String lastLog = runLogs.get(earlierRuns);
+        int spare = maxCharacters - lastLog.length();
+        int share = spare / earlierRuns;
         if (share < 0) {
             share = 0;
         }
@@ -461,7 +672,7 @@ public class ExecuteStage implements GradingStage {
      * @return the log, with a note on how much was cut if it was shortened
      */
     private String keepEnd(String log, int limit) {
-        int labelEnd = log.indexOf(LINE_END) + 1;
+        int labelEnd = log.indexOf(LINE_END) + LINE_END.length();
         String label = log.substring(0, labelEnd);
         String body = log.substring(labelEnd);
         if (body.length() <= limit) {
@@ -477,9 +688,14 @@ public class ExecuteStage implements GradingStage {
      * Adds up what the passed cases earn. Each case is worth what its own
      * "score +=" line in the tester gives, so a case worth 0.5 counts as
      * 0.5 and one worth 2 counts as 2. When the tester's lines cannot be
-     * matched to its cases one for one, the passed cases are taken to be
-     * worth the most they can be, so no earned mark is taken away.
+     * matched to its cases one for one, a finished run's passed cases are
+     * taken to be worth the most they can be, because this only caps the
+     * printed total, so no earned mark is taken away. A run that did not
+     * finish has no total, so its passed cases are taken to be worth the
+     * least they can be, and the instructor is told.
      *
+     * @param submission the submission, which gets a flag when an
+     *        unfinished run cannot be matched
      * @param tester the tester of the question
      * @param question the question
      * @param parsed the parsed run
@@ -487,8 +703,8 @@ public class ExecuteStage implements GradingStage {
      *        the tester was run
      * @return what the passed cases earn
      */
-    private double marksEarned(TesterFile tester, Question question,
-            QuestionResult parsed, boolean finished) {
+    private double marksEarned(Submission submission, TesterFile tester,
+            Question question, QuestionResult parsed, boolean finished) {
         int passes = passCount(parsed);
         if (passes == 0) {
             return 0.0;
@@ -500,8 +716,19 @@ public class ExecuteStage implements GradingStage {
             // The tester cannot be read now, so every case counts the same
             return passes * question.getMaxScore() / cases.size();
         }
-        if (!matchesCases(caseMarks, cases, finished)) {
+        boolean matched = matchesCases(caseMarks, cases, finished);
+        if (!matched && finished) {
             return TesterMarks.sumLargest(caseMarks, passes);
+        }
+        if (!matched) {
+            double smallest = sumSmallest(caseMarks, passes);
+            addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
+                    + question.getId() + " tester's cases could not be "
+                    + "matched one for one to its score lines, so its "
+                    + passes + " passed case(s) were given the smallest "
+                    + "marks a case is worth: " + smallest + " in all.",
+                    CHECK_OUTPUT_ACTION);
+            return smallest;
         }
 
         double total = 0.0;
@@ -510,6 +737,25 @@ public class ExecuteStage implements GradingStage {
                 int markIndex = testCase.getTestNumber() - FIRST_NUMBER;
                 total += caseMarks.get(markIndex);
             }
+        }
+        return total;
+    }
+
+    /**
+     * Adds up the smallest marks in a tester, one for each passed case.
+     *
+     * @param caseMarks the tester's marks in order
+     * @param passes the number of passed cases
+     * @return the sum of the smallest marks, as many as there are passes
+     */
+    private double sumSmallest(List<Double> caseMarks, int passes) {
+        List<Double> marks = new ArrayList<>(caseMarks);
+        Collections.sort(marks);
+
+        double total = 0.0;
+        for (int index = 0; index < passes && index < marks.size();
+                index++) {
+            total += marks.get(index);
         }
         return total;
     }
@@ -597,15 +843,16 @@ public class ExecuteStage implements GradingStage {
         try {
             List<String> changed = snapshot.restore();
             if (!changed.isEmpty()) {
+                String message = "Files in the " + question.getId()
+                        + " folder changed after compiling, before its "
+                        + "tester ran: "
+                        + TextUtils.join(NAME_SEPARATOR, changed)
+                        + ". Code run for another question may have changed "
+                        + "them. The originals were put back.";
                 submission.addAnomaly(new Anomaly(
                         ID_PREFIX + UUID.randomUUID(),
                         AnomalyType.HARD_CODED_ANSWER, Severity.WARNING,
-                        submission.getUsername(), "Files in the "
-                        + question.getId() + " folder changed after "
-                        + "compiling, before its tester ran: "
-                        + TextUtils.join(NAME_SEPARATOR, changed)
-                        + ". Code run for another question may have changed "
-                        + "them. The originals were put back.",
+                        submission.getUsername(), message,
                         FILES_CHANGED_ACTION));
             }
             return snapshot;

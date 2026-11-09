@@ -22,6 +22,8 @@ import gradezzy.model.Submission;
 
 /**
  * Flags suspicious answers for the instructor to review.
+ *
+ * <p>Tier: SHOULD. Owner: Jun Sheng.
  */
 public class DetectStage implements GradingStage {
 

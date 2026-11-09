@@ -52,6 +52,13 @@ public class TesterRunner {
      */
     public static final int EARLY_EXIT_CODE = -1;
 
+    /**
+     * Exit code reported when a case that was being skipped threw outside
+     * the tester's try block, so the skip itself stopped the tester and
+     * the cases after it were not run.
+     */
+    public static final int SKIP_FAILED_EXIT_CODE = -2;
+
     // Option that sets where java looks for classes
     private static final String CLASSPATH_OPTION = "-cp";
 
@@ -75,6 +82,12 @@ public class TesterRunner {
     // Student code may not load native libraries, which could do anything
     private static final String NO_NATIVE_OPTION =
             "--illegal-native-access=deny";
+
+    // The tester runs in English whatever the computer's language, so a
+    // total printed with printf always has a decimal point, never "4,5"
+    private static final String ENGLISH_LANGUAGE_OPTION =
+            "-Duser.language=en";
+    private static final String ENGLISH_COUNTRY_OPTION = "-Duser.country=US";
 
     // Limits for each tester run, so one student's code cannot take the
     // memory or CPUs the other workers need: a heap size from the
@@ -125,6 +138,13 @@ public class TesterRunner {
     // Ends each line of the rebuilt output
     private static final String NEW_LINE = "\n";
 
+    // A backslash and a double quote in a path, and the same characters
+    // escaped for the sandbox rules
+    private static final String BACKSLASH = "\\";
+    private static final String ESCAPED_BACKSLASH = "\\\\";
+    private static final String QUOTE = "\"";
+    private static final String ESCAPED_QUOTE = "\\\"";
+
     // The application settings
     private final AppConfig config;
 
@@ -134,9 +154,15 @@ public class TesterRunner {
     // Whether testers run inside the macOS sandbox
     private final boolean sandboxed;
 
+    // Why java cannot run the testers, or empty when it can
+    private final String javaProblem;
+
     /**
      * Creates a new tester runner. One is made for each grading run, so
-     * the note about a missing sandbox is printed once per run.
+     * the note about a missing sandbox is printed once per run. java is
+     * tried once here with the options every tester gets; if it cannot
+     * start with them, every later runTester call fails with the reason
+     * instead of giving each student 0.
      *
      * @param config the application settings
      * @param processRunner the helper that runs external commands
@@ -144,10 +170,72 @@ public class TesterRunner {
     public TesterRunner(AppConfig config, ProcessRunner processRunner) {
         this.config = config;
         this.processRunner = processRunner;
-        this.sandboxed = sandboxWorks();
-        if (!sandboxed) {
+        this.javaProblem = checkJava();
+        this.sandboxed = javaProblem.isEmpty() && sandboxWorks();
+        if (!javaProblem.isEmpty()) {
+            System.err.println(javaProblem);
+        } else if (!sandboxed) {
             System.err.println(NO_SANDBOX_NOTE);
         }
+    }
+
+    /**
+     * Returns the program that runs a tester: exec.java.command, where the
+     * bare word java means the java of the JDK running GradeZZY.
+     *
+     * @return the program to start
+     */
+    private String javaCommand() {
+        return JdkCommand.resolve(config.getString(ConfigKeys.JAVA_COMMAND));
+    }
+
+    /**
+     * Runs java once with every option a tester run gets, plus -version,
+     * in an empty folder. An older java rejects options such as
+     * --illegal-native-access, and then every tester run would fail.
+     *
+     * @return why java cannot run the testers, or empty when it can
+     */
+    private String checkJava() {
+        Path probeFolder = null;
+        try {
+            probeFolder = Files.createTempDirectory(PROBE_FOLDER_PREFIX)
+                    .toRealPath();
+            List<String> command = new ArrayList<>();
+            command.add(javaCommand());
+            addJavaOptions(command, probeFolder.toString());
+            command.add(VERSION_OPTION);
+            ProcessResult probe = processRunner.run(command, probeFolder,
+                    config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS));
+            if (probe.getExitCode() == SUCCESS_EXIT_CODE) {
+                return "";
+            }
+            return describeJavaProblem(probe.getStandardError());
+        } catch (ProcessExecutionException exception) {
+            return describeJavaProblem(exception.getMessage());
+        } catch (IOException exception) {
+            return describeJavaProblem(exception.getMessage());
+        } finally {
+            deleteProbeFolder(probeFolder);
+        }
+    }
+
+    /**
+     * Words the reason java cannot run the testers.
+     *
+     * @param detail what java or the system said, such as its first error
+     * @return the message for the instructor
+     */
+    private String describeJavaProblem(String detail) {
+        String firstLine = "";
+        String trimmed = String.valueOf(detail).trim();
+        if (!trimmed.isEmpty()) {
+            firstLine = " (" + trimmed.split(LINE_BREAK)[0] + ")";
+        }
+        return javaCommand() + " cannot run the testers" + firstLine
+                + ". GradeZZY needs JDK 25 or newer: set "
+                + ConfigKeys.JAVA_COMMAND + " to its java, or to java to "
+                + "use the JDK running GradeZZY.";
     }
 
     /**
@@ -172,7 +260,8 @@ public class TesterRunner {
             command.add(SANDBOX_COMMAND);
             command.add(PROFILE_OPTION);
             command.add(sandboxRules(probeFolder, harnessLocation()));
-            command.add(config.getString(ConfigKeys.JAVA_COMMAND));
+            command.add(javaCommand());
+            addJavaOptions(command, probeFolder.toString());
             command.add(VERSION_OPTION);
             ProcessResult probe = processRunner.run(command, probeFolder,
                     config.getLong(ConfigKeys.RUN_TIMEOUT_SECONDS));
@@ -233,6 +322,9 @@ public class TesterRunner {
         if (testerClassName == null || testerClassName.isBlank()) {
             throw new ProcessExecutionException("No tester class to run.");
         }
+        if (!javaProblem.isEmpty()) {
+            throw new ProcessExecutionException(javaProblem);
+        }
 
         // The harness comes first, so a student class cannot replace it
         String harness = harnessLocation();
@@ -246,20 +338,8 @@ public class TesterRunner {
             command.add(PROFILE_OPTION);
             command.add(sandboxRules(questionFolder, harness));
         }
-        command.add(config.getString(ConfigKeys.JAVA_COMMAND));
-        int maxMemoryMb = config.getInt(ConfigKeys.MAX_MEMORY_MB);
-        if (maxMemoryMb > 0) {
-            command.add(MAX_HEAP_OPTION + maxMemoryMb + MEGABYTES_SUFFIX);
-        }
-        // A stack trace on standard error is UTF-8 on Windows too
-        command.add(UTF8_ERROR_OPTION);
-        command.add(OLD_UTF8_ERROR_OPTION);
-        command.add(STACK_SIZE_OPTION);
-        command.add(ONE_PROCESSOR_OPTION);
-        command.add(LIMIT_MODULES_OPTION);
-        command.add(NO_NATIVE_OPTION);
-        command.add(HOME_OPTION + folder);
-        command.add(TEMP_OPTION + folder);
+        command.add(javaCommand());
+        addJavaOptions(command, folder);
         command.add(CLASSPATH_OPTION);
         command.add(classPath);
         command.add(TesterHarness.class.getName());
@@ -283,10 +363,39 @@ public class TesterRunner {
     }
 
     /**
+     * Adds the java options that limit one tester run: its memory, stack
+     * and CPUs, the modules and native code it may use, its home and temp
+     * folders, and its language, which is always English.
+     *
+     * @param command the command being built
+     * @param folder the full path of the question folder
+     */
+    private void addJavaOptions(List<String> command, String folder) {
+        int maxMemoryMb = config.getInt(ConfigKeys.MAX_MEMORY_MB);
+        if (maxMemoryMb > 0) {
+            command.add(MAX_HEAP_OPTION + maxMemoryMb + MEGABYTES_SUFFIX);
+        }
+        // A stack trace on standard error is UTF-8 on Windows too
+        command.add(UTF8_ERROR_OPTION);
+        command.add(OLD_UTF8_ERROR_OPTION);
+        command.add(STACK_SIZE_OPTION);
+        command.add(ONE_PROCESSOR_OPTION);
+        command.add(LIMIT_MODULES_OPTION);
+        command.add(NO_NATIVE_OPTION);
+        command.add(HOME_OPTION + folder);
+        command.add(TEMP_OPTION + folder);
+        command.add(ENGLISH_LANGUAGE_OPTION);
+        command.add(ENGLISH_COUNTRY_OPTION);
+    }
+
+    /**
      * Rebuilds the output: marked lines lose their token, every other line
-     * gets STUDENT_LINE_PREFIX, and the harness's finished line is
-     * removed. A run that exited with code 0 without that line was ended
-     * early by student code, so it gets EARLY_EXIT_CODE.
+     * gets STUDENT_LINE_PREFIX, and the harness's own lines (finished,
+     * crashed, skip failed) are removed. A run that exited with code 0
+     * without the finished line, or with CRASH_EXIT_CODE without the
+     * crashed line, was ended early by student code, such as
+     * System.exit(3), so it gets EARLY_EXIT_CODE. A run whose skipped
+     * case stopped the tester gets SKIP_FAILED_EXIT_CODE.
      *
      * @param raw the result as the process printed it
      * @param token the token of this run
@@ -297,7 +406,8 @@ public class TesterRunner {
         // The lines are joined once at the end: a student printing many
         // short lines would make += copy the whole output again each time
         List<String> lines = new ArrayList<>();
-        boolean finished = false;
+        // The harness's own lines seen in the output
+        List<String> harnessLines = new ArrayList<>();
 
         for (String line : raw.getStandardOutput().split(LINE_BREAK)) {
             int tokenStart = line.indexOf(token);
@@ -311,22 +421,67 @@ public class TesterRunner {
 
             String testerLine = "";
             if (tokenStart >= 0) {
-                testerLine = line.substring(tokenStart + token.length());
+                int testerStart = tokenStart + token.length();
+                testerLine = line.substring(testerStart);
             }
-            if (testerLine.equals(TesterHarness.FINISHED_LINE)) {
-                finished = true;
+            if (isHarnessLine(testerLine)) {
+                harnessLines.add(testerLine);
             } else if (tokenStart >= 0) {
                 lines.add(testerLine + NEW_LINE);
             }
         }
 
-        int exitCode = raw.getExitCode();
-        if (exitCode == SUCCESS_EXIT_CODE && !finished && !raw.isTimedOut()) {
-            exitCode = EARLY_EXIT_CODE;
-        }
+        int exitCode = reportedExitCode(raw, harnessLines);
         return new ProcessResult(exitCode, TextUtils.join("", lines),
                 raw.getStandardError(), raw.isTimedOut(),
                 raw.getDurationMillis());
+    }
+
+    /**
+     * Says whether a marked line is one the harness prints about the run
+     * itself, not one the tester printed.
+     *
+     * @param testerLine the marked line, without its token
+     * @return true for the finished, crashed and skip failed lines
+     */
+    private boolean isHarnessLine(String testerLine) {
+        return testerLine.equals(TesterHarness.FINISHED_LINE)
+                || testerLine.equals(TesterHarness.CRASHED_LINE)
+                || testerLine.equals(TesterHarness.SKIP_FAILED_LINE);
+    }
+
+    /**
+     * Works out the exit code to report from the real one and the
+     * harness's own lines. A stopped run keeps its real code.
+     *
+     * @param raw the result as the process printed it
+     * @param harnessLines the harness's own lines in the output
+     * @return the exit code to report
+     */
+    private int reportedExitCode(ProcessResult raw,
+            List<String> harnessLines) {
+        int exitCode = raw.getExitCode();
+        if (raw.isTimedOut()) {
+            return exitCode;
+        }
+
+        boolean finished = harnessLines.contains(
+                TesterHarness.FINISHED_LINE);
+        boolean crashed = harnessLines.contains(TesterHarness.CRASHED_LINE);
+        boolean skipFailed = harnessLines.contains(
+                TesterHarness.SKIP_FAILED_LINE);
+        boolean crashCode = exitCode == TesterHarness.CRASH_EXIT_CODE;
+        if (crashCode && skipFailed) {
+            return SKIP_FAILED_EXIT_CODE;
+        }
+        // Only the harness prints the crashed line, so CRASH_EXIT_CODE
+        // without it came from student code such as System.exit(3)
+        boolean studentExit = (exitCode == SUCCESS_EXIT_CODE && !finished)
+                || (crashCode && !crashed);
+        if (studentExit) {
+            return EARLY_EXIT_CODE;
+        }
+        return exitCode;
     }
 
     /**
@@ -381,9 +536,10 @@ public class TesterRunner {
      * @return the quoted path
      */
     private String quotedPath(Path path) {
-        String escaped = realPath(path).toString().replace("\\", "\\\\")
-                .replace("\"", "\\\"");
-        return "\"" + escaped + "\"";
+        String escaped = realPath(path).toString()
+                .replace(BACKSLASH, ESCAPED_BACKSLASH)
+                .replace(QUOTE, ESCAPED_QUOTE);
+        return QUOTE + escaped + QUOTE;
     }
 
     /**

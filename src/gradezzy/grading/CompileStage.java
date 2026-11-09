@@ -101,6 +101,9 @@ public class CompileStage implements GradingStage {
     // Stands for "the tester compiled, or could not be checked"
     private static final String NO_TESTER_ERROR = "";
 
+    // The word a package declaration starts with
+    private static final String PACKAGE_KEYWORD = "package";
+
     // Times javac is run on one question before a slow compile is given
     // up, because a busy computer can make one run miss the time limit
     private static final int COMPILE_ATTEMPTS = 2;
@@ -165,31 +168,38 @@ public class CompileStage implements GradingStage {
             TesterFile tester = TesterFile.findFor(context.getTesters(),
                     question.getId());
             Path folder = findFolder(submission, assessment, question);
+            boolean hasAnswer = folder != null && Files.isRegularFile(
+                    folder.resolve(question.getFileName()));
 
-            if (tester != null && folder != null
-                    && Files.isRegularFile(
-                            folder.resolve(question.getFileName()))) {
-                String testerError = checkTester(context.getConfig(),
-                        question, tester);
-                if (testerError.isEmpty()) {
-                    Path copy = prepareCopy(submission, assessment,
-                            question);
-                    QuestionResult result = compileQuestion(submission,
-                            question, tester, copy, context.getTesters(),
-                            context.getConfig());
-                    submission.addQuestionResult(result);
-                    if (result.isCompiled()) {
-                        saveSnapshot(context.getConfig(), submission,
-                                tester, copy);
-                    }
-                    removeTesterSource(folder.resolve(
-                            tester.getClassName() + JAVA_EXTENSION));
-                } else {
-                    reportBrokenTester(submission, question, tester,
-                            testerError);
-                }
+            if (tester != null && hasAnswer) {
+                compileOrReport(submission, context, question, tester,
+                        folder);
             }
         }
+    }
+
+    // Compiles one question in its own copy when its tester works with
+    // the starter code, or reports the tester as broken.
+    private void compileOrReport(Submission submission,
+            GradingContext context, Question question, TesterFile tester,
+            Path folder) throws GradingException {
+        AppConfig config = context.getConfig();
+        String testerError = checkTester(config, question, tester);
+        if (!testerError.isEmpty()) {
+            reportBrokenTester(submission, question, tester, testerError);
+            return;
+        }
+
+        Path copy = prepareCopy(submission, context.getAssessment(),
+                question);
+        QuestionResult result = compileQuestion(submission, question,
+                tester, copy, context.getTesters(), config);
+        submission.addQuestionResult(result);
+        if (result.isCompiled()) {
+            saveSnapshot(config, submission, tester, copy);
+        }
+        String testerSource = tester.getClassName() + JAVA_EXTENSION;
+        removeTesterSource(folder.resolve(testerSource));
     }
 
     /**
@@ -301,8 +311,8 @@ public class CompileStage implements GradingStage {
     private String compileWithStarter(AppConfig config, Question question,
             TesterFile tester) throws GradingException {
         Path starterFolder = findStarterFolder(config, question);
-        if (!Files.isRegularFile(
-                starterFolder.resolve(question.getFileName()))) {
+        Path starterFile = starterFolder.resolve(question.getFileName());
+        if (!Files.isRegularFile(starterFile)) {
             return NO_TESTER_ERROR;
         }
 
@@ -318,22 +328,7 @@ public class CompileStage implements GradingStage {
                 Files.copy(tester.getSourceFile(),
                         copy.resolve(testerSource),
                         StandardCopyOption.REPLACE_EXISTING);
-                ProcessResult result = runCompiler(copy,
-                        sourceFiles(question, testerSource));
-                if (result.getExitCode() == SUCCESS_EXIT_CODE
-                        || result.isTimedOut()) {
-                    return NO_TESTER_ERROR;
-                }
-                // An error in the starter file says nothing about the
-                // tester, so the students are graded as before
-                String errorLine = firstLine(result.getStandardError());
-                if (!errorLine.startsWith(testerSource)) {
-                    return NO_TESTER_ERROR;
-                }
-                if (errorLine.contains(VOID_RESULT_ERROR)) {
-                    return errorLine + VOID_RESULT_HINT;
-                }
-                return errorLine;
+                return findTesterError(copy, question, testerSource);
             } finally {
                 FileUtils.deleteDirectory(checkFolder);
             }
@@ -341,6 +336,30 @@ public class CompileStage implements GradingStage {
             // The check could not be done, so grade as before
             return NO_TESTER_ERROR;
         }
+    }
+
+    // Compiles the tester with the starter code in the copy and returns
+    // its first error line, or NO_TESTER_ERROR when it compiled, javac was
+    // too slow, or the error is in the starter file.
+    private String findTesterError(Path copy, Question question,
+            String testerSource) throws GradingException {
+        ProcessResult result = runCompiler(copy,
+                sourceFiles(question, testerSource));
+        boolean compiledOrSlow = result.getExitCode() == SUCCESS_EXIT_CODE
+                || result.isTimedOut();
+        if (compiledOrSlow) {
+            return NO_TESTER_ERROR;
+        }
+        // An error in the starter file says nothing about the tester, so
+        // the students are graded as before
+        String errorLine = firstLine(result.getStandardError());
+        if (!errorLine.startsWith(testerSource)) {
+            return NO_TESTER_ERROR;
+        }
+        if (errorLine.contains(VOID_RESULT_ERROR)) {
+            return errorLine + VOID_RESULT_HINT;
+        }
+        return errorLine;
     }
 
     /**
@@ -392,8 +411,8 @@ public class CompileStage implements GradingStage {
         // The copy also holds the sources of testers that share the folder,
         // such as Q1bTester.java next to Q1aTester.java
         for (TesterFile anyTester : testers) {
-            removeTesterSource(folder.resolve(
-                    anyTester.getClassName() + JAVA_EXTENSION));
+            String anySource = anyTester.getClassName() + JAVA_EXTENSION;
+            removeTesterSource(folder.resolve(anySource));
         }
 
         // Still too slow: no mark is taken and the submission is left
@@ -412,8 +431,9 @@ public class CompileStage implements GradingStage {
 
         if (!compiled) {
             String message = question.getId() + " did not compile: "
-                    + firstLine(compileResult.getStandardError())
-                    + ". The other questions were still graded.";
+                    + firstLine(compileResult.getStandardError()) + "."
+                    + describePackageLine(folder, question)
+                    + " The other questions were still graded.";
             submission.addAnomaly(new Anomaly(ID_PREFIX + UUID.randomUUID(),
                     AnomalyType.COMPILE_ERROR, Severity.ERROR,
                     submission.getUsername(), message,
@@ -422,6 +442,41 @@ public class CompileStage implements GradingStage {
             flagHiddenTypes(submission, question, tester, folder, config);
         }
         return result;
+    }
+
+    /**
+     * Says, for the compile error message, when the student's file starts
+     * with a package declaration. The testers have no package and expect
+     * the student's class to have none, so javac then fails with an error
+     * such as "duplicate class: q1.Q1" that does not name the real cause.
+     * The mark stays 0; the note only says what to remove.
+     *
+     * @param folder the copy of the question folder
+     * @param question the question
+     * @return a sentence with a space in front, or empty if the file has
+     *         no package line or cannot be read
+     */
+    private String describePackageLine(Path folder, Question question) {
+        String code = "";
+        try {
+            // Without comments, so a header comment above the package
+            // line does not hide it
+            code = TesterMarks.readCode(folder.resolve(
+                    question.getFileName())).trim();
+        } catch (IOException exception) {
+            return "";
+        }
+
+        int keywordEnd = PACKAGE_KEYWORD.length();
+        boolean packageLine = code.startsWith(PACKAGE_KEYWORD)
+                && code.length() > keywordEnd
+                && Character.isWhitespace(code.charAt(keywordEnd));
+        if (!packageLine) {
+            return "";
+        }
+        return " The cause is the package line at the top of "
+                + question.getFileName() + ": the tester needs the class "
+                + "outside any package, so that line must be removed.";
     }
 
     /**
@@ -440,8 +495,8 @@ public class CompileStage implements GradingStage {
     private void flagHiddenTypes(Submission submission, Question question,
             TesterFile tester, Path folder, AppConfig config) {
         String fileName = question.getFileName();
-        String studentClass = fileName.substring(0,
-                fileName.length() - JAVA_EXTENSION.length());
+        int classNameEnd = fileName.length() - JAVA_EXTENSION.length();
+        String studentClass = fileName.substring(0, classNameEnd);
         String prefix = studentClass + MEMBER_SEPARATOR;
         String testerSource = "";
         List<Path> classFiles = new ArrayList<>();
@@ -457,19 +512,25 @@ public class CompileStage implements GradingStage {
 
         for (Path classFile : classFiles) {
             String name = classFile.getFileName().toString();
-            String typeName = name.substring(0,
-                    name.length() - CLASS_EXTENSION.length());
+            int typeNameEnd = name.length() - CLASS_EXTENSION.length();
+            String typeName = name.substring(0, typeNameEnd);
             if (name.startsWith(prefix)) {
                 typeName = typeName.substring(prefix.length());
-                if (isMemberTypeName(typeName)
-                        && usesName(testerSource, typeName)) {
+                boolean hidesType = isMemberTypeName(typeName)
+                        && usesName(testerSource, typeName);
+                if (hidesType) {
                     flagHiddenType(submission, fileName, typeName, tester,
                             "extends " + studentClass);
                 }
-            } else if (isExtraType(config, question, tester, studentClass,
-                    typeName) && usesName(testerSource, typeName)) {
-                flagHiddenType(submission, question.getFolderName()
-                        + " folder", typeName, tester, "shares its folder");
+            } else {
+                boolean hidesType = isExtraType(config, question, tester,
+                        studentClass, typeName)
+                        && usesName(testerSource, typeName);
+                if (hidesType) {
+                    String place = question.getFolderName() + " folder";
+                    flagHiddenType(submission, place, typeName, tester,
+                            "shares its folder");
+                }
             }
         }
     }
@@ -486,13 +547,14 @@ public class CompileStage implements GradingStage {
      */
     private void flagHiddenType(Submission submission, String place,
             String typeName, TesterFile tester, String link) {
+        String message = "The " + place + " declares its own type "
+                + typeName + ", a name " + tester.getClassName()
+                + " also uses. The tester " + link + ", so it may have used "
+                + "the student's " + typeName + " instead. The mark was not "
+                + "changed.";
         submission.addAnomaly(new Anomaly(ID_PREFIX + UUID.randomUUID(),
                 AnomalyType.HARD_CODED_ANSWER, Severity.WARNING,
-                submission.getUsername(), "The " + place
-                + " declares its own type " + typeName + ", a name "
-                + tester.getClassName() + " also uses. The tester " + link
-                + ", so it may have used the student's " + typeName
-                + " instead. The mark was not changed.", HIDDEN_TYPE_ACTION));
+                submission.getUsername(), message, HIDDEN_TYPE_ACTION));
     }
 
     /**
@@ -512,14 +574,20 @@ public class CompileStage implements GradingStage {
             TesterFile tester, String studentClass, String typeName) {
         Path starterFolder = findStarterFolder(config, question);
         String classFile = typeName + CLASS_EXTENSION;
-        return !typeName.contains(MEMBER_SEPARATOR)
-                && !typeName.equals(studentClass)
-                && !typeName.equals(tester.getClassName())
-                && !config.getList(ConfigKeys.PROVIDED_CLASS_FILES)
-                        .contains(classFile)
-                && !Files.exists(starterFolder.resolve(classFile))
-                && !Files.exists(starterFolder.resolve(
-                        typeName + JAVA_EXTENSION));
+        String sourceFile = typeName + JAVA_EXTENSION;
+        // A member type, the student class or the tester
+        boolean questionType = typeName.contains(MEMBER_SEPARATOR)
+                || typeName.equals(studentClass)
+                || typeName.equals(tester.getClassName());
+        if (questionType) {
+            return false;
+        }
+
+        boolean provided = config.getList(ConfigKeys.PROVIDED_CLASS_FILES)
+                .contains(classFile);
+        boolean inStarter = Files.exists(starterFolder.resolve(classFile))
+                || Files.exists(starterFolder.resolve(sourceFile));
+        return !provided && !inStarter;
     }
 
     /**
@@ -572,7 +640,8 @@ public class CompileStage implements GradingStage {
             if (startsWord && endsWord) {
                 return true;
             }
-            index = source.indexOf(name, index + 1);
+            int nextStart = index + 1;
+            index = source.indexOf(name, nextStart);
         }
         return false;
     }
@@ -642,8 +711,9 @@ public class CompileStage implements GradingStage {
     private void saveSnapshot(AppConfig config, Submission submission,
             TesterFile tester, Path copy) throws GradingException {
         try {
-            tester.saveSnapshot(submission.getUsername(), new FolderSnapshot(
-                    copy, config.getList(ConfigKeys.TESTER_DATA_FILES)));
+            FolderSnapshot snapshot = new FolderSnapshot(copy,
+                    config.getList(ConfigKeys.TESTER_DATA_FILES));
+            tester.saveSnapshot(submission.getUsername(), snapshot);
         } catch (IOException exception) {
             throw new GradingException("The compiled files could not be "
                     + "read: " + exception.getMessage(), exception);
@@ -708,7 +778,8 @@ public class CompileStage implements GradingStage {
         String line = trimmed.split(LINE_BREAK)[0];
         // The message is put inside a sentence, so its own full stop goes
         if (line.endsWith(FULL_STOP)) {
-            return line.substring(0, line.length() - FULL_STOP.length());
+            int sentenceEnd = line.length() - FULL_STOP.length();
+            return line.substring(0, sentenceEnd);
         }
         return line;
     }

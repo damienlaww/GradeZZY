@@ -14,6 +14,7 @@ import java.util.List;
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.exec.ProcessResult;
+import gradezzy.exec.TesterHarness;
 import gradezzy.exec.TesterRunner;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
@@ -74,44 +75,87 @@ public class TesterOutputScoreParser implements ScoreParser {
         String failMarker = config.getString(ConfigKeys.FAIL_MARKER);
         // The verdict of each case in order, empty while it has none
         List<String> verdicts = new ArrayList<>();
-        String lastLine = "";
 
         // A test case runs from its header to the next header. Lines that
         // student code printed are marked by TesterRunner and never count.
         for (String rawLine : output.split(LINE_BREAK)) {
             String line = rawLine.trim();
+            boolean studentLine = rawLine.startsWith(
+                    TesterRunner.STUDENT_LINE_PREFIX);
 
-            if (rawLine.startsWith(TesterRunner.STUDENT_LINE_PREFIX)) {
-                line = "";
-            } else if (line.startsWith(headerMarker)) {
+            boolean header = !studentLine
+                    && TesterHarness.isCaseHeader(line, headerMarker);
+            boolean verdict = !studentLine
+                    && isVerdict(line, passMarker, failMarker);
+
+            if (header) {
                 verdicts.add("");
-            } else if (line.equals(passMarker)
-                    || line.startsWith(failMarker)) {
+            } else if (verdict) {
                 // A verdict with no open case, as from a tester that
                 // prints no headers, is a case of its own
-                if (verdicts.isEmpty()
-                        || !verdicts.get(verdicts.size() - 1).isEmpty()) {
+                if (!hasOpenCase(verdicts)) {
                     verdicts.add("");
                 }
-                verdicts.set(verdicts.size() - 1, line);
-            }
-
-            if (!line.isEmpty()) {
-                lastLine = line;
+                int openCase = verdicts.size() - 1;
+                verdicts.set(openCase, line);
             }
         }
 
         for (int index = 0; index < verdicts.size(); index++) {
-            addCase(result, index + 1, verdicts.get(index), passMarker);
+            int testNumber = index + 1;
+            addCase(result, testNumber, verdicts.get(index), passMarker,
+                    failMarker);
         }
 
         int passCount = countPasses(result);
         result.setCompiled(true);
         result.setTimedOut(processResult.isTimedOut());
         result.setOutput(buildLog(processResult));
-        result.setScore(readScore(processResult, lastLine, passCount,
+        result.setScore(readScore(processResult, passCount,
                 question.getMaxScore()));
         return result;
+    }
+
+    /**
+     * Reads the total the tester printed as its last line, as printed.
+     * Lines student code printed are skipped.
+     *
+     * @param processResult the process result
+     * @return the printed total, or null if the last tester line is not
+     *         a number or there is no run
+     */
+    @Override
+    public Double readTotal(ProcessResult processResult) {
+        if (processResult == null) {
+            return null;
+        }
+
+        String lastLine = findLastTesterLine(
+                processResult.getStandardOutput());
+        try {
+            return Double.valueOf(lastLine);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    /**
+     * Finds the last line the tester printed that is not blank.
+     *
+     * @param output the standard output of the run
+     * @return the line, trimmed, or empty if there is none
+     */
+    private String findLastTesterLine(String output) {
+        String lastLine = "";
+        for (String rawLine : output.split(LINE_BREAK)) {
+            String line = rawLine.trim();
+            boolean studentLine = rawLine.startsWith(
+                    TesterRunner.STUDENT_LINE_PREFIX);
+            if (!studentLine && !line.isEmpty()) {
+                lastLine = line;
+            }
+        }
+        return lastLine;
     }
 
     /**
@@ -119,45 +163,64 @@ public class TesterOutputScoreParser implements ScoreParser {
      * maximum score. Only the tester can print that line, so a tester that
      * gives more than one mark per case is believed; ExecuteStage then caps
      * it at what the passed cases earn. A run that was stopped, crashed or
-     * ended early never printed its total, so the passes printed so far
-     * are counted here one mark each; ExecuteStage replaces that with
-     * what each passed case is worth in the tester.
+     * ended early never printed its total, and a total that is not a
+     * number cannot be read, so the passes are counted here one mark
+     * each; ExecuteStage replaces that with what each passed case is worth
+     * in the tester.
      *
      * @param processResult the finished run
-     * @param lastLine the last line that was not blank
      * @param passCount the number of passed test cases
      * @param maxScore the question's maximum score
      * @return the score
      */
-    private double readScore(ProcessResult processResult, String lastLine,
-            int passCount, double maxScore) {
-        if (!finishedNormally(processResult)) {
+    private double readScore(ProcessResult processResult, int passCount,
+            double maxScore) {
+        Double printedTotal = readTotal(processResult);
+        boolean totalRead = finishedNormally(processResult)
+                && printedTotal != null;
+        if (!totalRead) {
             return Math.min(passCount, maxScore);
         }
+        return Math.min(printedTotal, maxScore);
+    }
 
-        try {
-            return Math.min(Double.parseDouble(lastLine), maxScore);
-        } catch (NumberFormatException exception) {
-            return Math.min(passCount, maxScore);
+    // Says whether a line is a fail or a pass verdict. A pass is any line
+    // that starts with the pass marker, such as "Passed!".
+    private boolean isVerdict(String line, String passMarker,
+            String failMarker) {
+        return line.startsWith(failMarker) || line.startsWith(passMarker);
+    }
+
+    // Says whether the last case is still waiting for its verdict.
+    private boolean hasOpenCase(List<String> verdicts) {
+        if (verdicts.isEmpty()) {
+            return false;
         }
+        int lastCase = verdicts.size() - 1;
+        return verdicts.get(lastCase).isEmpty();
     }
 
     /**
-     * Records one test case. A case with no verdict never finished.
+     * Records one test case. A case with no verdict never finished. The
+     * fail marker is checked first, so a line that starts with both, such
+     * as "Failed" when the pass marker is "F", is a fail.
      *
      * @param result where the case is added
      * @param testNumber the position of the case, from 1
      * @param verdict the verdict line, or empty if none was printed
-     * @param passMarker the line printed for a pass
+     * @param passMarker the start of the line printed for a pass
+     * @param failMarker the start of the line printed for a fail
      */
     private void addCase(QuestionResult result, int testNumber,
-            String verdict, String passMarker) {
+            String verdict, String passMarker, String failMarker) {
         if (verdict.isEmpty()) {
             result.addTestCaseResult(new TestCaseResult(testNumber, false,
                     NOT_FINISHED));
         } else {
-            result.addTestCaseResult(new TestCaseResult(testNumber,
-                    verdict.equals(passMarker), verdict));
+            boolean passed = !verdict.startsWith(failMarker)
+                    && verdict.startsWith(passMarker);
+            result.addTestCaseResult(new TestCaseResult(testNumber, passed,
+                    verdict));
         }
     }
 

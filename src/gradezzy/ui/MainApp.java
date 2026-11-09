@@ -34,6 +34,8 @@ import gradezzy.ui.flow.FlowWindow;
 
 /**
  * The JavaFX application class and graphical entry point.
+ *
+ * <p>Tier: MUST.
  */
 public class MainApp extends Application {
 
@@ -63,9 +65,21 @@ public class MainApp extends Application {
     // The title of the window
     private static final String WINDOW_TITLE = "GradeZZY";
 
-    // The smallest window: a 1200 by 800 screen at 200 percent scaling
+    // The smallest window width: a 1200 wide screen at 200 percent scaling
     private static final double MIN_WIDTH = 600.0;
+
+    // The smallest window height: an 800 high screen at 200 percent scaling
     private static final double MIN_HEIGHT = 400.0;
+
+    // What every command line flag starts with
+    private static final String FLAG_PREFIX = "--";
+
+    // The exit code when the window could not start
+    private static final int FAILURE_EXIT_CODE = 1;
+
+    // The oldest JDK GradeZZY runs on: the testers are started with
+    // options that older versions reject
+    private static final int MIN_JDK_VERSION = 25;
 
     // The exit code of a developer flag
     private static int exitCode = 0;
@@ -74,11 +88,19 @@ public class MainApp extends Application {
     private ApplicationContext context = null;
 
     /**
-     * Starts the JavaFX application.
+     * Starts the JavaFX application. On a JDK older than 25 it says so
+     * and ends at once.
      *
      * @param args the command line arguments
      */
     public static void main(String[] args) {
+        int jdkVersion = Runtime.version().feature();
+        if (jdkVersion < MIN_JDK_VERSION) {
+            System.err.println("GradeZZY needs JDK " + MIN_JDK_VERSION
+                    + " or newer; this is JDK " + jdkVersion + ".");
+            System.exit(FAILURE_EXIT_CODE);
+        }
+
         launch(args);
         if (exitCode != 0) {
             System.exit(exitCode);
@@ -107,16 +129,18 @@ public class MainApp extends Application {
                 exitCode = new FlowCheck(services, null).run();
                 Platform.exit();
             } else if (args.contains(SNAPSHOT_ARGUMENT)) {
-                exitCode = new FlowCheck(services, folderAfter(args,
-                        SNAPSHOT_ARGUMENT, DEFAULT_SNAPSHOT_FOLDER)).run();
+                Path snapshotFolder = folderAfter(args, SNAPSHOT_ARGUMENT,
+                        DEFAULT_SNAPSHOT_FOLDER);
+                exitCode = new FlowCheck(services, snapshotFolder).run();
                 Platform.exit();
             } else if (args.contains(SELF_TEST_ARGUMENT)) {
                 exitCode = new FlowSelfTest(services).run();
                 Platform.exit();
             } else if (args.contains(WINDOW_TEST_ARGUMENT)) {
+                Path testFolder = folderAfter(args, WINDOW_TEST_ARGUMENT,
+                        DEFAULT_WINDOW_TEST_FOLDER);
                 FlowWindowTest test = new FlowWindowTest(services, stage,
-                        folderAfter(args, WINDOW_TEST_ARGUMENT,
-                        DEFAULT_WINDOW_TEST_FOLDER));
+                        testFolder);
                 test.start(code -> finishWindowTest(code));
             } else {
                 showMainWindow(stage, services, config,
@@ -151,12 +175,13 @@ public class MainApp extends Application {
             backend = new LiveBackend(services);
         }
 
-        boolean dark = ThemeManager.isDark(config.getString(
-                ConfigKeys.UI_THEME));
+        String themeName = config.getString(ConfigKeys.UI_THEME);
+        boolean dark = ThemeManager.isDark(themeName);
         FlowWindow window = new FlowWindow(backend, dark);
         window.setHostServices(getHostServices());
-        Scene scene = window.build(config.getInt(ConfigKeys.WINDOW_WIDTH),
-                config.getInt(ConfigKeys.WINDOW_HEIGHT));
+        int width = config.getInt(ConfigKeys.WINDOW_WIDTH);
+        int height = config.getInt(ConfigKeys.WINDOW_HEIGHT);
+        Scene scene = window.build(width, height);
 
         stage.setTitle(title);
         stage.getIcons().addAll(AppIcons.loadWindowIcons());
@@ -178,9 +203,11 @@ public class MainApp extends Application {
     private Path folderAfter(List<String> args, String flag,
             String defaultFolder) {
         int index = args.indexOf(flag);
-        if (index >= 0 && index + 1 < args.size()
-                && !args.get(index + 1).startsWith("--")) {
-            return Paths.get(args.get(index + 1));
+        int valueIndex = index + 1;
+        boolean hasValue = index >= 0 && valueIndex < args.size()
+                && !args.get(valueIndex).startsWith(FLAG_PREFIX);
+        if (hasValue) {
+            return Paths.get(args.get(valueIndex));
         }
         return Paths.get(defaultFolder);
     }
@@ -188,7 +215,7 @@ public class MainApp extends Application {
     // Reports a start-up failure and closes the application.
     private void failToStart(String message, boolean showDialog) {
         System.err.println("GradeZZY could not start: " + message);
-        exitCode = 1;
+        exitCode = FAILURE_EXIT_CODE;
         if (showDialog) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("GradeZZY could not start");
