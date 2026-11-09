@@ -5,12 +5,16 @@
  * section, or the bell curves and figures of up to three sections side
  * by side. Module and Section pickers and a "One section | Compare
  * sections" switch sit on the header row. A Run picker appears when the
- * section has earlier runs.
+ * section has earlier runs. In Compare sections an Assessment picker
+ * takes the place of Section and Run, and each section's latest run of
+ * that assessment is compared, so two assessments never share a chart.
  *
  * Where it fits: FlowWindow shows it when the Statistics tab is picked,
  * and openStatistics (from Export and Runs) points it at one section
  * first. It reads getRun, listRuns and summarise from DashboardBackend;
- * SectionView and CompareView build the two views.
+ * ModuleRuns finds the runs to compare; SectionView and CompareView
+ * build the two views. The assessment and sections compared are kept
+ * in FlowState.
  */
 package gradezzy.ui.flow;
 
@@ -27,6 +31,7 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
@@ -40,6 +45,7 @@ import gradezzy.stats.StatisticsSummary;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.RunRecord;
+import gradezzy.util.TextUtils;
 
 /**
  * The Statistics tab.
@@ -49,8 +55,9 @@ public class StatisticsScreen extends FlowScreen {
     // Below this content width the header and the cards rearrange
     private static final double NARROW_WIDTH = 1000.0;
 
-    // The widths of the three pickers
+    // The widths of the four pickers
     private static final double MODULE_WIDTH = 110.0;
+    private static final double ASSESSMENT_WIDTH = 160.0;
     private static final double SECTION_WIDTH = 90.0;
     private static final double RUN_WIDTH = 150.0;
 
@@ -69,6 +76,15 @@ public class StatisticsScreen extends FlowScreen {
     // Separates the parts of the subtitle
     private static final String DOT = " · ";
 
+    // Two maximums closer than this are the same
+    private static final double SAME_MAXIMUM = 1e-9;
+
+    // Turns a fraction into a percentage
+    private static final double PERCENT = 100.0;
+
+    // The fewest graded sections Compare sections draws
+    private static final int FEWEST_COMPARED = 2;
+
     // When a run was graded, such as "28 Oct 2026, 14:05"
     private static final DateTimeFormatter WHEN =
             DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm");
@@ -86,6 +102,10 @@ public class StatisticsScreen extends FlowScreen {
     private final ComboBox<String> moduleBox = new ComboBox<>();
     private final ComboBox<String> sectionBox = new ComboBox<>();
     private final ComboBox<String> runBox = new ComboBox<>();
+    private final ComboBox<String> assessmentBox = new ComboBox<>();
+    private final VBox moduleField = field("Module", moduleBox);
+    private final VBox assessmentField = field("Assessment",
+            assessmentBox);
     private final VBox sectionField = field("Section", sectionBox);
     private final VBox runField = field("Run", runBox);
     private final ToggleButton oneButton = new ToggleButton("One section");
@@ -104,9 +124,14 @@ public class StatisticsScreen extends FlowScreen {
     private final ScrollPane view =
             Parts.widePage(new Node[] {headerArea, body});
 
+    // The tip of a Module picker with one module, set on its field as a
+    // turned-off picker shows no tip of its own
+    private final Tooltip moduleTip = Parts.tooltip("More modules are "
+            + "added in Settings.");
+
     // The two views
     private final SectionView sectionView;
-    private final CompareView compareView = new CompareView();
+    private final CompareView compareView;
 
     // The largest answer groups of the run shown, under the charts
     private final CommonMistakesSection commonMistakes;
@@ -140,6 +165,7 @@ public class StatisticsScreen extends FlowScreen {
         super(window);
         sectionView = new SectionView(window.getBackend());
         commonMistakes = new CommonMistakesSection(window);
+        compareView = new CompareView(getState().getStatisticsSections());
         view.getStyleClass().add("statistics-page");
         createControls();
         arrangeHeader();
@@ -237,7 +263,9 @@ public class StatisticsScreen extends FlowScreen {
         moduleBox.setPrefWidth(MODULE_WIDTH);
         sectionBox.setPrefWidth(SECTION_WIDTH);
         runBox.setPrefWidth(RUN_WIDTH);
+        assessmentBox.setPrefWidth(ASSESSMENT_WIDTH);
         moduleBox.setOnAction(event -> chooseModule());
+        assessmentBox.setOnAction(event -> chooseAssessment());
         sectionBox.setOnAction(event -> chooseSection());
         runBox.setOnAction(event -> chooseRun());
 
@@ -254,7 +282,7 @@ public class StatisticsScreen extends FlowScreen {
         switchBar.setMinWidth(Region.USE_PREF_SIZE);
         HBox.setMargin(switchBar, new Insets(0, 0, 0, SWITCH_GAP));
 
-        controls.getChildren().addAll(field("Module", moduleBox),
+        controls.getChildren().addAll(moduleField, assessmentField,
                 sectionField, runField, switchBar);
         controls.setAlignment(Pos.BOTTOM_LEFT);
         controls.setFillHeight(false);
@@ -341,6 +369,16 @@ public class StatisticsScreen extends FlowScreen {
         moduleBox.getItems().setAll(modules);
         moduleBox.setValue(moduleCode);
         filling = false;
+
+        // With one module there is nothing to choose, but the picker
+        // stays, so it is clear which module is shown
+        boolean single = modules.size() <= 1;
+        moduleBox.setDisable(single);
+        if (single) {
+            Tooltip.install(moduleField, moduleTip);
+        } else {
+            Tooltip.uninstall(moduleField, moduleTip);
+        }
     }
 
     // Fills the section picker and picks a section: the one asked for,
@@ -448,6 +486,7 @@ public class StatisticsScreen extends FlowScreen {
     private void showSection() {
         sectionField.setVisible(true);
         sectionField.setManaged(true);
+        setShown(assessmentField, false);
         fillRuns();
         GradingRun run = null;
         if (!runChoices.isEmpty()) {
@@ -503,53 +542,179 @@ public class StatisticsScreen extends FlowScreen {
 
     // --------------------------------------------------------- compare
 
-    // Shows the bell curves and figures of up to three sections.
+    // Shows the bell curves and figures of up to three sections, each
+    // from its latest run of the assessment picked.
     private void showCompare() {
-        sectionField.setVisible(false);
-        sectionField.setManaged(false);
-        runField.setVisible(false);
-        runField.setManaged(false);
-        Assessment assessment = getBackend().getAssessment();
-        subtitle.setText(moduleCode + DOT + assessment.getName() + DOT
-                + "current run of each section");
-
+        setShown(sectionField, false);
+        setShown(runField, false);
         List<String> sections = getBackend().getSectionCodes(moduleCode);
-        List<GradingRun> runs = new ArrayList<>();
-        List<MarkStats> stats = new ArrayList<>();
-        List<String> graded = new ArrayList<>();
-        for (String code : sections) {
-            GradingRun run = runOf(code);
-            if (isGraded(run)) {
-                runs.add(run);
-                double max = assessment.getMaxTotal();
-                if (run.getAssessment() != null) {
-                    max = run.getAssessment().getMaxTotal();
-                }
-                stats.add(MarkStats.of(run.getSubmissions(), max,
-                        passPercent()));
-                graded.add(code);
-            } else {
-                runs.add(null);
-                stats.add(null);
-            }
-        }
-
-        if (graded.isEmpty()) {
+        ModuleRuns moduleRuns = new ModuleRuns(getBackend(), moduleCode,
+                sections);
+        List<String> assessments = moduleRuns.getAssessmentNames();
+        String assessmentName = fillAssessments(assessments);
+        if (assessmentName == null) {
+            subtitle.setText(moduleCode + DOT + "nothing graded yet");
             body.getChildren().setAll(emptyState("Nothing graded yet",
                     "Grade a section of " + moduleCode + " in Grading, "
                     + "then grade another to compare them."));
             return;
         }
-        if (graded.size() == 1) {
-            body.getChildren().setAll(emptyState(
-                    "Compare needs two graded sections",
-                    "Only " + graded.get(0) + " of " + moduleCode
-                    + " has been graded so far. Grade another section in "
-                    + "Grading, then come back to compare them."));
-            return;
+        subtitle.setText(moduleCode + DOT + assessmentName + DOT
+                + "latest run of each section");
+
+        List<GradingRun> runs = new ArrayList<>();
+        for (String code : sections) {
+            runs.add(moduleRuns.findRun(code, assessmentName));
         }
-        compareView.show(sections, runs, stats, assessment, sectionCode);
+        boolean mixed = hasMixedMaximums(runs);
+        List<MarkStats> stats = new ArrayList<>();
+        for (GradingRun run : runs) {
+            stats.add(compareStats(run, mixed));
+        }
+        boolean otherAssessments = assessments.size() > 1;
+        compareView.setPercent(mixed, maximumsNote(assessmentName, runs));
+        compareView.setMessage(compareMessage(sections, runs,
+                assessmentName, otherAssessments));
+        compareView.show(sections, runs, stats, assessmentName,
+                sectionCode);
         body.getChildren().setAll(compareView.getView());
+    }
+
+    // Fills the Assessment picker and returns the assessment picked: the
+    // one picked before, else the one in Settings when it has runs, else
+    // the one graded most recently, or null when none is graded.
+    private String fillAssessments(List<String> names) {
+        String picked = getState().getStatisticsAssessment();
+        if (!names.contains(picked)) {
+            picked = null;
+            String inSettings = getBackend().getAssessment().getName();
+            if (names.contains(inSettings)) {
+                picked = inSettings;
+            } else if (!names.isEmpty()) {
+                picked = names.get(0);
+            }
+        }
+        filling = true;
+        assessmentBox.getItems().setAll(names);
+        assessmentBox.setValue(picked);
+        filling = false;
+        setShown(assessmentField, !names.isEmpty());
+        return picked;
+    }
+
+    // Says whether the graded runs have different maximums.
+    private static boolean hasMixedMaximums(List<GradingRun> runs) {
+        List<Double> maximums = maximumsOf(runs);
+        return maximums.size() > 1;
+    }
+
+    // Lists the different maximums of the graded runs, in order.
+    private static List<Double> maximumsOf(List<GradingRun> runs) {
+        List<Double> maximums = new ArrayList<>();
+        for (GradingRun run : runs) {
+            boolean newMaximum = run != null
+                    && !hasMaximum(maximums, maxOf(run));
+            if (newMaximum) {
+                maximums.add(maxOf(run));
+            }
+        }
+        return maximums;
+    }
+
+    // Says whether a list already holds a maximum.
+    private static boolean hasMaximum(List<Double> maximums, double max) {
+        for (double listed : maximums) {
+            if (Math.abs(listed - max) < SAME_MAXIMUM) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Returns the highest possible total of a run, from its own
+    // assessment.
+    private static double maxOf(GradingRun run) {
+        return run.getAssessment().getMaxTotal();
+    }
+
+    // Works out the figures of a run, as marks or as percentages of its
+    // maximum, or returns null for a section with no run.
+    private MarkStats compareStats(GradingRun run, boolean asPercent) {
+        if (run == null) {
+            return null;
+        }
+        if (!asPercent) {
+            return MarkStats.of(run.getSubmissions(), maxOf(run),
+                    passPercent());
+        }
+        return new MarkStats(percentTotals(run), PERCENT, passPercent());
+    }
+
+    // Returns the total of each graded student as a percentage of the
+    // run's maximum.
+    private static List<Double> percentTotals(GradingRun run) {
+        List<Double> totals = new ArrayList<>();
+        double max = maxOf(run);
+        for (Submission submission : run.getSubmissions()) {
+            boolean hasMarks = !submission.getQuestionResults().isEmpty();
+            boolean counted = hasMarks && max > 0;
+            if (counted) {
+                double share = submission.getTotalScore() * PERCENT / max;
+                totals.add(share);
+            }
+        }
+        return totals;
+    }
+
+    // Says why the figures are percentages, or returns an empty text
+    // when every run has the same maximum.
+    private static String maximumsNote(String assessmentName,
+            List<GradingRun> runs) {
+        List<Double> maximums = maximumsOf(runs);
+        if (maximums.size() <= 1) {
+            return "";
+        }
+        List<String> marks = new ArrayList<>();
+        for (double max : maximums) {
+            marks.add(Parts.mark(max));
+        }
+        return "These runs of " + assessmentName + " have different "
+                + "maximums (" + TextUtils.join(", ", marks) + "), so each "
+                + "total is shown as a percentage of its own run's "
+                + "maximum.";
+    }
+
+    // Returns the empty state shown in place of the chart when fewer
+    // than two sections are graded for the assessment, or null.
+    private VBox compareMessage(List<String> sections,
+            List<GradingRun> runs, String assessmentName,
+            boolean otherAssessments) {
+        List<String> graded = new ArrayList<>();
+        for (int index = 0; index < sections.size(); index++) {
+            if (runs.get(index) != null) {
+                graded.add(sections.get(index));
+            }
+        }
+        if (graded.size() >= FEWEST_COMPARED) {
+            return null;
+        }
+        String next = ", then come back to compare them.";
+        if (otherAssessments) {
+            next = ", or choose another assessment above.";
+        }
+        String which = "another section";
+        if (graded.isEmpty()) {
+            which = "a section";
+        }
+        String help = "Grade " + which + " of " + moduleCode + " for "
+                + assessmentName + " in Grading" + next;
+        if (graded.isEmpty()) {
+            return emptyState("Nothing graded for " + assessmentName
+                    + " yet", help);
+        }
+        return emptyState("Compare needs two graded sections", "Only "
+                + graded.get(0) + " has been graded for " + assessmentName
+                + " so far. " + help);
     }
 
     // ---------------------------------------------------------- events
@@ -562,6 +727,16 @@ public class StatisticsScreen extends FlowScreen {
         moduleCode = moduleBox.getValue();
         sectionCode = null;
         runIndex = 0;
+        refresh();
+    }
+
+    // Compares the sections' runs of another assessment.
+    private void chooseAssessment() {
+        boolean ignored = filling || assessmentBox.getValue() == null;
+        if (ignored) {
+            return;
+        }
+        getState().setStatisticsAssessment(assessmentBox.getValue());
         refresh();
     }
 
@@ -623,6 +798,12 @@ public class StatisticsScreen extends FlowScreen {
             return null;
         }
         return getBackend().getRun(new Section(moduleCode, code));
+    }
+
+    // Shows or hides a node and the room it takes.
+    private static void setShown(Node node, boolean shown) {
+        node.setVisible(shown);
+        node.setManaged(shown);
     }
 
     // Reads the pass percentage from the settings.

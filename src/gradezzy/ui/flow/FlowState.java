@@ -3,7 +3,8 @@
  *
  * Purpose: What the guided window remembers while the instructor moves
  * between steps: the class, the chosen files, the run and how far the
- * instructor has got.
+ * instructor has got, and the assessment and sections compared on
+ * Statistics.
  *
  * Where it fits: FlowWindow owns one; every screen reads and changes it.
  * It holds no JavaFX objects, so it is plain data.
@@ -60,6 +61,13 @@ public class FlowState {
 
     // The assessment open in Settings, or null for the one in use
     private String settingsAssessment = null;
+
+    // The assessment compared on Statistics, or null for the default
+    private String statisticsAssessment = null;
+
+    // The sections compared on Statistics, in the order they were
+    // turned on
+    private final List<String> statisticsSections = new ArrayList<>();
 
     // The students chosen on Export when only some are exported
     private final List<Submission> exportPicked = new ArrayList<>();
@@ -466,5 +474,40 @@ public class FlowState {
      */
     public void setSettingsAssessment(String name) {
         settingsAssessment = name;
+    }
+
+    /**
+     * Returns the assessment compared on the Statistics tab.
+     *
+     * <p>Tier: SHOULD. Owner: Jing Yuan.
+     *
+     * @return its name, or null when none has been chosen
+     */
+    public String getStatisticsAssessment() {
+        return statisticsAssessment;
+    }
+
+    /**
+     * Remembers the assessment compared on the Statistics tab, so it is
+     * still chosen after One section or another tab.
+     *
+     * <p>Tier: SHOULD. Owner: Jing Yuan.
+     *
+     * @param name its name, or null for the default
+     */
+    public void setStatisticsAssessment(String name) {
+        statisticsAssessment = name;
+    }
+
+    /**
+     * Returns the sections compared on the Statistics tab. The list is
+     * the one kept here, so changing it changes what is remembered.
+     *
+     * <p>Tier: SHOULD. Owner: Jing Yuan.
+     *
+     * @return the section codes, in the order they were turned on
+     */
+    public List<String> getStatisticsSections() {
+        return statisticsSections;
     }
 }

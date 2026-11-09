@@ -697,6 +697,13 @@ section) and `StatisticsCalculator` works out:
 - the test case failed most often;
 - the most common compile errors.
 
+In the window, Statistics > Compare sections has an Assessment picker
+listing the assessments with a graded run in the module, newest first.
+Each section is compared on its run in use when that run is of the
+chosen assessment, else on its newest graded run of it from the run
+history, so runs of two assessments never share a chart. When those runs
+have different maximums, the chart and table show percentages.
+
 ## Saved state, backup and audit log
 
 With `database.enabled=true`, every run is saved to the SQLite file
