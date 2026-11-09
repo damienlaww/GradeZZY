@@ -54,6 +54,7 @@ import gradezzy.report.ExportException;
 import gradezzy.report.ScoreFormatter;
 import gradezzy.service.AnomalyService;
 import gradezzy.service.AnswerGroupService;
+import gradezzy.service.AssessmentFolderScanner;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.ClassFileMatch;
@@ -65,6 +66,7 @@ import gradezzy.service.UndoResult;
 import gradezzy.stats.StatisticsFilter;
 import gradezzy.stats.StatisticsSummary;
 import gradezzy.testcase.TestCase;
+import gradezzy.testcase.TesterMarks;
 import gradezzy.testcase.TestCaseSource;
 import gradezzy.testcase.TesterGenerator;
 import gradezzy.testcase.TypedTestCaseSource;
@@ -369,6 +371,9 @@ public class LiveBackend implements DashboardBackend {
         }
         if (kind == InputKind.STARTER) {
             return inspectStarter(path);
+        }
+        if (kind == InputKind.TESTERS) {
+            return inspectTesters(path);
         }
         return new ImportItem(kind, path, "", ImportState.ACCEPTED,
                 "Folder found.");
@@ -1747,6 +1752,44 @@ public class LiveBackend implements DashboardBackend {
                 ImportState.WARNING, joinWords(missingFiles) + verb
                 + " not in this folder, so untouched or empty answers to "
                 + joinWords(missingIds) + " will not be flagged.");
+    }
+
+    // Checks that a tester folder holds testers, with the scan that fills
+    // in an assessment's questions, so the folder's status and the
+    // questions found always agree. A tester with no marks to read is a
+    // warning, because its question would be worth nothing.
+    private ImportItem inspectTesters(Path folder) {
+        String testerSuffix = config.getString(
+                ConfigKeys.TESTER_CLASS_SUFFIX);
+        List<Question> found = AssessmentFolderScanner.findQuestions(folder,
+                testerSuffix, null);
+        if (found.isEmpty()) {
+            return new ImportItem(InputKind.TESTERS, folder, "",
+                    ImportState.INVALID, "No tester files, such as "
+                    + firstTesterName() + ", are in this folder. Choose "
+                    + "the folder that holds the testers.");
+        }
+
+        List<String> ids = new ArrayList<>();
+        List<String> unmarked = new ArrayList<>();
+        for (Question question : found) {
+            ids.add(question.getId());
+            boolean noMarks = question.getMaxScore() <= TesterMarks.UNKNOWN;
+            if (noMarks) {
+                unmarked.add(question.getId());
+            }
+        }
+        int testerCount = found.size();
+        String holds = "Holds " + testerCount + " tester"
+                + plural(testerCount) + ": " + joinWords(ids) + ".";
+        if (unmarked.isEmpty()) {
+            return new ImportItem(InputKind.TESTERS, folder, "",
+                    ImportState.ACCEPTED, holds);
+        }
+        return new ImportItem(InputKind.TESTERS, folder, "",
+                ImportState.WARNING, holds + " No marks could be read from "
+                + "the tester of " + joinWords(unmarked) + ", so type "
+                + "them in.");
     }
 
     // Says what grading does instead of using a starter folder that
