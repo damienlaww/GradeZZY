@@ -1207,7 +1207,7 @@ public class ReviewScreen extends FlowScreen {
         List<Anomaly> flags = openFlags();
         if (!flags.isEmpty()) {
             actions.addSecondary(Parts.secondary("Mark all "
-                    + flags.size() + " as checked",
+                    + Parts.plural(flags.size(), "flag") + " as checked",
                     () -> askCheckAll(flags)));
         }
         actions.setPrimary("Continue to export", () -> continueToExport(),
@@ -1401,7 +1401,8 @@ public class ReviewScreen extends FlowScreen {
             content.getChildren().add(line);
             listed++;
         }
-        getWindow().confirm("Mark all " + flags.size() + " as checked?",
+        getWindow().confirm("Mark all "
+                + Parts.plural(flags.size(), "flag") + " as checked?",
                 content, "Mark all as checked", () -> checkAll(flags));
     }
 

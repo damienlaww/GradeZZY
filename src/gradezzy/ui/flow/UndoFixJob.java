@@ -19,6 +19,7 @@ import java.util.function.Consumer;
 
 import javafx.concurrent.Task;
 
+import gradezzy.model.Anomaly;
 import gradezzy.model.GradingRun;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
@@ -58,10 +59,13 @@ public class UndoFixJob extends Task<ActionResult> {
      * Says whether a rejected fix may be applied again.
      *
      * @param backend the backend
+     * @param anomaly the anomaly of the rejected fix
      * @return true when Apply fix again may be offered
      */
-    public static boolean canApplyAgain(DashboardBackend backend) {
-        return backend.supports(Capability.REAPPLY_FIX);
+    public static boolean canApplyAgain(DashboardBackend backend,
+            Anomaly anomaly) {
+        return backend.supports(Capability.REAPPLY_FIX)
+                && backend.canReapplyRepair(anomaly);
     }
 
     /**

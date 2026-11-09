@@ -195,9 +195,9 @@ public class Submission {
     /**
      * Returns the keys of the fixes the instructor undid. Grading the
      * student again keeps this list, and FixManager does not apply a fix
-     * whose key is in it. The list is kept in memory only until the
-     * database saves it (Huxley's rejected_fixes column), so a run resumed
-     * after a restart applies those fixes again.
+     * whose key is in it. The database saves the list with the submission
+     * (column rejected_fixes), so a run resumed after a restart skips
+     * those fixes too.
      *
      * <p>Tier: SHOULD.
      *

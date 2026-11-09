@@ -59,6 +59,7 @@ import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.service.ClassFileMatcher;
+import gradezzy.service.ReapplyResult;
 import gradezzy.service.ScoreAdjustmentService;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.service.UndoResult;
@@ -849,13 +850,51 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet until the service can apply a rejected
-     * fix again.
+     * Calls AnomalyService.canReapplyFix.
+     */
+    @Override
+    public boolean canReapplyRepair(Anomaly anomaly) {
+        return services.getAnomalyService().canReapplyFix(anomaly);
+    }
+
+    /**
+     * Calls AnomalyService.reapplyFix, which grades the student again
+     * with the fix, and says what the marks became.
      */
     @Override
     public ActionResult reapplyRepair(RepairItem repair) {
-        // Waits for AnomalyService.reapplyFix (Jing Yuan)
-        return ActionResult.notConnected(Capability.REAPPLY_FIX);
+        Anomaly anomaly = repair.getAnomaly();
+        if (!canReapplyRepair(anomaly)) {
+            return ActionResult.failed(explainReapplyFailure(anomaly));
+        }
+
+        GradingRun run = findSessionRunWith(anomaly);
+        ReapplyResult reapplied =
+                services.getAnomalyService().reapplyFix(anomaly);
+        forgetSavedRuns();
+        if (reapplied == null) {
+            return ActionResult.failed(explainReapplyFailure(anomaly));
+        }
+        if (!reapplied.getProblem().isEmpty()) {
+            return ActionResult.failed(reapplied.getMessage());
+        }
+        return ActionResult.done(reapplied.getMessage()
+                + " It waits for you to keep or reject it."
+                + checkAfterUndo(run));
+    }
+
+    // Explains why a rejected fix cannot be applied again.
+    private String explainReapplyFailure(Anomaly anomaly) {
+        String start = "The fix for " + anomaly.getUsername()
+                + " was not applied again. ";
+        if (anomaly.getFixStatus() != FixStatus.UNDONE) {
+            return start + "Only a rejected fix can be applied again.";
+        }
+        if (services.getGradingService().isGrading()) {
+            return start + "Wait until grading has finished.";
+        }
+        return start + "GradeZZY can only apply again a fix rejected "
+                + "since it was opened, or in a run resumed since.";
     }
 
     // Grading the student again cleared their Similar code flags, so the

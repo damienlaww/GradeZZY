@@ -176,35 +176,6 @@ public class WorkingCopyManager {
         }
     }
 
-    /**
-     * Removes the working copy of a submission.
-     *
-     * @param submission the submission
-     * @throws UncheckedIOException if the copy cannot safely be removed
-     */
-    public void deleteWorkingCopy(Submission submission) {
-        if (submission.getWorkingCopyPath() == null) {
-            return;
-        }
-        try {
-            Path expected = workingPath(submission);
-            Path actual = submission.getWorkingCopyPath()
-                    .toAbsolutePath().normalize();
-            if (!actual.equals(expected)) {
-                throw new IOException("Unexpected working copy path.");
-            }
-            Path original = submission.getOriginalPath().toRealPath();
-            if (original.startsWith(actual) || actual.startsWith(original)) {
-                throw new IOException("Original and working copy overlap.");
-            }
-            FileUtils.deleteDirectory(actual);
-            submission.setWorkingCopyPath(null);
-        } catch (IOException exception) {
-            throw new UncheckedIOException("Could not delete working copy: "
-                    + exception.getMessage(), exception);
-        }
-    }
-
     // Removes the half-built staging folder, if any, and builds the error
     // for a working copy that could not be created. A failure to remove
     // the folder is attached to the original error instead of hiding it.

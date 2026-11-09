@@ -1025,7 +1025,8 @@ public class RunsScreen extends FlowScreen {
                         return () -> takeBackFix(run, anomaly);
                     }
                     if (undone && anomaly.getFixStatus() == FixStatus.UNDONE
-                            && UndoFixJob.canApplyAgain(getBackend())) {
+                            && UndoFixJob.canApplyAgain(getBackend(),
+                            anomaly)) {
                         return () -> runFixJob(run, anomaly, true);
                     }
                     if (reapplied

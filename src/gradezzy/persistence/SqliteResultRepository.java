@@ -93,6 +93,7 @@ public class SqliteResultRepository implements ResultRepository {
                 + "last_name TEXT, "
                 + "first_name TEXT, "
                 + "email TEXT, "
+                + "rejected_fixes TEXT, "
                 + "PRIMARY KEY (run_id, username))",
         "CREATE TABLE IF NOT EXISTS question_results ("
                 + "run_id TEXT NOT NULL, "
@@ -154,11 +155,14 @@ public class SqliteResultRepository implements ResultRepository {
     private static final String TESTERS_DIR_COLUMN = "testers_dir";
     private static final String STARTER_DIR_COLUMN = "starter_dir";
     private static final String DECISION_COLUMN = "decision";
+    private static final String REJECTED_FIXES_COLUMN = "rejected_fixes";
 
     // List the columns of a table, one row per column
     private static final String LIST_RUN_COLUMNS = "PRAGMA table_info(runs)";
     private static final String LIST_ANOMALY_COLUMNS =
             "PRAGMA table_info(anomalies)";
+    private static final String LIST_SUBMISSION_COLUMNS =
+            "PRAGMA table_info(submissions)";
 
     private static final String ADD_SCORE_SHEET_COLUMN = "ALTER TABLE runs "
             + "ADD COLUMN score_sheet_file TEXT";
@@ -171,6 +175,9 @@ public class SqliteResultRepository implements ResultRepository {
 
     private static final String ADD_DECISION_COLUMN = "ALTER TABLE "
             + "anomalies ADD COLUMN decision TEXT";
+
+    private static final String ADD_REJECTED_FIXES_COLUMN = "ALTER TABLE "
+            + "submissions ADD COLUMN rejected_fixes TEXT";
 
     // How long a write waits for another GradeZZY to finish its own
     // write before it fails, in milliseconds
@@ -191,7 +198,8 @@ public class SqliteResultRepository implements ResultRepository {
             + "submissions (run_id, username, position, status, "
             + "original_path, working_copy_path, ingest_failure, "
             + "org_defined_id, student_username, last_name, first_name, "
-            + "email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            + "email, rejected_fixes) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String INSERT_QUESTION_RESULT = "INSERT INTO "
             + "question_results (run_id, username, position, question_id, "
@@ -243,7 +251,8 @@ public class SqliteResultRepository implements ResultRepository {
     private static final String SELECT_SUBMISSIONS = "SELECT username, "
             + "status, original_path, working_copy_path, ingest_failure, "
             + "org_defined_id, student_username, last_name, first_name, "
-            + "email FROM submissions WHERE run_id = ? ORDER BY position";
+            + "email, rejected_fixes FROM submissions WHERE run_id = ? "
+            + "ORDER BY position";
 
     private static final String SELECT_QUESTION_RESULTS = "SELECT "
             + "username, question_id, score, compiled, timed_out, output "
@@ -895,6 +904,10 @@ public class SqliteResultRepository implements ResultRepository {
                     DECISION_COLUMN)) {
                 statement.executeUpdate(ADD_DECISION_COLUMN);
             }
+            if (!hasColumn(statement, LIST_SUBMISSION_COLUMNS,
+                    REJECTED_FIXES_COLUMN)) {
+                statement.executeUpdate(ADD_REJECTED_FIXES_COLUMN);
+            }
         } finally {
             closeStatement(statement);
         }
@@ -1151,6 +1164,8 @@ public class SqliteResultRepository implements ResultRepository {
             statement.setString(10, lastName);
             statement.setString(11, firstName);
             statement.setString(12, email);
+            statement.setString(13, joinFixKeys(
+                    submission.getRejectedFixes()));
             statement.executeUpdate();
         } finally {
             closeStatement(statement);
@@ -1380,7 +1395,25 @@ public class SqliteResultRepository implements ResultRepository {
                     row.getString("first_name"),
                     row.getString("email")));
         }
+
+        // Undone fixes stay undone when the run is resumed or retried
+        String rejectedFixes = row.getString(REJECTED_FIXES_COLUMN);
+        if (rejectedFixes != null && !rejectedFixes.isEmpty()) {
+            for (String fixKey : rejectedFixes.split(KEY_SEPARATOR)) {
+                submission.rejectFix(fixKey);
+            }
+        }
         return submission;
+    }
+
+    // Joins the keys of the undone fixes into one column, or returns null
+    // when there are none. A fix key names a fixer and a path, so it has
+    // no newline in it.
+    private String joinFixKeys(List<String> fixKeys) {
+        if (fixKeys.isEmpty()) {
+            return null;
+        }
+        return TextUtils.join(KEY_SEPARATOR, fixKeys);
     }
 
     // Adds each saved question result to its submission and returns them

@@ -689,8 +689,18 @@ public class SetUpScreen extends FlowScreen {
         addDefault(InputKind.STARTER);
     }
 
-    // Removes every zip file from the batch.
+    // Asks before removing every chosen zip file.
     private void clearSubmissions() {
+        int count = getState().getBatch().getItems(
+                InputKind.SUBMISSION).size();
+        getWindow().confirm("Remove all " + Parts.plural(count, "file")
+                + "?", "They are only taken off this list; the zip files "
+                + "are not changed. You can add them again.",
+                "Remove all", () -> removeAllSubmissions());
+    }
+
+    // Removes every zip file from the batch.
+    private void removeAllSubmissions() {
         getState().getBatch().clear(InputKind.SUBMISSION);
         refresh();
     }
@@ -1531,7 +1541,11 @@ public class SetUpScreen extends FlowScreen {
         String detail;
         Label status;
         ClassFileMatch match = ClassFileMatch.fits();
-        if (items.isEmpty() && kind.isRequired()) {
+        if (items.isEmpty() && kind.isRequired() && filesBeingChecked > 0) {
+            // Chosen files join the list once checked, so not Missing yet
+            detail = "Checking...";
+            status = Parts.pill("Checking", Tone.NEUTRAL);
+        } else if (items.isEmpty() && kind.isRequired()) {
             detail = "Not chosen yet.";
             status = Parts.pill("Missing", Tone.BAD);
         } else if (items.isEmpty()) {
@@ -1646,7 +1660,7 @@ public class SetUpScreen extends FlowScreen {
         if (isOn(ConfigKeys.PLAGIARISM_ENABLED)) {
             similar = "On";
         }
-        facts.add(fact("Time limit per test",
+        facts.add(fact("Time limit per test run",
                 getBackend().getRunTimeoutSeconds() + " s", true, "A "
                 + "tester that runs longer is stopped, so an endless loop "
                 + "cannot hold up the batch. Cases passed before that keep "

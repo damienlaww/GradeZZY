@@ -65,6 +65,9 @@ Desktop.ini
 /docs/
 /samples/
 
+# Knowledge graph built locally by graphify
+/graphify-out/
+
 # Assistant settings kept on each machine only
 CLAUDE.md
 .claude/
