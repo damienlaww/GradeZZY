@@ -617,6 +617,7 @@ public class SubmissionLoader {
         return submissions;
     }
 
+    // Marks a submission as failed and records why as an anomaly.
     private void reject(Submission submission, String message) {
         submission.setIngestFailure(message);
         submission.setStatus(SubmissionStatus.FAILED);

@@ -10,6 +10,7 @@ package gradezzy.grading;
 
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
+import java.util.UUID;
 
 import gradezzy.ingest.IngestException;
 import gradezzy.ingest.InvalidArchiveException;
@@ -32,6 +33,12 @@ public class ExtractStage implements GradingStage {
      * The name shown while this stage runs.
      */
     public static final String NAME = "Unpacking";
+
+    // Start of the id of an unknown-student anomaly
+    private static final String UNKNOWN_ID_PREFIX = "UNKNOWN-";
+
+    // Start of the id of an anomaly for a zip that cannot be unpacked
+    private static final String ARCHIVE_ID_PREFIX = "ARCHIVE-";
 
     // What the instructor can do about a zip that cannot be unpacked
     private static final String NEW_UPLOAD_ACTION =
@@ -106,7 +113,7 @@ public class ExtractStage implements GradingStage {
                 context.getRoster(), submission.getUsername()));
         if (submission.getStudent() == null) {
             submission.addAnomaly(new Anomaly(
-                    "UNKNOWN-" + java.util.UUID.randomUUID(),
+                    UNKNOWN_ID_PREFIX + UUID.randomUUID(),
                     AnomalyType.UNKNOWN_STUDENT, Severity.WARNING,
                     submission.getUsername(), submission.getUsername()
                             + " is not on the roster.",
@@ -132,7 +139,7 @@ public class ExtractStage implements GradingStage {
     private UploadRejectedException rejectUpload(Submission submission,
             InvalidArchiveException exception) {
         submission.addAnomaly(new Anomaly(
-                "ARCHIVE-" + java.util.UUID.randomUUID(),
+                ARCHIVE_ID_PREFIX + UUID.randomUUID(),
                 AnomalyType.INVALID_ARCHIVE, Severity.ERROR,
                 submission.getUsername(), exception.getMessage(),
                 NEW_UPLOAD_ACTION));

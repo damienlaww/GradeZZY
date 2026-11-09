@@ -163,20 +163,21 @@ public final class TextUtils {
      * @return the values joined together
      */
     public static String join(String separator, String[] values) {
-        int length = 0;
-        for (int index = 0; index < values.length; index++) {
-            if (index > 0) {
-                length += separator.length();
-            }
+        if (values.length == 0) {
+            return "";
+        }
+
+        String first = String.valueOf(values[0]);
+        int length = first.length();
+        for (int index = 1; index < values.length; index++) {
+            length += separator.length();
             length += String.valueOf(values[index]).length();
         }
 
         char[] joined = new char[length];
-        int count = 0;
-        for (int index = 0; index < values.length; index++) {
-            if (index > 0) {
-                count = copyInto(separator, joined, count);
-            }
+        int count = copyInto(first, joined, 0);
+        for (int index = 1; index < values.length; index++) {
+            count = copyInto(separator, joined, count);
             count = copyInto(String.valueOf(values[index]), joined, count);
         }
         return new String(joined);

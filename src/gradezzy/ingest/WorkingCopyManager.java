@@ -47,6 +47,9 @@ public class WorkingCopyManager {
     // Start of the folder an inner zip is moved to while it is unpacked
     private static final String INNER_ZIP_PREFIX = ".inner-zip-";
 
+    // Start of the folder a submission is unpacked in before it is moved
+    private static final String STAGING_PREFIX = ".unpacking-";
+
     // A zip of a zip holds exactly this many files
     private static final int SINGLE_FILE = 1;
 
@@ -95,7 +98,7 @@ public class WorkingCopyManager {
             }
             Files.createDirectories(target.getParent());
             staging = Files.createTempDirectory(target.getParent(),
-                    ".unpacking-");
+                    STAGING_PREFIX);
             if (Files.isDirectory(original, LinkOption.NOFOLLOW_LINKS)) {
                 FileUtils.copyDirectory(original, staging);
                 removeIgnoredFiles(staging);
