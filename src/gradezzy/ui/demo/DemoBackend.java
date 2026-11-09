@@ -1248,7 +1248,8 @@ public final class DemoBackend implements DashboardBackend {
      * Returns synthetic excerpts and the files left out of the comparison.
      */
     @Override
-    public SimilarityDetail getSimilarityDetail(SimilarityPair pair) {
+    public SimilarityDetail getSimilarityDetail(GradingRun gradingRun,
+            SimilarityPair pair) {
         List<String> excluded = new ArrayList<>();
         excluded.add("RenameToYourUsername/Q2/Q2a.java (starter file)");
         excluded.add("Q2aTester.java (tester)");

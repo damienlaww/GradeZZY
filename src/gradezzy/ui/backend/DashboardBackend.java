@@ -728,10 +728,12 @@ public interface DashboardBackend {
     /**
      * Returns the evidence for one similar pair.
      *
+     * @param gradingRun the run the pair belongs to
      * @param pair the pair
      * @return the evidence, or null when none is available
      */
-    SimilarityDetail getSimilarityDetail(SimilarityPair pair);
+    SimilarityDetail getSimilarityDetail(GradingRun gradingRun,
+            SimilarityPair pair);
 
     /**
      * Says whether the similarity check is switched on.
