@@ -805,7 +805,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `detection.untouched.enabled` | `true` | Flag untouched starter files. |
 | `detection.empty.enabled` | `true` | Flag empty answers. |
 | `detection.hardcoded.enabled` | `true` | Flag hard-coded answers. |
-| `plagiarism.enabled` | `false` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
+| `plagiarism.enabled` | `true` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
 | `export.formats` | `csv,json` | Formats offered by default. |
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
