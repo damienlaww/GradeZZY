@@ -47,6 +47,9 @@ public class ServiceRegistry {
     // The saved assessments, built from the settings service
     private final AssessmentLibrary assessmentLibrary;
 
+    // Checks the testers with broken copies of the model answer
+    private final TesterStrengthService testerStrengthService;
+
     // Changes marks by hand; set after construction
     private ScoreAdjustmentService scoreAdjustmentService = null;
 
@@ -82,6 +85,7 @@ public class ServiceRegistry {
         this.plagiarismService = plagiarismService;
         this.assessmentLibrary = new AssessmentLibrary(config,
                 settingsService);
+        this.testerStrengthService = new TesterStrengthService(config);
     }
 
     /**
@@ -135,6 +139,18 @@ public class ServiceRegistry {
             answerGroupService = new AnswerGroupService(null, config);
         }
         return answerGroupService;
+    }
+
+    /**
+     * Returns the service that checks the testers with broken copies of
+     * the model answer.
+     *
+     * <p>Tier: COULD.
+     *
+     * @return the service
+     */
+    public TesterStrengthService getTesterStrengthService() {
+        return testerStrengthService;
     }
 
     /**
