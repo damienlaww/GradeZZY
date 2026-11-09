@@ -19,8 +19,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import gradezzy.util.TextUtils;
+
 /**
  * The export folders of single modules and sections.
+ *
+ * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
 public final class ExportFolders {
 
@@ -329,15 +333,11 @@ public final class ExportFolders {
 
     // Writes the entries back into one value.
     private static String write(List<String[]> entries) {
-        if (entries.isEmpty()) {
-            return "";
+        List<String> texts = new ArrayList<>();
+        for (String[] entry : entries) {
+            texts.add(entryText(entry));
         }
-
-        String text = entryText(entries.get(0));
-        for (int index = 1; index < entries.size(); index++) {
-            text += ENTRY_SEPARATOR + entryText(entries.get(index));
-        }
-        return text;
+        return TextUtils.join(ENTRY_SEPARATOR, texts);
     }
 
     // Writes one entry as who=folder.

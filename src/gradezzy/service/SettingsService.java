@@ -64,9 +64,6 @@ public class SettingsService {
     // Added to the file name for the copy written before replacing it
     private static final String TEMP_SUFFIX = ".tmp";
 
-    // Separator between the items of a list setting
-    private static final String LIST_SEPARATOR = ",";
-
     // Characters allowed in a decimal number setting
     private static final String NUMBER_CHARACTERS = "0123456789.+-eE";
 
@@ -446,10 +443,11 @@ public class SettingsService {
         for (String key : config.getKeys()) {
             // The model answers folder is checked when it is used, so a
             // moved folder skips those checks instead of stopping the app
-            boolean mustExist = contains(EXISTING_FOLDER_KEYS, key)
+            boolean isCheckedElsewhere =
+                    contains(EXISTING_FOLDER_KEYS, key)
                     || contains(EXISTING_FILE_KEYS, key)
                     || key.equals(ConfigKeys.MODEL_ANSWERS_DIR);
-            if (!mustExist) {
+            if (!isCheckedElsewhere) {
                 String message = validate(key, config.getString(key));
                 if (!message.isEmpty()) {
                     problems.add(message);
@@ -799,7 +797,7 @@ public class SettingsService {
 
     // Checks the question ids: at least one, each with its settings.
     private String checkQuestionIds(String key, String text) {
-        List<String> ids = splitList(text);
+        List<String> ids = AppConfig.splitList(text);
 
         if (ids.isEmpty()) {
             return "'" + key + "' needs at least one question id.";
@@ -824,28 +822,12 @@ public class SettingsService {
 
     // Checks that a list setting has at least one item.
     private String checkRequiredList(String key, String text) {
-        if (splitList(text).isEmpty()) {
+        if (AppConfig.splitList(text).isEmpty()) {
             return "'" + key + "' needs at least one item, separated by "
                     + "commas.";
         }
 
         return "";
-    }
-
-    // Splits a list value the same way AppConfig.getList does: items
-    // are trimmed and empty items are left out.
-    private List<String> splitList(String text) {
-        List<String> items = new ArrayList<>();
-
-        for (String part : text.split(LIST_SEPARATOR)) {
-            String item = part.trim();
-
-            if (!item.isEmpty()) {
-                items.add(item);
-            }
-        }
-
-        return items;
     }
 
     // Returns the key on a line, or null for a blank or comment line.

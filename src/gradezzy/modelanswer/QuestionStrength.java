@@ -22,6 +22,9 @@ public class QuestionStrength {
     // Turns a fraction into a percentage
     private static final int PERCENT = 100;
 
+    // Follows a share printed as a percentage
+    private static final String PERCENT_SIGN = "%";
+
     // The question, such as Q2b
     private final String questionId;
 
@@ -181,7 +184,7 @@ public class QuestionStrength {
             return questionId + ": no broken copy could be made and run.";
         }
 
-        String caught = "caught " + getPercentCaught() + "%";
+        String caught = "caught " + getPercentCaught() + PERCENT_SIGN;
         int timedOut = countOutcome(MutantOutcome.TIMED_OUT);
         if (timedOut > 0) {
             // Shown apart, since a slow computer can stop a copy that

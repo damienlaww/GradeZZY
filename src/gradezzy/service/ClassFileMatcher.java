@@ -65,11 +65,6 @@ public class ClassFileMatcher {
     // How deep a question file is looked for in an unzipped upload
     private static final int MAX_FOLDER_DEPTH = 4;
 
-    // How many tokens after "static" a method name is looked for. A real
-    // declaration has a few modifiers and a type; the limit keeps a file
-    // made of "static" words from taking long.
-    private static final int MAX_DECLARATION_TOKENS = 40;
-
     // How many unknown method names a problem names
     private static final int MAX_NAMES_SHOWN = 2;
 
@@ -93,30 +88,12 @@ public class ClassFileMatcher {
     // Index of a score sheet's first student row, after the header
     private static final int FIRST_ROW = 1;
 
-    // Length of "/*", which opens a block comment
-    private static final int COMMENT_START_LENGTH = 2;
-
-    // Length of an escape in a string or character, such as \t
-    private static final int ESCAPE_LENGTH = 2;
-
-    // The method every program may declare, which says nothing about the
-    // lab test
-    private static final String MAIN_METHOD = "main";
-
-    // The word in front of a method that belongs to the class
-    private static final String STATIC_KEYWORD = "static";
-
     // Folders that macOS adds to a zip, and the start of hidden names
     private static final String MAC_FOLDER = "__MACOSX";
     private static final String HIDDEN_PREFIX = ".";
 
     // Separator between the folders of a zip entry name
     private static final String ENTRY_SEPARATOR = "/";
-
-    // Words that are followed by "(" but are not method calls
-    private static final String[] NOT_CALLS = {"if", "for", "while",
-        "switch", "catch", "return", "synchronized", "super", "this",
-        "new", "assert", "throw"};
 
     // The words in a problem about testers or starter files from another
     // lab test
@@ -397,10 +374,11 @@ public class ClassFileMatcher {
             String source = readSmallFile(tester);
             if (countFilesRead(id) > 0 && source != null) {
                 tested.add(id);
-                List<String> tokens = tokenize(source);
-                List<String> called = findCalls(tokens,
+                List<String> tokens = JavaSourceScanner.tokenize(source);
+                List<String> called = JavaSourceScanner.findCalls(tokens,
                         classNameOf(question));
-                called.removeAll(findStaticMethods(tokens));
+                called.removeAll(
+                        JavaSourceScanner.findStaticMethods(tokens));
                 if (sharesCommonMethod(id, called)) {
                     fitting++;
                 } else {
@@ -520,7 +498,9 @@ public class ClassFileMatcher {
             String source = readSmallFile(file);
             if (countFilesRead(id) > 0 && source != null) {
                 checked.add(id);
-                List<String> declared = findStaticMethods(tokenize(source));
+                List<String> tokens = JavaSourceScanner.tokenize(source);
+                List<String> declared =
+                        JavaSourceScanner.findStaticMethods(tokens);
                 if (sharesCommonMethod(id, declared)) {
                     fitting++;
                 } else {
@@ -554,8 +534,9 @@ public class ClassFileMatcher {
             for (Question question : assessment.getQuestions()) {
                 String source = sources.get(question.getId());
                 if (source != null) {
+                    List<String> tokens = JavaSourceScanner.tokenize(source);
                     countMethods(question.getId(),
-                            findStaticMethods(tokenize(source)));
+                            JavaSourceScanner.findStaticMethods(tokens));
                 }
             }
         }
@@ -772,155 +753,6 @@ public class ClassFileMatcher {
     }
 
     // ------------------------------------------------------ java source
-
-    // Splits Java source into names and single symbols, leaving out
-    // comments, strings and characters.
-    private List<String> tokenize(String source) {
-        List<String> tokens = new ArrayList<>();
-        int index = 0;
-        int length = source.length();
-        while (index < length) {
-            char current = source.charAt(index);
-            char next = ' ';
-            if (index + 1 < length) {
-                next = source.charAt(index + 1);
-            }
-            if (current == '/' && next == '/') {
-                index = skipPast(source, index, "\n");
-            } else if (current == '/' && next == '*') {
-                index = skipPast(source, index + COMMENT_START_LENGTH,
-                        "*/");
-            } else if (current == '"' || current == '\'') {
-                index = skipQuoted(source, index);
-            } else if (Character.isJavaIdentifierStart(current)) {
-                int end = index + 1;
-                while (end < length
-                        && Character.isJavaIdentifierPart(
-                        source.charAt(end))) {
-                    end++;
-                }
-                tokens.add(source.substring(index, end));
-                index = end;
-            } else {
-                if (!Character.isWhitespace(current)) {
-                    tokens.add(String.valueOf(current));
-                }
-                index++;
-            }
-        }
-        return tokens;
-    }
-
-    // Returns the index just after the next end text, or the length.
-    private int skipPast(String source, int from, String end) {
-        int found = source.indexOf(end, from);
-        if (found < 0) {
-            return source.length();
-        }
-        return found + end.length();
-    }
-
-    // Returns the index just after a quoted string or character.
-    private int skipQuoted(String source, int start) {
-        char quote = source.charAt(start);
-        int index = start + 1;
-        while (index < source.length()) {
-            char current = source.charAt(index);
-            if (current == '\\') {
-                index = index + ESCAPE_LENGTH;
-            } else if (current == quote || current == '\n') {
-                return index + 1;
-            } else {
-                index++;
-            }
-        }
-        return source.length();
-    }
-
-    // Lists the static methods a class declares, except main: the
-    // methods a question asks for, such as getIsogramWords.
-    private List<String> findStaticMethods(List<String> tokens) {
-        List<String> methods = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (int index = 0; index < tokens.size(); index++) {
-            if (tokens.get(index).equals(STATIC_KEYWORD)) {
-                String name = findDeclaredName(tokens, index + 1);
-                if (name != null && !name.equals(MAIN_METHOD)
-                        && seen.add(name)) {
-                    methods.add(name);
-                }
-            }
-        }
-        return methods;
-    }
-
-    // Returns the method name declared after "static", or null when
-    // "static" starts a field, a block or a nested class instead. It
-    // looks at no more than MAX_DECLARATION_TOKENS tokens and stops at
-    // the next "static", so the whole file is read in one pass.
-    private String findDeclaredName(List<String> tokens, int start) {
-        int stop = Math.min(tokens.size(), start + MAX_DECLARATION_TOKENS);
-        for (int index = start; index < stop; index++) {
-            String token = tokens.get(index);
-            if (token.equals(STATIC_KEYWORD)) {
-                return null;
-            }
-            if (token.equals("(")) {
-                String name = tokens.get(index - 1);
-                if (index > start && isName(name)) {
-                    return name;
-                }
-                return null;
-            }
-            if (token.equals("=") || token.equals(";") || token.equals("{")
-                    || token.equals(")")) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    // Lists the methods a tester calls that could be the student's:
-    // calls with no object in front, or with the student's class name in
-    // front, such as Q1a.getIsogramWords(...).
-    private List<String> findCalls(List<String> tokens, String className) {
-        List<String> calls = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        // The two tokens before the current one, empty at the start
-        String twoBefore = "";
-        String before = "";
-        for (int index = 0; index + 1 < tokens.size(); index++) {
-            String name = tokens.get(index);
-            boolean onClass = before.equals(".")
-                    && twoBefore.equals(className);
-            if (tokens.get(index + 1).equals("(") && isName(name)
-                    && !isNotCall(name) && !name.equals(MAIN_METHOD)
-                    && !before.equals("new")
-                    && (!before.equals(".") || onClass)
-                    && seen.add(name)) {
-                calls.add(name);
-            }
-            twoBefore = before;
-            before = name;
-        }
-        return calls;
-    }
-
-    // Says whether a token is a Java name.
-    private boolean isName(String token) {
-        return !token.isEmpty()
-                && Character.isJavaIdentifierStart(token.charAt(0));
-    }
-
-    // Says whether a word before "(" is a keyword, not a method.
-    private boolean isNotCall(String word) {
-        for (String keyword : NOT_CALLS) {
-            if (keyword.equals(word)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     // Returns a question's class name: its file name without ".java".
     private String classNameOf(Question question) {

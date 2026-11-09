@@ -55,9 +55,6 @@ public class RandomInputStage implements GradingStage {
     private static final String SUGGESTED_ACTION = "Read the answer with "
             + "the inputs named. The mark is not changed.";
 
-    // How far below the maximum a mark may be and still be full marks
-    private static final double FULL_MARKS_MARGIN = 0.0001;
-
     // Compares the answers with the model answer's
     private final RandomInputChecker checker;
 
@@ -120,8 +117,7 @@ public class RandomInputStage implements GradingStage {
         }
 
         Severity severity = Severity.INFO;
-        double lowestFull = question.getMaxScore() - FULL_MARKS_MARGIN;
-        if (result.getScore() >= lowestFull) {
+        if (ModelAnswerCopy.isFullMarks(result.getScore(), question)) {
             severity = Severity.WARNING;
             message = message + FULL_MARKS_NOTE;
         }

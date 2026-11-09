@@ -20,6 +20,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * The sections of one module only.
+ *
+ * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
 public final class ModuleSections {
 

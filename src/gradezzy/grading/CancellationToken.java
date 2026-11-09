@@ -4,8 +4,9 @@
  * Purpose: A flag that tells a running batch to stop.
  *
  * Where it fits: The Cancel button sets it through GradingService and
- * GradingPipeline checks it before each submission. It lets the user
- * interface stop grading without knowing how the pipeline works.
+ * GradingPipeline checks it before each submission and before each
+ * stage. It lets the user interface stop grading without knowing how
+ * the pipeline works.
  *
  * Note on untaught Java: the methods are synchronized because the flag is
  * set from the window while grading runs on another thread. That keyword
@@ -15,7 +16,8 @@
 package gradezzy.grading;
 
 /**
- * A flag that asks a running batch to stop after the current submission.
+ * A flag that asks a running batch to stop at the next stage. The
+ * submission being graded then becomes CANCELLED.
  *
  * <p>Tier: SHOULD. Owner: Jing Yuan.
  */

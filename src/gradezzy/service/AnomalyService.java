@@ -569,15 +569,7 @@ public class AnomalyService {
         if (gradingRun == null) {
             return null;
         }
-
-        Submission found = null;
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (submission.getUsername().equalsIgnoreCase(username)
-                    && (found == null || found.getIngestFailure() != null)) {
-                found = submission;
-            }
-        }
-        return found;
+        return gradingRun.findLoaded(username);
     }
 
     // Says whether a submission holds the problem with this id.
