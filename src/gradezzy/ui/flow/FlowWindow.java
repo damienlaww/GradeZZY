@@ -387,6 +387,54 @@ public class FlowWindow {
     }
 
     /**
+     * Grades the batch chosen on Set up into the section's existing run
+     * and shows the Grade step. Does nothing while a batch is being
+     * graded.
+     *
+     * @param run the run the batch joins
+     */
+    public void addToRun(GradingRun run) {
+        if (state.isGrading() || !state.getBatch().isReady()) {
+            return;
+        }
+        if (blockedByFix()) {
+            return;
+        }
+        GradeScreen grade = gradeScreen();
+        state.restart();
+        advanceTo(Step.GRADE);
+        grade.startAdding(run);
+    }
+
+    /**
+     * Asks a question with two ways to go on, in a sheet. Esc or a click
+     * outside closes it and does neither.
+     *
+     * @param title the question
+     * @param detail one or two sentences under it
+     * @param otherText the text of the second choice
+     * @param onOther what to do for the second choice
+     * @param primaryText the text of the main choice, filled in
+     * @param onPrimary what to do for the main choice
+     */
+    public void choose(String title, String detail, String otherText,
+            Runnable onOther, String primaryText, Runnable onPrimary) {
+        Label text = Parts.subtitle(detail);
+        text.setMaxWidth(Parts.TEXT_WIDTH);
+        text.setWrapText(true);
+        Button other = Parts.secondary(otherText, () -> confirmed(onOther));
+        Button primary = Parts.secondary(primaryText,
+                () -> confirmed(onPrimary));
+        primary.getStyleClass().add("confirm-ok");
+        HBox buttons = Parts.row(Parts.GAP,
+                new Node[] {Parts.grow(), other, primary});
+        VBox body = new VBox(Parts.GAP, Parts.title(title), text, buttons);
+        body.getStyleClass().add("confirm");
+        showSheet(body);
+        primary.requestFocus();
+    }
+
+    /**
      * Grades the rest of a stopped run and shows the Grade step.
      *
      * @param run the stopped run

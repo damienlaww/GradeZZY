@@ -454,6 +454,30 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public void startGrading(ImportBatch batch, Section section,
             ProgressListener listener, RunCallback callback) {
+        startDemoRun(batch, section, listener, callback);
+    }
+
+    /**
+     * Returns no run: every demo batch starts its own run, so Set up never
+     * asks about a late batch in the demo.
+     */
+    @Override
+    public GradingRun findRunToJoin(Section section) {
+        return null;
+    }
+
+    /**
+     * Grades the batch as a new demo run, as the demo has no run to join.
+     */
+    @Override
+    public void addToRun(GradingRun gradingRun, ImportBatch batch,
+            ProgressListener listener, RunCallback callback) {
+        startDemoRun(batch, gradingRun.getSection(), listener, callback);
+    }
+
+    // Grades a batch of demo students as a new run.
+    private void startDemoRun(ImportBatch batch, Section section,
+            ProgressListener listener, RunCallback callback) {
         GradingRun run = new GradingRun(String.format("%03d",
                 nextRunNumber), assessment, section, LocalDateTime.now());
         nextRunNumber++;

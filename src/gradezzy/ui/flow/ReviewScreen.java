@@ -216,11 +216,20 @@ public class ReviewScreen extends FlowScreen {
     // The run the missing rows were made for, or null
     private GradingRun missingRowsRun = null;
 
+    // The students the missing rows were made from, or null; a late batch
+    // looks them up again, which gives a new list
+    private List<Student> missingRowsFrom = null;
+
     // The rows made for chosen files grading skipped
     private final List<Submission> skippedRows = new ArrayList<>();
 
     // The run the skipped rows were made for, or null
     private GradingRun skippedRowsRun = null;
+
+    // The skipped files and graded students the skipped rows were made
+    // with; a late batch changes them
+    private int skippedRowsFiles = 0;
+    private int skippedRowsGraded = 0;
 
     // The search field
     private final CustomTextField search = new CustomTextField();
@@ -390,12 +399,17 @@ public class ReviewScreen extends FlowScreen {
 
     // Returns one "Could not open" row per skipped file of an ungraded user.
     private List<Submission> findSkippedRows(GradingRun run) {
-        if (run == skippedRowsRun) {
+        List<ImportItem> files = getState().getSkippedFiles(run);
+        int graded = run.getSubmissions().size();
+        if (run == skippedRowsRun && files.size() == skippedRowsFiles
+                && graded == skippedRowsGraded) {
             return skippedRows;
         }
         skippedRows.clear();
         skippedRowsRun = run;
-        for (ImportItem item : getState().getSkippedFiles(run)) {
+        skippedRowsFiles = files.size();
+        skippedRowsGraded = graded;
+        for (ImportItem item : files) {
             String username = item.getUsername();
             // A student graded from another file is shown as graded
             if (username.isEmpty()) {
@@ -430,16 +444,17 @@ public class ReviewScreen extends FlowScreen {
 
     // Returns a "No submission" row per student with no file, once read.
     private List<Submission> findMissingRows(GradingRun run) {
-        if (run == missingRowsRun) {
-            return missingRows;
-        }
         List<Student> missing = getState().getMissingStudents(run);
         if (missing == null) {
             getWindow().findMissingStudents(run, () -> missingFound());
             return new ArrayList<>();
         }
+        if (run == missingRowsRun && missing == missingRowsFrom) {
+            return missingRows;
+        }
         missingRows.clear();
         missingRowsRun = run;
+        missingRowsFrom = missing;
         for (Student student : missing) {
             Submission skipped = findSkippedRowOf(student);
             if (skipped == null) {

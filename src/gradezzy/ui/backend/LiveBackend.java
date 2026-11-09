@@ -567,6 +567,38 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
+     * Calls GradingService.findNewestRun. A run with no students has
+     * nothing to join, so it gives null.
+     */
+    @Override
+    public GradingRun findRunToJoin(Section section) {
+        if (section == null) {
+            return null;
+        }
+        GradingRun run = services.getGradingService().findNewestRun(
+                section.getModuleCode(), section.getSectionCode());
+        if (run == null || run.getSubmissions().isEmpty()) {
+            return null;
+        }
+        return run;
+    }
+
+    /**
+     * Starts GradingService.addToRun in a GradingTask. The service refuses
+     * a tester folder or score sheet that is not the run's, and says why.
+     */
+    @Override
+    public void addToRun(GradingRun gradingRun, ImportBatch batch,
+            ProgressListener listener, RunCallback callback) {
+        GradingTask task = new GradingTask(services.getGradingService(),
+                gradingRun, batch.getSubmissionPaths(),
+                createTestCaseSource(batch), listener,
+                batch.getSinglePath(InputKind.ROSTER));
+        setRunGradedAgain(gradingRun.getId());
+        runInBackground(task, callback, Capability.LATE_BATCH);
+    }
+
+    /**
      * Calls GradingService.cancel.
      */
     @Override

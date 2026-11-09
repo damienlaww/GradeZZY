@@ -120,9 +120,9 @@ Set up again for **CS102 G4**, with the same score sheet and tester
 files, and choose the folder `samples/e2e/upload-2-late`.
 
 The late batch should join the G4 run. In the service this works
-(`GradingService.addToRun`). In the window, Set up should ask whether to
-add these students to that run. That question is still to be wired in
-the UI (Seth); until it is, the window starts a second run. The console
+(`GradingService.addToRun`). In the window, after the marks are
+confirmed, Set up asks "Add these students to that run?"; choose
+**Add to that run**. **Start a new run** grades them on their own. The console
 cannot add a late batch at all (`run.sh console` always starts a new
 run), so the results below, such as "Chloe keeps 18", can only be checked
 in the window or by calling `addToRun`.
