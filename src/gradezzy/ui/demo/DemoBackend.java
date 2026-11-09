@@ -112,8 +112,8 @@ public final class DemoBackend implements DashboardBackend {
     // Keeps answer group names and checks until the demo closes
     private final AnswerGroupService answerGroups;
 
-    // The assessment in use, built from the configuration and changed
-    // when another sample assessment is chosen
+    // The assessment in use: the sample assessment, changed when another
+    // sample assessment is chosen
     private Assessment assessment;
 
     // The sample saved assessments, kept for this session only
@@ -171,7 +171,10 @@ public final class DemoBackend implements DashboardBackend {
         this.services = services;
         this.config = services.getConfig();
         this.answerGroups = new AnswerGroupService(null, config);
-        this.assessment = new AssessmentFactory(config).create();
+        // The sample assessment, not the configured one, so the sample
+        // marks fit its questions whatever config.properties names
+        this.assessment = DemoData.sampleAssessment().toAssessment(
+                new AssessmentFactory(config).getDefaultModuleCode());
 
         Section section = sampleSection();
         sampleRun = DemoData.buildCurrentRun(assessment, section,
@@ -307,7 +310,8 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Returns the assessment built from the configuration.
+     * Returns the sample assessment, or the sample assessment chosen
+     * since.
      */
     @Override
     public Assessment getAssessment() {
@@ -419,6 +423,15 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public Path getConfiguredPath(InputKind kind) {
         return null;
+    }
+
+    /**
+     * Judges the sample starter folder as inspect does, whatever the
+     * questions. No file is opened.
+     */
+    @Override
+    public ImportItem inspectStarter(Path folder, List<Question> questions) {
+        return inspect(InputKind.STARTER, folder);
     }
 
     /**
@@ -1196,11 +1209,10 @@ public final class DemoBackend implements DashboardBackend {
                 + ". Results graded with it are kept.");
     }
 
-    // Saves the configured assessment and a shorter second one, so the
-    // demo can switch between two.
+    // Saves the sample assessment and a shorter second one, so the demo
+    // can switch between two.
     private void seedAssessments() {
-        SavedAssessment current = services.getAssessmentLibrary()
-                .readCurrent();
+        SavedAssessment current = DemoData.sampleAssessment();
         addSorted(current);
         SavedAssessment second = current.copy();
         second.setName(SECOND_ASSESSMENT);

@@ -21,6 +21,7 @@ import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
+import gradezzy.model.SavedAssessment;
 import gradezzy.model.Section;
 import gradezzy.model.Severity;
 import gradezzy.model.Student;
@@ -115,6 +116,29 @@ public final class DemoData {
         {"Devan Alexandra-Rose", "Montgomery-Abernathy"},
         {"Ellis", "Tan"}, {"Frankie", "Park"}};
 
+    /** The name of the sample assessment. */
+    public static final String ASSESSMENT_NAME = "Lab Test";
+
+    // The sample assessment's questions, their folders and their maximum
+    // marks, as in the provided Lab Test sample. The demo uses these
+    // instead of config.properties, so SCORES always fits its questions.
+    private static final String[] QUESTION_IDS = {"Q1a", "Q1b", "Q2a",
+        "Q2b", "Q3"};
+    private static final String[] QUESTION_FOLDERS = {"Q1", "Q1", "Q2",
+        "Q2", "Q3"};
+    private static final double[] MAX_MARKS = {3, 3, 5, 5, 4};
+
+    // The ending of an answer's source file
+    private static final String JAVA_EXTENSION = ".java";
+
+    // The files that come with the sample assessment
+    private static final String[] PROVIDED_CLASS_FILES = {
+        "DataException.class", "Shape.class", "Circle.class",
+        "Rectangle.class"};
+    private static final String[] TESTER_DATA_FILES = {"personstester.txt",
+        "studentstester.txt"};
+    private static final String PLACEHOLDER_FOLDER = "RenameToYourUsername";
+
     // Marks per question (Q1a, Q1b, Q2a, Q2b, Q3) of each sample student
     private static final int[][] SCORES = {{3, 3, 5, 5, 4},
         {2, 3, 5, 5, 4}, {3, 3, 5, 0, 2}, {0, 0, 0, 0, 0},
@@ -185,6 +209,36 @@ public final class DemoData {
     // Utility class, never instantiated.
     private DemoData() {
         // nothing to set up
+    }
+
+    /**
+     * Builds the sample assessment the demo grades with: five questions
+     * worth 20 marks, the same whatever config.properties names.
+     *
+     * <p>Tier: MUST.
+     *
+     * @return a new copy of the sample assessment
+     */
+    public static SavedAssessment sampleAssessment() {
+        SavedAssessment sample = new SavedAssessment();
+        sample.setName(ASSESSMENT_NAME);
+        sample.setModuleCode(MODULE_CODE);
+        sample.setTestersDirectory(samplePath(SAMPLE_TESTERS).toString());
+        sample.setStarterDirectory(samplePath(SAMPLE_STARTER).toString());
+        for (int index = 0; index < QUESTION_IDS.length; index++) {
+            String id = QUESTION_IDS[index];
+            sample.getQuestions().add(new Question(id,
+                    QUESTION_FOLDERS[index], id + JAVA_EXTENSION,
+                    MAX_MARKS[index]));
+        }
+        for (String name : PROVIDED_CLASS_FILES) {
+            sample.getProvidedClassFiles().add(name);
+        }
+        for (String name : TESTER_DATA_FILES) {
+            sample.getTesterDataFiles().add(name);
+        }
+        sample.getPlaceholderFolderNames().add(PLACEHOLDER_FOLDER);
+        return sample;
     }
 
     /**
@@ -313,7 +367,7 @@ public final class DemoData {
         List<Question> questions = assessment.getQuestions();
         for (int position = 0; position < questions.size(); position++) {
             submission.addQuestionResult(passedFirst(questions.get(position),
-                    SCORES[index][position]));
+                    sampleScore(index, position)));
         }
 
         String username = submission.getUsername();
@@ -678,6 +732,16 @@ public final class DemoData {
         }
         submission.setWorkingCopyPath(workingCopyPath(username));
         submission.setStatus(SubmissionStatus.GRADED);
+    }
+
+    // Returns a sample student's mark for the question at a position, or
+    // 0 past the sample's five questions, for an assessment saved in the
+    // demo with more questions.
+    private static int sampleScore(int student, int position) {
+        if (position >= SCORES[student].length) {
+            return 0;
+        }
+        return SCORES[student][position];
     }
 
     // Creates a question result whose first cases pass.
