@@ -67,8 +67,16 @@ public class StructureValidator extends AbstractValidator {
         }
 
         Path contentRoot = findContentRoot(submission, assessment);
+        List<Path> holders = findHolders(listFolders(workingCopy),
+                assessment);
 
-        if (contentRoot == null) {
+        if (contentRoot == null && holders.size() > 1) {
+            // The folders are there, so one card says why none is graded
+            anomalies.add(createAnomaly(submission,
+                    AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
+                    describeSeveralAnswers(holders)));
+            return anomalies;
+        } else if (contentRoot == null) {
             addAllFoldersMissing(anomalies, submission, assessment,
                     describeTopLevel(workingCopy, submission));
             return anomalies;
@@ -211,6 +219,20 @@ public class StructureValidator extends AbstractValidator {
                     AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
                     "The " + folderName + " folder is missing. " + reason));
         }
+    }
+
+    // Says that several folders hold question folders, so GradeZZY cannot
+    // tell which one is the answer.
+    private String describeSeveralAnswers(List<Path> holders) {
+        List<String> names = new ArrayList<>();
+
+        for (Path holder : holders) {
+            names.add(holder.getFileName().toString());
+        }
+        return "The ZIP file holds " + holders.size() + " folders with the "
+                + "question folders in them (" + joinNames(names) + "), so "
+                + "GradeZZY cannot tell which one to grade. Ask the student "
+                + "which one is their answer, then grade it again.";
     }
 
     // Explains why no top folder could be used: none, or too many.
