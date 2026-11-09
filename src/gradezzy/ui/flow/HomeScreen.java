@@ -758,7 +758,7 @@ public class HomeScreen extends FlowScreen {
         Label pill = null;
         String tip = "";
         if (isGradingNow(section)) {
-            pill = Parts.pill("Grading now", Tone.NEUTRAL);
+            pill = Parts.pill("Grading now", Tone.GOOD);
             tip = "This section is being graded. You can leave this page; "
                     + "grading carries on.";
         } else if (run == null) {
