@@ -116,7 +116,10 @@ public class SettingsService {
         ConfigKeys.MAX_OUTPUT_CHARACTERS,
         ConfigKeys.BACKUP_KEEP_COUNT,
         ConfigKeys.WINDOW_WIDTH,
-        ConfigKeys.WINDOW_HEIGHT
+        ConfigKeys.WINDOW_HEIGHT,
+        ConfigKeys.TESTER_STRENGTH_MAX_COPIES,
+        ConfigKeys.TESTER_STRENGTH_TIMEOUT_SECONDS,
+        ConfigKeys.RANDOM_INPUTS_COUNT
     };
 
     // Settings that hold a whole number of 0 or more, where 0 means none
@@ -135,7 +138,9 @@ public class SettingsService {
         ConfigKeys.PLAGIARISM_ENABLED,
         ConfigKeys.DATABASE_ENABLED,
         ConfigKeys.AUDIT_ENABLED,
-        ConfigKeys.ANIMATIONS_ENABLED
+        ConfigKeys.ANIMATIONS_ENABLED,
+        ConfigKeys.TESTER_STRENGTH_ENABLED,
+        ConfigKeys.RANDOM_INPUTS_ENABLED
     };
 
     // Settings that name a folder which must already exist
@@ -163,7 +168,8 @@ public class SettingsService {
         ConfigKeys.SUBMISSIONS_DIR,
         ConfigKeys.TESTERS_DIR,
         ConfigKeys.STARTER_DIR,
-        ConfigKeys.SCORE_SHEET_FILE
+        ConfigKeys.SCORE_SHEET_FILE,
+        ConfigKeys.MODEL_ANSWERS_DIR
     };
 
     // List settings that need at least one item
@@ -192,6 +198,7 @@ public class SettingsService {
         ConfigKeys.TESTERS_DIR,
         ConfigKeys.SCORE_SHEET_FILE,
         ConfigKeys.STARTER_DIR,
+        ConfigKeys.MODEL_ANSWERS_DIR,
         ConfigKeys.WORKING_DIR,
         ConfigKeys.OUTPUT_DIR,
         ConfigKeys.BACKUP_DIR,
@@ -224,6 +231,11 @@ public class SettingsService {
         ConfigKeys.DETECT_UNTOUCHED_ENABLED,
         ConfigKeys.DETECT_EMPTY_ENABLED,
         ConfigKeys.DETECT_HARD_CODED_ENABLED,
+        ConfigKeys.TESTER_STRENGTH_ENABLED,
+        ConfigKeys.TESTER_STRENGTH_MAX_COPIES,
+        ConfigKeys.TESTER_STRENGTH_TIMEOUT_SECONDS,
+        ConfigKeys.RANDOM_INPUTS_ENABLED,
+        ConfigKeys.RANDOM_INPUTS_COUNT,
         ConfigKeys.PLAGIARISM_ENABLED,
         ConfigKeys.PLAGIARISM_THRESHOLD,
         ConfigKeys.EXPORT_FORMATS,
@@ -360,6 +372,10 @@ public class SettingsService {
             return checkPath(key, text, true);
         }
 
+        if (key.equals(ConfigKeys.MODEL_ANSWERS_DIR)) {
+            return checkOptionalFolder(key, text);
+        }
+
         if (contains(EXISTING_FILE_KEYS, key)) {
             return checkPath(key, text, false);
         }
@@ -420,8 +436,12 @@ public class SettingsService {
             }
         }
         for (String key : config.getKeys()) {
-            if (!contains(EXISTING_FOLDER_KEYS, key)
-                    && !contains(EXISTING_FILE_KEYS, key)) {
+            // The model answers folder is checked when it is used, so a
+            // moved folder skips those checks instead of stopping the app
+            boolean mustExist = contains(EXISTING_FOLDER_KEYS, key)
+                    || contains(EXISTING_FILE_KEYS, key)
+                    || key.equals(ConfigKeys.MODEL_ANSWERS_DIR);
+            if (!mustExist) {
                 String message = validate(key, config.getString(key));
                 if (!message.isEmpty()) {
                     problems.add(message);
@@ -695,9 +715,12 @@ public class SettingsService {
     }
 
     // Says whether a folder is the same as, inside or around a path
-    // from another setting. A setting that is not a valid path cannot
-    // overlap.
+    // from another setting. A setting that is not a valid path, or is
+    // left empty, cannot overlap.
     private boolean overlaps(Path folder, String otherText) {
+        if (otherText.isEmpty()) {
+            return false;
+        }
         try {
             Path other = Paths.get(otherText).toAbsolutePath().normalize();
             return folder.startsWith(other) || other.startsWith(folder);
@@ -724,6 +747,15 @@ public class SettingsService {
 
         String[] names = folder.toFile().list();
         return names != null && names.length == 0;
+    }
+
+    // Checks a folder setting that may be left empty to switch off what
+    // uses it, and must otherwise name an existing folder.
+    private String checkOptionalFolder(String key, String text) {
+        if (text.isEmpty()) {
+            return "";
+        }
+        return checkPath(key, text, true);
     }
 
     // Checks that a value names an existing folder or file. A relative

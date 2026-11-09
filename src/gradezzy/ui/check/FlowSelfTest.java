@@ -54,6 +54,7 @@ import gradezzy.ui.backend.ImportBatch;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.ImportState;
 import gradezzy.ui.backend.InputKind;
+import gradezzy.ui.backend.PipelineStages;
 import gradezzy.ui.backend.RepairItem;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.ReviewDecision;
@@ -84,8 +85,9 @@ public class FlowSelfTest {
     // The index of the tour's stop about the Review step
     private static final int REVIEW_STOP = 9;
 
-    // Steps in one submission: start, eight more stages, then finish
-    private static final int STEPS_PER_SUBMISSION = 10;
+    // Steps in one submission: one per stage, then finish
+    private static final int STEPS_PER_SUBMISSION = PipelineStages.count()
+            + 1;
 
     // The submissions graded before Cancel in flow 2
     private static final int GRADED_BEFORE_CANCEL = 3;

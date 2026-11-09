@@ -132,6 +132,10 @@ public class SettingsScreen extends FlowScreen {
         "5000", "10000"};
     private static final String[] HEADER_LINES = {"5", "10", "15", "20",
         "30"};
+    private static final String[] COPY_COUNTS = {"20", "40", "80"};
+    private static final String[] COPY_SECONDS = {"2", "5", "10"};
+    private static final String[] INPUT_COUNTS = {"50", "100", "200",
+        "500"};
 
     // The most students graded at once the list offers, before the
     // number of processors decides
@@ -435,6 +439,27 @@ public class SettingsScreen extends FlowScreen {
                 "Per run, to protect memory.", OUTPUT_CHARACTERS)
                 .showChoicesAs(groupedNames(OUTPUT_CHARACTERS,
                 " characters"));
+
+        startGroup("Model answers");
+        folder(ConfigKeys.MODEL_ANSWERS_DIR, "Model answers folder",
+                "Laid out like the starter folder. Leave it empty to skip "
+                + "the checks below.");
+        toggle(ConfigKeys.TESTER_STRENGTH_ENABLED,
+                "Check testers before grading",
+                "In the console, each tester is run on broken copies of "
+                + "the model answer. A copy with full marks shows a gap.");
+        listed(ConfigKeys.TESTER_STRENGTH_MAX_COPIES,
+                "Broken copies per question",
+                "More finds more gaps, but takes longer.", COPY_COUNTS, "");
+        listed(ConfigKeys.TESTER_STRENGTH_TIMEOUT_SECONDS,
+                "Time limit per broken copy",
+                "A copy that runs longer counts as caught.", COPY_SECONDS,
+                " seconds");
+        toggle(ConfigKeys.RANDOM_INPUTS_ENABLED, "Try random inputs",
+                "After the tests, answers that differ from the model "
+                + "answer are flagged. Marks never change.");
+        listed(ConfigKeys.RANDOM_INPUTS_COUNT, "Random inputs per method",
+                "", INPUT_COUNTS, "");
 
         startGroup("Similar code");
         toggle(ConfigKeys.PLAGIARISM_ENABLED, "Look for similar code",

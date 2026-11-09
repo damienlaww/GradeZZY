@@ -1,7 +1,7 @@
 /*
  * File: PipelineStages.java
  *
- * Purpose: The names of the nine grading stages, in pipeline order.
+ * Purpose: The names of the ten grading stages, in pipeline order.
  *
  * Where it fits: Used by the Grade step. The names come from each
  * stage's NAME constant, so they match what GradingPipeline reports.
@@ -17,6 +17,7 @@ import gradezzy.grading.InstallTestersStage;
 import gradezzy.grading.PersistStage;
 import gradezzy.grading.ScoreStage;
 import gradezzy.grading.ValidateStage;
+import gradezzy.modelanswer.RandomInputStage;
 
 /**
  * The grading stages, in order.
@@ -27,7 +28,7 @@ public final class PipelineStages {
     private static final String[] NAMES = {ExtractStage.NAME,
         ValidateStage.NAME, FixStage.NAME, DetectStage.NAME,
         InstallTestersStage.NAME, CompileStage.NAME, ExecuteStage.NAME,
-        ScoreStage.NAME, PersistStage.NAME};
+        RandomInputStage.NAME, ScoreStage.NAME, PersistStage.NAME};
 
     // Utility class, never instantiated.
     private PipelineStages() {

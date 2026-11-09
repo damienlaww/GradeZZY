@@ -42,6 +42,7 @@ CORE_SOURCES="src/gradezzy/app/*.java
     src/gradezzy/grading/*.java
     src/gradezzy/ingest/*.java
     src/gradezzy/model/*.java
+    src/gradezzy/modelanswer/*.java
     src/gradezzy/persistence/*.java
     src/gradezzy/plagiarism/*.java
     src/gradezzy/report/*.java

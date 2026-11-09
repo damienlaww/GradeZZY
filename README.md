@@ -18,10 +18,11 @@ teammate's part and the coding rules are in `design/TEAM-GUIDE.md`.
 - [What the backend does](#what-the-backend-does)
 - [Architecture](#architecture)
 - [One grading run, start to finish](#one-grading-run-start-to-finish)
-- [The nine pipeline stages](#the-nine-pipeline-stages)
+- [The ten pipeline stages](#the-ten-pipeline-stages)
 - [Grading several submissions at once](#grading-several-submissions-at-once)
 - [Problems the backend reports](#problems-the-backend-reports)
 - [After grading: review, corrections and late work](#after-grading-review-corrections-and-late-work)
+- [Checks with the model answer](#checks-with-the-model-answer)
 - [Answer groups: common mistakes](#answer-groups-common-mistakes)
 - [Similar code check](#similar-code-check)
 - [Exports](#exports)
@@ -45,6 +46,7 @@ sh compile.sh core       # compile only the backend, with no JavaFX
 sh run.sh console        # grade paths.submissions.dir from the terminal
 sh run.sh console G2     # the same, for section G2
 sh run.sh console CS102 G2   # the same, for module CS102, section G2
+sh run.sh console --testers  # only check how strong each tester is
 sh run.sh                # open the window
 sh clean.sh              # empty classes/ and remove workspace/
 ```
@@ -74,6 +76,10 @@ On top of that, the backend also:
 - finds pairs of students with very similar code;
 - reads each question's maximum mark from its tester file;
 - generates tester files from test cases typed into the app;
+- checks how strong each tester is, by running it on broken copies of
+  the model answer;
+- calls students' methods with random inputs and edge cases and flags
+  answers that differ from the model answer's;
 - checks that the score sheet, testers and starter files belong with
   the uploads, and suggests a better file nearby when they do not;
 - saves every run to SQLite, so a run can be resumed, retried and
@@ -104,7 +110,7 @@ flowchart TD
         OS["AnomalyService, ExportService,<br/>StatisticsService, HistoryService,<br/>PlagiarismService, ScoreAdjustmentService,<br/>SettingsService, AuditService,<br/>AssessmentLibrary, ClassFileMatcher"]
     end
     GS --> PF["PipelineFactory"]
-    PF --> GP["grading.GradingPipeline<br/>nine GradingStage objects"]
+    PF --> GP["grading.GradingPipeline<br/>ten GradingStage objects"]
     GP --> ST["ingest, validation, fix, detection,<br/>testcase, exec, grading"]
     OS --> RP["report, stats, plagiarism"]
     GP --> PS["persistence.ResultRepository"]
@@ -140,6 +146,7 @@ Rules the code keeps:
 | `app` | Entry point and wiring. | `ConsoleMain`, `ApplicationContext`, `ConsoleProgressListener` |
 | `config` | Loads and checks `config.properties`; per-module sections and export folders. | `AppConfig`, `ConfigKeys`, `ModuleSections`, `ExportFolders` |
 | `model` | Plain data with no logic. | `Submission`, `Student`, `Section`, `Assessment`, `Question`, `QuestionResult`, `TestCaseResult`, `Anomaly`, `GradingRun`, `AuditEntry`, `ScoreAdjustment`, `SavedAssessment`, enums `AnomalyType`, `Severity`, `FixStatus`, `SubmissionStatus` |
+| `modelanswer` | Checks that compare with the model answer: tester strength and random inputs. | `ModelAnswerCopy`, `MutantMaker`, `Mutant`, `MutantOutcome`, `TesterStrengthChecker`, `MutantBatch`, `MutantWorker`, `QuestionStrength`, `SignatureReader`, `MethodSignature`, `InputMaker`, `InputDriver`, `CallResult`, `MethodCheck`, `RandomInputChecker`, `RandomInputStage` |
 | `ingest` | Turns uploads into submissions, unzips them safely, reads the roster. | `SubmissionLoader`, `ZipExtractor`, `WorkingCopyManager`, `RosterReader` |
 | `validation` | One class per structural check. | `Validator`, `AbstractValidator`, `StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`, `HeaderNameValidator`, `ValidationRunner` |
 | `fix` | One class per automatic correction, each with apply and undo. | `Fixer`, `AbstractFixer`, `EncodingFixer`, `FolderHierarchyFixer`, `FolderNameFixer`, `CaseNameFixer`, `MisplacedFileFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
@@ -267,7 +274,7 @@ sequenceDiagram
     GS->>GP: run(submissions, context)
     GP->>W: start exec.thread.count workers
     loop each submission
-        W->>W: the nine stages, in order
+        W->>W: the ten stages, in order
         W-->>C: progress events
     end
     GP-->>GS: graded run
@@ -283,13 +290,13 @@ module or section is not in the settings, the score sheet, uploads or
 testers cannot be read, or a tester's maximum mark cannot be counted.
 A problem with one student never stops it.
 
-## The nine pipeline stages
+## The ten pipeline stages
 
 ```mermaid
 flowchart LR
     A["1 Extract"] --> B["2 Validate"] --> C["3 Fix"] --> D["4 Detect"]
     D --> E["5 Install testers"] --> F["6 Compile"] --> G["7 Execute"]
-    G --> H["8 Score"] --> I["9 Persist"]
+    G --> R["8 Random inputs"] --> H["9 Score"] --> I["10 Persist"]
     X{{"Stage throws"}} -.-> Y["INTERNAL_ERROR on this student,<br/>status FAILED, next student"]
 ```
 
@@ -302,8 +309,9 @@ flowchart LR
 | 5 | `InstallTestersStage` | Copies testers, data files and provided class files in. | `MISSING_FILE` |
 | 6 | `CompileStage` | Compiles each question in its own folder. | `COMPILE_ERROR` |
 | 7 | `ExecuteStage` | Runs each tester with limits and parses its output. | `TIMEOUT`, `RUNTIME_ERROR` |
-| 8 | `ScoreStage` | Caps each question at its maximum and adds up the total. | |
-| 9 | `PersistStage` | Saves the student's result to SQLite. | |
+| 8 | `RandomInputStage` | Calls the student's methods with random inputs and compares with the model answer. Added only when `random.inputs.enabled` is true and `paths.model.answers.dir` is set. | `DIFFERENT_FROM_MODEL_ANSWER` |
+| 9 | `ScoreStage` | Caps each question at its maximum and adds up the total. | |
+| 10 | `PersistStage` | Saves the student's result to SQLite. | |
 
 A `CancellationToken` is checked between stages, so Cancel stops each
 student at its next step and the run can be resumed later.
@@ -575,6 +583,7 @@ action and a fix status.
 | `HARD_CODED_ANSWER` | An answer looks hard-coded to sample cases | `HardCodedAnswerDetector` | Flag only |
 | `COPIED_HEADER` | A file header names another student | `CopiedHeaderDetector` | Flag only |
 | `SIMILAR_CODE` | Code very similar to another student's | `PlagiarismService` | Flag only |
+| `DIFFERENT_FROM_MODEL_ANSWER` | Some random inputs give a different answer from the model answer's | `RandomInputStage` | Flag only |
 | `INTERNAL_ERROR` | GradeZZY itself failed on this student | `GradingPipeline` and the stages | No |
 
 For example, on the six provided samples the console reports:
@@ -606,6 +615,122 @@ For example, on the six provided samples the console reports:
 | Resume | `GradingService.resume` | Loads a saved run, with its own score sheet, tester and starter folders, and grades what is left. |
 | Late batch | `GradingService.findNewestRun`, `addToRun` | Adds students to the section's earlier run. A student graded before is graded again and the old total is kept in the audit log. Refused when the tester folder or score sheet is not the run's. |
 | Change score sheet | `GradingService.changeScoreSheet` | Matches the students to another sheet and saves the run, without grading again. |
+
+## Checks with the model answer
+
+Two checks use the model answers in `paths.model.answers.dir`, a folder
+laid out like the starter folder (`Q1/Q1.java`, `Q3/GoldMember.java` and
+so on). With the setting empty, neither runs. Both compile and run with
+the same `javac`, sandbox and limits as grading, in folders of their own
+under `paths.working.dir` that are deleted afterwards, and neither
+changes a mark.
+
+### Tester strength: breaking the model answer on purpose
+
+A weak tester gives wrong marks to a whole class. Before grading, the
+console (`tester.strength.enabled`, or `run.sh console --testers` on
+its own) makes broken copies of each question's model answer and runs
+the tester on each:
+
+1. `MutantMaker` splits the model answer into tokens with
+   `JavaTokenizer.tokenize` and applies standard mutation rules: `<` and
+   `<=` swapped (and the same for `>`), `==` and `!=`, `&&` and `||`, `+`
+   and `-`, `*` and `/`, `++` and `--`, `true` and `false`, a whole
+   number made one larger, an `if` condition reversed, and a statement
+   removed (a `return`, `break`, assignment, `count++` or method call).
+2. Only lines the student had to write are changed. A line that is also
+   in the starter file, and the `main` method, which testers never call,
+   are left alone. The `<` and `>` of types such as `ArrayList<Integer>`
+   are not comparisons and are skipped. When there are more places than
+   `tester.strength.max.copies`, copies are taken evenly from the whole
+   answer.
+3. `TesterStrengthChecker` first runs the tester on the model answer
+   itself. If that is not full marks, the question is reported and no
+   copy is made, since the tester or the model answer needs a look
+   first.
+4. Each copy is compiled with the tester and run with
+   `tester.strength.timeout.seconds`, on `exec.thread.count` threads
+   (`MutantWorker`, `MutantBatch`). A copy that does not compile is left
+   out. A copy that loses marks, or runs past the limit, is caught. A
+   copy that still gets full marks survives.
+5. The result per question is the mutation score: the share of copies
+   caught. Every surviving copy is listed with its line and change, and
+   the report is saved as `tester-strength.txt` in the section's export
+   folder.
+
+On Lab Test 3 (`samples/lab-test-3`) it takes about 20 seconds with 4
+threads and finds, for example:
+
+```text
+Q5: the tester gave full marks to 3 of 19 broken copies (caught 84%).
+    - Q5.java line 10 "return countDigit(-number, digit);": "-" changed to "+"
+```
+
+That copy never ends for a negative number, and still gets full marks:
+the tester has no negative case.
+
+| | |
+|---|---|
+| Advantage | It measures what a tester actually checks, not only which lines it runs. A gap is shown as a concrete wrong answer the tester accepts. |
+| Disadvantage | It is slow: one compile and one run per copy. Some changes do not change what the code does (removing `sc.close()`, `>` made `>=` where the two values are never equal), so they survive without showing a real gap, and the score looks lower than it is. These have to be read and dismissed by hand. |
+
+### Random inputs: comparing with the model answer
+
+Fixed test cases miss bugs, and a student who hard-codes the cases of
+the question gets them right. After the testers run,
+`RandomInputStage` calls each student's methods with inputs that are
+new every run:
+
+1. `SignatureReader` finds the methods of the model answer that can be
+   called with made-up inputs: static, not private, named in the
+   starter file (so helpers of the model answer are left out), with
+   parameters that are numbers, text, `char`, `boolean`, or arrays and
+   `ArrayList`s of these, and a result that prints the same way every
+   time. A parameter whose name contains "file" is left out, since
+   random text names no real file, and so are objects of the
+   assessment's own classes. On Lab Test 3 that is Q1 `compress(String)`
+   and Q5 `countDigit(long, int)`; Q2 to Q4 read files or take provided
+   objects, so they are not checked.
+2. `InputMaker` makes `random.inputs.count` different inputs: edge cases
+   first (0, 1, -1, the largest and smallest `int` and `long`, empty
+   text, `null`, empty arrays and lists), then random values, from a
+   seed that is new for each run.
+3. `InputDriver` writes a small program that calls the method once per
+   input inside `try`/`catch` and prints each result, or the exception's
+   class, on its own line. It is run through `TesterRunner` as if it
+   were a tester, so it gets the sandbox and limits, and only its own
+   lines are trusted: anything the student's method prints is ignored.
+4. `RandomInputChecker` runs the program on the model answer once per
+   question and run, and then in each student's compiled question
+   folder. An input on which the model answer throws is outside the
+   question and is left out. Decimal results that differ only in their
+   last digits count as the same. A student run stopped at the time
+   limit is compared on the calls it finished, since the limit is for
+   the whole run and cannot be blamed on one input.
+5. Any difference becomes a `DIFFERENT_FROM_MODEL_ANSWER` flag naming
+   how many inputs differ and the first two, such as
+   `countDigit(-4809L, 4) returned 0 where the model answer returns 1`.
+   When the tester gave that question full marks, the flag is a warning
+   and says the test cases miss it; otherwise it is information.
+
+On Lab Test 3, 11 students lose marks on Q1 or Q5. It flags 10 of them
+(a missing last run, a `NullPointerException` on `null`, a forgotten
+absolute value, a `StackOverflowError` for negatives, `countDigit(0, 0)`,
+untouched starters, a crash while the class loads) and none of the
+correct answers. The eleventh, qasim.ali, loops forever on the very
+first input, so the run stops at the time limit before any call
+finishes; the tester already reports that as a `TIMEOUT`. The marks are
+the same with it on and off. Grading the 45
+students took 85 seconds with both checks on and 41 with both off.
+
+This is the brief's "automatic or parameterised generation of tester
+files" taken further: the inputs are generated, and the model answer is
+the expected output, so no expected value is typed by hand.
+
+| | |
+|---|---|
+| Advantage | Finds bugs the fixed cases miss, with the exact input, and a hard-coded answer cannot know inputs that are made when grading starts. |
+| Disadvantage | Only methods with simple parameter types can be called; methods that read files or take the assessment's own objects are skipped. A difference on an input the question rules out (such as `null` when the paper says text is never null) is still flagged, which is why it is a flag the instructor judges, not a mark. |
 
 ## Answer groups: common mistakes
 
@@ -872,6 +997,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `paths.score.sheet.file` | `samples/IS442-ScoreSheet.csv` | The roster and the template for the CSV export. |
 | `paths.score.sheet.by.section` | (empty) | Each section's own score sheet, such as `CS102/G1=Test Data/G1.csv`, set in Settings. A section with none uses `paths.score.sheet.file`. A run started with no score sheet chosen (the console) and a run saved without one (Export's warning and the CSV export) all use this rule (`config.ExportFolders.findScoreSheet`). |
 | `paths.starter.dir` | `samples/RenameToYourUsername` | Starter files, used to spot untouched answers when no starter folder is chosen on the Set up step, and by the similarity check. Set up warns when a chosen starter folder lacks some question files. |
+| `paths.model.answers.dir` | empty | Model answers, laid out like the starter folder. Empty switches off the tester strength and random inputs checks. Checked when used, not at start-up. |
 | `paths.working.dir` | `workspace/working` | Where working copies are created. |
 | `paths.output.dir` | `workspace/output` | Where exports are written. |
 | `paths.output.dir.by.section` | empty | Export folders of single modules or sections, such as `CS102/G1=workspace/g1-exports;IS442=workspace/is442`. A section's own folder wins over its module's, then `paths.output.dir`. Deleting a module or section removes its entries here and in `paths.score.sheet.by.section`. |
@@ -908,6 +1034,11 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `detection.untouched.enabled` | `true` | Flag untouched starter files. |
 | `detection.empty.enabled` | `true` | Flag empty answers. |
 | `detection.hardcoded.enabled` | `true` | Flag hard-coded answers. |
+| `tester.strength.enabled` | `true` | The console checks each tester with broken copies of the model answer before grading. |
+| `tester.strength.max.copies` | `40` | The most broken copies per question. |
+| `tester.strength.timeout.seconds` | `5` | Time limit for the tester on one broken copy; a copy that runs longer counts as caught. |
+| `random.inputs.enabled` | `true` | Call students' methods with random inputs after the tests and flag answers that differ from the model answer. |
+| `random.inputs.count` | `200` | Inputs per method. |
 | `plagiarism.enabled` | `true` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
 | `export.formats` | `csv,json` | Formats offered by default. |

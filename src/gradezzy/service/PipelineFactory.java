@@ -42,6 +42,9 @@ import gradezzy.grading.ValidateStage;
 import gradezzy.ingest.RosterReader;
 import gradezzy.ingest.WorkingCopyManager;
 import gradezzy.ingest.ZipExtractor;
+import gradezzy.modelanswer.ModelAnswerCopy;
+import gradezzy.modelanswer.RandomInputChecker;
+import gradezzy.modelanswer.RandomInputStage;
 import gradezzy.persistence.ResultRepository;
 import gradezzy.testcase.TesterInstaller;
 import gradezzy.validation.FileNameValidator;
@@ -123,6 +126,7 @@ public class PipelineFactory {
                 processRunner), starterDirectory));
         pipeline.addStage(new ExecuteStage(new TesterRunner(config,
                 processRunner), new TesterOutputScoreParser(config)));
+        addRandomInputStage(pipeline, processRunner, starterDirectory);
         pipeline.addStage(new ScoreStage(new ScoreCalculator()));
         pipeline.addStage(new PersistStage(repository));
 
@@ -156,8 +160,31 @@ public class PipelineFactory {
                 processRunner), starterDirectory));
         pipeline.addStage(new ExecuteStage(new TesterRunner(config,
                 processRunner), new TesterOutputScoreParser(config)));
+        addRandomInputStage(pipeline, processRunner, starterDirectory);
 
         return pipeline;
+    }
+
+    // Adds the check that calls students' methods with random inputs,
+    // when random.inputs.enabled is true and there are model answers to
+    // compare with. Each pipeline gets new inputs, from a new seed.
+    private void addRandomInputStage(GradingPipeline pipeline,
+            ProcessRunner processRunner, Path chosenStarter) {
+        Path modelAnswers = ModelAnswerCopy.findFolder(config);
+        boolean enabled = config.getBoolean(ConfigKeys.RANDOM_INPUTS_ENABLED);
+        if (modelAnswers == null || !enabled) {
+            return;
+        }
+
+        Path starterDirectory = chosenStarter;
+        if (starterDirectory == null) {
+            starterDirectory = Paths.get(
+                    config.getString(ConfigKeys.STARTER_DIR));
+        }
+        long seed = System.nanoTime();
+        RandomInputChecker checker = new RandomInputChecker(config,
+                processRunner, modelAnswers, starterDirectory, seed);
+        pipeline.addStage(new RandomInputStage(checker));
     }
 
     // To add a validator, write a class that extends AbstractValidator
