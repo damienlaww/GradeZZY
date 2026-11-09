@@ -29,7 +29,9 @@ import gradezzy.persistence.ResultRepository;
 import gradezzy.persistence.SqliteResultRepository;
 import gradezzy.plagiarism.TokenSimilarityDetector;
 import gradezzy.report.AnomalyReportExporter;
+import gradezzy.report.AnswerGroupSource;
 import gradezzy.report.AuditLogExporter;
+import gradezzy.report.CommonMistakesExporter;
 import gradezzy.report.CsvScoreSheetExporter;
 import gradezzy.report.JsonExporter;
 import gradezzy.report.JsonWriter;
@@ -108,7 +110,7 @@ public class ApplicationContext {
         this.services = new ServiceRegistry(config, gradingService,
                 new AnomalyService(fixManager, repository, auditService,
                         gradingService),
-                createExportService(),
+                createExportService(answerGroupService),
                 new StatisticsService(new StatisticsCalculator(config),
                         repository, gradingService),
                 auditService,
@@ -205,16 +207,22 @@ public class ApplicationContext {
     }
 
     // To add an export format, write a class that implements Exporter
-    // and register it here.
-    private ExportService createExportService() {
+    // and register it here. The JSON and the common mistakes read the
+    // answer groups from answerGroups.
+    private ExportService createExportService(
+            AnswerGroupSource answerGroups) {
         ExportService exportService = new ExportService(config);
+        JsonExporter jsonExporter = new JsonExporter(new JsonWriter());
+        jsonExporter.setAnswerGroupSource(answerGroups);
 
         exportService.registerExporter(new CsvScoreSheetExporter(config,
                 Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE))));
-        exportService.registerExporter(new JsonExporter(new JsonWriter()));
+        exportService.registerExporter(jsonExporter);
         exportService.registerExporter(new AnomalyReportExporter());
         exportService.registerExporter(new StudentReportExporter());
         exportService.registerExporter(new AuditLogExporter(repository));
+        exportService.registerExporter(new CommonMistakesExporter(
+                answerGroups));
 
         return exportService;
     }

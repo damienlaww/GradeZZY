@@ -9,6 +9,9 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.model.*;
 import gradezzy.persistence.SqliteResultRepository;
 import gradezzy.plagiarism.JavaTokenizer;
+import gradezzy.report.CommonMistakesExporter;
+import gradezzy.report.JsonExporter;
+import gradezzy.report.JsonWriter;
 import gradezzy.service.AnswerGroupService;
 import gradezzy.stats.AnswerGrouper;
 
@@ -23,6 +26,7 @@ public class AnswerGroupsTest {
         patterns();
         grouping();
         notes();
+        exports();
         System.out.println("AnswerGroupsTest: " + checks + " checks passed");
     }
 
@@ -275,6 +279,62 @@ public class AnswerGroupsTest {
                 && !failing.getSaveProblem().isEmpty(),
                 "a failed save keeps the name for the session and says why");
         Files.deleteIfExists(file);
+    }
+
+    // ---------------------------------------------------------- Task 4
+
+    private static void exports() throws Exception {
+        GradingRun run = twoStudentRun();
+        AnswerGroupService service = new AnswerGroupService(null,
+                config(false, Path.of("unused.db")));
+        service.setLabel(run, service.listGroups(run).get(0),
+                "uses < instead of <=");
+        Path csv = Files.createTempFile("common-mistakes-", ".csv");
+        new CommonMistakesExporter(service).export(run, csv);
+        List<String> lines = Files.readAllLines(csv);
+        check(lines.get(0).equals("Module,Section,Question,Mistake,Pattern,"
+                + "Label,Students,Same code shape,Checked,Usernames"),
+                "header: " + lines.get(0));
+        check(lines.size() == 2 && lines.get(1).contains("Q2b")
+                && lines.get(1).contains("Failed tests 3 and 5")
+                && lines.get(1).contains("uses < instead of <=")
+                && lines.get(1).contains("amy ben")
+                && lines.get(1).contains(",2,"),
+                "one row per group: " + lines);
+        check(CommonMistakesExporter.FORMAT_NAME.equals("Common mistakes"),
+                "format name");
+
+        // labelWithCommaAndQuote
+        service.setLabel(run, service.listGroups(run).get(0), "a, \"b\"");
+        new CommonMistakesExporter(service).export(run, csv);
+        List<String> quoted = Files.readAllLines(csv);
+        check(quoted.size() == 2 && quoted.get(1).contains("\"a, \"\"b\"\"\""),
+                "a comma and quote stay in one quoted cell: " + quoted);
+
+        Path json = Files.createTempFile("results-", ".json");
+        JsonExporter jsonExporter = new JsonExporter(new JsonWriter());
+        jsonExporter.setAnswerGroupSource(service);
+        jsonExporter.export(run, json);
+        String text = Files.readString(json);
+        check(text.contains("\"mistake\"") && text.contains("a, \\\"b\\\"")
+                && text.contains("Failed tests 3 and 5"),
+                "the JSON names the mistake");
+        check(count(text, '{') == count(text, '}'),
+                "the JSON stays balanced");
+        Files.deleteIfExists(csv);
+        Files.deleteIfExists(json);
+    }
+
+    static int count(String text, char wanted) {
+        int count = 0;
+        boolean inString = false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '\\') { i++; continue; }
+            if (c == '"') inString = !inString;
+            if (!inString && c == wanted) count++;
+        }
+        return count;
     }
 
     static void writeAnswer(Path root, String username, String code) throws Exception {
