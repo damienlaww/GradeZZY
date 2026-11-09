@@ -26,6 +26,7 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.service.ServiceRegistry;
+import gradezzy.ui.AppIcons;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.ImportBatch;
 import gradezzy.ui.backend.ImportItem;
@@ -78,7 +79,7 @@ public class FlowCheck {
      * @return the number of problems found
      */
     public int run() {
-        int problems = 0;
+        int problems = checkLogo();
         boolean[] themes = {false, true};
         for (boolean dark : themes) {
             for (double[] size : SIZES) {
@@ -93,6 +94,25 @@ public class FlowCheck {
                     + "in live and demo mode, both themes, two sizes.");
         }
         return problems;
+    }
+
+    // Checks that every window icon and the top bar logo were found.
+    private int checkLogo() {
+        int expected = AppIcons.WINDOW_FILES.length;
+        int found = AppIcons.loadWindowIcons().size();
+        if (found != expected) {
+            System.out.println("FAILED: window icons: " + found + " of "
+                    + expected + " loaded from gradezzy/ui/images");
+            return 1;
+        }
+        if (AppIcons.loadTopBarLogo() == null) {
+            System.out.println("FAILED: top bar logo "
+                    + AppIcons.TOP_BAR_FILE + " not loaded");
+            return 1;
+        }
+        System.out.println("Logo: " + found + " window icons and the "
+                + "top bar logo loaded.");
+        return 0;
     }
 
     // Walks through the screens with one backend, theme and size.

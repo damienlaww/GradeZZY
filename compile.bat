@@ -7,7 +7,7 @@ rem   compile.bat         compile the whole application
 rem   compile.bat core    compile only the grading core, without JavaFX
 rem
 rem javac does not copy resource files, so this script also copies the
-rem .css and font files of the ui package into classes\.
+rem .css, font and logo files of the ui package into classes\.
 rem
 rem When you add a new package, add its folder to CORE_SOURCES below and
 rem to compile.sh.
@@ -58,6 +58,9 @@ mkdir classes\gradezzy\ui\fonts
 copy /y src\gradezzy\ui\fonts\*.ttf classes\gradezzy\ui\fonts\ >nul
 if errorlevel 1 goto failed
 copy /y src\gradezzy\ui\fonts\OFL.txt classes\gradezzy\ui\fonts\ >nul
+if errorlevel 1 goto failed
+mkdir classes\gradezzy\ui\images
+copy /y src\gradezzy\ui\images\*.png classes\gradezzy\ui\images\ >nul
 if errorlevel 1 goto failed
 
 echo Compiled GradeZZY into classes\ using %JAVAFX_DIR%.

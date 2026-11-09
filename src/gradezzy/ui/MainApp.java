@@ -159,6 +159,7 @@ public class MainApp extends Application {
                 config.getInt(ConfigKeys.WINDOW_HEIGHT));
 
         stage.setTitle(title);
+        stage.getIcons().addAll(AppIcons.loadWindowIcons());
         stage.setMinWidth(MIN_WIDTH);
         stage.setMinHeight(MIN_HEIGHT);
         stage.setScene(scene);
