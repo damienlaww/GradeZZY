@@ -172,6 +172,20 @@ public interface DashboardBackend {
     ImportItem inspect(InputKind kind, Path path);
 
     /**
+     * Checks a starter folder against the given questions instead of the
+     * assessment in use, so the assessment form can check its questions
+     * before they are saved.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param folder the chosen starter folder
+     * @param questions the questions to look for, each with its folder
+     *        and file
+     * @return the checked item
+     */
+    ImportItem inspectStarter(Path folder, List<Question> questions);
+
+    /**
      * Lists what is wrong with a tester folder before grading: questions
      * with no tester, data files that are missing and testers that do not
      * compile with the starter code. It compiles, so it takes seconds.

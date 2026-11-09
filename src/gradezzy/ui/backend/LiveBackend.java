@@ -341,8 +341,9 @@ public class LiveBackend implements DashboardBackend {
 
     /**
      * Checks the path with InputValidator and its file name. Student zips
-     * and folders are checked with SubmissionPreview, and a starter folder
-     * for the starter file of each question.
+     * and folders are checked with SubmissionPreview, a starter folder
+     * for the starter file of each question of the assessment in use, and
+     * a tester folder for the testers it holds.
      */
     @Override
     public ImportItem inspect(InputKind kind, Path path) {
@@ -367,7 +368,7 @@ public class LiveBackend implements DashboardBackend {
             return unreadable(kind, path);
         }
         if (kind == InputKind.STARTER) {
-            return inspectStarter(path);
+            return checkStarter(path, assessment.getQuestions());
         }
         if (kind == InputKind.TESTERS) {
             return inspectTesters(path);
@@ -1799,12 +1800,31 @@ public class LiveBackend implements DashboardBackend {
         return unreadable(InputKind.SUBMISSION, path);
     }
 
+    /**
+     * Checks that the folder can be read, then that it holds the starter
+     * file of each of the given questions.
+     */
+    @Override
+    public ImportItem inspectStarter(Path folder, List<Question> questions) {
+        if (!InputValidator.isReadableDirectory(folder)) {
+            return unreadable(InputKind.STARTER, folder);
+        }
+        return checkStarter(folder, questions);
+    }
+
     // Checks that a starter folder holds each question's starter file,
     // which the untouched and empty answer checks compare answers with.
-    private ImportItem inspectStarter(Path folder) {
+    // With no questions there is nothing to look for yet.
+    private ImportItem checkStarter(Path folder, List<Question> questions) {
+        if (questions.isEmpty()) {
+            return new ImportItem(InputKind.STARTER, folder, "",
+                    ImportState.ACCEPTED, "Folder found. Its starter files "
+                    + "are checked once there are questions.");
+        }
+
         List<String> missingFiles = new ArrayList<>();
         List<String> missingIds = new ArrayList<>();
-        for (Question question : assessment.getQuestions()) {
+        for (Question question : questions) {
             Path file = folder.resolve(question.getFolderName())
                     .resolve(question.getFileName());
             if (!InputValidator.isReadableFile(file)) {
@@ -1818,7 +1838,7 @@ public class LiveBackend implements DashboardBackend {
             return new ImportItem(InputKind.STARTER, folder, "",
                     ImportState.ACCEPTED, "Holds the starter file of every "
                     + "question.");
-        } else if (missingFiles.size() == assessment.getQuestions().size()) {
+        } else if (missingFiles.size() == questions.size()) {
             return new ImportItem(InputKind.STARTER, folder, "",
                     ImportState.INVALID, "None of the starter files, such "
                     + "as " + missingFiles.get(0) + ", is in this folder, "

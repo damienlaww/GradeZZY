@@ -63,8 +63,9 @@ public class QuestionFields {
      * Creates the fields of a question, filled from it when one is given.
      *
      * @param question the question, or null for an empty row
-     * @param onChange called when the id changes, so the editor can read
-     *        the question's maximum mark from its tester again
+     * @param onChange called when the id, folder or file changes, so the
+     *        editor can read the question's maximum mark from its tester
+     *        and check the starter folder again
      */
     public QuestionFields(Question question, Runnable onChange) {
         if (question != null) {
@@ -94,6 +95,10 @@ public class QuestionFields {
         id.focusedProperty().addListener((seen, before, now) ->
                 suggestNames(now));
         id.textProperty().addListener((seen, before, now) ->
+                onChange.run());
+        folder.textProperty().addListener((seen, before, now) ->
+                onChange.run());
+        file.textProperty().addListener((seen, before, now) ->
                 onChange.run());
 
         Hyperlink remove = Parts.link("Remove", () -> removeClicked());

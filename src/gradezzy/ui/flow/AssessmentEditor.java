@@ -392,7 +392,7 @@ public final class AssessmentEditor {
     // Adds a question row filled from a question.
     private void addQuestion(Question question) {
         QuestionFields fields = new QuestionFields(question,
-                () -> readAllMarks());
+                () -> questionChanged());
         fields.setOnRemove(() -> removeQuestion(fields));
         questions.add(fields);
         questionRows.getChildren().add(fields.getRow());
@@ -410,6 +410,36 @@ public final class AssessmentEditor {
         questions.remove(fields);
         questionRows.getChildren().remove(fields.getRow());
         updateTotal();
+        checkStarterAgain();
+    }
+
+    // Reads the marks and checks the starter folder again after a
+    // question's id, folder or file changed.
+    private void questionChanged() {
+        readAllMarks();
+        checkStarterAgain();
+    }
+
+    // Checks the starter folder against the questions now in the form,
+    // so its status is right before the assessment is saved.
+    private void checkStarterAgain() {
+        checkFolder(starter, starterStatus, InputKind.STARTER);
+    }
+
+    // Returns the questions in the form that have an id, folder and
+    // file, for checking the starter folder.
+    private List<Question> formQuestions() {
+        List<Question> filled = new ArrayList<>();
+        for (QuestionFields fields : questions) {
+            boolean complete = !fields.getId().isEmpty()
+                    && !fields.getFolder().isEmpty()
+                    && !fields.getFile().isEmpty();
+            if (complete) {
+                filled.add(new Question(fields.getId(), fields.getFolder(),
+                        fields.getFile(), fields.getMaxScore()));
+            }
+        }
+        return filled;
     }
 
     // Reads one question's maximum mark from its tester in the chosen
@@ -518,7 +548,13 @@ public final class AssessmentEditor {
         }
         ImportItem item = null;
         try {
-            item = window.getBackend().inspect(kind, Path.of(text));
+            if (kind == InputKind.STARTER) {
+                // The questions in the form, saved or not
+                item = window.getBackend().inspectStarter(Path.of(text),
+                        formQuestions());
+            } else {
+                item = window.getBackend().inspect(kind, Path.of(text));
+            }
         } catch (RuntimeException exception) {
             // A path with characters this computer does not allow
             status.getChildren().add(Parts.pill("Cannot be used",
@@ -556,6 +592,10 @@ public final class AssessmentEditor {
         Path previous = existingFolder(lastFilled.get(kind));
         lastFilled.put(kind, text);
         fillFromFolder(kind, previous, usable);
+        if (kind == InputKind.TESTERS) {
+            // The new tester folder may have added or removed questions
+            checkStarterAgain();
+        }
     }
 
     // Returns the folder a path names when it exists, or null.
