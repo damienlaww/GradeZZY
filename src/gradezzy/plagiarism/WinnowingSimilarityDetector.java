@@ -278,11 +278,21 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
             SimilarityPair newPair) {
         int position = 0;
 
-        while (position < pairs.size() && pairs.get(position).getSimilarity()
-                >= newPair.getSimilarity()) {
+        while (isAtLeastAsSimilar(pairs, position, newPair)) {
             position++;
         }
 
         pairs.add(position, newPair);
+    }
+
+    // Says whether there is a pair at a position and it is at least as
+    // similar as the new pair, so the new pair goes after it.
+    private boolean isAtLeastAsSimilar(List<SimilarityPair> pairs,
+            int position, SimilarityPair newPair) {
+        if (position >= pairs.size()) {
+            return false;
+        }
+        double similarity = pairs.get(position).getSimilarity();
+        return similarity >= newPair.getSimilarity();
     }
 }

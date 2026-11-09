@@ -52,6 +52,7 @@ public final class Winnowing {
 
     // Only static methods; never created
     private Winnowing() {
+        // Nothing to set up
     }
 
     /**
@@ -120,13 +121,14 @@ public final class Winnowing {
             return fingerprints;
         }
 
-        int lastWindowStart = Math.max(FIRST_POSITION,
-                hashes.size() - windowSize);
+        int lastFullWindowStart = hashes.size() - windowSize;
+        int lastWindowStart = Math.max(FIRST_POSITION, lastFullWindowStart);
         int lastPicked = NONE_PICKED;
 
         for (int start = FIRST_POSITION; start <= lastWindowStart;
                 start++) {
-            int windowEnd = Math.min(start + windowSize, hashes.size());
+            int fullWindowEnd = start + windowSize;
+            int windowEnd = Math.min(fullWindowEnd, hashes.size());
             int picked = findRightmostSmallest(hashes, start, windowEnd);
 
             if (picked != lastPicked) {

@@ -87,6 +87,9 @@ public class SignatureReader {
     // The number of tokens in an annotation such as @Override
     private static final int ANNOTATION_LENGTH = 2;
 
+    // The fewest words a parameter has: its type and its name
+    private static final int MIN_PARAMETER_WORDS = 2;
+
     // Returned when no matching token is found
     private static final int NOT_FOUND = -1;
 
@@ -124,33 +127,43 @@ public class SignatureReader {
                 index = index + NEXT;
                 header.clear();
             } else if (text.equals(OPEN_PAREN)) {
-                int close = findClosing(tokens, index, OPEN_PAREN,
-                        CLOSE_PAREN);
-                if (close == NOT_FOUND) {
-                    return methods;
-                }
-                if (endsWithAnnotation(header)) {
-                    // The arguments of an annotation such as
-                    // @SuppressWarnings("unchecked"): the method comes after
-                    index = close + NEXT;
-                    continue;
-                }
-                int firstParameter = index + NEXT;
-                List<String> parameters = tokens.subList(firstParameter,
-                        close);
-                MethodSignature method = readMethod(className, header,
-                        parameters);
-                if (method != null && isInStarter(method, starterTokens)) {
-                    methods.add(method);
-                }
-                index = skipMethodBody(tokens, close);
-                header.clear();
+                index = readBrackets(tokens, index, className, header,
+                        starterTokens, methods);
             } else {
                 header.add(text);
                 index = index + NEXT;
             }
         }
         return methods;
+    }
+
+    // Reads what the "(" at an index opens: the arguments of an
+    // annotation, which are skipped, or a method's parameters, adding the
+    // method when it can be called and is in the starter. Returns the
+    // index to read on from, or the end of the tokens when the "(" is
+    // never closed.
+    private int readBrackets(List<String> tokens, int openParen,
+            String className, List<String> header,
+            List<String> starterTokens, List<MethodSignature> methods) {
+        int close = findClosing(tokens, openParen, OPEN_PAREN, CLOSE_PAREN);
+        if (close == NOT_FOUND) {
+            return tokens.size();
+        }
+        if (endsWithAnnotation(header)) {
+            // The arguments of an annotation such as
+            // @SuppressWarnings("unchecked"): the method comes after
+            return close + NEXT;
+        }
+
+        int firstParameter = openParen + NEXT;
+        List<String> parameters = tokens.subList(firstParameter, close);
+        MethodSignature method = readMethod(className, header, parameters);
+        if (method != null && isInStarter(method, starterTokens)) {
+            methods.add(method);
+        }
+        int after = skipMethodBody(tokens, close);
+        header.clear();
+        return after;
     }
 
     // Returns the index of the "{" that opens a class's body, or
@@ -229,11 +242,18 @@ public class SignatureReader {
     // Counts the modifiers at the start of a header.
     private int countModifiers(List<String> words) {
         int count = 0;
-        while (count < words.size() && contains(MODIFIERS,
-                words.get(count))) {
+        while (isModifierAt(words, count)) {
             count++;
         }
         return count;
+    }
+
+    // Says whether there is a word at a position and it is a modifier.
+    private boolean isModifierAt(List<String> words, int position) {
+        if (position >= words.size()) {
+            return false;
+        }
+        return contains(MODIFIERS, words.get(position));
     }
 
     // Adds each parameter's type to a method. Returns false when one
@@ -247,7 +267,7 @@ public class SignatureReader {
         for (List<String> parameter : splitParameters(parameters)) {
             List<String> words = new ArrayList<>(parameter);
             words.remove(FINAL_WORD);
-            if (words.size() <= NEXT) {
+            if (words.size() < MIN_PARAMETER_WORDS) {
                 return false;
             }
             int nameIndex = words.size() - NEXT;
@@ -302,8 +322,8 @@ public class SignatureReader {
                 int elementEnd = type.length() - LIST_END.length();
                 String element = type.substring(listStart.length(),
                         elementEnd);
-                return contains(BOXED_TYPES, element)
-                        || element.equals(STRING_TYPE);
+                boolean boxed = contains(BOXED_TYPES, element);
+                return boxed || element.equals(STRING_TYPE);
             }
         }
         return false;

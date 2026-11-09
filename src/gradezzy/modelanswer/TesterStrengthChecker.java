@@ -146,16 +146,10 @@ public class TesterStrengthChecker {
                 + config.getString(ConfigKeys.TESTER_CLASS_SUFFIX);
         String testerFileName = testerClassName + JAVA_EXTENSION;
         Path testerFile = testersDirectory.resolve(testerFileName);
-        if (!Files.isRegularFile(testerFile)) {
-            result.setProblem("There is no " + testerFileName
-                    + " in the tester folder.");
-            return;
-        }
-        if (ModelAnswerCopy.findAnswerFile(modelAnswers, question) == null) {
-            result.setProblem("The model answers have no "
-                    + question.getFolderName() + FOLDER_SEPARATOR
-                    + question.getFileName()
-                    + ".");
+        String missing = findMissingFile(question, testerFile,
+                testerFileName, modelAnswers);
+        if (missing != null) {
+            result.setProblem(missing);
             return;
         }
 
@@ -163,8 +157,9 @@ public class TesterStrengthChecker {
             Path modelFolder = questionWork.resolve(MODEL_FOLDER);
             prepareModel(question, testersDirectory, starterDirectory,
                     modelAnswers, testerFile, modelFolder);
-            if (!checkModelAnswer(result, question, modelFolder,
-                    testerClassName, testerFileName)) {
+            boolean fullMarks = checkModelAnswer(result, question,
+                    modelFolder, testerClassName, testerFileName);
+            if (!fullMarks) {
                 return;
             }
 
@@ -184,6 +179,21 @@ public class TesterStrengthChecker {
             result.setProblem("javac or java could not be run: "
                     + exception.getMessage());
         }
+    }
+
+    // Returns the problem when the tester or the model answer of a
+    // question is missing, or null when both are there.
+    private String findMissingFile(Question question, Path testerFile,
+            String testerFileName, Path modelAnswers) {
+        if (!Files.isRegularFile(testerFile)) {
+            return "There is no " + testerFileName
+                    + " in the tester folder.";
+        }
+        if (ModelAnswerCopy.findAnswerFile(modelAnswers, question) == null) {
+            return "The model answers have no " + question.getFolderName()
+                    + FOLDER_SEPARATOR + question.getFileName() + ".";
+        }
+        return null;
     }
 
     // Makes the unbroken copy: starter files, model answer, tester and
@@ -236,8 +246,8 @@ public class TesterStrengthChecker {
         List<Mutant> mutants = new ArrayList<>();
 
         for (String fileName : listAnswerFiles(question, answerFolder)) {
-            String source = FileUtils.readText(answerFolder.resolve(
-                    fileName));
+            Path answerFile = answerFolder.resolve(fileName);
+            String source = FileUtils.readText(answerFile);
             String starterSource = readStarter(starterDirectory, question,
                     fileName);
             mutants.addAll(mutantMaker.make(fileName, source,
@@ -278,7 +288,8 @@ public class TesterStrengthChecker {
     // Runs every copy of a batch on exec.thread.count threads and waits
     // for them all.
     private void runBatch(MutantBatch batch) {
-        int threadCount = Math.min(config.getInt(ConfigKeys.THREAD_COUNT),
+        int configuredThreads = config.getInt(ConfigKeys.THREAD_COUNT);
+        int threadCount = Math.min(configuredThreads,
                 batch.getMutants().size());
         List<Thread> threads = new ArrayList<>();
 
@@ -343,9 +354,9 @@ public class TesterStrengthChecker {
 
         long timeoutSeconds = config.getLong(
                 ConfigKeys.TESTER_STRENGTH_TIMEOUT_SECONDS);
+        List<Integer> skippedCases = new ArrayList<>();
         ProcessResult run = testerRunner.runTester(folder,
-                batch.getTesterClassName(), new ArrayList<Integer>(),
-                timeoutSeconds);
+                batch.getTesterClassName(), skippedCases, timeoutSeconds);
         if (run.isTimedOut()) {
             mutant.setOutcome(MutantOutcome.TIMED_OUT);
             return;

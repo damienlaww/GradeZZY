@@ -323,7 +323,8 @@ public class InputMaker {
     private double randomDouble() {
         double width = DOUBLE_RANGE + DOUBLE_RANGE;
         double value = random.nextDouble() * width - DOUBLE_RANGE;
-        return Math.round(value * HUNDREDTHS) / HUNDREDTHS;
+        double inHundredths = value * HUNDREDTHS;
+        return Math.round(inHundredths) / HUNDREDTHS;
     }
 
     // Picks one character from CHARACTER_POOL.
