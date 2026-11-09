@@ -46,7 +46,7 @@ public class AnomalyReportExporter implements Exporter {
      * Creates a new anomaly report exporter.
      */
     public AnomalyReportExporter() {
-        // nothing to set up yet
+        // nothing to set up
     }
 
     /**

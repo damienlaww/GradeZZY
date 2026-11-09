@@ -16,7 +16,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.config.ModuleSections;
@@ -30,14 +29,15 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.SavedAssessment;
+import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
-import gradezzy.service.ClassFileMatch;
 import gradezzy.model.TestCaseResult;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.service.AssessmentFactory;
+import gradezzy.service.ClassFileMatch;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.stats.StatisticsSummary;
 import gradezzy.ui.backend.ActionResult;
@@ -53,7 +53,6 @@ import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.backend.ReviewRules;
 import gradezzy.ui.backend.RunCallback;
 import gradezzy.ui.backend.RunRecord;
-import gradezzy.model.ScoreAdjustment;
 import gradezzy.ui.backend.SimilarityDetail;
 
 /**
@@ -270,9 +269,11 @@ public final class DemoBackend implements DashboardBackend {
         // Modules added in this session, after the sample ones
         for (String code : getSetting(ConfigKeys.MODULE_CODES).split(",")) {
             String trimmed = code.trim();
-            if (!trimmed.isEmpty() && !trimmed.equalsIgnoreCase(
-                    DemoData.MODULE_CODE) && !trimmed.equalsIgnoreCase(
-                    DemoData.EMPTY_MODULE_CODE)) {
+            boolean sampleModule = trimmed.equalsIgnoreCase(
+                    DemoData.MODULE_CODE);
+            boolean emptyModule = trimmed.equalsIgnoreCase(
+                    DemoData.EMPTY_MODULE_CODE);
+            if (!trimmed.isEmpty() && !sampleModule && !emptyModule) {
                 codes.add(trimmed);
             }
         }
@@ -436,7 +437,7 @@ public final class DemoBackend implements DashboardBackend {
                     "This file could not be opened as a ZIP archive. "
                     + "Replace it with a new copy.");
         }
-        if (name.startsWith("learner.echo")) {
+        if (name.startsWith(DemoData.EXTRA_FOLDER_USERNAME)) {
             return new ImportItem(kind, path, username, ImportState.WARNING,
                     "Holds an extra resources folder. It will still be "
                     + "graded.");
@@ -913,7 +914,7 @@ public final class DemoBackend implements DashboardBackend {
                     + "export.");
         }
 
-        String preview;
+        String preview = "";
         if ("json".equalsIgnoreCase(formatName)) {
             preview = DemoExports.toJson(gradingRun, scope);
         } else if ("csv".equalsIgnoreCase(formatName)) {
@@ -1334,9 +1335,10 @@ public final class DemoBackend implements DashboardBackend {
         for (Submission submission : run.getSubmissions()) {
             for (Anomaly anomaly : submission.getAnomalies()) {
                 String username = submission.getUsername();
+                boolean approved = username.equals(
+                        DemoData.APPROVED_REPAIR_USERNAME);
                 if (anomaly.getType() == AnomalyType.MISSING_WRAPPER_FOLDER
-                        && username.equals(
-                        DemoData.APPROVED_REPAIR_USERNAME)) {
+                        && approved) {
                     anomaly.setFixStatus(FixStatus.APPROVED);
                 }
                 if (username.equals(DemoData.REVIEWED_USERNAME)) {

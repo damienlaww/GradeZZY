@@ -101,6 +101,7 @@
     -fx-max-height: 48px;
 }
 
+/* The "G" tile, shown only when the logo picture cannot be read */
 .logo-mark {
     -fx-background-color: -color-fg-default;
     -fx-background-radius: 6px;

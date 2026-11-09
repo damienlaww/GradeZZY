@@ -91,6 +91,9 @@ public class ExportScreen extends FlowScreen {
     // How many ticked students the export question names
     private static final int NAMES_IN_CONFIRM = 3;
 
+    // The gap between the export choices
+    private static final double CHOICE_GAP = 10.0;
+
     // The scrolling page
     private final ScrollPane view;
 
@@ -104,7 +107,7 @@ public class ExportScreen extends FlowScreen {
     private final VBox figures = new VBox();
 
     // The chart and figures, or a note when nobody is graded
-    private final HBox glance = Parts.row(Parts.GAP + Parts.GAP_SMALL / 2);
+    private final HBox glance = Parts.row(Parts.GAP + Parts.GAP_TINY);
 
     // Shown instead of the chart when nobody is graded
     private final Label noMarks = Parts.muted("No student has a mark "
@@ -121,7 +124,7 @@ public class ExportScreen extends FlowScreen {
             () -> openPicker());
 
     // The ticked choice and its reason
-    private final VBox tickedRow = new VBox(Parts.GAP_SMALL / 2);
+    private final VBox tickedRow = new VBox(Parts.GAP_TINY);
 
     // Also write the JSON file
     private final CheckBox json = new CheckBox(
@@ -318,7 +321,7 @@ public class ExportScreen extends FlowScreen {
         json.setSelected(true);
         tickedReason.getStyleClass().addAll("small-text", "choice-reason");
         tickedRow.getChildren().addAll(tickedOnly, tickedReason);
-        VBox choices = new VBox(Parts.GAP_SMALL + 2, everyone, tickedRow,
+        VBox choices = new VBox(CHOICE_GAP, everyone, tickedRow,
                 json, problemReport, studentReport, activityLog);
         choices.getStyleClass().add("export-choices");
 
@@ -342,7 +345,7 @@ public class ExportScreen extends FlowScreen {
         suggestionName.getStyleClass().addAll("sheet-suggestion-text",
                 "sheet-suggestion-name");
         suggestionDetail.getStyleClass().add("sheet-suggestion-text");
-        VBox words = new VBox(Parts.GAP_SMALL / 2, warningTitle,
+        VBox words = new VBox(Parts.GAP_TINY, warningTitle,
                 warningText, suggestionLine);
         words.setMinWidth(0);
         HBox.setHgrow(words, Priority.ALWAYS);
@@ -730,13 +733,18 @@ public class ExportScreen extends FlowScreen {
             sheetChanged(run, change.changeNow());
             return;
         }
-        change.setOnSucceeded(event -> sheetChanged(run, change.getValue()));
+        change.setOnSucceeded(event -> sheetChangeDone(run, change));
         change.setOnFailed(event -> sheetNotChanged(run, change));
         changingSheet = true;
         refreshActions();
         Thread worker = new Thread(change, "gradezzy-score-sheet");
         worker.setDaemon(true);
         worker.start();
+    }
+
+    // Shows the outcome of a change of score sheet that finished.
+    private void sheetChangeDone(GradingRun run, ScoreSheetChange change) {
+        sheetChanged(run, change.getValue());
     }
 
     // Shows why a change of score sheet stopped before it finished.
@@ -1038,17 +1046,14 @@ public class ExportScreen extends FlowScreen {
                 + "read both before deciding.");
         about.setWrapText(true);
         VBox rows = new VBox();
-        for (int index = 0; index < pairs.size(); index++) {
-            HBox row = pairRow(run, pairs.get(index));
+        for (SimilarityPair pair : pairs) {
+            HBox row = pairRow(run, pair);
             row.getStyleClass().add("card-row");
-            if (index == 0) {
-                row.getStyleClass().add("first");
-            }
-            if (index == pairs.size() - 1) {
-                row.getStyleClass().add("last");
-            }
             rows.getChildren().add(row);
         }
+        int lastRow = rows.getChildren().size() - 1;
+        rows.getChildren().get(0).getStyleClass().add("first");
+        rows.getChildren().get(lastRow).getStyleClass().add("last");
         similar.getChildren().addAll(about, rows);
     }
 
@@ -1207,33 +1212,28 @@ public class ExportScreen extends FlowScreen {
             return "";
         }
 
-        String text = files.get(0);
-        for (int index = 1; index < files.size(); index++) {
-            if (index == files.size() - 1) {
-                text += " and ";
-            } else {
-                text += ", ";
-            }
-            text += files.get(index);
+        int count = files.size();
+        String last = files.remove(count - 1);
+        String text = last;
+        if (!files.isEmpty()) {
+            text = TextUtils.join(", ", files) + " and " + last;
         }
         String first = text.substring(0, 1).toUpperCase(Locale.ROOT);
         return " " + first + text.substring(1) + " "
-                + isOrAre(files.size()) + " saved beside it.";
+                + isOrAre(count) + " saved beside it.";
     }
 
     // Names up to three students, then says how many more.
     private String listNames(List<Submission> scope) {
-        String text = "";
+        List<String> names = new ArrayList<>();
         int shown = 0;
         for (Submission submission : scope) {
             if (shown < NAMES_IN_CONFIRM) {
-                if (!text.isEmpty()) {
-                    text += ", ";
-                }
-                text += Students.name(submission);
+                names.add(Students.name(submission));
                 shown++;
             }
         }
+        String text = TextUtils.join(", ", names);
         if (scope.size() > shown) {
             text += " and " + (scope.size() - shown) + " more";
         }
@@ -1268,13 +1268,19 @@ public class ExportScreen extends FlowScreen {
             exportDone(run, wholeRun, job.exportNow());
             return;
         }
-        job.setOnSucceeded(event -> exportDone(run, wholeRun, job.getValue()));
+        job.setOnSucceeded(event -> exportFinished(run, wholeRun, job));
         job.setOnFailed(event -> exportFailed(run, job));
         exporting = true;
         refreshActions();
         Thread worker = new Thread(job, "gradezzy-export");
         worker.setDaemon(true);
         worker.start();
+    }
+
+    // Shows the outcome of an export that finished.
+    private void exportFinished(GradingRun run, boolean wholeRun,
+            ExportJob job) {
+        exportDone(run, wholeRun, job.getValue());
     }
 
     // Shows why an export stopped before it finished.

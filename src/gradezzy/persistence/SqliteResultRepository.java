@@ -275,8 +275,8 @@ public class SqliteResultRepository implements ResultRepository {
 
     // The next free place at the end of a run
     private static final String SELECT_NEXT_POSITION = "SELECT "
-            + "COALESCE(MAX(position) + 1, 0) FROM submissions "
-            + "WHERE run_id = ?";
+            + "COALESCE(MAX(position) + 1, 0) AS next_position "
+            + "FROM submissions WHERE run_id = ?";
 
     private static final String UPDATE_FIX_STATUS = "UPDATE anomalies "
             + "SET fix_status = ? WHERE anomaly_id = ?";
@@ -303,6 +303,7 @@ public class SqliteResultRepository implements ResultRepository {
             + "score_adjustments (run_id, username, question_id, "
             + "previous_score, new_score, reason, saved_at) "
             + "VALUES (?, ?, ?, ?, ?, ?, ?)";
+
     // Removes one row only, so two changes saved at the same time with
     // the same marks are taken back one at a time
     private static final String DELETE_ADJUSTMENT = "DELETE FROM "
@@ -310,6 +311,7 @@ public class SqliteResultRepository implements ResultRepository {
             + "score_adjustments WHERE run_id = ? AND username = ? "
             + "AND question_id = ? AND saved_at = ? "
             + "AND previous_score = ? AND new_score = ? LIMIT 1)";
+
     private static final String SELECT_ADJUSTMENTS = "SELECT username, "
             + "question_id, previous_score, new_score, reason, saved_at "
             + "FROM score_adjustments WHERE run_id = ? ORDER BY saved_at";
@@ -1271,7 +1273,7 @@ public class SqliteResultRepository implements ResultRepository {
             statement.setString(1, runId);
             rows = statement.executeQuery();
             rows.next();
-            return rows.getInt(1);
+            return rows.getInt("next_position");
         } finally {
             closeQuery(rows, statement);
         }

@@ -191,9 +191,9 @@ public class GradingPipeline {
         try {
             requested = context.getConfig().getInt(ConfigKeys.THREAD_COUNT);
         } catch (RuntimeException exception) {
-            // A missing or non-numeric setting grades in order rather
-            // than stopping the whole run.
-            requested = SINGLE_THREADED;
+            // Ignored: a missing or non-numeric setting keeps
+            // SINGLE_THREADED and grades in order rather than stopping
+            // the whole run.
         }
 
         if (requested < SINGLE_THREADED) {

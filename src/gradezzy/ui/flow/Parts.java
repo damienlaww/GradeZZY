@@ -103,6 +103,9 @@ public final class Parts {
     /** A smaller gap, between an icon and its text. */
     public static final double GAP_SMALL = 8.0;
 
+    /** The smallest gap, between a title and the line under it. */
+    public static final double GAP_TINY = GAP_SMALL / 2;
+
     /** The gap between cards. */
     public static final double CARD_GAP = 12.0;
 
@@ -541,7 +544,7 @@ public final class Parts {
 
     /**
      * Returns the large value of a figure with its unit after it, such
-     * as "8.8 / 20", without the tile around it. SHOULD.
+     * as "8.8 / 20", without the tile around it.
      *
      * @param value the value, such as "8.8" or "67%"
      * @param unit the smaller text after it, or null
@@ -670,7 +673,7 @@ public final class Parts {
      * @return the row
      */
     public static HBox labelWithInfo(Label text, String help) {
-        HBox box = row(GAP_SMALL / 2, new Node[] {text,
+        HBox box = row(GAP_TINY, new Node[] {text,
             info(text.getText(), help)});
         box.setMaxWidth(Region.USE_PREF_SIZE);
         return box;

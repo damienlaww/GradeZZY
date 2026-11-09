@@ -37,8 +37,6 @@ import gradezzy.ui.ThemeManager;
 
 /**
  * One setting with its name, description and control.
- *
- * <p>Tier: SHOULD.
  */
 public class SettingField {
 
@@ -83,6 +81,9 @@ public class SettingField {
     // The gap between the name and the description
     private static final double LINE_GAP = 2.0;
 
+    // The gap between a control and the problem under it
+    private static final double CONTROL_GAP = 4.0;
+
     // The window, for file choosers and the theme
     private final FlowWindow window;
 
@@ -110,9 +111,6 @@ public class SettingField {
     // The Choose button of a path setting
     private Button chooseButton = null;
 
-    // The path field and its Choose button, for a file or folder
-    private HBox pathLine = null;
-
     // The blue dot shown when the value changed
     private final Circle dot = new Circle(DOT_RADIUS);
 
@@ -130,8 +128,6 @@ public class SettingField {
 
     /**
      * Creates a setting row with the saved value.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param window the window
      * @param key the setting's name in config.properties
@@ -165,8 +161,6 @@ public class SettingField {
      * Creates a setting row with the saved value, for a setting that
      * has no fixed values.
      *
-     * <p>Tier: SHOULD.
-     *
      * @param window the window
      * @param key the setting's name in config.properties
      * @param name the name shown
@@ -181,8 +175,6 @@ public class SettingField {
     /**
      * Returns the row to show.
      *
-     * <p>Tier: SHOULD.
-     *
      * @return the row
      */
     public HBox getRow() {
@@ -192,8 +184,6 @@ public class SettingField {
     /**
      * Returns the setting's name in config.properties.
      *
-     * <p>Tier: SHOULD.
-     *
      * @return the key
      */
     public String getKey() {
@@ -202,8 +192,6 @@ public class SettingField {
 
     /**
      * Returns the value the control holds now, as it would be saved.
-     *
-     * <p>Tier: SHOULD.
      *
      * @return the value
      */
@@ -229,8 +217,6 @@ public class SettingField {
     /**
      * Puts a value in the control, as if it was typed or picked.
      *
-     * <p>Tier: SHOULD.
-     *
      * @param value the value
      */
     public void setValue(String value) {
@@ -239,8 +225,6 @@ public class SettingField {
 
     /**
      * Says whether the value differs from the saved one.
-     *
-     * <p>Tier: SHOULD.
      *
      * @return true when changed
      */
@@ -251,8 +235,6 @@ public class SettingField {
     /**
      * Says whether the value can be saved.
      *
-     * <p>Tier: SHOULD.
-     *
      * @return true when the check found no problem
      */
     public boolean isValid() {
@@ -261,8 +243,6 @@ public class SettingField {
 
     /**
      * Puts the saved value back in the control.
-     *
-     * <p>Tier: SHOULD.
      */
     public void reset() {
         setControlValue(original);
@@ -283,8 +263,6 @@ public class SettingField {
 
     /**
      * Treats the value in the control as saved.
-     *
-     * <p>Tier: SHOULD.
      */
     public void markSaved() {
         original = getValue();
@@ -293,8 +271,6 @@ public class SettingField {
 
     /**
      * Says whether the name or description holds some text.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param query the text in lower case; empty matches every row
      * @return true when the row matches
@@ -309,8 +285,6 @@ public class SettingField {
 
     /**
      * Allows or stops changes.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param editable true to allow changes
      */
@@ -340,8 +314,6 @@ public class SettingField {
      * Shows each fixed value of a CHOICE setting under a plain name,
      * such as "Light" for "light". The value saved does not change.
      *
-     * <p>Tier: COULD.
-     *
      * @param names one name per value, in the same order
      */
     public void showChoicesAs(String[] names) {
@@ -351,8 +323,6 @@ public class SettingField {
 
     /**
      * Sets what is called after every change.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param action the action
      */
@@ -380,7 +350,7 @@ public class SettingField {
 
         problem.getStyleClass().add("setting-problem");
         problem.setWrapText(true);
-        VBox control = new VBox(LINE_GAP * 2, createControl(), problem);
+        VBox control = new VBox(CONTROL_GAP, createControl(), problem);
         control.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(control, Priority.ALWAYS);
 
@@ -406,7 +376,6 @@ public class SettingField {
             HBox line = Parts.row(Parts.GAP_SMALL,
                     new Node[] {field, chooseButton});
             HBox.setHgrow(field, Priority.SOMETIMES);
-            pathLine = line;
             return line;
         }
         double width = TEXT_WIDTH;

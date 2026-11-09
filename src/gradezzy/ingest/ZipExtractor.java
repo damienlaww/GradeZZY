@@ -62,6 +62,9 @@ public class ZipExtractor {
     // The part of an entry name that climbs out of its folder
     private static final String PARENT_FOLDER = "..";
 
+    // A part of an entry name that names its own folder, as in Q1/./A.java
+    private static final String SAME_FOLDER = ".";
+
     // An entry name that starts with a Windows drive, such as C:
     private static final String DRIVE_PATTERN = "(?s)[A-Za-z]:.*";
 
@@ -234,16 +237,17 @@ public class ZipExtractor {
             return false;
         }
         try {
-            Path entry = Path.of(entryName.replace('\\', '/'));
+            Path entry = Path.of(entryName.replace(WINDOWS_SEPARATOR,
+                    ENTRY_SEPARATOR));
             if (entry.isAbsolute()) {
                 return false;
             }
             for (Path part : entry) {
                 String name = part.toString();
-                if (name.equals(".")) {
+                if (name.equals(SAME_FOLDER)) {
                     continue;
                 }
-                if (name.equals("..") || name.endsWith(".")
+                if (name.equals(PARENT_FOLDER) || name.endsWith(".")
                         || name.endsWith(" ") || name.matches(WINDOWS_DEVICE)
                         || name.matches(".*[<>\"|?*\\p{Cntrl}].*")) {
                     return false;
@@ -297,7 +301,8 @@ public class ZipExtractor {
                 if (entryCount > maxEntries) {
                     throw tooBig(maxMegabytes, maxEntries);
                 }
-                String entryName = entry.getName().replace('\\', '/');
+                String entryName = entry.getName().replace(
+                        WINDOWS_SEPARATOR, ENTRY_SEPARATOR);
                 // Some ZIP tools emit an explicit ./ directory entry.
                 if (isOnlyCurrentFolder(entryName)) {
                     continue;
@@ -315,7 +320,7 @@ public class ZipExtractor {
                     skip = true;
                 }
 
-                if (entryName.endsWith("/")) {
+                if (entryName.endsWith(ENTRY_SEPARATOR)) {
                     if (!skip) {
                         Files.createDirectories(target.resolve(entryName)
                                 .normalize());

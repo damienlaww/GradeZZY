@@ -150,8 +150,7 @@ public class PipelineFactory {
         return runner;
     }
 
-    // To add a detector, write a class that implements Detector and add
-    // it here. A null starter folder means the one in the settings.
+    // Lists the detectors; a null starter means the one in the settings.
     private List<Detector> createDetectors(Path chosenStarter) {
         List<Detector> detectors = new ArrayList<>();
         Path starterDirectory = chosenStarter;

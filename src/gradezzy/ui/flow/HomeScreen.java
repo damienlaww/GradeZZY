@@ -20,7 +20,6 @@ import java.io.File;
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +36,7 @@ import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
@@ -104,9 +104,13 @@ public class HomeScreen extends FlowScreen {
     // The dots of the "..." menu
     private static final double MORE_DOT_RADIUS = 1.6;
     private static final double MORE_DOT_GAP = 3.0;
+    private static final int MORE_DOT_COUNT = 3;
 
     // The size of the small icons
     private static final double ICON_SIZE = 12.0;
+
+    // The size of the upload icon of an empty card
+    private static final double DROP_ICON_SIZE = 18.0;
 
 
 
@@ -119,6 +123,12 @@ public class HomeScreen extends FlowScreen {
 
     // Shares of the width of the lower row
     private static final double HALF_PERCENT = 50.0;
+
+    // How many columns the lower row has
+    private static final int LOWER_COLUMNS = 2;
+
+    // Turns a share into a percentage
+    private static final double PERCENT = 100.0;
 
     // The scrolling page
     private final ScrollPane view;
@@ -178,7 +188,7 @@ public class HomeScreen extends FlowScreen {
         cards.getStyleClass().add("section-cards");
         lower.setHgap(Parts.CARD_GAP);
         lower.setVgap(Parts.CARD_GAP);
-        for (int index = 0; index < 2; index++) {
+        for (int index = 0; index < LOWER_COLUMNS; index++) {
             ColumnConstraints column = new ColumnConstraints();
             column.setPercentWidth(HALF_PERCENT);
             lower.getColumnConstraints().add(column);
@@ -251,7 +261,7 @@ public class HomeScreen extends FlowScreen {
     private VBox field(String label, Node control) {
         Label name = Parts.muted(label);
         name.getStyleClass().add("field-label");
-        return new VBox(Parts.GAP_SMALL / 2, name, control);
+        return new VBox(Parts.GAP_TINY, name, control);
     }
 
     // ---------------------------------------------------------- refresh
@@ -695,8 +705,8 @@ public class HomeScreen extends FlowScreen {
         }
         Label hint = Parts.muted(words);
         hint.getStyleClass().add("small-text");
-        VBox drop = new VBox(Parts.GAP_SMALL / 2,
-                Parts.icon(Parts.UPLOAD, ICON_SIZE * 1.5), hint);
+        VBox drop = new VBox(Parts.GAP_TINY,
+                Parts.icon(Parts.UPLOAD, DROP_ICON_SIZE), hint);
         drop.setAlignment(Pos.CENTER);
         drop.getStyleClass().add("card-drop-hint");
         drop.setMaxHeight(Double.MAX_VALUE);
@@ -742,15 +752,15 @@ public class HomeScreen extends FlowScreen {
         number.getStyleClass().add("card-average");
         Label after = Parts.muted(unit);
         after.getStyleClass().add("card-average-max");
-        HBox line = new HBox(Parts.GAP_SMALL / 2, number, after);
+        HBox line = new HBox(Parts.GAP_TINY, number, after);
         line.setAlignment(Pos.BASELINE_LEFT);
         return new VBox(0, name, line);
     }
 
     // Returns the pill that says where a section is.
     private Label statusPill(String section, GradingRun run) {
-        Label pill;
-        String tip;
+        Label pill = null;
+        String tip = "";
         if (isGradingNow(section)) {
             pill = Parts.pill("Grading now", Tone.NEUTRAL);
             tip = "This section is being graded. You can leave this page; "
@@ -811,7 +821,7 @@ public class HomeScreen extends FlowScreen {
         }
         Label words = Parts.muted(place);
         words.getStyleClass().addAll("small-text", "card-progress-words");
-        return new VBox(Parts.GAP_SMALL / 2, bar, words);
+        return new VBox(Parts.GAP_TINY, bar, words);
     }
 
     // The footer: when the section was last graded on the left, the
@@ -876,14 +886,15 @@ public class HomeScreen extends FlowScreen {
         first.getStyleClass().add("next-item");
         more.getItems().add(first);
         if (run != null && !isGradingNow(section)) {
-            more.getItems().addAll(menuItem("Open results", Parts.CHEVRON,
-                    () -> getWindow().openRun(run)), menuItem(
-                    "Grade again...", Parts.UPLOAD, () -> openSetUp(section)));
+            MenuItem results = menuItem("Open results", Parts.CHEVRON,
+                    () -> getWindow().openRun(run));
+            MenuItem again = menuItem("Grade again...", Parts.UPLOAD,
+                    () -> openSetUp(section));
+            more.getItems().addAll(results, again);
         }
         if (run != null && getBackend().supports(Capability.STATISTICS)) {
             more.getItems().add(menuItem("Statistics", Parts.CHART,
-                    () -> getWindow().openStatistics(
-                    getState().getModuleCode(), section)));
+                    () -> openStatistics(section)));
         }
         if (run != null && getBackend().supports(Capability.HISTORY)) {
             more.getItems().add(menuItem("Earlier runs", Parts.CLOCK,
@@ -892,9 +903,7 @@ public class HomeScreen extends FlowScreen {
         if (getBackend().supports(Capability.SETTINGS)
                 && !isGradingNow(section)) {
             MenuItem delete = menuItem("Delete section...", Parts.CLOSE,
-                    () -> CourseSheets.askDeleteSection(getWindow(),
-                    getState().getModuleCode(), section,
-                    () -> sectionAdded()));
+                    () -> askDeleteSection(section));
             delete.getStyleClass().add("danger-item");
             // A line sets the delete apart from the other items
             if (more.getItems().size() > 1) {
@@ -910,11 +919,22 @@ public class HomeScreen extends FlowScreen {
         return more;
     }
 
+    // Opens Statistics on a section of the chosen module.
+    private void openStatistics(String section) {
+        getWindow().openStatistics(getState().getModuleCode(), section);
+    }
+
+    // Asks whether to delete a section of the chosen module.
+    private void askDeleteSection(String section) {
+        CourseSheets.askDeleteSection(getWindow(),
+                getState().getModuleCode(), section, () -> sectionAdded());
+    }
+
     // Draws three dots, for the "..." menu; a font glyph can be cut off.
     private Node moreDots() {
         HBox dots = new HBox(MORE_DOT_GAP);
         dots.setAlignment(Pos.CENTER);
-        for (int index = 0; index < 3; index++) {
+        for (int index = 0; index < MORE_DOT_COUNT; index++) {
             Circle dot = new Circle(MORE_DOT_RADIUS);
             dot.getStyleClass().add("more-dot");
             dots.getChildren().add(dot);
@@ -935,13 +955,13 @@ public class HomeScreen extends FlowScreen {
     private void makeClickable(VBox card, Runnable action, String tip) {
         card.getStyleClass().add("clickable");
         Parts.tipNode(card, tip);
-        card.setOnMouseClicked(event -> cardClicked(event.getPickResult()
-                .getIntersectedNode(), card, action));
+        card.setOnMouseClicked(event -> cardClicked(event, card, action));
     }
 
     // Opens what a card opens, unless the click was on one of its
     // buttons.
-    private void cardClicked(Node clicked, VBox card, Runnable action) {
+    private void cardClicked(MouseEvent event, VBox card, Runnable action) {
+        Node clicked = event.getPickResult().getIntersectedNode();
         if (!isInsideButton(clicked, card)) {
             action.run();
         }
@@ -1005,8 +1025,7 @@ public class HomeScreen extends FlowScreen {
     private VBox activityCard() {
         List<AuditEntry> entries = new ArrayList<>(
                 getBackend().listAuditEntries());
-        entries.sort(Comparator.comparing(AuditEntry::getTimestamp)
-                .reversed());
+        entries.sort(new AuditEntryNewestFirstComparator());
         VBox list = new VBox();
         int shown = 0;
         for (AuditEntry entry : entries) {
@@ -1024,15 +1043,14 @@ public class HomeScreen extends FlowScreen {
             HBox line = Parts.row(Parts.GAP, new Node[] {what, Parts.grow(),
                 when});
             line.getStyleClass().add("card-row");
-            if (shown == 0) {
-                line.getStyleClass().add("first");
-            }
             list.getChildren().add(line);
             shown++;
         }
         if (shown == 0) {
             list.getChildren().add(Parts.muted("Nothing done yet. Grading, "
                     + "fixes, exports and backups are listed here."));
+        } else {
+            list.getChildren().get(0).getStyleClass().add("first");
         }
         HBox top = Parts.row(Parts.GAP, new Node[] {Parts.title("Recent "
                 + "activity"), Parts.grow(), Parts.link("See all",
@@ -1067,10 +1085,11 @@ public class HomeScreen extends FlowScreen {
             }
             Label name = Parts.strong(section);
             name.setMinWidth(Label.USE_PREF_SIZE);
-            Label figures = Parts.muted(String.format("%.1f",
-                    stats.getMean()) + " / " + Parts.mark(
-                    stats.getMaxTotal()) + DOT + Math.round(
-                    stats.getPassRate() * 100) + "% passed");
+            String mean = String.format("%.1f", stats.getMean());
+            String max = Parts.mark(stats.getMaxTotal());
+            long passed = Math.round(stats.getPassRate() * PERCENT);
+            Label figures = Parts.muted(mean + " / " + max + DOT + passed
+                    + "% passed");
             figures.getStyleClass().add("small-text");
             figures.setMinWidth(Label.USE_PREF_SIZE);
             // An assessment with no marks to earn shows an empty bar
@@ -1083,15 +1102,14 @@ public class HomeScreen extends FlowScreen {
             HBox line = Parts.row(Parts.GAP, new Node[] {name, bar,
                 figures});
             line.getStyleClass().add("card-row");
-            if (shown == 0) {
-                line.getStyleClass().add("first");
-            }
             list.getChildren().add(line);
             shown++;
         }
         if (shown == 0) {
             list.getChildren().add(Parts.muted("Grade a section to "
                     + "compare its marks here."));
+        } else {
+            list.getChildren().get(0).getStyleClass().add("first");
         }
         HBox top = Parts.row(Parts.GAP, new Node[] {Parts.title("Marks "
                 + "across sections"), Parts.grow(), Parts.link("Compare",

@@ -189,7 +189,7 @@ public final class TestCasesSheet {
     private static VBox field(String name, Node control, boolean grow) {
         Label label = Parts.muted(name);
         label.getStyleClass().add("field-label");
-        VBox box = new VBox(Parts.GAP_SMALL / 2, label, control);
+        VBox box = new VBox(Parts.GAP_TINY, label, control);
         if (grow) {
             HBox.setHgrow(box, Priority.ALWAYS);
         }
@@ -276,14 +276,12 @@ public final class TestCasesSheet {
             list.getChildren().add(box);
             return;
         }
-        for (int index = 0; index < cases.size(); index++) {
-            HBox row = caseRow(cases.get(index));
+        for (TestCase testCase : cases) {
+            HBox row = caseRow(testCase);
             row.getStyleClass().add("case-row");
-            if (index == 0) {
-                row.getStyleClass().add("first");
-            }
             list.getChildren().add(row);
         }
+        list.getChildren().get(0).getStyleClass().add("first");
     }
 
     // Builds one row of the list: question, the call, the result.

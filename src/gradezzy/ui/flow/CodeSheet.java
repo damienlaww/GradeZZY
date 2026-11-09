@@ -196,7 +196,7 @@ public final class CodeSheet {
         Label subtitle = Parts.muted("The files after any fixes; the "
                 + "original zip is unchanged. Pick a question on the left.");
         subtitle.getStyleClass().add("small-text");
-        VBox titles = new VBox(Parts.GAP_SMALL / 2, Parts.title(
+        VBox titles = new VBox(Parts.GAP_TINY, Parts.title(
                 Students.name(submission) + ": code and test output"),
                 subtitle);
         HBox top = Parts.row(Parts.GAP,
@@ -231,7 +231,7 @@ public final class CodeSheet {
     // Builds the list on the left: one button per question, with its
     // mark and how many of its tests passed.
     private VBox createQuestionList() {
-        VBox items = new VBox(Parts.GAP_SMALL / 2);
+        VBox items = new VBox(Parts.GAP_TINY);
         Assessment assessment = shownAssessment();
         if (assessment != null) {
             for (Question question : assessment.getQuestions()) {

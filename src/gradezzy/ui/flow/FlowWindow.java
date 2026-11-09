@@ -28,6 +28,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -46,6 +48,7 @@ import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.SavedAssessment;
 import gradezzy.ui.AppFonts;
+import gradezzy.ui.AppIcons;
 import gradezzy.model.Student;
 import gradezzy.ui.ThemeManager;
 import gradezzy.ui.backend.ActionResult;
@@ -63,12 +66,18 @@ public class FlowWindow {
     // How long a notice stays on screen
     private static final Duration NOTICE_TIME = Duration.seconds(3.5);
 
+    // How many times longer a notice with a link stays
+    private static final double ACTION_NOTICE_FACTOR = 2.0;
+
     // How often to check whether a stopped batch has finished, before
     // closing
     private static final Duration CLOSE_CHECK_TIME = Duration.millis(200);
 
     // The size of the icon of the Help button
     private static final double TOP_ICON_SIZE = 16.0;
+
+    // The width and height of the logo in the top bar
+    private static final double LOGO_SIZE = 22.0;
 
     // The shortcut that presses the blue button: Ctrl or Cmd and Enter
     private static final KeyCombination NEXT_KEYS = new KeyCodeCombination(
@@ -783,7 +792,7 @@ public class FlowWindow {
 
     /**
      * Gives the window the application's host services, so it can open
-     * a folder in Finder or File Explorer. COULD.
+     * a folder in Finder or File Explorer.
      *
      * @param services the host services, or null for none
      */
@@ -794,7 +803,7 @@ public class FlowWindow {
     /**
      * Opens a folder in Finder or File Explorer. When the folder does
      * not exist yet, or nothing can open it, a notice says where it is
-     * instead. COULD.
+     * instead.
      *
      * @param folder the folder, as the settings give it
      */
@@ -856,7 +865,7 @@ public class FlowWindow {
             notice.setGraphic(link);
             notice.setContentDisplay(ContentDisplay.RIGHT);
             notice.setMouseTransparent(false);
-            time = NOTICE_TIME.multiply(2);
+            time = NOTICE_TIME.multiply(ACTION_NOTICE_FACTOR);
         }
         if (noticeTimer != null) {
             noticeTimer.stop();
@@ -1099,8 +1108,7 @@ public class FlowWindow {
     // Builds the logo on the left, the tabs in the exact middle of the
     // window and Help on the right.
     private StackPane createTopBar() {
-        Label mark = new Label("G");
-        mark.getStyleClass().add("logo-mark");
+        Node mark = createLogoMark();
         Label name = new Label("GradeZZY");
         name.getStyleClass().add("logo-name");
         HBox logo = Parts.row(Parts.GAP_SMALL, new Node[] {mark, name});
@@ -1116,6 +1124,22 @@ public class FlowWindow {
         StackPane bar = new StackPane(logo, tabBar, help);
         bar.getStyleClass().add("top-bar");
         return bar;
+    }
+
+    // Returns the logo picture, or a "G" tile if it cannot be read.
+    private Node createLogoMark() {
+        Image picture = AppIcons.loadTopBarLogo();
+        if (picture == null) {
+            Label tile = new Label("G");
+            tile.getStyleClass().add("logo-mark");
+            return tile;
+        }
+        ImageView logo = new ImageView(picture);
+        logo.setFitWidth(LOGO_SIZE);
+        logo.setFitHeight(LOGO_SIZE);
+        logo.setPreserveRatio(true);
+        logo.setSmooth(true);
+        return logo;
     }
 
     // Builds one text button with an icon for the top bar.

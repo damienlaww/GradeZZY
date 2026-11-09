@@ -177,16 +177,18 @@ public class StructureValidator extends AbstractValidator {
 
     // Joins folder names as "Q1, Q2 and Q3".
     private String joinNames(List<String> names) {
-        String joined = "";
-        int last = names.size() - 1;
+        if (names.isEmpty()) {
+            return "";
+        }
 
-        for (int i = 0; i < names.size(); i++) {
-            if (i == last && i > 0) {
-                joined = joined + " and ";
-            } else if (i > 0) {
-                joined = joined + ", ";
-            }
-            joined = joined + names.get(i);
+        int last = names.size() - 1;
+        String joined = names.get(0);
+
+        for (int index = 1; index < last; index++) {
+            joined = joined + ", " + names.get(index);
+        }
+        if (last > 0) {
+            joined = joined + " and " + names.get(last);
         }
         return joined;
     }

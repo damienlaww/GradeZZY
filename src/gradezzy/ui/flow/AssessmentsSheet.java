@@ -81,13 +81,13 @@ public final class AssessmentsSheet {
         VBox list = new VBox();
         list.getStyleClass().add("case-list");
         List<SavedAssessment> saved = window.getBackend().listAssessments();
-        for (int index = 0; index < saved.size(); index++) {
-            HBox row = row(saved.get(index));
+        for (SavedAssessment assessment : saved) {
+            HBox row = row(assessment);
             row.getStyleClass().add("case-row");
-            if (index == 0) {
-                row.getStyleClass().add("first");
-            }
             list.getChildren().add(row);
+        }
+        if (!list.getChildren().isEmpty()) {
+            list.getChildren().get(0).getStyleClass().add("first");
         }
         ScrollPane scroll = new ScrollPane(list);
         scroll.setFitToWidth(true);

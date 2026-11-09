@@ -119,10 +119,8 @@ final class JavaSourceText {
     }
 
     // Removes every comment but keeps string and char literals unchanged.
-    // Each comment is at least two characters and becomes one line end,
-    // so the result is never longer than the code and fits in an array of
-    // that size; count says how much of the array is filled.
     static String removeComments(String code) {
+        // Each comment becomes one line end, so the result fits
         char[] result = new char[code.length()];
         int count = 0;
         int index = 0;
@@ -282,9 +280,7 @@ final class JavaSourceText {
         return trimmed.substring(headerEnd + BLOCK_COMMENT_END.length());
     }
 
-    // Drops blank lines and the spaces at the end of every line. The lines
-    // are joined once at the end: adding each one to a String with += would
-    // copy the whole text again for every line of a long student file.
+    // Drops blank lines and the spaces at the end of every line.
     private static String removeBlankLines(String text) {
         List<String> kept = new ArrayList<>();
         int lineStart = 0;
@@ -305,12 +301,11 @@ final class JavaSourceText {
             lineStart = lineEnd + LINE_END.length();
         }
 
+        // Joined once, as += would copy the text again for every line
         return TextUtils.join("", kept);
     }
 
     // Drops every space, tab and line break.
-    // The result is never longer than the text, so an array of that size
-    // holds it; count says how much of the array is filled.
     private static String removeWhitespace(String text) {
         char[] result = new char[text.length()];
         int count = 0;
@@ -404,9 +399,9 @@ final class JavaSourceText {
         return header.indexOf(OPEN_PAREN) >= 0 && !assignsValue;
     }
 
-    // Returns the name in front of the parameter list: the last bracket
-    // pair of the header, which holds any parameter annotation's brackets.
+    // Returns the name in front of the parameter list.
     private static String findMethodName(String code, int braceIndex) {
+        // The last bracket pair, which holds any annotation's brackets
         int closeIndex = code.lastIndexOf(CLOSE_PAREN, braceIndex);
         int nameEnd = findOpeningBracket(code, closeIndex, OPEN_PAREN,
                 CLOSE_PAREN);
@@ -426,8 +421,7 @@ final class JavaSourceText {
         return code.substring(nameStart, nameEnd);
     }
 
-    // Returns where the bracket closed at closeIndex is opened, or 0 if
-    // it never is.
+    // Returns where the bracket closed at closeIndex opens, or 0.
     private static int findOpeningBracket(String code, int closeIndex,
             char open, char close) {
         int depth = 0;

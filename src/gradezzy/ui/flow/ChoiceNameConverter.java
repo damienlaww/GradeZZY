@@ -15,8 +15,6 @@ import javafx.util.StringConverter;
 
 /**
  * Turns the saved values of a list into the names shown, and back.
- *
- * <p>Tier: COULD.
  */
 public class ChoiceNameConverter extends StringConverter<String> {
 
@@ -40,8 +38,6 @@ public class ChoiceNameConverter extends StringConverter<String> {
     /**
      * Returns the name shown for a value.
      *
-     * <p>Tier: COULD.
-     *
      * @param value the saved value
      * @return its name, or the value itself when it has none
      */
@@ -56,8 +52,6 @@ public class ChoiceNameConverter extends StringConverter<String> {
 
     /**
      * Returns the value of a shown name.
-     *
-     * <p>Tier: COULD.
      *
      * @param text the name
      * @return the saved value, or the text when it is no name

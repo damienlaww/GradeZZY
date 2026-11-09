@@ -24,8 +24,6 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * Builds the Help sheet.
- *
- * <p>Tier: COULD.
  */
 public final class HelpSheet {
 
@@ -78,8 +76,6 @@ public final class HelpSheet {
 
     /**
      * Builds the sheet.
-     *
-     * <p>Tier: COULD.
      *
      * @param window the window that shows it
      * @return the sheet's content

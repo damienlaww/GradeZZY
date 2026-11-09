@@ -40,8 +40,20 @@ public final class ExportFolders {
     private static final int WHO = 0;
     private static final int FOLDER = 1;
 
+    // The most parts who an entry is for can have: module and section
+    private static final int MAX_WHO_PARTS = 2;
+
+    // A percent sign, and how encode writes it
+    private static final String PERCENT = "%";
+    private static final String ENCODED_PERCENT = "%25";
+
+    // How encode writes the entry separator, and its lowercase form
+    private static final String ENCODED_SEPARATOR = "%3B";
+    private static final String ENCODED_SEPARATOR_LOWER = "%3b";
+
     // Not used: every method is static.
     private ExportFolders() {
+        // utility class, never instantiated
     }
 
     /**
@@ -270,7 +282,7 @@ public final class ExportFolders {
         }
         String who = entry.substring(0, equals).trim();
         String[] parts = who.split(SECTION_SEPARATOR, -1);
-        if (parts.length > 2) {
+        if (parts.length > MAX_WHO_PARTS) {
             return "Name a module, or a module and a section, such as "
                     + "CS102/G1.";
         }
@@ -317,26 +329,34 @@ public final class ExportFolders {
 
     // Writes the entries back into one value.
     private static String write(List<String[]> entries) {
-        String text = "";
-        for (String[] entry : entries) {
-            if (!text.isEmpty()) {
-                text += ENTRY_SEPARATOR;
-            }
-            text += entry[WHO] + VALUE_SEPARATOR + encode(entry[FOLDER]);
+        if (entries.isEmpty()) {
+            return "";
+        }
+
+        String text = entryText(entries.get(0));
+        for (int index = 1; index < entries.size(); index++) {
+            text += ENTRY_SEPARATOR + entryText(entries.get(index));
         }
         return text;
+    }
+
+    // Writes one entry as who=folder.
+    private static String entryText(String[] entry) {
+        return entry[WHO] + VALUE_SEPARATOR + encode(entry[FOLDER]);
     }
 
     // Writes a folder so a ; in its name does not end the entry: % is
     // written %25 and ; is written %3B.
     private static String encode(String folder) {
-        return folder.replace("%", "%25").replace(ENTRY_SEPARATOR, "%3B");
+        return folder.replace(PERCENT, ENCODED_PERCENT)
+                .replace(ENTRY_SEPARATOR, ENCODED_SEPARATOR);
     }
 
     // Reads a folder written by encode.
     private static String decode(String folder) {
-        return folder.replace("%3B", ENTRY_SEPARATOR).replace("%3b",
-                ENTRY_SEPARATOR).replace("%25", "%");
+        return folder.replace(ENCODED_SEPARATOR, ENTRY_SEPARATOR)
+                .replace(ENCODED_SEPARATOR_LOWER, ENTRY_SEPARATOR)
+                .replace(ENCODED_PERCENT, PERCENT);
     }
 
     // Returns the folder of an entry, ignoring case, or null.

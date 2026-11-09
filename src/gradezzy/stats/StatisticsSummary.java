@@ -45,7 +45,7 @@ public class StatisticsSummary {
      * Creates a new statistics summary.
      */
     public StatisticsSummary() {
-        // nothing to set up yet
+        // nothing to set up
     }
 
     /**

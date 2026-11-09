@@ -86,11 +86,11 @@ or run on the instructor's laptop.
 
 | Folder or file | What it holds |
 |---|---|
-| `compile.sh`, `compile.bat` | Compile all sources into `classes/` and copy the `.css` file. |
+| `compile.sh`, `compile.bat` | Compile all sources into `classes/` and copy the `.css` file and the logo pictures. |
 | `run.sh`, `run.bat` | Run the window, the demo, the screen checks or the console. |
 | `clean.sh`, `clean.bat` | Empty `classes/` and remove `workspace/`. |
 | `config.properties` | Every setting of the application. |
-| `src/` | All Java source files, plus the stylesheet of the `ui` package (`ui/css/flow.css`). |
+| `src/` | All Java source files, plus the stylesheet of the `ui` package (`ui/css/flow.css`) and the logo as PNG files (`ui/images/`). |
 | `classes/` | Compiled classes. Created by the compile script, not in git, and must be empty at submission. |
 | `lib/` | The library jars. `lib/javafx/<platform>/` holds JavaFX for each platform. |
 | `media/` | Images and audio used by the application. Empty for now. |

@@ -41,10 +41,10 @@ public class GradingTask extends Task<GradingRun> {
     private final List<Path> inputPaths;
 
     // The roster chosen for this batch, or null to use the config
-    private Path scoreSheetFile;
+    private Path scoreSheetFile = null;
 
     // The starter folder chosen for this batch, or null to use the config
-    private Path starterDirectory;
+    private Path starterDirectory = null;
 
     // The section the batch belongs to
     private final Section section;

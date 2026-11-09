@@ -43,7 +43,7 @@ public class MainApp extends Application {
     /** Command line argument that shows synthetic demo data. */
     public static final String DEMO_ARGUMENT = "--demo";
 
-    /** Command line argument that runs the seven demo flows and exits. */
+    /** Command line argument that runs the eight demo flows and exits. */
     public static final String SELF_TEST_ARGUMENT = "--selftest";
 
     /** Command line argument that saves a picture of every screen. */
@@ -142,7 +142,7 @@ public class MainApp extends Application {
     // Shows the main window, sized from the configuration.
     private void showMainWindow(Stage stage, ServiceRegistry services,
             AppConfig config, boolean demo) throws IOException {
-        DashboardBackend backend;
+        DashboardBackend backend = null;
         String title = WINDOW_TITLE;
         if (demo) {
             backend = new DemoBackend(services);
@@ -159,6 +159,7 @@ public class MainApp extends Application {
                 config.getInt(ConfigKeys.WINDOW_HEIGHT));
 
         stage.setTitle(title);
+        stage.getIcons().addAll(AppIcons.loadWindowIcons());
         stage.setMinWidth(MIN_WIDTH);
         stage.setMinHeight(MIN_HEIGHT);
         stage.setScene(scene);

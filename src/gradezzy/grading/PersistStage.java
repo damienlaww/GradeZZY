@@ -3,7 +3,7 @@
  *
  * Purpose: Saves the result of a submission so a run can be resumed.
  *
- * Where it fits: Last stage. Tier SHOULD: skipped when the database is
+ * Where it fits: Last stage. Tier MUST: skipped when the database is
  * disabled.
  */
 package gradezzy.grading;

@@ -143,6 +143,9 @@ public class ReviewScreen extends FlowScreen {
     // The corner of the table box (twice the 12 pixel radius)
     private static final double CORNER_ARC = 24.0;
 
+    // The corner of the table's clip, a little tighter than the frame
+    private static final double CLIP_ARC = 22.0;
+
     // A class file problem is shown once only when at least this many
     // graded students share it
     private static final int MIN_SHARED_STUDENTS = 3;
@@ -283,7 +286,7 @@ public class ReviewScreen extends FlowScreen {
         HBox tools = Parts.row(Parts.GAP,
                 new Node[] {createFilterBar(), Parts.grow()});
         tools.getChildren().add(search);
-        VBox.setMargin(tools, new Insets(Parts.GAP_SMALL / 2, 0, 0, 0));
+        VBox.setMargin(tools, new Insets(Parts.GAP_TINY, 0, 0, 0));
 
         VBox header = new VBox(HEADING_GAP, Parts.heading(
                 "Review the results"), subtitle);
@@ -645,8 +648,8 @@ public class ReviewScreen extends FlowScreen {
         tableFrame.getChildren().add(table);
         tableFrame.getStyleClass().add("table-frame");
         Rectangle corners = new Rectangle();
-        corners.setArcWidth(CORNER_ARC - 2);
-        corners.setArcHeight(CORNER_ARC - 2);
+        corners.setArcWidth(CLIP_ARC);
+        corners.setArcHeight(CLIP_ARC);
         corners.widthProperty().bind(table.widthProperty());
         corners.heightProperty().bind(table.heightProperty());
         table.setClip(corners);
@@ -1217,13 +1220,11 @@ public class ReviewScreen extends FlowScreen {
     // Returns the sentence beside Back.
     private String statusText() {
         int needReview = countNeedingReview();
-        String text;
+        String text = needReview + " students still need a look.";
         if (needReview == 0) {
             text = "Every student is checked.";
         } else if (needReview == 1) {
             text = "1 student still needs a look.";
-        } else {
-            text = needReview + " students still need a look.";
         }
         int ticked = getState().getSelected().size();
         if (ticked > 0) {
@@ -1423,9 +1424,8 @@ public class ReviewScreen extends FlowScreen {
                 + " as checked.", "Undo", () -> uncheckAll(done));
     }
 
-    // Puts flags marked as checked together back to be checked.
-    // Puts back to check the flags Mark all checked. A flag decided
-    // otherwise since, such as marked as looking fine, keeps that.
+    // Puts the flags Mark all checked set back to be checked. A flag
+    // decided otherwise since, such as marked as looking fine, keeps that.
     private void uncheckAll(List<Anomaly> flags) {
         int reopened = 0;
         for (Anomaly anomaly : flags) {

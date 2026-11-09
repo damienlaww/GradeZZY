@@ -28,6 +28,7 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.config.ExportFolders;
 import gradezzy.config.ModuleSections;
 import gradezzy.ui.backend.ActionResult;
+import gradezzy.util.TextUtils;
 
 /**
  * Adds a module or a section, after checking it.
@@ -70,10 +71,8 @@ public final class CourseSheets {
         Button cancel = Parts.secondary("Cancel",
                 () -> window.closeSheet());
         Button add = Parts.primary("Add module");
-        Runnable doAdd = () -> addModule(window, code.getText().trim(),
-                problem, onAdded);
-        add.setOnAction(event -> doAdd.run());
-        code.setOnAction(event -> doAdd.run());
+        add.setOnAction(event -> addModule(window, code, problem, onAdded));
+        code.setOnAction(event -> addModule(window, code, problem, onAdded));
         VBox body = new VBox(Parts.GAP, Parts.title("Add a module"),
                 Parts.subtitle("A course code you teach. It starts with no "
                 + "sections; add its own sections next."),
@@ -85,8 +84,9 @@ public final class CourseSheets {
     }
 
     // Adds a module to the settings after checking it, and shows it.
-    private static void addModule(FlowWindow window, String code,
+    private static void addModule(FlowWindow window, TextField codeField,
             Label problem, Consumer<String> onAdded) {
+        String code = codeField.getText().trim();
         String message = "";
         if (!code.matches(SECTION_PATTERN)
                 || code.length() > MAX_SECTION_LENGTH) {
@@ -157,7 +157,6 @@ public final class CourseSheets {
                 ConfigKeys.OWN_SECTIONS_ONLY_MODULES), module)) {
             everywhere.setVisible(false);
             everywhere.setManaged(false);
-            onlyHere.setSelected(true);
         }
         Label problem = Parts.muted("");
         problem.getStyleClass().add("field-problem");
@@ -167,10 +166,10 @@ public final class CourseSheets {
         Button cancel = Parts.secondary("Cancel",
                 () -> window.closeSheet());
         Button add = Parts.primary("Add section");
-        Runnable doAdd = () -> addSection(window, module,
-                code.getText().trim(), onlyHere.isSelected(), problem, onAdded);
-        add.setOnAction(event -> doAdd.run());
-        code.setOnAction(event -> doAdd.run());
+        add.setOnAction(event -> addSection(window, module, code, onlyHere,
+                problem, onAdded));
+        code.setOnAction(event -> addSection(window, module, code, onlyHere,
+                problem, onAdded));
         VBox body = new VBox(Parts.GAP, Parts.title("Add a section"),
                 Parts.subtitle("A class group you teach. Its card appears "
                 + "on Home and it can be picked on Set up."),
@@ -185,8 +184,10 @@ public final class CourseSheets {
     // Adds a section to this module only or to every module, after
     // checking it.
     private static void addSection(FlowWindow window, String module,
-            String code, boolean onlyHere, Label problem,
+            TextField codeField, RadioButton onlyHereButton, Label problem,
             Consumer<String> onAdded) {
+        String code = codeField.getText().trim();
+        boolean onlyHere = onlyHereButton.isSelected();
         String message = "";
         if (!code.matches(SECTION_PATTERN)
                 || code.length() > MAX_SECTION_LENGTH) {
@@ -352,19 +353,16 @@ public final class CourseSheets {
     // The sections every module has, without one, as the setting holds
     // them.
     private static String sharedWithout(FlowWindow window, String code) {
-        String kept = "";
+        List<String> kept = new ArrayList<>();
         String value = window.getBackend().getSetting(
                 ConfigKeys.SECTION_CODES);
         for (String shared : value.split(LIST_SEPARATOR)) {
             if (!shared.trim().isEmpty()
                     && !shared.trim().equalsIgnoreCase(code)) {
-                if (!kept.isEmpty()) {
-                    kept += LIST_SEPARATOR;
-                }
-                kept += shared.trim();
+                kept.add(shared.trim());
             }
         }
-        return kept;
+        return TextUtils.join(LIST_SEPARATOR, kept);
     }
 
     // The entries of a "CS102/G1=..." setting that belong to a section:

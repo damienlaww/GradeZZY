@@ -35,8 +35,6 @@ public class SavedAssessment {
     // The module the assessment belongs to, or "" for every module
     private String moduleCode = "";
 
-
-
     // Class files given to students without their source
     private final List<String> providedClassFiles = new ArrayList<>();
 
@@ -64,7 +62,6 @@ public class SavedAssessment {
         copy.getQuestions().addAll(questions);
         copy.setTestersDirectory(testersDirectory);
         copy.setStarterDirectory(starterDirectory);
-
         copy.setModuleCode(moduleCode);
         copy.getProvidedClassFiles().addAll(providedClassFiles);
         copy.getTesterDataFiles().addAll(testerDataFiles);

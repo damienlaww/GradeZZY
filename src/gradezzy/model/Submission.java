@@ -44,7 +44,7 @@ public class Submission {
     // The grading status
     private SubmissionStatus status = SubmissionStatus.PENDING;
 
-    // The two lists below are copy-on-write: each change builds a new copy,
+    // The three lists below are copy-on-write: each change builds a new copy,
     // so the window can loop over them while a grading thread adds to or
     // clears them for Retry, without a ConcurrentModificationException.
 

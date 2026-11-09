@@ -24,8 +24,6 @@ import javafx.scene.layout.VBox;
 
 /**
  * A read-only table built from rows of nodes.
- *
- * <p>Tier: SHOULD.
  */
 public class PlainTable extends VBox {
 
@@ -56,8 +54,6 @@ public class PlainTable extends VBox {
     /**
      * Creates an empty table.
      *
-     * <p>Tier: SHOULD.
-     *
      * @param rowHeight the height of every row under the header
      */
     public PlainTable(double rowHeight) {
@@ -71,8 +67,6 @@ public class PlainTable extends VBox {
 
     /**
      * Adds a column at the right.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param title the header text, or an empty string
      * @param width the width in pixels, or GROW for the spare width
@@ -90,8 +84,6 @@ public class PlainTable extends VBox {
     /**
      * Adds a row under the others. Pass one node per column.
      *
-     * <p>Tier: SHOULD.
-     *
      * @param cells the content of each column, left to right
      */
     public void addRow(Node[] cells) {
@@ -108,8 +100,6 @@ public class PlainTable extends VBox {
 
     /**
      * Removes every row under the header.
-     *
-     * <p>Tier: SHOULD.
      */
     public void clearRows() {
         rows.getChildren().clear();
@@ -117,8 +107,6 @@ public class PlainTable extends VBox {
 
     /**
      * Shows a message in place of the rows, such as an empty state.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param message what to show
      */
@@ -132,8 +120,6 @@ public class PlainTable extends VBox {
 
     /**
      * Returns the number of rows under the header.
-     *
-     * <p>Tier: SHOULD.
      *
      * @return the number of rows
      */

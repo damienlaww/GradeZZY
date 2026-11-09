@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import gradezzy.util.TextUtils;
+
 /**
  * The sections of one module only.
  */
@@ -33,8 +35,12 @@ public final class ModuleSections {
     // A module or section code: letters, digits and dashes
     private static final String CODE_PATTERN = "[A-Za-z0-9-]+";
 
+    // The parts of one entry: the module and its sections
+    private static final int ENTRY_PARTS = 2;
+
     // Not used: every method is static.
     private ModuleSections() {
+        // utility class, never instantiated
     }
 
     /**
@@ -211,7 +217,8 @@ public final class ModuleSections {
         }
         for (String entry : split(value, ENTRY_SEPARATOR)) {
             String[] parts = entry.split(MODULE_SEPARATOR, -1);
-            if (parts.length != 2 || !parts[0].trim().matches(CODE_PATTERN)) {
+            if (parts.length != ENTRY_PARTS
+                    || !parts[0].trim().matches(CODE_PATTERN)) {
                 return "Write each module as CS102:G5|G6, separated by ;.";
             }
             for (String section : split(parts[1], SECTION_SEPARATOR)) {
@@ -234,7 +241,7 @@ public final class ModuleSections {
         }
         for (String entry : split(value, ENTRY_SEPARATOR)) {
             String[] parts = entry.split(MODULE_SEPARATOR, -1);
-            if (parts.length == 2 && !parts[0].trim().isEmpty()) {
+            if (parts.length == ENTRY_PARTS && !parts[0].trim().isEmpty()) {
                 String module = parts[0].trim();
                 if (!sections.containsKey(module)) {
                     modules.add(module);
@@ -261,27 +268,12 @@ public final class ModuleSections {
     // Writes each module and its sections back into one value.
     private static String write(List<String> modules,
             Map<String, List<String>> sections) {
-        String text = "";
+        List<String> entries = new ArrayList<>();
         for (String module : modules) {
-            if (!text.isEmpty()) {
-                text += ENTRY_SEPARATOR;
-            }
-            text += module + MODULE_SEPARATOR + joinSections(
-                    sections.get(module));
+            entries.add(module + MODULE_SEPARATOR + TextUtils.join(
+                    SECTION_SEPARATOR, sections.get(module)));
         }
-        return text;
-    }
-
-    // Joins a module's sections with the section separator.
-    private static String joinSections(List<String> codes) {
-        String text = "";
-        for (String code : codes) {
-            if (!text.isEmpty()) {
-                text += SECTION_SEPARATOR;
-            }
-            text += code;
-        }
-        return text;
+        return TextUtils.join(ENTRY_SEPARATOR, entries);
     }
 
     // Adds codes that are not listed yet, ignoring case.
