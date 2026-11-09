@@ -711,7 +711,12 @@ new every run:
    how many inputs differ and the first two, such as
    `countDigit(-4809L, 4) returned 0 where the model answer returns 1`.
    When the tester gave that question full marks, the flag is a warning
-   and says the test cases miss it; otherwise it is information.
+   and says so; otherwise it is information.
+6. Every Java class the program uses is written in full, such as
+   `java.lang.System`, so a student class called `System` or `Arrays`
+   cannot take its place. If the program compiles with the model answer
+   but not in a student's folder, the flag says the method could not be
+   called there, rather than staying silent.
 
 On Lab Test 3, 11 students lose marks on Q1 or Q5. It flags 10 of them
 (a missing last run, a `NullPointerException` on `null`, a forgotten

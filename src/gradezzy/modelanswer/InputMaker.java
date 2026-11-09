@@ -58,11 +58,13 @@ public class InputMaker {
     private static final String DOUBLE_TYPE = "double";
     private static final String BOOLEAN_TYPE = "boolean";
     private static final String CHAR_TYPE = "char";
+    private static final String STRING_TYPE = "String";
 
     // The simple types, and at the same place the boxed type each is
     // held in a list as
     private static final String[] SIMPLE_TYPES = {
-        INT_TYPE, LONG_TYPE, DOUBLE_TYPE, BOOLEAN_TYPE, CHAR_TYPE, "String"
+        INT_TYPE, LONG_TYPE, DOUBLE_TYPE, BOOLEAN_TYPE, CHAR_TYPE,
+        STRING_TYPE
     };
     private static final String[] BOXED_TYPES = {
         "Integer", "Long", "Double", "Boolean", "Character", "String"
@@ -73,13 +75,17 @@ public class InputMaker {
     private static final String[] LIST_STARTS = {"ArrayList<", "List<"};
     private static final String LIST_END = ">";
 
-    // Java text around an array or a list
+    // Java text around an array or a list. Classes are named in full,
+    // such as java.util.ArrayList, so a student class with the same
+    // short name cannot take their place.
     private static final String NEW = "new ";
     private static final String ARRAY_OPEN = " {";
     private static final String ARRAY_CLOSE = "}";
-    private static final String LIST_TYPE = "ArrayList<";
+    private static final String LIST_TYPE = "java.util.ArrayList<";
+    private static final String JAVA_LANG = "java.lang.";
     private static final String EMPTY_LIST_END = ">()";
-    private static final String FILLED_LIST_MIDDLE = ">(Arrays.asList(";
+    private static final String FILLED_LIST_MIDDLE =
+            ">(java.util.Arrays.asList(";
     private static final String FILLED_LIST_END = "))";
     private static final String NULL = "null";
     private static final String ELEMENT_SEPARATOR = ", ";
@@ -199,7 +205,11 @@ public class InputMaker {
             return NULL;
         }
         List<String> elements = makeElements(elementType, round);
-        return NEW + elementType + ARRAY_END + ARRAY_OPEN
+        String writtenType = elementType;
+        if (elementType.equals(STRING_TYPE)) {
+            writtenType = JAVA_LANG + elementType;
+        }
+        return NEW + writtenType + ARRAY_END + ARRAY_OPEN
                 + TextUtils.join(ELEMENT_SEPARATOR, elements) + ARRAY_CLOSE;
     }
 
@@ -210,10 +220,11 @@ public class InputMaker {
         }
         List<String> elements = makeElements(simpleTypeOf(elementType),
                 round);
+        String writtenType = JAVA_LANG + elementType;
         if (elements.isEmpty()) {
-            return NEW + LIST_TYPE + elementType + EMPTY_LIST_END;
+            return NEW + LIST_TYPE + writtenType + EMPTY_LIST_END;
         }
-        return NEW + LIST_TYPE + elementType + FILLED_LIST_MIDDLE
+        return NEW + LIST_TYPE + writtenType + FILLED_LIST_MIDDLE
                 + TextUtils.join(ELEMENT_SEPARATOR, elements)
                 + FILLED_LIST_END;
     }

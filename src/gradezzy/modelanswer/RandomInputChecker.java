@@ -82,6 +82,7 @@ public class RandomInputChecker {
     private static final int MAX_SHOWN_LENGTH = 40;
     private static final String CUT_MARK = "...";
     private static final String EXAMPLE_SEPARATOR = "; ";
+    private static final String SENTENCE_SEPARATOR = " ";
 
     // How a result of these types is quoted when shown, and how a null
     // result prints
@@ -90,6 +91,10 @@ public class RandomInputChecker {
     private static final String TEXT_QUOTE = "\"";
     private static final String CHAR_QUOTE = "'";
     private static final String NULL_TEXT = "null";
+
+    // The package names the input program writes in full
+    private static final String JAVA_UTIL = "java.util.";
+    private static final String JAVA_LANG = "java.lang.";
 
     // The settings
     private final AppConfig config;
@@ -146,9 +151,10 @@ public class RandomInputChecker {
      *
      * @param studentFolder the student's compiled question folder
      * @param question the question
-     * @return a sentence naming the differences with examples, starting
-     *         with the question id, or null when there is none or the
-     *         question cannot be checked
+     * @return sentences naming the differences with examples, and any
+     *         method that could not be called in the student's folder,
+     *         starting with the question id; or null when there is
+     *         nothing to report or the question cannot be checked
      * @throws ProcessExecutionException if java could not be run, for
      *         example because grading was cancelled
      */
@@ -158,24 +164,47 @@ public class RandomInputChecker {
         int compared = 0;
         int different = 0;
         List<String> examples = new ArrayList<>();
+        List<String> notCalled = new ArrayList<>();
 
         for (MethodCheck check : checks) {
             Map<Integer, CallResult> studentResults = runProgram(
                     studentFolder, check.getDriverSource());
-            if (studentResults != null) {
+            if (studentResults == null) {
+                notCalled.add(describeMethod(check.getMethod()));
+            } else {
                 compared = compared + countCompared(check, studentResults);
                 different = different + collectDifferences(check,
                         studentResults, examples);
             }
         }
 
-        if (different == 0) {
+        List<String> sentences = new ArrayList<>();
+        if (different > 0) {
+            sentences.add(question.getId() + ": " + different + " of "
+                    + compared + " random inputs give a different answer "
+                    + "from the model answer, for example "
+                    + TextUtils.join(EXAMPLE_SEPARATOR, examples) + ".");
+        }
+        if (!notCalled.isEmpty()) {
+            // The same program compiled with the model answer, so the
+            // folder holds a changed method or a class named like one of
+            // Java's own, which could be there to dodge this check
+            sentences.add(question.getId() + ": "
+                    + TextUtils.join(EXAMPLE_SEPARATOR, notCalled)
+                    + " could not be called with random inputs here, "
+                    + "though it can in the model answer. Check that the "
+                    + "method is as the question asks.");
+        }
+        if (sentences.isEmpty()) {
             return null;
         }
-        return question.getId() + ": " + different + " of " + compared
-                + " random inputs give a different answer from the model "
-                + "answer, for example " + TextUtils.join(EXAMPLE_SEPARATOR,
-                examples) + ".";
+        return TextUtils.join(SENTENCE_SEPARATOR, sentences);
+    }
+
+    // Names a method with its parameter types, such as
+    // countDigit(long, int).
+    private String describeMethod(MethodSignature method) {
+        return method.describeCall(method.getParameterTypes());
     }
 
     /**
@@ -272,7 +301,9 @@ public class RandomInputChecker {
     // Writes, compiles and runs the input program in a folder, then
     // removes it again. Returns the result of each call by number, or
     // null when the program does not compile there, such as when the
-    // student changed the method's parameters.
+    // student changed the method's parameters. A file that cannot be
+    // written gives no results rather than null, since it says nothing
+    // about the student.
     private Map<Integer, CallResult> runProgram(Path folder, String source)
             throws ProcessExecutionException {
         Path sourceFile = folder.resolve(InputDriver.FILE_NAME);
@@ -290,7 +321,7 @@ public class RandomInputChecker {
                     InputDriver.CLASS_NAME);
             return readResults(run.getStandardOutput());
         } catch (IOException exception) {
-            return null;
+            return new HashMap<>();
         } finally {
             deleteFileQuietly(sourceFile);
             deleteFileQuietly(classFile);
@@ -407,13 +438,21 @@ public class RandomInputChecker {
             return;
         }
         MethodSignature method = check.getMethod();
-        String call = method.describeCall(check.getInputs().get(index));
+        String call = makeReadable(method.describeCall(
+                check.getInputs().get(index)));
         String got = "returned " + showResult(method, actual.getText());
         if (actual.hasThrown()) {
             got = "threw " + actual.getText();
         }
         examples.add(call + " " + got + " where the model answer returns "
                 + showResult(method, expected.getText()));
+    }
+
+    // Removes the package names the input program writes in full, so a
+    // call reads as the student would write it, such as
+    // new ArrayList<Integer>(Arrays.asList(3, 1)).
+    private String makeReadable(String call) {
+        return call.replace(JAVA_UTIL, "").replace(JAVA_LANG, "");
     }
 
     // Writes a result as Java writes the value, so empty text shows as

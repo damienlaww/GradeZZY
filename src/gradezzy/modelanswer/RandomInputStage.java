@@ -47,9 +47,9 @@ public class RandomInputStage implements GradingStage {
     public static final String ID_PREFIX = "random-inputs-";
 
     // Added to the flag when the tester gave the question full marks,
-    // which is when the difference matters most
+    // which is when the flag matters most
     private static final String FULL_MARKS_NOTE = " The tester gave this "
-            + "question full marks, so its test cases miss this.";
+            + "question full marks.";
 
     // What the instructor can do about the flag
     private static final String SUGGESTED_ACTION = "Read the answer with "

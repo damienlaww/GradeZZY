@@ -69,53 +69,56 @@ public class InputDriver {
     // The parts of the source that are the same for every method: the
     // start of the class, and the helpers that turn any result into one
     // line of text. Arrays print their elements, not their address.
+    // Every class of Java is named in full, such as java.lang.System, so
+    // a student class called System or Arrays cannot take its place.
     private static final String[] CLASS_START = {
-        "import java.util.*;",
-        "",
         "public class " + CLASS_NAME + " {",
         ""
     };
     private static final String[] HELPERS = {
-        "    private static void report(int number, String text) {",
-        "        String oneLine = text.replace(\"\\\\\", \"\\\\\\\\\")",
+        "    private static void report(int number,",
+        "            java.lang.String text) {",
+        "        java.lang.String oneLine = text"
+                + ".replace(\"\\\\\", \"\\\\\\\\\")",
         "                .replace(\"\\n\", \"\\\\n\")"
                 + ".replace(\"\\r\", \"\\\\r\")",
         "                .replace(\"\\t\", \"\\\\t\");",
-        "        System.out.println(number + \"" + "\\t" + VALUE_MARK
+        "        java.lang.System.out.println(number + \"\\t" + VALUE_MARK
                 + "\\t\" + oneLine);",
         "    }",
         "",
-        "    private static void reportThrown(int number, Throwable problem) {",
-        "        System.out.println(number + \"\\t" + THREW_MARK
+        "    private static void reportThrown(int number,",
+        "            java.lang.Throwable problem) {",
+        "        java.lang.System.out.println(number + \"\\t" + THREW_MARK
                 + "\\t\" + problem.getClass().getName());",
         "    }",
         "",
-        "    private static String show(Object value) {",
-        "        return String.valueOf(value);",
+        "    private static java.lang.String show(java.lang.Object value) {",
+        "        return java.lang.String.valueOf(value);",
         "    }",
         "",
-        "    private static String show(int[] value) {",
-        "        return Arrays.toString(value);",
+        "    private static java.lang.String show(int[] value) {",
+        "        return java.util.Arrays.toString(value);",
         "    }",
         "",
-        "    private static String show(long[] value) {",
-        "        return Arrays.toString(value);",
+        "    private static java.lang.String show(long[] value) {",
+        "        return java.util.Arrays.toString(value);",
         "    }",
         "",
-        "    private static String show(double[] value) {",
-        "        return Arrays.toString(value);",
+        "    private static java.lang.String show(double[] value) {",
+        "        return java.util.Arrays.toString(value);",
         "    }",
         "",
-        "    private static String show(boolean[] value) {",
-        "        return Arrays.toString(value);",
+        "    private static java.lang.String show(boolean[] value) {",
+        "        return java.util.Arrays.toString(value);",
         "    }",
         "",
-        "    private static String show(char[] value) {",
-        "        return Arrays.toString(value);",
+        "    private static java.lang.String show(char[] value) {",
+        "        return java.util.Arrays.toString(value);",
         "    }",
         "",
-        "    private static String show(Object[] value) {",
-        "        return Arrays.deepToString(value);",
+        "    private static java.lang.String show(java.lang.Object[] value) {",
+        "        return java.util.Arrays.deepToString(value);",
         "    }",
         "}"
     };
@@ -145,7 +148,7 @@ public class InputDriver {
 
     // Adds the main method, which makes every call in order.
     private void addMain(List<String> lines, int count) {
-        lines.add("    public static void main(String[] args) {");
+        lines.add("    public static void main(java.lang.String[] args) {");
         for (int number = FIRST_NUMBER; number <= count; number++) {
             lines.add("        " + CALL_METHOD + number + "();");
         }
@@ -162,7 +165,7 @@ public class InputDriver {
                 + "() {");
         lines.add("        try {");
         lines.add("            report(" + number + ", show(" + call + "));");
-        lines.add("        } catch (Throwable problem) {");
+        lines.add("        } catch (java.lang.Throwable problem) {");
         lines.add("            reportThrown(" + number + ", problem);");
         lines.add("        }");
         lines.add("    }");
