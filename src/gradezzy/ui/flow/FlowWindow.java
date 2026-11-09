@@ -605,9 +605,26 @@ public class FlowWindow {
      */
     public void confirm(String title, Node content, String okText,
             Runnable onOk) {
+        confirm(title, content, null, null, okText, onOk);
+    }
+
+    /**
+     * Asks a question in a sheet with two ways to go ahead besides
+     * Cancel, such as Just this one and Keep all.
+     *
+     * @param title the question
+     * @param content what is shown under the question
+     * @param otherText the text of the plain button that goes ahead the
+     *        other way, or null for none
+     * @param onOther what to do when that button is pressed
+     * @param okText the text of the filled button that goes ahead
+     * @param onOk what to do when the instructor goes ahead
+     */
+    public void confirm(String title, Node content, String otherText,
+            Runnable onOther, String okText, Runnable onOk) {
         Button cancel = Parts.secondary("Cancel", () -> closeSheet());
-        // The two buttons have the same shape; the one that goes ahead
-        // is filled, in red when it deletes something
+        // The buttons have the same shape; the one that goes ahead is
+        // filled, in red when it deletes something
         Button ok = Parts.secondary(okText, () -> confirmed(onOk));
         if (isDestructive(okText)) {
             ok.getStyleClass().add("confirm-danger");
@@ -616,6 +633,13 @@ public class FlowWindow {
         }
         HBox buttons = Parts.row(Parts.GAP,
                 new Node[] {Parts.grow(), cancel, ok});
+        if (otherText != null) {
+            Button other = Parts.secondary(otherText,
+                    () -> confirmed(onOther));
+            // Between Cancel and the filled button
+            buttons.getChildren().add(buttons.getChildren().size() - 1,
+                    other);
+        }
         VBox body = new VBox(Parts.GAP, Parts.title(title), content,
                 buttons);
         body.getStyleClass().add("confirm");

@@ -39,6 +39,7 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.SavedAssessment;
+import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.service.ServiceRegistry;
@@ -465,6 +466,114 @@ public class FlowSelfTest {
                 != null, "the flag can be decided again");
         reopenedFlag = flag;
         checkSettledIsGraded(run);
+        checkSameFixes(run);
+    }
+
+    // Keep fix and Reject fix offer to decide the same kind of fix of
+    // the other students too: Keep all and its Undo, Just this one,
+    // Cancel and Reject all. The demo has one fix of each kind, so a
+    // second wrong folder name is added for the check and removed after.
+    private void checkSameFixes(GradingRun run) {
+        Anomaly first = null;
+        Submission other = null;
+        for (Submission submission : run.getSubmissions()) {
+            for (Anomaly anomaly : submission.getAnomalies()) {
+                if (first == null && anomaly.getType()
+                        == AnomalyType.WRONG_FOLDER_NAME) {
+                    first = anomaly;
+                }
+            }
+        }
+        for (Submission submission : run.getSubmissions()) {
+            if (other == null && first != null
+                    && submission.getStatus() == SubmissionStatus.GRADED
+                    && !submission.getUsername().equals(
+                    first.getUsername())) {
+                other = submission;
+            }
+        }
+        check(first != null && other != null, "a wrong folder name and a "
+                + "second graded student exist");
+        if (first == null || other == null) {
+            return;
+        }
+        FixStatus firstBefore = first.getFixStatus();
+        Anomaly second = new Anomaly("selftest-same-fix",
+                AnomalyType.WRONG_FOLDER_NAME, Severity.WARNING,
+                other.getUsername(), "The top folder was named "
+                + "RenameToYourStudentID (self-test).",
+                "Approve the rename, or reject it.");
+        other.addAnomaly(second);
+        first.setFixStatus(FixStatus.APPLIED);
+        second.setFixStatus(FixStatus.APPLIED);
+        window.refreshScreen();
+        settle();
+
+        openStudent(first.getUsername());
+        press(SceneFinder.button(cardOf(first), "Keep fix"), "Keep fix");
+        Node asked = sheet();
+        check(asked != null && SceneFinder.shows(asked,
+                "Keep this fix for 1 more student?")
+                && SceneFinder.shows(asked, other.getUsername()),
+                "Keep fix asks to keep the same fix of "
+                + other.getUsername());
+        press(SceneFinder.button(asked, "Keep all 2"), "Keep all 2");
+        check(!window.isSheetOpen()
+                && first.getFixStatus() == FixStatus.APPROVED
+                && second.getFixStatus() == FixStatus.APPROVED,
+                "Keep all kept both fixes");
+        check(noticeText().equals("Kept 2 fixes."), "the notice says Kept "
+                + "2 fixes (it says \"" + noticeText() + "\")");
+        press(noticeAction(), "Undo in the notice");
+        check(first.getFixStatus() == FixStatus.APPLIED
+                && second.getFixStatus() == FixStatus.APPLIED,
+                "Undo put both fixes back to review");
+
+        press(SceneFinder.button(cardOf(first), "Keep fix"), "Keep fix");
+        press(SceneFinder.button(sheet(), "Cancel"), "Cancel");
+        check(!window.isSheetOpen()
+                && first.getFixStatus() == FixStatus.APPLIED
+                && second.getFixStatus() == FixStatus.APPLIED,
+                "Cancel decided neither fix");
+
+        press(SceneFinder.button(cardOf(first), "Keep fix"), "Keep fix");
+        press(SceneFinder.button(sheet(), "Just this one"),
+                "Just this one");
+        check(first.getFixStatus() == FixStatus.APPROVED
+                && second.getFixStatus() == FixStatus.APPLIED,
+                "Just this one kept only the fix pressed");
+        backend.undoRepairDecision(repairOf(run, first));
+        window.refreshScreen();
+        settle();
+
+        press(SceneFinder.button(cardOf(first), "Reject fix"),
+                "Reject fix");
+        asked = sheet();
+        check(asked != null && SceneFinder.shows(asked,
+                "Reject this fix for 1 more student?"),
+                "Reject fix asks to reject the same fix too");
+        press(SceneFinder.button(asked, "Reject all 2"), "Reject all 2");
+        check(first.getFixStatus() == FixStatus.UNDONE
+                && second.getFixStatus() == FixStatus.UNDONE,
+                "Reject all rejected both fixes");
+        check(noticeText().startsWith("Rejected 2 fixes"), "the notice "
+                + "says Rejected 2 fixes (it says \"" + noticeText()
+                + "\")");
+
+        other.getAnomalies().remove(second);
+        first.setFixStatus(firstBefore);
+        window.refreshScreen();
+        settle();
+    }
+
+    // Returns the repair of an anomaly in a run, or null.
+    private RepairItem repairOf(GradingRun run, Anomaly anomaly) {
+        for (RepairItem repair : backend.listRepairs(run)) {
+            if (repair.getAnomaly() == anomaly) {
+                return repair;
+            }
+        }
+        return null;
     }
 
     // A rejected fix can be applied again from the activity log and

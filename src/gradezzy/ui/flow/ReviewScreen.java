@@ -1300,8 +1300,10 @@ public class ReviewScreen extends FlowScreen {
         List<Submission> scope = getState().getSelected();
         for (RepairItem repair : getBackend().listRepairs(run)) {
             Anomaly anomaly = repair.getAnomaly();
+            // A fix being undone in the background is left to that job
             if (anomaly.getFixStatus() == FixStatus.APPLIED
                     && !repair.isBlocked()
+                    && !getState().isFixInProgress(anomaly)
                     && (scope.isEmpty() || isTicked(anomaly.getUsername()))) {
                 open.add(repair);
             }
