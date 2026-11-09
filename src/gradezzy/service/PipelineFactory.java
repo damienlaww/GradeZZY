@@ -16,9 +16,11 @@ import java.util.List;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.detection.CopiedHeaderDetector;
 import gradezzy.detection.Detector;
 import gradezzy.detection.EmptyAnswerDetector;
 import gradezzy.detection.HardCodedAnswerDetector;
+import gradezzy.detection.RosterCheck;
 import gradezzy.detection.UntouchedStarterDetector;
 import gradezzy.exec.ProcessRunner;
 import gradezzy.exec.SourceCompiler;
@@ -111,9 +113,10 @@ public class PipelineFactory {
                 new RosterReader(config), starterDirectory));
         pipeline.addStage(new ValidateStage(createValidationRunner()));
         pipeline.addStage(new FixStage(fixManager,
-                createFileCheckRunner()));
+                createFileCheckRunner(), workingCopyManager,
+                starterDirectory));
         pipeline.addStage(new DetectStage(createDetectors(
-                starterDirectory)));
+                starterDirectory), createRosterChecks()));
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
         pipeline.addStage(new CompileStage(new SourceCompiler(config,
@@ -122,6 +125,37 @@ public class PipelineFactory {
                 processRunner), new TesterOutputScoreParser(config)));
         pipeline.addStage(new ScoreStage(new ScoreCalculator()));
         pipeline.addStage(new PersistStage(repository));
+
+        return pipeline;
+    }
+
+    /**
+     * Creates the shorter pipeline that grades one question of a student
+     * again in the working copy they already have: it adds the tester,
+     * compiles and runs it, as the full pipeline does. Extracting,
+     * checking, fixing and the code checks are left out, so the fixes and
+     * flags of the student stay as they are. Scoring and saving are left
+     * to GradingService.regradeQuestion, because ScoreStage would give
+     * every other question a result too.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param cancellationToken the flag that stops the grading when set
+     * @param starterDirectory the starter folder, or null to use
+     *        paths.starter.dir
+     * @return the pipeline, ready to run
+     */
+    public GradingPipeline createQuestionPipeline(
+            CancellationToken cancellationToken, Path starterDirectory) {
+        GradingPipeline pipeline = new GradingPipeline(cancellationToken);
+        ProcessRunner processRunner = new ProcessRunner(config);
+
+        pipeline.addStage(new InstallTestersStage(
+                new TesterInstaller(config)));
+        pipeline.addStage(new CompileStage(new SourceCompiler(config,
+                processRunner), starterDirectory));
+        pipeline.addStage(new ExecuteStage(new TesterRunner(config,
+                processRunner), new TesterOutputScoreParser(config)));
 
         return pipeline;
     }
@@ -148,6 +182,14 @@ public class PipelineFactory {
         runner.addValidator(new HeaderNameValidator(config));
 
         return runner;
+    }
+
+    // Lists the checks that also read the run's roster. To add one,
+    // write a class that implements RosterCheck and add it here.
+    private List<RosterCheck> createRosterChecks() {
+        List<RosterCheck> rosterChecks = new ArrayList<>();
+        rosterChecks.add(new CopiedHeaderDetector(config));
+        return rosterChecks;
     }
 
     // Lists the detectors; a null starter means the one in the settings.

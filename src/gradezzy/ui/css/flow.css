@@ -1497,7 +1497,8 @@
     -fx-fill: -color-fg-default;
 }
 
-/* Compare sections: chips, curves and the table. */
+/* Section chips on Settings take their height from here; their colours
+   and padding are set again under Settings below. */
 .section-chip {
     -fx-background-color: -color-bg-default;
     -fx-background-radius: 999px;
@@ -1509,45 +1510,82 @@
     -fx-padding: 0 4px 0 12px;
 }
 
-.section-chip.alone {
-    -fx-padding: 0 12px;
-}
-
-.chip-remove {
-    -fx-background-color: transparent;
-    -fx-border-color: transparent;
+/* Compare sections: the Sections field, curves and the table. Each
+   section is a toggle chip with a round mark: an empty ring when off,
+   filled with the section's colour and ticked when on. The ring of a
+   chip that is on takes the same colour. The theme's blue is not used
+   for a chip that is on. */
+.compare-chip {
+    -fx-background-color: -color-border-default, -color-bg-default;
+    -fx-background-insets: 0, 1px;
     -fx-background-radius: 999px;
-    -fx-padding: 4px;
-}
-
-.chip-remove:hover {
-    -fx-background-color: -color-bg-subtle;
-}
-
-.add-chip {
-    -fx-background-color: transparent;
-    -fx-background-radius: 999px;
-    -fx-border-color: -color-border-default;
-    -fx-border-style: segments(4, 3);
-    -fx-border-radius: 999px;
+    -fx-text-fill: -color-fg-default;
     -fx-min-height: 28px;
     -fx-pref-height: 28px;
     -fx-max-height: 28px;
-    -fx-padding: 0 12px;
+    -fx-padding: 0 12px 0 8px;
+    -fx-graphic-text-gap: 8px;
+    -fx-cursor: hand;
 }
 
-.add-chip > .label {
-    -fx-text-fill: -color-fg-muted;
-    -fx-padding: 0;
+.compare-chip:hover {
+    -fx-background-color: -color-border-default, -color-bg-subtle;
 }
 
-.add-chip > .arrow-button {
-    -fx-padding: 0;
+/* Keyboard focus: a blue ring and an underlined name */
+.compare-chip:focused {
+    -fx-background-color: -color-accent-emphasis, -color-bg-default;
+    -fx-background-insets: 0, 2px;
+    -fx-underline: true;
 }
 
-.add-chip > .arrow-button > .arrow {
-    -fx-padding: 0;
-    -fx-shape: null;
+.compare-chip:selected,
+.compare-chip:selected:focused {
+    -fx-background-insets: 0, 2px;
+    -fx-text-fill: -color-fg-default;
+}
+
+.compare-chip.series-1:selected {
+    -fx-background-color: series-one, -color-bg-default;
+}
+
+.compare-chip.series-2:selected {
+    -fx-background-color: series-two, -color-bg-default;
+}
+
+.compare-chip.series-3:selected {
+    -fx-background-color: series-three, -color-bg-default;
+}
+
+.compare-chip:disabled {
+    -fx-opacity: 0.45;
+}
+
+.chip-mark {
+    -fx-stroke-width: 0;
+}
+
+.chip-mark.off {
+    -fx-fill: transparent;
+    -fx-stroke: -color-fg-subtle;
+    -fx-stroke-width: 1.5;
+}
+
+.chip-mark.series-1 {
+    -fx-fill: series-one;
+}
+
+.chip-mark.series-2 {
+    -fx-fill: series-two;
+}
+
+.chip-mark.series-3 {
+    -fx-fill: series-three;
+}
+
+.chip-tick .icon {
+    -fx-stroke: -color-fg-emphasis;
+    -fx-stroke-width: 3;
 }
 
 .series-dot,
@@ -1768,6 +1806,17 @@
     -fx-background-color: -color-accent-subtle;
     -fx-background-radius: 10px;
     -fx-padding: 8px 12px;
+}
+
+/* While the ticked students are graded again: how far it is and a bar,
+   in line with the words of the band above. No fill, as it is not a
+   status; the bar's track is a shade darker so it shows on the page. */
+.regrade-band {
+    -fx-padding: 0 12px;
+}
+
+.regrade-band .score-track {
+    -fx-background-color: -color-border-muted;
 }
 
 /* ---- explanation of a "?" ---- */

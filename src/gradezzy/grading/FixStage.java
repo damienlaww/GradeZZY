@@ -9,6 +9,7 @@
 package gradezzy.grading;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.fix.EncodingFixer;
 import gradezzy.fix.FixManager;
 import gradezzy.fix.FixRecord;
+import gradezzy.ingest.WorkingCopyManager;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Severity;
@@ -52,16 +54,29 @@ public class FixStage implements GradingStage {
     // The checks of the required files, run again after a move or rename
     private final ValidationRunner fileChecks;
 
+    // Copies the provided class files into folders a fix made
+    private final WorkingCopyManager workingCopyManager;
+
+    // The starter folder of the batch, or null for paths.starter.dir
+    private final Path starterDirectory;
+
     /**
      * Creates a new fix stage.
      *
      * @param fixManager the helper that applies fixes
      * @param fileChecks the checks of the required files, run again after
      *        a fix moved or renamed something
+     * @param workingCopyManager copies the provided class files into
+     *        question folders a fix made
+     * @param starterDirectory the starter folder of the batch, or null for
+     *        paths.starter.dir
      */
-    public FixStage(FixManager fixManager, ValidationRunner fileChecks) {
+    public FixStage(FixManager fixManager, ValidationRunner fileChecks,
+            WorkingCopyManager workingCopyManager, Path starterDirectory) {
         this.fixManager = fixManager;
         this.fileChecks = fileChecks;
+        this.workingCopyManager = workingCopyManager;
+        this.starterDirectory = starterDirectory;
     }
 
     /**
@@ -93,10 +108,31 @@ public class FixStage implements GradingStage {
         }
 
         List<FixRecord> applied = fixManager.applyAll(submission);
+        boolean foldersChanged = false;
         while (movedOrRenamed(applied)) {
+            foldersChanged = true;
             List<Anomaly> newAnomalies = checkFilesAgain(submission,
                     context);
             applied = fixManager.applyTo(submission, newAnomalies);
+        }
+
+        // A folder a fix made, as for answer files sent with no question
+        // folders, has none of the class files given without source yet
+        if (foldersChanged) {
+            copyProvidedClassFiles(submission, context);
+        }
+    }
+
+    // Copies the provided class files into the question folders again. A
+    // failure is a problem with this computer, so it stops the submission.
+    private void copyProvidedClassFiles(Submission submission,
+            GradingContext context) throws GradingException {
+        try {
+            workingCopyManager.copyProvidedClassFiles(
+                    submission.getWorkingCopyPath(), context.getAssessment(),
+                    starterDirectory);
+        } catch (UncheckedIOException exception) {
+            throw new GradingException(exception.getMessage(), exception);
         }
     }
 

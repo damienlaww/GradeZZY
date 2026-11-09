@@ -730,8 +730,9 @@ public final class Parts {
         }
     }
 
-    // Builds a tip that shows quickly and wraps.
-    private static Tooltip tooltip(String text) {
+    // Builds a tip that shows quickly and wraps. CompareView also uses
+    // it, to change a tip's text as a chip is turned on and off.
+    static Tooltip tooltip(String text) {
         Tooltip tip = new Tooltip(text);
         tip.setShowDelay(TIP_DELAY);
         tip.setShowDuration(TIP_DURATION);

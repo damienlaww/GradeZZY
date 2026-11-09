@@ -306,6 +306,7 @@ public class JsonExporter implements Exporter {
         fields.put("message", text(anomaly.getMessage()));
         fields.put("suggestedAction", text(anomaly.getSuggestedAction()));
         fields.put("fixStatus", text(anomaly.getFixStatus()));
+        fields.put("fixMade", text(anomaly.describeFix()));
         return jsonWriter.writeObject(fields);
     }
 

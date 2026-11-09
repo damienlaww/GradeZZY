@@ -118,10 +118,10 @@ public class TesterOutputScoreParser implements ScoreParser {
      * Reads the total from the tester's last line, capped at the question's
      * maximum score. Only the tester can print that line, so a tester that
      * gives more than one mark per case is believed; ExecuteStage then caps
-     * it at what the passed cases earn. A run that was
-     * stopped, crashed or ended early never printed its total, so the
-     * passes printed so far are counted instead, one mark each, as the
-     * provided testers award.
+     * it at what the passed cases earn. A run that was stopped, crashed or
+     * ended early never printed its total, so the passes printed so far
+     * are counted here one mark each; ExecuteStage replaces that with
+     * what each passed case is worth in the tester.
      *
      * @param processResult the finished run
      * @param lastLine the last line that was not blank

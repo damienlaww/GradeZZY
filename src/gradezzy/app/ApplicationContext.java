@@ -23,6 +23,7 @@ import gradezzy.fix.FixManager;
 import gradezzy.fix.FolderHierarchyFixer;
 import gradezzy.fix.FolderNameFixer;
 import gradezzy.fix.HeaderNameFixer;
+import gradezzy.fix.MisplacedFileFixer;
 import gradezzy.persistence.BackupManager;
 import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
@@ -201,6 +202,7 @@ public class ApplicationContext {
         fixManager.addFixer(new FolderHierarchyFixer(config));
         fixManager.addFixer(new FolderNameFixer(config));
         fixManager.addFixer(new CaseNameFixer(config));
+        fixManager.addFixer(new MisplacedFileFixer(config));
         fixManager.addFixer(new HeaderNameFixer(config));
 
         return fixManager;

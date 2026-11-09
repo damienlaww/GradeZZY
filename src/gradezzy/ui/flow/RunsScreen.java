@@ -1201,6 +1201,7 @@ public class RunsScreen extends FlowScreen {
             return true;
         } else if ("Grading".equals(kind)) {
             return action.contains("grading") || action.contains("run")
+                    || action.contains("graded")
                     || action.contains("mark change")
                     || action.contains("result") || action.contains("student");
         } else if ("Fixes".equals(kind)) {

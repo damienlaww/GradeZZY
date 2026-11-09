@@ -4,11 +4,14 @@
  * Purpose: Small text helpers shared by several packages.
  *
  * Where it fits: Holds the CSV line handling used by the roster reader and the
- * exporters.
+ * exporters, and the reading of UTF-16 source files shared by the header
+ * check and the encoding fix.
  */
 package gradezzy.util;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -17,6 +20,18 @@ import java.util.List;
  * <p>Tier: MUST. Owner: Damien.
  */
 public final class TextUtils {
+
+    // The two bytes at the start of a little-endian UTF-16 file, as
+    // Notepad saves "Unicode"
+    private static final byte[] UTF16_LE_MARK = {
+        (byte) 0xFF, (byte) 0xFE
+    };
+
+    // The two bytes at the start of a big-endian UTF-16 file, as Notepad
+    // saves "Unicode big endian"
+    private static final byte[] UTF16_BE_MARK = {
+        (byte) 0xFE, (byte) 0xFF
+    };
 
     /**
      * Not used: every method here is static.
@@ -191,6 +206,54 @@ public final class TextUtils {
      */
     public static String normaliseLineEndings(String text) {
         return text.replace("\r\n", "\n").replace('\r', '\n');
+    }
+
+    /**
+     * Says whether the bytes start with a UTF-16 byte order mark, little
+     * or big endian.
+     *
+     * @param bytes the content of a file
+     * @return true if they start with FF FE or FE FF
+     */
+    public static boolean isUtf16(byte[] bytes) {
+        return startsWith(bytes, UTF16_LE_MARK)
+                || startsWith(bytes, UTF16_BE_MARK);
+    }
+
+    /**
+     * Reads the content of a source file as text. A file that starts with
+     * a UTF-16 byte order mark is read as UTF-16 in that byte order,
+     * leaving the mark out. Any other file is read as UTF-8, and a
+     * character that is not valid UTF-8 is replaced.
+     *
+     * @param bytes the content of the file
+     * @return the text
+     */
+    public static String decodeSource(byte[] bytes) {
+        if (!isUtf16(bytes)) {
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
+
+        byte[] withoutMark = Arrays.copyOfRange(bytes, UTF16_LE_MARK.length,
+                bytes.length);
+        if (startsWith(bytes, UTF16_LE_MARK)) {
+            return new String(withoutMark, StandardCharsets.UTF_16LE);
+        }
+        return new String(withoutMark, StandardCharsets.UTF_16BE);
+    }
+
+    // Says whether the bytes start with the given bytes.
+    private static boolean startsWith(byte[] bytes, byte[] start) {
+        if (bytes.length < start.length) {
+            return false;
+        }
+
+        for (int i = 0; i < start.length; i++) {
+            if (bytes[i] != start[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Copies the characters of text into target, starting at start, and

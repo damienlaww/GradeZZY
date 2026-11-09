@@ -612,7 +612,7 @@ public final class DemoBackend implements DashboardBackend {
      * any other question keeps its result.
      */
     @Override
-    public ActionResult retryQuestion(Submission submission,
+    public ActionResult retryQuestion(GradingRun run, Submission submission,
             String questionId) {
         QuestionResult result = findResult(submission, questionId);
         if (result == null) {
@@ -647,7 +647,8 @@ public final class DemoBackend implements DashboardBackend {
      * Grades one submission again from the start.
      */
     @Override
-    public ActionResult retrySubmission(Submission submission) {
+    public ActionResult retrySubmission(GradingRun run,
+            Submission submission) {
         if (DemoData.indexOf(submission.getUsername()) < 0) {
             return ActionResult.done("Graded " + submission.getUsername()
                     + " again. The result did not change.");
@@ -1260,6 +1261,29 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public List<SimilarityPair> checkSimilarity(GradingRun gradingRun) {
         return listSimilarPairs(gradingRun);
+    }
+
+    /**
+     * Returns the sample pair for a Similar code flag of one of its two
+     * students.
+     */
+    @Override
+    public SimilarityPair findSimilarPair(GradingRun gradingRun,
+            Anomaly anomaly) {
+        boolean similarFlag = anomaly != null
+                && anomaly.getType() == AnomalyType.SIMILAR_CODE;
+        if (!similarFlag) {
+            return null;
+        }
+        String username = anomaly.getUsername();
+        for (SimilarityPair pair : listSimilarPairs(gradingRun)) {
+            boolean ofStudent = pair.getFirstUsername().equals(username)
+                    || pair.getSecondUsername().equals(username);
+            if (ofStudent) {
+                return pair;
+            }
+        }
+        return null;
     }
 
     /**

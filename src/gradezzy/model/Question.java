@@ -8,6 +8,9 @@
  */
 package gradezzy.model;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * One gradable question of an assessment, such as Q1a.
  *
@@ -26,6 +29,10 @@ public class Question {
 
     // The most marks this question can earn
     private final double maxScore;
+
+    // The other source files the student writes for this question, such
+    // as GoldMember.java next to Q3.java
+    private final List<String> extraFileNames = new ArrayList<>();
 
     /**
      * Creates a new question.
@@ -77,5 +84,18 @@ public class Question {
      */
     public double getMaxScore() {
         return maxScore;
+    }
+
+    /**
+     * Returns the other source files the student writes for this
+     * question, such as GoldMember.java next to Q3.java. They are the
+     * starter's other .java files in the question's folder, filled in
+     * when a batch is graded; the list is empty when there are none or no
+     * starter folder is known. The list can be changed.
+     *
+     * @return the other source file names
+     */
+    public List<String> getExtraFileNames() {
+        return extraFileNames;
     }
 }

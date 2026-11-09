@@ -1792,7 +1792,15 @@ public class FlowSelfTest {
 
     // Returns the card of the student panel that shows an anomaly.
     private Node cardOf(Anomaly anomaly) {
-        return rowOf(anomaly.getMessage(), "fix-card");
+        // A made fix's card says what the fix did, else what was wrong
+        Node card = null;
+        if (!anomaly.describeFix().isEmpty()) {
+            card = rowOf(anomaly.describeFix(), "fix-card");
+        }
+        if (card == null) {
+            card = rowOf(anomaly.getMessage(), "fix-card");
+        }
+        return card;
     }
 
     // Returns the row of a question in the student panel.

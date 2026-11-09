@@ -469,12 +469,17 @@ public class FlowWindow {
     }
 
     /**
-     * Says whether a fix job still grades a student again, and if so
-     * tells the instructor to wait, as grading cannot start meanwhile.
+     * Says whether a fix job or a Grade again job still grades a student
+     * again, and if so tells the instructor to wait, as grading cannot
+     * start meanwhile.
      *
-     * @return true while a fix job runs
+     * @return true while such a job runs
      */
     public boolean blockedByFix() {
+        if (state.isRegrading()) {
+            notify("Wait until the students have been graded again.");
+            return true;
+        }
         if (state.getFixInProgress() == null) {
             return false;
         }

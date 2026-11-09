@@ -75,6 +75,7 @@ import gradezzy.ui.GradingTask;
 import gradezzy.ui.GradingTaskKind;
 import gradezzy.util.FileUtils;
 import gradezzy.util.InputValidator;
+import gradezzy.util.TextUtils;
 
 /**
  * The backend that calls the real services.
@@ -95,20 +96,16 @@ public class LiveBackend implements DashboardBackend {
     // folder, and one wrapper folder around it
     private static final int SOURCE_SEARCH_DEPTH = 3;
 
-    // How PlagiarismService writes a Similar code flag: its id is
-    // SIMILAR-<run>/<student>/<other student>/<question>, and its message
-    // starts "<question> is <percent>% similar"
-    private static final String SIMILAR_ID_PREFIX = "SIMILAR-";
-    private static final String SIMILAR_ID_SEPARATOR = "/";
-    private static final int SIMILAR_ID_PARTS = 3;
-    private static final int STUDENT_PART = 0;
-    private static final int OTHER_STUDENT_PART = 1;
-    private static final int QUESTION_PART = 2;
-    private static final String SIMILAR_MESSAGE_MIDDLE = " is ";
-    private static final String PERCENT_SIGN = "%";
+    // The activity log actions of grading a student or a question again
+    private static final String STUDENT_GRADED_AGAIN = "Student graded again";
+    private static final String QUESTION_GRADED_AGAIN =
+            "Question graded again";
 
-    // Turns a percentage into a similarity from 0 to 1
-    private static final double PERCENT = 100.0;
+    // Shown for a student or question that has no mark
+    private static final String NOT_GRADED = "not graded";
+
+    // Separates the questions in a list of kept marks
+    private static final String LIST_SEPARATOR = ", ";
 
     // Every service of the application
     private final ServiceRegistry services;
@@ -646,20 +643,169 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet: no service retries one question.
+     * Calls GradingService.regradeQuestion, which compiles and runs only
+     * that question again and saves the run, then puts a mark set by hand
+     * back with ScoreAdjustmentService.keepAfterRegrade. It runs a
+     * tester, so call it off the window's thread, as RegradeJob does.
+     * The activity log keeps the old and new marks.
      */
     @Override
-    public ActionResult retryQuestion(Submission submission,
+    public ActionResult retryQuestion(GradingRun run, Submission submission,
             String questionId) {
-        return ActionResult.notConnected(Capability.RETRY_QUESTION);
+        String refused = explainNoRegrade(run, submission);
+        if (refused != null) {
+            return ActionResult.failed(refused);
+        }
+
+        ScoreAdjustmentService adjustments =
+                services.getScoreAdjustmentService();
+        List<ScoreAdjustment> handMarks = findHandMark(
+                adjustments.listNewest(run, submission), questionId);
+        String markBefore = describeMark(submission, questionId);
+        String totalBefore = describeTotal(submission);
+        try {
+            services.getGradingService().regradeQuestion(run, submission,
+                    questionId, null);
+        } catch (GradingException exception) {
+            return ActionResult.failed(exception.getMessage());
+        } finally {
+            forgetSavedRuns();
+        }
+        rememberFoundNow(submission);
+        List<ScoreAdjustment> kept = adjustments.keepAfterRegrade(run,
+                submission, handMarks);
+
+        String markAfter = describeMark(submission, questionId);
+        String totalAfter = describeTotal(submission);
+        String keptWords = describeKept(kept);
+        String change = submission.getUsername() + " " + questionId + ": "
+                + markBefore + " to " + markAfter + ", total " + totalBefore
+                + " to " + totalAfter + "." + keptWords;
+        recordActivity(QUESTION_GRADED_AGAIN,
+                AuditEntry.withReference(change, run.getId()));
+        return ActionResult.done("Graded " + questionId + " of "
+                + submission.getUsername() + " again: " + markBefore
+                + " to " + markAfter + ". Total " + totalAfter + ". Other "
+                + "marks did not change." + keptWords);
     }
 
     /**
-     * Returns Not connected yet: no service retries one submission.
+     * Calls GradingService.regradeSubmission, which grades the student
+     * again from the upload and saves the run, then puts the marks set by
+     * hand back with ScoreAdjustmentService.keepAfterRegrade. It runs
+     * every tester, so call it off the window's thread, as RegradeJob
+     * does. An upload that was refused stays refused. The activity log
+     * keeps the old and new totals.
      */
     @Override
-    public ActionResult retrySubmission(Submission submission) {
-        return ActionResult.notConnected(Capability.RETRY_SUBMISSION);
+    public ActionResult retrySubmission(GradingRun run,
+            Submission submission) {
+        String refused = explainNoRegrade(run, submission);
+        if (refused != null) {
+            return ActionResult.failed(refused);
+        }
+
+        ScoreAdjustmentService adjustments =
+                services.getScoreAdjustmentService();
+        List<ScoreAdjustment> handMarks = adjustments.listNewest(run,
+                submission);
+        String totalBefore = describeTotal(submission);
+        try {
+            services.getGradingService().regradeSubmission(run, submission,
+                    null);
+        } catch (GradingException exception) {
+            return ActionResult.failed(exception.getMessage());
+        } finally {
+            forgetSavedRuns();
+        }
+        rememberFoundNow(submission);
+        List<ScoreAdjustment> kept = adjustments.keepAfterRegrade(run,
+                submission, handMarks);
+
+        String totalAfter = describeTotal(submission);
+        String keptWords = describeKept(kept);
+        String change = submission.getUsername() + ": " + totalBefore
+                + " to " + totalAfter + "." + keptWords;
+        recordActivity(STUDENT_GRADED_AGAIN,
+                AuditEntry.withReference(change, run.getId()));
+        return ActionResult.done("Graded " + submission.getUsername()
+                + " again. Total " + totalBefore + " to " + totalAfter + "."
+                + keptWords);
+    }
+
+    // Says why a student cannot be graded again, or returns null when
+    // they can. An upload that was refused stays refused: grading the
+    // same file again cannot help.
+    private String explainNoRegrade(GradingRun run, Submission submission) {
+        if (submission == null || run == null) {
+            return "Choose a student of a graded run first.";
+        }
+        boolean refused = submission.getIngestFailure() != null
+                || ResultState.isRejectedUpload(submission);
+        if (refused) {
+            return "The upload of " + submission.getUsername() + " was "
+                    + "refused, so it stays refused and was not graded "
+                    + "again. Choose a new copy of the zip on Set up.";
+        }
+        return null;
+    }
+
+    // Keeps only the mark set by hand for one question.
+    private List<ScoreAdjustment> findHandMark(
+            List<ScoreAdjustment> handMarks, String questionId) {
+        List<ScoreAdjustment> found = new ArrayList<>();
+        for (ScoreAdjustment change : handMarks) {
+            if (change.getQuestionId().equals(questionId)) {
+                found.add(change);
+            }
+        }
+        return found;
+    }
+
+    // Says which marks set by hand were kept, such as " Kept the mark set
+    // by hand for Q2b (4).", or "" when none was.
+    private String describeKept(List<ScoreAdjustment> kept) {
+        if (kept.isEmpty()) {
+            return "";
+        }
+        List<String> marks = new ArrayList<>();
+        for (ScoreAdjustment change : kept) {
+            marks.add(change.getQuestionId() + " ("
+                    + ScoreFormatter.format(change.getNewScore()) + ")");
+        }
+        String words = " Kept the mark set by hand for ";
+        if (kept.size() > 1) {
+            words = " Kept the marks set by hand for ";
+        }
+        return words + TextUtils.join(LIST_SEPARATOR, marks) + ".";
+    }
+
+    // The total of a student for a message, or "not graded".
+    private String describeTotal(Submission submission) {
+        if (!ResultState.hasTotal(submission)) {
+            return NOT_GRADED;
+        }
+        return ScoreFormatter.format(submission.getTotalScore());
+    }
+
+    // The mark of one question of a student, or "not graded".
+    private String describeMark(Submission submission, String questionId) {
+        for (QuestionResult result : submission.getQuestionResults()) {
+            Question question = result.getQuestion();
+            if (question != null && question.getId().equals(questionId)) {
+                return ScoreFormatter.format(result.getScore());
+            }
+        }
+        return NOT_GRADED;
+    }
+
+    // Remembers the problems a student was given when graded again in
+    // this session, so a failed undo of one of their fixes is explained
+    // right.
+    private void rememberFoundNow(Submission submission) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            anomaliesFoundNow.add(anomaly.getId());
+        }
     }
 
     /**
@@ -1489,30 +1635,22 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Reads the pairs back from the run's Similar code flags, so nothing
-     * is checked again and a saved run shows the pairs it was saved with.
+     * Calls PlagiarismService.listPairs, which reads the pairs back from
+     * the run's Similar code flags, so nothing is checked again and a
+     * saved run shows the pairs it was saved with.
      */
     @Override
     public List<SimilarityPair> listSimilarPairs(GradingRun gradingRun) {
-        List<SimilarityPair> pairs = new ArrayList<>();
-        if (gradingRun == null) {
-            return pairs;
-        }
+        return services.getPlagiarismService().listPairs(gradingRun);
+    }
 
-        String idStart = SIMILAR_ID_PREFIX + gradingRun.getId()
-                + SIMILAR_ID_SEPARATOR;
-        // Both students of a pair hold a flag, so each pair is kept once
-        List<String> pairKeys = new ArrayList<>();
-        for (Submission submission : gradingRun.getSubmissions()) {
-            for (Anomaly anomaly : submission.getAnomalies()) {
-                SimilarityPair pair = readSimilarFlag(anomaly, idStart);
-                if (pair != null && !pairKeys.contains(pairKey(pair))) {
-                    pairKeys.add(pairKey(pair));
-                    insertBySimilarity(pairs, pair);
-                }
-            }
-        }
-        return pairs;
+    /**
+     * Calls PlagiarismService.readPair, the one place a flag is read.
+     */
+    @Override
+    public SimilarityPair findSimilarPair(GradingRun gradingRun,
+            Anomaly anomaly) {
+        return services.getPlagiarismService().readPair(gradingRun, anomaly);
     }
 
     /**
@@ -1528,63 +1666,6 @@ public class LiveBackend implements DashboardBackend {
         // The check saves the run, so saved copies of it are stale
         forgetSavedRuns();
         return pairs;
-    }
-
-    // Reads the pair a Similar code flag of the run names, or returns
-    // null for any other anomaly or a flag that cannot be read.
-    private SimilarityPair readSimilarFlag(Anomaly anomaly, String idStart) {
-        if (anomaly.getType() != AnomalyType.SIMILAR_CODE
-                || !anomaly.getId().startsWith(idStart)) {
-            return null;
-        }
-
-        String[] parts = anomaly.getId().substring(idStart.length())
-                .split(SIMILAR_ID_SEPARATOR);
-        if (parts.length != SIMILAR_ID_PARTS) {
-            return null;
-        }
-
-        String questionId = parts[QUESTION_PART];
-        String message = anomaly.getMessage();
-        String start = questionId + SIMILAR_MESSAGE_MIDDLE;
-        int end = message.indexOf(PERCENT_SIGN);
-        if (!message.startsWith(start) || end < start.length()) {
-            return null;
-        }
-
-        try {
-            int percent = Integer.parseInt(message.substring(
-                    start.length(), end));
-            return new SimilarityPair(parts[STUDENT_PART],
-                    parts[OTHER_STUDENT_PART], questionId,
-                    percent / PERCENT);
-        } catch (NumberFormatException exception) {
-            return null;
-        }
-    }
-
-    // Names a pair the same way whichever student comes first.
-    private String pairKey(SimilarityPair pair) {
-        String first = pair.getFirstUsername();
-        String second = pair.getSecondUsername();
-        if (first.compareTo(second) > 0) {
-            return pair.getQuestionId() + SIMILAR_ID_SEPARATOR + second
-                    + SIMILAR_ID_SEPARATOR + first;
-        }
-        return pair.getQuestionId() + SIMILAR_ID_SEPARATOR + first
-                + SIMILAR_ID_SEPARATOR + second;
-    }
-
-    // Adds a pair after every pair at least as similar, so the list stays
-    // most similar first.
-    private void insertBySimilarity(List<SimilarityPair> pairs,
-            SimilarityPair pair) {
-        int place = 0;
-        while (place < pairs.size()
-                && pairs.get(place).getSimilarity() >= pair.getSimilarity()) {
-            place++;
-        }
-        pairs.add(place, pair);
     }
 
     /**

@@ -1,8 +1,8 @@
 /*
  * File: DetectStage.java
  *
- * Purpose: Flags untouched starter files, empty answers and hard-coded answers
- * for the instructor to review.
+ * Purpose: Flags untouched starter files, empty answers, hard-coded answers
+ * and headers that name another student, for the instructor to review.
  *
  * Where it fits: Fourth stage. It never changes a score.
  */
@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 import gradezzy.detection.Detector;
+import gradezzy.detection.RosterCheck;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
@@ -39,13 +40,30 @@ public class DetectStage implements GradingStage {
     // The detectors to run
     private final List<Detector> detectors;
 
+    // The checks that also read the roster, run after the detectors
+    private final List<RosterCheck> rosterChecks;
+
     /**
-     * Creates a new detect stage.
+     * Creates a new detect stage with no roster checks.
      *
      * @param detectors the detectors to run
      */
     public DetectStage(List<Detector> detectors) {
+        this(detectors, new ArrayList<RosterCheck>());
+    }
+
+    /**
+     * Creates a new detect stage.
+     *
+     * <p>Tier: SHOULD. Owner: Jing Yuan.
+     *
+     * @param detectors the detectors to run
+     * @param rosterChecks the checks that also read the run's roster
+     */
+    public DetectStage(List<Detector> detectors,
+            List<RosterCheck> rosterChecks) {
         this.detectors = detectors;
+        this.rosterChecks = rosterChecks;
     }
 
     /**
@@ -76,6 +94,27 @@ public class DetectStage implements GradingStage {
                 submission.addAnomaly(flag);
             }
         }
+
+        for (RosterCheck rosterCheck : rosterChecks) {
+            List<Anomaly> flags = runRosterCheck(rosterCheck, submission,
+                    context);
+
+            for (Anomaly flag : flags) {
+                submission.addAnomaly(flag);
+            }
+        }
+    }
+
+    // Runs one roster check, or returns a warning if it fails.
+    private List<Anomaly> runRosterCheck(RosterCheck rosterCheck,
+            Submission submission, GradingContext context) {
+        try {
+            return rosterCheck.check(submission, context.getAssessment(),
+                    context.getRoster());
+        } catch (RuntimeException exception) {
+            return failedCheck(rosterCheck.getName(), submission,
+                    exception);
+        }
     }
 
     // Runs one detector, or returns a warning if it fails.
@@ -84,13 +123,19 @@ public class DetectStage implements GradingStage {
         try {
             return detector.detect(submission, assessment);
         } catch (RuntimeException exception) {
-            List<Anomaly> warning = new ArrayList<>();
-            warning.add(new Anomaly(ID_PREFIX + UUID.randomUUID(),
-                    AnomalyType.INTERNAL_ERROR, Severity.WARNING,
-                    submission.getUsername(), "The check '"
-                    + detector.getName() + "' could not run: "
-                    + exception.getMessage(), FAILED_CHECK_ACTION));
-            return warning;
+            return failedCheck(detector.getName(), submission, exception);
         }
+    }
+
+    // Returns the warning that a check could not run.
+    private List<Anomaly> failedCheck(String checkName,
+            Submission submission, RuntimeException exception) {
+        List<Anomaly> warning = new ArrayList<>();
+        warning.add(new Anomaly(ID_PREFIX + UUID.randomUUID(),
+                AnomalyType.INTERNAL_ERROR, Severity.WARNING,
+                submission.getUsername(), "The check '" + checkName
+                + "' could not run: " + exception.getMessage(),
+                FAILED_CHECK_ACTION));
+        return warning;
     }
 }

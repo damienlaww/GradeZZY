@@ -78,6 +78,14 @@ final class JavaSourceText {
     // Reads the student's file for a question, or returns null if missing.
     static String readStudentFile(Submission submission,
             Assessment assessment, Question question) {
+        return readStudentFile(submission, assessment, question,
+                question.getFileName());
+    }
+
+    // Reads one of the student's files in a question's folder, such as
+    // its answer file or GoldMember.java, or returns null if missing.
+    static String readStudentFile(Submission submission,
+            Assessment assessment, Question question, String fileName) {
         try {
             Path folder = QuestionFolderFinder.find(submission, assessment,
                     question);
@@ -86,10 +94,19 @@ final class JavaSourceText {
                 return null;
             }
 
-            return readFile(folder.resolve(question.getFileName()));
+            return readFile(folder.resolve(fileName));
         } catch (IOException exception) {
             return null;
         }
+    }
+
+    // Lists the files the student writes for a question: its answer file
+    // first, then its other source files, such as GoldMember.java.
+    static List<String> listSourceFiles(Question question) {
+        List<String> fileNames = new ArrayList<>();
+        fileNames.add(question.getFileName());
+        fileNames.addAll(question.getExtraFileNames());
+        return fileNames;
     }
 
     // Reads the starter file for a question, or returns null if missing.
@@ -101,8 +118,12 @@ final class JavaSourceText {
 
     // Names a question's file the way the instructor sees it: Q1/Q1a.java.
     static String describeFile(Question question) {
-        return question.getFolderName() + FOLDER_SEPARATOR
-                + question.getFileName();
+        return describeFile(question, question.getFileName());
+    }
+
+    // Names one file of a question's folder, such as Q3/GoldMember.java.
+    static String describeFile(Question question, String fileName) {
+        return question.getFolderName() + FOLDER_SEPARATOR + fileName;
     }
 
     // Says whether a file is unchanged from the starter file.

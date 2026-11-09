@@ -9,7 +9,6 @@
 package gradezzy.validation;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -129,13 +128,13 @@ public class HeaderNameValidator extends AbstractValidator {
         return findExact(listFiles(folder), question.getFileName());
     }
 
-    // Reads the first HEADER_SCAN_LINES lines of a file. The bytes are
-    // decoded so that a character that is not valid UTF-8 is replaced
-    // instead of stopping the check.
+    // Reads the first HEADER_SCAN_LINES lines of a file. The checks run
+    // before the encoding fix, so a UTF-16 file is read by its byte order
+    // mark, and a character that is not valid UTF-8 is replaced instead
+    // of stopping the check.
     private List<String> readHeader(Path file) throws IOException {
         int scanLines = config.getInt(ConfigKeys.HEADER_SCAN_LINES);
-        String text = new String(Files.readAllBytes(file),
-                StandardCharsets.UTF_8);
+        String text = TextUtils.decodeSource(Files.readAllBytes(file));
         String[] lines = TextUtils.normaliseLineEndings(text)
                 .split(NEW_LINE);
         List<String> header = new ArrayList<>();
