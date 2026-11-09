@@ -21,9 +21,11 @@ import gradezzy.util.TextUtils;
  * The lines of two files, each marked same, own, starter or blank.
  *
  * <p>Spaces are ignored when lines are compared. A line in the starter
- * file is starter code and is never marked same. A line holding only
- * closing brackets, such as "}" or "});", takes the kind of the line
- * above it, so a block that is the same reads as one piece.
+ * file is starter code and is never marked same. A starter comment line
+ * ending in a colon, such as " * Name:", is a label the student fills
+ * in, so any line starting with it is starter code too. A line holding
+ * only closing brackets, such as "}" or "});", takes the kind of the
+ * line above it, so a block that is the same reads as one piece.
  *
  * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
@@ -37,6 +39,15 @@ public class LineComparison {
 
     // What indexOf returns when a character is not found
     private static final int NOT_FOUND = -1;
+
+    // The text that ends a starter label, such as "Name:"
+    private static final String LABEL_END = ":";
+
+    // How a block comment line starts once spaces are removed
+    private static final String BLOCK_COMMENT_START = "*";
+
+    // How a line comment starts
+    private static final String LINE_COMMENT_START = "//";
 
     // The first file's lines
     private final List<String> firstLines;
@@ -62,10 +73,11 @@ public class LineComparison {
         firstLines = splitLines(firstCode);
         secondLines = splitLines(secondCode);
         Set<String> starter = collectLines(splitLines(starterCode));
+        List<String> labels = collectLabels(starter);
         firstKinds = markLines(firstLines, collectLines(secondLines),
-                starter);
+                starter, labels);
         secondKinds = markLines(secondLines, collectLines(firstLines),
-                starter);
+                starter, labels);
     }
 
     /**
@@ -105,16 +117,21 @@ public class LineComparison {
     }
 
     /**
-     * Counts the lines of one kind.
+     * Counts the lines of one kind, leaving out lines of brackets only.
      *
-     * @param kinds the kinds of a file's lines
+     * @param lines a file's lines
+     * @param kinds the kind of each of those lines
      * @param kind the kind to count
-     * @return how many lines are of that kind
+     * @return how many lines are of that kind and hold more than brackets
      */
-    public static int count(List<LineKind> kinds, LineKind kind) {
+    public static int countCode(List<String> lines, List<LineKind> kinds,
+            LineKind kind) {
         int total = 0;
-        for (LineKind each : kinds) {
-            if (each == kind) {
+        for (int index = 0; index < kinds.size(); index++) {
+            String key = removeSpaces(lines.get(index));
+            boolean counted = kinds.get(index) == kind
+                    && !isBracketsOnly(key);
+            if (counted) {
                 total++;
             }
         }
@@ -172,9 +189,44 @@ public class LineComparison {
         return found;
     }
 
+    // Collects the starter comment lines that end in a colon, such as
+    // "*Name:".
+    private static List<String> collectLabels(Set<String> starter) {
+        List<String> labels = new ArrayList<>();
+        for (String key : starter) {
+            if (isLabel(key)) {
+                labels.add(key);
+            }
+        }
+        return labels;
+    }
+
+    // Says whether a line is a comment line that ends in a colon.
+    private static boolean isLabel(String key) {
+        boolean comment = key.startsWith(BLOCK_COMMENT_START)
+                || key.startsWith(LINE_COMMENT_START);
+        return comment && key.endsWith(LABEL_END);
+    }
+
+    // Says whether a line is starter code: a starter line, or a label
+    // with the student's answer after it.
+    private static boolean isStarter(String key, Set<String> starter,
+            List<String> labels) {
+        if (starter.contains(key)) {
+            return true;
+        }
+        for (String label : labels) {
+            if (key.startsWith(label)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Works out the kind of every line of one file.
     private static List<LineKind> markLines(List<String> lines,
-            Set<String> otherLines, Set<String> starter) {
+            Set<String> otherLines, Set<String> starter,
+            List<String> labels) {
         List<LineKind> kinds = new ArrayList<>();
         LineKind previous = LineKind.OWN;
         for (String line : lines) {
@@ -184,7 +236,7 @@ public class LineComparison {
                 kind = LineKind.BLANK;
             } else if (isBracketsOnly(key)) {
                 kind = previous;
-            } else if (starter.contains(key)) {
+            } else if (isStarter(key, starter, labels)) {
                 kind = LineKind.STARTER;
             } else if (otherLines.contains(key)) {
                 kind = LineKind.SAME;

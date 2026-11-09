@@ -385,7 +385,6 @@ public class FlowWindow {
         show(step);
     }
 
-
     /**
      * Starts grading the batch chosen on Set up and shows the Grade
      * step. Does nothing while a batch is being graded.

@@ -395,7 +395,7 @@ public class GuidedTour {
         try {
             folder.mkdirs();
             return note.createNewFile();
-        } catch (IOException e) {
+        } catch (IOException exception) {
             return false;
         }
     }
@@ -717,36 +717,37 @@ public class GuidedTour {
             return;
         }
         Bounds box = visibleBox(found);
-        double holeLeft = Math.max(EDGE_SPACE, box.getMinX() - HOLE_PADDING);
-        double holeTop = Math.max(EDGE_SPACE, box.getMinY() - HOLE_PADDING);
+        double left = Math.max(EDGE_SPACE, box.getMinX() - HOLE_PADDING);
+        double top = Math.max(EDGE_SPACE, box.getMinY() - HOLE_PADDING);
         double right = Math.min(overlay.getWidth() - EDGE_SPACE,
                 box.getMaxX() + HOLE_PADDING);
         double bottom = Math.min(overlay.getHeight() - EDGE_SPACE,
                 box.getMaxY() + HOLE_PADDING);
-        double width = Math.max(0.0, right - holeLeft);
-        double height = Math.max(0.0, bottom - holeTop);
+        double width = Math.max(0.0, right - left);
+        double height = Math.max(0.0, bottom - top);
         ring.setVisible(true);
         pulse.setVisible(true);
         if (!slide) {
-            setHole(holeLeft, holeTop, width, height);
+            setHole(left, top, width, height);
         } else {
             if (!wasLit) {
                 // Grow out of the part's middle
-                setHole(holeLeft + width / 2, holeTop + height / 2, 0.0, 0.0);
+                setHole(left + width / 2, top + height / 2, 0.0, 0.0);
             }
             KeyFrame end = new KeyFrame(MOVE_TIME, new KeyValue[] {
-                new KeyValue(holeX, holeLeft, Interpolator.EASE_BOTH),
-                new KeyValue(holeY, holeTop, Interpolator.EASE_BOTH),
+                new KeyValue(holeX, left, Interpolator.EASE_BOTH),
+                new KeyValue(holeY, top, Interpolator.EASE_BOTH),
                 new KeyValue(holeWidth, width, Interpolator.EASE_BOTH),
                 new KeyValue(holeHeight, height, Interpolator.EASE_BOTH)});
             moveTimeline = new Timeline(new KeyFrame[] {end});
             moveTimeline.play();
         }
-        placeCard(new BoundingBox(holeLeft, holeTop, width, height));
+        placeCard(new BoundingBox(left, top, width, height));
     }
 
     // Puts the light at once where it is given.
-    private void setHole(double left, double top, double width, double height) {
+    private void setHole(double left, double top, double width,
+            double height) {
         holeX.set(left);
         holeY.set(top);
         holeWidth.set(width);

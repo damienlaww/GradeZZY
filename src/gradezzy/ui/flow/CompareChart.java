@@ -75,7 +75,6 @@ public class CompareChart extends Region {
     // How far a label sits from what it labels
     private static final double LABEL_GAP = 6.0;
 
-
     // The gap kept between two names moved apart
     private static final double NAME_SPACING = 2.0;
 

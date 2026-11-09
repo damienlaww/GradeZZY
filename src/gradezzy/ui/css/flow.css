@@ -1091,9 +1091,10 @@
     -fx-stroke-width: 0;
 }
 
-/* The Similar code sheet: both students' files in one box that
-   scrolls as one. A line that is in both files is red with a red bar on
-   its left; starter code is grey. */
+/* The Similar code sheet: both students' files in one box, each in its
+   own pane that scrolls sideways, while the two scroll up and down
+   together. Long lines do not wrap. A line that is in both files is red
+   with a red bar on its left; starter code is grey. */
 .similar-code {
     -fx-background-color: -color-bg-subtle;
     -fx-background-radius: 6px;
@@ -1102,24 +1103,23 @@
     -fx-padding: 8px 0;
 }
 
-.similar-code > .viewport {
+.similar-pane,
+.similar-pane > .viewport {
     -fx-background-color: transparent;
 }
 
+/* Only a left border, so both panes keep the same height */
 .similar-column-right {
-    -fx-border-color: transparent transparent transparent
-        -color-border-muted;
+    -fx-border-color: -color-border-muted;
+    -fx-border-width: 0 0 0 1px;
 }
 
 .code-line {
-    -fx-padding: 0 12px 0 9px;
-    -fx-border-color: transparent;
-    -fx-border-width: 0 0 0 3px;
+    -fx-padding: 0 12px 0 0;
 }
 
 .code-line.same {
     -fx-background-color: -color-danger-subtle;
-    -fx-border-color: -color-danger-emphasis;
 }
 
 .line-number,
@@ -1128,12 +1128,24 @@
     -fx-font-size: 12px;
 }
 
+/* The number stays at the left while the code scrolls under it, so it
+   has a solid background and carries the red bar. */
 .line-number {
-    -fx-min-width: 28px;
-    -fx-pref-width: 28px;
+    -fx-min-width: 40px;
+    -fx-pref-width: 40px;
     -fx-alignment: top-right;
-    -fx-padding: 0 12px 0 0;
+    -fx-padding: 0 12px 0 9px;
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 0 3px;
+    -fx-background-color: -color-bg-subtle;
     -fx-text-fill: -color-fg-subtle;
+}
+
+/* The red is see-through in the dark theme, so it is laid over the
+   box's own colour to hide the code under the number. */
+.code-line.same .line-number {
+    -fx-background-color: -color-bg-subtle, -color-danger-subtle;
+    -fx-border-color: -color-danger-emphasis;
 }
 
 .code-line.starter .line-code,

@@ -1283,21 +1283,17 @@ public class FlowSelfTest {
         check(window.getCurrentPage() == Page.HOME, "the tour starts on "
                 + "Home");
 
+        // The welcome lights up nothing; the last stop shows Done
         int stops = tour.getStopCount();
-        for (int stop = 0; stop < stops; stop++) {
-            String count = (stop + 1) + " of " + stops;
-            check(count.equals(SceneFinder.text(root(), "tour-count")),
-                    "the card says " + count);
-            if (stop > 0) {
-                check(tour.getTarget() != null, "stop " + (stop + 1)
-                        + " lights up a part of the window");
-            }
-            String button = "Next";
-            if (stop == stops - 1) {
-                button = "Done";
-            }
-            press(tourButton(button), button);
+        int lastStop = stops - 1;
+        checkTourCount(0, stops);
+        press(tourButton("Next"), "Next");
+        for (int stop = 1; stop < lastStop; stop++) {
+            checkTourStop(tour, stop, stops);
+            press(tourButton("Next"), "Next");
         }
+        checkTourStop(tour, lastStop, stops);
+        press(tourButton("Done"), "Done");
         check(!tour.isOpen(), "Done ends the tour");
         check(window.getCurrentPage() == Page.STATISTICS, "Done goes "
                 + "back to Statistics");
@@ -1345,6 +1341,21 @@ public class FlowSelfTest {
                 .contains("This step opens"), "the card says when the "
                 + "step opens");
         freshTour.end();
+    }
+
+    // Checks that the card counts a stop, such as "4 of 15".
+    private void checkTourCount(int stop, int stops) {
+        String count = (stop + 1) + " of " + stops;
+        check(count.equals(SceneFinder.text(root(), "tour-count")),
+                "the card says " + count);
+    }
+
+    // Checks the count of a stop after the welcome, and that it lights
+    // up a part of the window.
+    private void checkTourStop(GuidedTour tour, int stop, int stops) {
+        checkTourCount(stop, stops);
+        check(tour.getTarget() != null, "stop " + (stop + 1)
+                + " lights up a part of the window");
     }
 
     // Returns a button of the tour's card, or null.
@@ -1484,8 +1495,8 @@ public class FlowSelfTest {
         row = rowOf("Failed tests 3 and 4", "plain-row");
         check(row != null && SceneFinder.texts(row, "pill").contains("1 new"),
                 "a student who joined before Confirm shows as 1 new (pills: "
-                + (row == null ? "none" : SceneFinder.texts(row, "pill"))
-                + ")");
+                + (row == null ? "none"
+                        : SceneFinder.texts(row, "pill")) + ")");
         alphaQ3.getTestCaseResults().clear();
         for (TestCaseResult test : alphaTests) {
             alphaQ3.addTestCaseResult(test);

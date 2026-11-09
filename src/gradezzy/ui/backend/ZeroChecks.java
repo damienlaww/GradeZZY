@@ -31,6 +31,7 @@ final class ZeroChecks {
             Collections.synchronizedSet(Collections.newSetFromMap(
             new WeakHashMap<>()));
 
+    // Not used: every method is static.
     private ZeroChecks() {
     }
 
