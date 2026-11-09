@@ -808,7 +808,7 @@ reported and grading goes on.
 |---|---|
 | One student crashes the grader | Each stage failure becomes an `INTERNAL_ERROR` on that student; the batch carries on. |
 | Infinite loop or very slow code | Per-run time limit, kill of the whole process tree, rerun without the hung case. |
-| An error the tester cannot catch (`StackOverflowError`, `OutOfMemoryError`) | Rerun without the case that crashed, so the cases after it are still marked. |
+| An error the tester cannot catch (`StackOverflowError`, `OutOfMemoryError`) | Rerun without the case that crashed, so the cases after it are still marked. When a run printed `java.lang.OutOfMemoryError`, the message says the tester ran out of memory and names the `exec.max.memory.mb` limit. |
 | Endless printing | Output capped; student output has its own smaller share so the tester's lines are never cut off. |
 | Huge memory use or deep recursion | Heap limit, 2 MB stack, one CPU per run. |
 | Student prints `Passed` | Only token-marked lines from the tester are counted. |

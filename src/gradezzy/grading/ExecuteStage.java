@@ -74,6 +74,15 @@ public class ExecuteStage implements GradingStage {
     // Stands for "no test case hung"
     private static final int NO_CASE = 0;
 
+    // What Java prints when a program uses more memory than it may
+    private static final String OUT_OF_MEMORY_MARKER =
+            "java.lang.OutOfMemoryError";
+
+    // What the instructor can do about a tester that ran out of memory
+    private static final String OUT_OF_MEMORY_ACTION = "Read "
+            + "the code on Review: it may keep far more data than the "
+            + "question needs. The mark stays as the tester gave it.";
+
     // Allowed rounding gap when a printed total is compared with the cap
     private static final double SCORE_TOLERANCE = 0.000001;
 
@@ -166,6 +175,7 @@ public class ExecuteStage implements GradingStage {
         ProcessResult run = runTester(folder, tester.getClassName(),
                 skippedCases);
         ProcessResult firstRun = run;
+        boolean outOfMemory = ranOutOfMemory(run);
         QuestionResult parsed = scoreParser.parse(question, run);
         int stoppedCase = findStoppedCase(run, parsed, skippedCases);
         while (stoppedCase != NO_CASE && skippedCases.size() < maxReruns) {
@@ -174,6 +184,9 @@ public class ExecuteStage implements GradingStage {
             skippedCases.add(stoppedCase);
             putBackFiles(snapshot, question);
             run = runTester(folder, tester.getClassName(), skippedCases);
+            if (ranOutOfMemory(run)) {
+                outOfMemory = true;
+            }
             parsed = scoreParser.parse(question, run);
             stoppedCase = findStoppedCase(run, parsed, skippedCases);
         }
@@ -240,6 +253,14 @@ public class ExecuteStage implements GradingStage {
                     + "A run that ends early never prints the tester's "
                     + "total, so these passes could not be checked against "
                     + "it.", EARLY_EXIT_ACTION);
+        } else if (outOfMemory) {
+            int limitMb = context.getConfig().getInt(
+                    ConfigKeys.MAX_MEMORY_MB);
+            addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
+                    + question.getId() + " tester ran out of memory: "
+                    + "student code may use at most " + limitMb + " MB ("
+                    + ConfigKeys.MAX_MEMORY_MB + "). " + outcome,
+                    OUT_OF_MEMORY_ACTION);
         } else if (firstRun.getExitCode() == TesterHarness.CRASH_EXIT_CODE) {
             addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
                     + question.getId() + " tester stopped because a case "
@@ -252,6 +273,13 @@ public class ExecuteStage implements GradingStage {
                     + "code " + firstRun.getExitCode() + "). " + outcome,
                     RUNTIME_ERROR_ACTION);
         }
+    }
+
+    // Says whether a run of the tester stopped because student code used
+    // more memory than exec.max.memory.mb allows.
+    private boolean ranOutOfMemory(ProcessResult run) {
+        String output = run.getStandardOutput() + run.getStandardError();
+        return output.contains(OUT_OF_MEMORY_MARKER);
     }
 
     /**
