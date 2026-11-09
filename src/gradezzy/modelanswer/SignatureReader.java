@@ -129,6 +129,12 @@ public class SignatureReader {
                 if (close == NOT_FOUND) {
                     return methods;
                 }
+                if (endsWithAnnotation(header)) {
+                    // The arguments of an annotation such as
+                    // @SuppressWarnings("unchecked"): the method comes after
+                    index = close + NEXT;
+                    continue;
+                }
                 int firstParameter = index + NEXT;
                 List<String> parameters = tokens.subList(firstParameter,
                         close);
@@ -194,7 +200,18 @@ public class SignatureReader {
         return method;
     }
 
-    // Removes annotations such as @Override from a method's header.
+    // Says whether a header ends with an annotation's name, such as
+    // "@ SuppressWarnings", so the "(" after it opens its arguments.
+    private boolean endsWithAnnotation(List<String> header) {
+        int markIndex = header.size() - ANNOTATION_LENGTH;
+        if (markIndex < 0) {
+            return false;
+        }
+        return header.get(markIndex).equals(ANNOTATION_MARK);
+    }
+
+    // Removes annotations such as @Override from a method's header. The
+    // arguments of an annotation never reach the header.
     private List<String> removeAnnotations(List<String> header) {
         List<String> words = new ArrayList<>();
         int index = 0;

@@ -373,8 +373,11 @@ public class MutantMaker {
 
     // Adds a copy with the statement starting at an index removed, when
     // it is a return, break or continue, an assignment, a change by one
-    // or a method call. Declarations are kept, since removing one only
-    // stops the copy compiling.
+    // or a method call. Declarations that start with a type word, such as
+    // "int count = 0;", are kept, since removing one only stops the copy
+    // compiling; one that starts with a class name, such as
+    // "String[] parts = ...;", can slip through, and its copy is left out
+    // when it does not compile.
     private void addRemovedStatement(List<Mutant> mutants, String fileName,
             String source, String[] lines, List<JavaToken> tokens,
             int index) {

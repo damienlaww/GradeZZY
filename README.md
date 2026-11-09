@@ -652,7 +652,9 @@ the tester on each:
    `tester.strength.timeout.seconds`, on `exec.thread.count` threads
    (`MutantWorker`, `MutantBatch`). A copy that does not compile is left
    out. A copy that loses marks, or runs past the limit, is caught. A
-   copy that still gets full marks survives.
+   copy that still gets full marks survives. The summary says how many
+   were caught only by the time limit, since a slow or busy computer can
+   stop a copy that would have survived.
 5. The result per question is the mutation score: the share of copies
    caught. Every surviving copy is listed with its line and change, and
    the report is saved as `tester-strength.txt` in the section's export
@@ -683,7 +685,8 @@ new every run:
 
 1. `SignatureReader` finds the methods of the model answer that can be
    called with made-up inputs: static, not private, named in the
-   starter file (so helpers of the model answer are left out), with
+   starter file (so helpers of the model answer are left out; a question
+   with no starter file is not checked), with
    parameters that are numbers, text, `char`, `boolean`, or arrays and
    `ArrayList`s of these, and a result that prints the same way every
    time. A parameter whose name contains "file" is left out, since
@@ -703,8 +706,9 @@ new every run:
 4. `RandomInputChecker` runs the program on the model answer once per
    question and run, and then in each student's compiled question
    folder. An input on which the model answer throws is outside the
-   question and is left out. Decimal results that differ only in their
-   last digits count as the same. A student run stopped at the time
+   question and is left out. Decimal (`double`) results that differ
+   only in their last digits count as the same; every other result must
+   match exactly. A student run stopped at the time
    limit is compared on the calls it finished, since the limit is for
    the whole run and cannot be blamed on one input.
 5. Any difference becomes a `DIFFERENT_FROM_MODEL_ANSWER` flag naming

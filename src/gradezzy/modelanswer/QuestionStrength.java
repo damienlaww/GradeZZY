@@ -165,7 +165,9 @@ public class QuestionStrength {
 
     /**
      * Sums up the question in one sentence, such as "Q2b: the tester
-     * gave full marks to 7 of 40 broken copies (caught 83%)."
+     * gave full marks to 7 of 40 broken copies (caught 83%)." Copies
+     * caught only because they ran past the time limit are counted
+     * apart.
      *
      * @return the sentence
      */
@@ -179,9 +181,17 @@ public class QuestionStrength {
             return questionId + ": no broken copy could be made and run.";
         }
 
+        String caught = "caught " + getPercentCaught() + "%";
+        int timedOut = countOutcome(MutantOutcome.TIMED_OUT);
+        if (timedOut > 0) {
+            // Shown apart, since a slow computer can stop a copy that
+            // would have survived
+            caught = caught + ", " + timedOut + " of them only by the "
+                    + "time limit";
+        }
         return questionId + ": the tester gave full marks to "
-                + countSurvived() + " of " + tried + " broken copies "
-                + "(caught " + getPercentCaught() + "%).";
+                + countSurvived() + " of " + tried + " broken copies ("
+                + caught + ").";
     }
 
     // Counts the copies with one outcome.

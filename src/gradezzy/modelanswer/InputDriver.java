@@ -24,8 +24,8 @@ import gradezzy.util.TextUtils;
  *
  * <p>Each line it prints is the call's number, then VALUE_MARK and the
  * result, or THREW_MARK and the exception's class, separated by tabs.
- * Line breaks and tabs in a result are written as \n and \t, so one call
- * is always one line.
+ * Every character Java counts as a line break, and tabs, are written as
+ * escapes such as \n and \t, so one call is always one line.
  *
  * <p>Tier: COULD. Owner: Jing Yuan.
  */
@@ -78,11 +78,21 @@ public class InputDriver {
     private static final String[] HELPERS = {
         "    private static void report(int number,",
         "            java.lang.String text) {",
-        "        java.lang.String oneLine = text"
-                + ".replace(\"\\\\\", \"\\\\\\\\\")",
-        "                .replace(\"\\n\", \"\\\\n\")"
-                + ".replace(\"\\r\", \"\\\\r\")",
-        "                .replace(\"\\t\", \"\\\\t\");",
+        "        java.lang.String oneLine = text",
+        "                .replace(\"\\\\\", \"\\\\\\\\\")",
+        "                .replace(\"\\n\", \"\\\\n\")",
+        "                .replace(\"\\r\", \"\\\\r\")",
+        "                .replace(\"\\t\", \"\\\\t\")",
+        "                .replace(java.lang.String.valueOf((char) 11),",
+        "                        \"\\\\u000b\")",
+        "                .replace(java.lang.String.valueOf((char) 12),",
+        "                        \"\\\\u000c\")",
+        "                .replace(java.lang.String.valueOf((char) 133),",
+        "                        \"\\\\u0085\")",
+        "                .replace(java.lang.String.valueOf((char) 8232),",
+        "                        \"\\\\u2028\")",
+        "                .replace(java.lang.String.valueOf((char) 8233),",
+        "                        \"\\\\u2029\");",
         "        java.lang.System.out.println(number + \"\\t" + VALUE_MARK
                 + "\\t\" + oneLine);",
         "    }",

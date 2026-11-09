@@ -28,7 +28,6 @@ import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.exec.ProcessExecutionException;
 import gradezzy.exec.ProcessResult;
-import gradezzy.exec.ProcessRunner;
 import gradezzy.exec.SourceCompiler;
 import gradezzy.exec.TesterRunner;
 import gradezzy.model.Question;
@@ -88,6 +87,8 @@ public class RandomInputChecker {
     // result prints
     private static final String STRING_TYPE = "String";
     private static final String CHAR_TYPE = "char";
+    private static final String DOUBLE_TYPE = "double";
+    private static final String BOXED_DOUBLE_TYPE = "Double";
     private static final String TEXT_QUOTE = "\"";
     private static final String CHAR_QUOTE = "'";
     private static final String NULL_TEXT = "null";
@@ -124,16 +125,18 @@ public class RandomInputChecker {
      * Creates a checker for one grading run, with new random inputs.
      *
      * @param config the settings
-     * @param processRunner the helper that runs javac and java
+     * @param compiler compiles the input program
+     * @param testerRunner runs the input program like a tester
      * @param modelAnswers the model answers folder
      * @param starterDirectory the starter folder
      * @param seed where the random inputs start; a new one each run
      */
-    public RandomInputChecker(AppConfig config, ProcessRunner processRunner,
-            Path modelAnswers, Path starterDirectory, long seed) {
+    public RandomInputChecker(AppConfig config, SourceCompiler compiler,
+            TesterRunner testerRunner, Path modelAnswers,
+            Path starterDirectory, long seed) {
         this.config = config;
-        this.compiler = new SourceCompiler(config, processRunner);
-        this.testerRunner = new TesterRunner(config, processRunner);
+        this.compiler = compiler;
+        this.testerRunner = testerRunner;
         this.modelAnswers = modelAnswers;
         this.starterDirectory = starterDirectory;
         this.inputMaker = new InputMaker(new Random(seed));
@@ -229,6 +232,11 @@ public class RandomInputChecker {
         Path modelFolder = workFolder.resolve(question.getId());
         try {
             prepareInFolder(question, modelFolder, checks);
+        } catch (ProcessExecutionException exception) {
+            // java could not run, perhaps only for now: the next student
+            // tries again rather than every one being skipped
+            prepared.remove(question.getId());
+            throw exception;
         } catch (IOException exception) {
             System.err.println("Random inputs: the model answer of "
                     + question.getId() + " could not be copied: "
@@ -261,9 +269,16 @@ public class RandomInputChecker {
             return;
         }
 
+        // Without the starter's file, the methods the question asks for
+        // cannot be told from the model answer's own helpers, which the
+        // students do not have, so the question is skipped
+        String starterSource = readStarter(question);
+        if (starterSource.isEmpty()) {
+            return;
+        }
         String source = FileUtils.readText(answerFile);
         List<MethodSignature> methods = signatureReader.read(source,
-                classNameOf(question), readStarter(question));
+                classNameOf(question), starterSource);
         int count = config.getInt(ConfigKeys.RANDOM_INPUTS_COUNT);
         for (MethodSignature method : methods) {
             List<List<String>> inputs = inputMaker.make(method, count);
@@ -285,7 +300,7 @@ public class RandomInputChecker {
     }
 
     // Reads the starter's copy of a question's file, or "" when there is
-    // none, so every method of the model answer is called.
+    // none.
     private String readStarter(Question question) throws IOException {
         if (starterDirectory == null) {
             return "";
@@ -393,7 +408,8 @@ public class RandomInputChecker {
             CallResult actual = studentResults.get(number);
             boolean comparable = expected != null && actual != null
                     && !expected.hasThrown();
-            if (comparable && !isSameAnswer(expected, actual)) {
+            boolean decimal = isDecimal(check.getMethod());
+            if (comparable && !isSameAnswer(expected, actual, decimal)) {
                 different++;
                 addExample(examples, check, index, expected, actual);
             }
@@ -401,9 +417,12 @@ public class RandomInputChecker {
         return different;
     }
 
-    // Says whether two answers are the same: equal text, or numbers that
-    // differ only in their last digits.
-    private boolean isSameAnswer(CallResult expected, CallResult actual) {
+    // Says whether two answers are the same: equal text, or, for a
+    // decimal result, numbers that differ only in their last digits.
+    // Whole numbers and text must match exactly, so an answer that is
+    // one out on a large number is still found.
+    private boolean isSameAnswer(CallResult expected, CallResult actual,
+            boolean decimal) {
         if (actual.hasThrown()) {
             return false;
         }
@@ -412,7 +431,13 @@ public class RandomInputChecker {
         if (expectedText.equals(actualText)) {
             return true;
         }
-        return areCloseNumbers(expectedText, actualText);
+        return decimal && areCloseNumbers(expectedText, actualText);
+    }
+
+    // Says whether a method returns a decimal number.
+    private boolean isDecimal(MethodSignature method) {
+        String type = method.getReturnType();
+        return type.equals(DOUBLE_TYPE) || type.equals(BOXED_DOUBLE_TYPE);
     }
 
     // Says whether two texts are decimal numbers close enough to be the

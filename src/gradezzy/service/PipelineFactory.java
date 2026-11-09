@@ -122,11 +122,14 @@ public class PipelineFactory {
                 starterDirectory), createRosterChecks()));
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
-        pipeline.addStage(new CompileStage(new SourceCompiler(config,
-                processRunner), starterDirectory));
-        pipeline.addStage(new ExecuteStage(new TesterRunner(config,
-                processRunner), new TesterOutputScoreParser(config)));
-        addRandomInputStage(pipeline, processRunner, starterDirectory);
+        SourceCompiler compiler = new SourceCompiler(config, processRunner);
+        // One runner, so the note about a missing sandbox prints once
+        TesterRunner testerRunner = new TesterRunner(config, processRunner);
+        pipeline.addStage(new CompileStage(compiler, starterDirectory));
+        pipeline.addStage(new ExecuteStage(testerRunner,
+                new TesterOutputScoreParser(config)));
+        addRandomInputStage(pipeline, compiler, testerRunner,
+                starterDirectory);
         pipeline.addStage(new ScoreStage(new ScoreCalculator()));
         pipeline.addStage(new PersistStage(repository));
 
@@ -156,11 +159,13 @@ public class PipelineFactory {
 
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
-        pipeline.addStage(new CompileStage(new SourceCompiler(config,
-                processRunner), starterDirectory));
-        pipeline.addStage(new ExecuteStage(new TesterRunner(config,
-                processRunner), new TesterOutputScoreParser(config)));
-        addRandomInputStage(pipeline, processRunner, starterDirectory);
+        SourceCompiler compiler = new SourceCompiler(config, processRunner);
+        TesterRunner testerRunner = new TesterRunner(config, processRunner);
+        pipeline.addStage(new CompileStage(compiler, starterDirectory));
+        pipeline.addStage(new ExecuteStage(testerRunner,
+                new TesterOutputScoreParser(config)));
+        addRandomInputStage(pipeline, compiler, testerRunner,
+                starterDirectory);
 
         return pipeline;
     }
@@ -169,7 +174,8 @@ public class PipelineFactory {
     // when random.inputs.enabled is true and there are model answers to
     // compare with. Each pipeline gets new inputs, from a new seed.
     private void addRandomInputStage(GradingPipeline pipeline,
-            ProcessRunner processRunner, Path chosenStarter) {
+            SourceCompiler compiler, TesterRunner testerRunner,
+            Path chosenStarter) {
         Path modelAnswers = ModelAnswerCopy.findFolder(config);
         boolean enabled = config.getBoolean(ConfigKeys.RANDOM_INPUTS_ENABLED);
         if (modelAnswers == null || !enabled) {
@@ -183,7 +189,7 @@ public class PipelineFactory {
         }
         long seed = System.nanoTime();
         RandomInputChecker checker = new RandomInputChecker(config,
-                processRunner, modelAnswers, starterDirectory, seed);
+                compiler, testerRunner, modelAnswers, starterDirectory, seed);
         pipeline.addStage(new RandomInputStage(checker));
     }
 
