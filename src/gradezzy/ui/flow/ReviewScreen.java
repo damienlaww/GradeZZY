@@ -14,6 +14,7 @@ package gradezzy.ui.flow;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.NumberBinding;
@@ -597,14 +598,18 @@ public class ReviewScreen extends FlowScreen {
         return row;
     }
 
-    // Returns the skipped file row of a student, by username or file name.
+    // Returns the skipped file row of a student, by username or file
+    // name, matched as Export counts it.
     private Submission findSkippedRowOf(Student student) {
-        String username = student.getUsername().toLowerCase();
+        String username = student.getUsername();
+        String prefixPattern = getBackend().getSetting(
+                ConfigKeys.ZIP_NAME_PREFIX_PATTERN);
         for (Submission row : skippedRows) {
-            String shown = row.getUsername().toLowerCase();
-            if (shown.equals(username)) {
+            String shown = row.getUsername();
+            if (shown.equalsIgnoreCase(username)) {
                 return row;
-            } else if (isNameless(row) && shown.contains(username)) {
+            } else if (isNameless(row) && ExportScreen.isNameOf(shown,
+                    username, prefixPattern)) {
                 return row;
             }
         }
@@ -1239,7 +1244,7 @@ public class ReviewScreen extends FlowScreen {
 
     // Applies the filter buttons and the search text.
     private void applyFilter() {
-        String text = search.getText().trim().toLowerCase();
+        String text = search.getText().trim().toLowerCase(Locale.ROOT);
         boolean onlyReview = reviewButton.isSelected();
         boolean onlyFailed = failedButton.isSelected();
         boolean onlyMissing = missingButton.isSelected();
@@ -1277,8 +1282,8 @@ public class ReviewScreen extends FlowScreen {
         if (text.isEmpty()) {
             return true;
         }
-        String name = Students.name(submission).toLowerCase();
-        String username = submission.getUsername().toLowerCase();
+        String name = Students.name(submission).toLowerCase(Locale.ROOT);
+        String username = submission.getUsername().toLowerCase(Locale.ROOT);
         return name.contains(text) || username.contains(text);
     }
 

@@ -479,13 +479,22 @@ public class RunsScreen extends FlowScreen {
                     + "for this section.");
             title.getChildren().add(current);
         }
-        Label when = Parts.muted("Graded " + run.getStartedAt().format(WHEN));
+        Label when = Parts.muted("Graded " + when(run));
         when.getStyleClass().add("small-text");
         VBox runCell = new VBox(RUN_CELL_GAP, title, when);
         runCell.setAlignment(Pos.CENTER_LEFT);
         runCell.setMinWidth(0);
         runsTable.addRow(new Node[] {runCell, students, average(run),
             status(run, shown, hasNewer), actions(record, shown)});
+    }
+
+    // Says when a run was graded. A run read back from a database row
+    // with no start time has none.
+    private static String when(GradingRun run) {
+        if (run.getStartedAt() == null) {
+            return "date unknown";
+        }
+        return run.getStartedAt().format(WHEN);
     }
 
     // Shows the average of a run as a small bar and "x / max".
@@ -842,7 +851,7 @@ public class RunsScreen extends FlowScreen {
         }
         table.addRow(new Node[] {Parts.strong(module),
             Parts.strong(sectionCode),
-            Parts.muted(run.getStartedAt().format(WHEN)),
+            Parts.muted(when(run)),
             new Label(record.getBackupText()), shownCell, buttons});
     }
 

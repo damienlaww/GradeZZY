@@ -9,6 +9,7 @@
 package gradezzy.ui.flow;
 
 import java.util.Comparator;
+import java.util.Locale;
 
 import gradezzy.model.Submission;
 
@@ -30,8 +31,8 @@ public class StudentNameComparator implements Comparator<Submission> {
      */
     @Override
     public int compare(Submission first, Submission second) {
-        String firstName = Students.name(first).toLowerCase();
-        String secondName = Students.name(second).toLowerCase();
+        String firstName = Students.name(first).toLowerCase(Locale.ROOT);
+        String secondName = Students.name(second).toLowerCase(Locale.ROOT);
         return firstName.compareTo(secondName);
     }
 }

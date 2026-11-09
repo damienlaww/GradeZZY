@@ -1724,7 +1724,7 @@ public class SettingsScreen extends FlowScreen {
     // Shows only the settings that match the search, and only the groups
     // that still hold one.
     private void applySearch() {
-        String query = search.getText().trim().toLowerCase();
+        String query = search.getText().trim().toLowerCase(Locale.ROOT);
         boolean any = false;
         for (SettingsGroup group : groups) {
             boolean shown = group.filter(query);

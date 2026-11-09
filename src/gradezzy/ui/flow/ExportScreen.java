@@ -111,6 +111,11 @@ public class ExportScreen extends FlowScreen {
     // Put before the maximum mark beside a figure
     private static final String MAX_PREFIX = "/ ";
 
+    // A file ending, such as ".zip" or ".rar". It needs a letter, so the
+    // year at the end of a username such as "ping.lee.2023" is kept
+    private static final String FILE_ENDING_PATTERN =
+            "\\.[a-z0-9]*[a-z][a-z0-9]*$";
+
     // The names of the background threads
     private static final String SHEET_THREAD = "gradezzy-score-sheet";
     private static final String SIMILARITY_THREAD = "gradezzy-similarity";
@@ -831,21 +836,39 @@ public class ExportScreen extends FlowScreen {
 
     // Says whether grading skipped a file of a username.
     private boolean isSkipped(GradingRun run, String username) {
-        String wanted = username.toLowerCase();
+        String prefixPattern = getBackend().getSetting(
+                ConfigKeys.ZIP_NAME_PREFIX_PATTERN);
         for (ImportItem item : getState().getSkippedFiles(run)) {
-            String itemUser = item.getUsername().toLowerCase();
-            if (itemUser.equals(wanted)) {
+            String itemUser = item.getUsername();
+            if (itemUser.equalsIgnoreCase(username)) {
                 return true;
-            } else if (itemUser.isEmpty() && nameHas(item, wanted)) {
+            } else if (itemUser.isEmpty()
+                    && isNameOf(item.getName(), username, prefixPattern)) {
                 return true;
             }
         }
         return false;
     }
 
-    // Says whether a file's name holds a lower case username.
-    private boolean nameHas(ImportItem item, String wanted) {
-        return item.getName().toLowerCase().contains(wanted);
+    // Says whether a file or folder name is a student's, read the way
+    // grading reads a username from a name: without the zip name prefix
+    // and without a file ending, in lower case, the rest equal to the
+    // username. A name that only holds the username, as "alice.zip"
+    // holds "li", is not that student's. Review matches the same way.
+    static boolean isNameOf(String fileName, String username,
+            String prefixPattern) {
+        String name = fileName;
+        if (!TextUtils.isBlank(prefixPattern)) {
+            name = name.replaceFirst(prefixPattern, "");
+        }
+        String lowerName = name.trim().toLowerCase(Locale.ROOT);
+        String wanted = username.toLowerCase(Locale.ROOT);
+        if (lowerName.equals(wanted)) {
+            return true;
+        }
+        String withoutEnding = lowerName.replaceFirst(FILE_ENDING_PATTERN,
+                "");
+        return withoutEnding.equals(wanted);
     }
 
     // Adds "N reason" to the reasons when the count is above zero.

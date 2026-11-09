@@ -15,6 +15,7 @@ package gradezzy.ui.flow;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 
 import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
@@ -281,7 +282,7 @@ public class SettingField {
         }
         String words = name + WORD_SEPARATOR + description + WORD_SEPARATOR
                 + key;
-        String all = words.toLowerCase();
+        String all = words.toLowerCase(Locale.ROOT);
         return all.contains(query);
     }
 

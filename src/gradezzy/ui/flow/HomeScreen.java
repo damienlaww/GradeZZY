@@ -900,8 +900,10 @@ public class HomeScreen extends FlowScreen {
         String when = "Not graded yet";
         if (isGradingNow(section)) {
             when = "Being graded now";
-        } else if (run != null) {
+        } else if (run != null && run.getStartedAt() != null) {
             when = "Graded " + run.getStartedAt().format(WHEN);
+        } else if (run != null) {
+            when = "Graded date unknown";
         }
         Label time = Parts.muted(when);
         time.getStyleClass().addAll("small-text", "card-meta");
