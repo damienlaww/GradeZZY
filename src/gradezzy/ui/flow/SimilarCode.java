@@ -61,6 +61,9 @@ public class SimilarCode {
     // The style class of a starter line, and of its key
     private static final String STARTER_STYLE = "starter";
 
+    // The number of files side by side
+    private static final int COLUMN_COUNT = 2;
+
     // The comparison of the two files
     private final LineComparison comparison;
 
@@ -102,6 +105,10 @@ public class SimilarCode {
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scroll.getStyleClass().add("similar-code");
         VBox.setVgrow(scroll, Priority.ALWAYS);
+        // A column works out its height from its preferred width, and
+        // its long lines wrap, so it needs its real width
+        scroll.viewportBoundsProperty().addListener((seen, old, bounds) ->
+                fitColumns(bounds));
 
         previous = Parts.small("Previous", () -> showPreviousPart());
         next = Parts.small("Next same part", () -> showNextPart());
@@ -192,7 +199,6 @@ public class SimilarCode {
         VBox box = new VBox();
         box.getStyleClass().add("similar-column");
         box.setMinWidth(0);
-        box.setPrefWidth(0);
         HBox.setHgrow(box, Priority.ALWAYS);
         for (int index = 0; index < lines.size(); index++) {
             int number = index + FIRST_LINE_NUMBER;
@@ -203,6 +209,16 @@ public class SimilarCode {
             box.getChildren().add(line);
         }
         return box;
+    }
+
+    // Gives each column an equal share of the visible width as its
+    // preferred width, so wrapped lines are measured at the width they
+    // are shown at.
+    private void fitColumns(Bounds bounds) {
+        double columnWidth = bounds.getWidth() / COLUMN_COUNT;
+        for (Node column : content.getChildren()) {
+            ((Region) column).setPrefWidth(columnWidth);
+        }
     }
 
     // Builds one line: its number, its code and, for starter code, a tag.
