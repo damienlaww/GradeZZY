@@ -554,9 +554,9 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Starts GradingService.startGrading in a GradingTask. A starter
-     * folder that cannot be used is not passed, so grading uses the one
-     * in Settings, as its row on Set up says.
+     * Starts GradingService.startGrading in a GradingTask. When no usable
+     * starter folder is chosen, the one in Settings is passed, as its row
+     * on Set up says, so the run records the folder it used.
      */
     @Override
     public void startGrading(ImportBatch batch, Section section,
@@ -1700,9 +1700,10 @@ public class LiveBackend implements DashboardBackend {
             return null;
         }
 
+        String starterCode = readStarterCode(gradingRun, question);
         return new SimilarityDetail(pair, file, file, firstCode,
-                secondCode, readStarterCode(gradingRun, question),
-                listLeftOut(gradingRun, question));
+                secondCode, starterCode,
+                listLeftOut(gradingRun, question, starterCode));
     }
 
     // Returns where a question's starter file is, whether or not it
@@ -1733,12 +1734,17 @@ public class LiveBackend implements DashboardBackend {
     }
 
     // Lists what the check leaves out of a question: the starter file's
-    // code, and every other file in the question folder.
+    // code, and every other file in the question folder. A starter file
+    // that could not be read is named, so the instructor knows why no
+    // line is greyed.
     private List<String> listLeftOut(GradingRun gradingRun,
-            Question question) {
+            Question question, String starterCode) {
         List<String> leftOut = new ArrayList<>();
         Path starterFile = findStarterFile(gradingRun, question);
-        if (Files.isRegularFile(starterFile)) {
+        if (starterCode.isEmpty()) {
+            leftOut.add("Could not read a starter file at " + starterFile
+                    + ", so starter lines are not greyed");
+        } else {
             leftOut.add(starterFile.toString() + " (starter code, taken "
                     + "out before comparing)");
         }
@@ -1915,14 +1921,20 @@ public class LiveBackend implements DashboardBackend {
                 second.toAbsolutePath().normalize());
     }
 
-    // Returns the chosen starter folder, or null when none is chosen or
-    // it cannot be used, so grading uses the one in Settings.
+    // Returns the chosen starter folder, else the one in Settings, so the
+    // run records the folder it was graded with. Returns null when
+    // neither can be used.
     private Path findUsableStarter(ImportBatch batch) {
         List<ImportItem> starters = batch.getItems(InputKind.STARTER);
-        if (starters.isEmpty() || !starters.get(0).getState().isUsable()) {
-            return null;
+        if (!starters.isEmpty() && starters.get(0).getState().isUsable()) {
+            return starters.get(0).getPath();
         }
-        return starters.get(0).getPath();
+
+        Path configured = configuredPath(InputKind.STARTER);
+        if (inspect(InputKind.STARTER, configured).getState().isUsable()) {
+            return configured;
+        }
+        return null;
     }
 
     // Returns the item for a path InputValidator could not read. A path
