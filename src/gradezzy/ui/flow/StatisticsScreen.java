@@ -106,6 +106,9 @@ public class StatisticsScreen extends FlowScreen {
 
     // The two views
     private final SectionView sectionView;
+
+    // The largest answer groups of the run shown, under the charts
+    private final CommonMistakesSection commonMistakes;
     private final CompareView compareView = new CompareView();
 
     // The runs of the section in the Run picker; the first is the one in
@@ -136,6 +139,7 @@ public class StatisticsScreen extends FlowScreen {
     public StatisticsScreen(FlowWindow window) {
         super(window);
         sectionView = new SectionView(window.getBackend());
+        commonMistakes = new CommonMistakesSection(window);
         view.getStyleClass().add("statistics-page");
         createControls();
         arrangeHeader();
@@ -478,6 +482,10 @@ public class StatisticsScreen extends FlowScreen {
         sectionView.show(run, summary, stats, assessment);
         sectionView.setNarrow(narrow);
         body.getChildren().setAll(sectionView.getView());
+        if (getBackend().supports(Capability.ANSWER_GROUPS)) {
+            commonMistakes.show(run);
+            body.getChildren().add(commonMistakes.getView());
+        }
     }
 
     // Returns the empty state of a section without marks.

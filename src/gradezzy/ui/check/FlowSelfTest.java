@@ -66,6 +66,7 @@ import gradezzy.ui.flow.GuidedTour;
 import gradezzy.ui.flow.MarkStats;
 import gradezzy.ui.flow.Page;
 import gradezzy.ui.flow.Parts;
+import gradezzy.ui.flow.StatisticsScreen;
 import gradezzy.ui.flow.Step;
 import gradezzy.ui.flow.ReviewScreen;
 import gradezzy.ui.flow.StudentPanel;
@@ -935,6 +936,7 @@ public class FlowSelfTest {
         check(window.getCurrentPage() == Page.STATISTICS,
                 "the Statistics tab opened");
         checkFigures(run);
+        checkCommonMistakes();
 
         choose(DemoData.SAMPLE_SECTION, EMPTY_SECTION);
         check(SceneFinder.shows(root(), EMPTY_SECTION + " has not been "
@@ -960,12 +962,28 @@ public class FlowSelfTest {
                 && ticked.getText().endsWith("(" + TICKED_COUNT + ")"),
                 "Only the students I choose (2) is chosen");
 
+        CheckBox mistakesBox = null;
+        for (CheckBox box : SceneFinder.ofType(root(), CheckBox.class)) {
+            if (box.getText().startsWith("Also save the common mistakes")) {
+                mistakesBox = box;
+            }
+        }
+        check(mistakesBox != null, "Export offers the common mistakes");
+        if (mistakesBox != null) {
+            mistakesBox.setSelected(true);
+        }
         int filesBefore = outputFileCount();
         press(window.getActionBar().getPrimaryButton(), "Export score sheet");
         Node confirm = sheet();
         String question = "Export " + TICKED_COUNT + " students";
         check(confirm != null && SceneFinder.shows(confirm, question + "?"),
                 "Export asks \"" + question + "?\" first");
+        check(confirm != null && SceneFinder.shows(confirm,
+                "the common mistakes"), "the export question names the "
+                + "common mistakes");
+        if (mistakesBox != null) {
+            mistakesBox.setSelected(false);
+        }
         if (confirm != null) {
             press(SceneFinder.button(confirm, question), question);
         }
@@ -1343,6 +1361,25 @@ public class FlowSelfTest {
         KeyEvent event = new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code,
                 false, shortcut, false, shortcut);
         Event.fireEvent(root(), event);
+        settle();
+    }
+
+    // Statistics lists the demo's Q3 group under Common mistakes, and
+    // hides the section when comparing sections.
+    private void checkCommonMistakes() {
+        check(SceneFinder.shows(root(), "Common mistakes"),
+                "Statistics shows Common mistakes");
+        Node row = rowOf("Failed tests 3 and 4", "plain-row");
+        check(row != null && SceneFinder.label(row, "Q3") != null
+                && SceneFinder.label(row, "2") != null,
+                "Common mistakes lists Q3, failed tests 3 and 4, 2 students");
+        StatisticsScreen statistics =
+                (StatisticsScreen) window.getPageScreen(Page.STATISTICS);
+        statistics.setCompare(true);
+        settle();
+        check(!SceneFinder.shows(root(), "Common mistakes"),
+                "Compare sections hides Common mistakes");
+        statistics.setCompare(false);
         settle();
     }
 
