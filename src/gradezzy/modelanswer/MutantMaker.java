@@ -99,6 +99,12 @@ public class MutantMaker {
     // The position of the token after a given one
     private static final int NEXT = 1;
 
+    // Taken from a size to give the last index
+    private static final int LAST_OFFSET = 1;
+
+    // The number of the first line: lines count from 1, arrays from 0
+    private static final int FIRST_LINE_NUMBER = 1;
+
     // The longest removed statement shown in a change, in characters
     private static final int MAX_SHOWN_LENGTH = 60;
     private static final String CUT_MARK = "...";
@@ -238,12 +244,12 @@ public class MutantMaker {
     private int findBlockEnd(List<JavaToken> tokens, int from) {
         int open = findText(tokens, OPEN_BRACE, from);
         if (open == NOT_FOUND) {
-            return tokens.size() - NEXT;
+            return tokens.size() - LAST_OFFSET;
         }
 
         int close = findClosing(tokens, open, OPEN_BRACE, CLOSE_BRACE);
         if (close == NOT_FOUND) {
-            return tokens.size() - NEXT;
+            return tokens.size() - LAST_OFFSET;
         }
         return close;
     }
@@ -351,8 +357,12 @@ public class MutantMaker {
             int index) {
         int openIndex = index + NEXT;
         boolean isIf = tokens.get(index).getText().equals(IF_WORD);
-        if (!isIf || openIndex >= tokens.size()
-                || !tokens.get(openIndex).getText().equals(OPEN_PAREN)) {
+        if (!isIf || openIndex >= tokens.size()) {
+            return;
+        }
+        boolean opensCondition = tokens.get(openIndex).getText()
+                .equals(OPEN_PAREN);
+        if (!opensCondition) {
             return;
         }
 
@@ -495,7 +505,7 @@ public class MutantMaker {
 
     // Returns the line a token is on.
     private String lineOf(String[] lines, JavaToken token) {
-        int lineIndex = token.getLine() - NEXT;
+        int lineIndex = token.getLine() - FIRST_LINE_NUMBER;
         if (lineIndex >= lines.length) {
             return "";
         }

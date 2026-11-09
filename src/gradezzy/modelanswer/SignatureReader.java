@@ -84,6 +84,12 @@ public class SignatureReader {
     // The position of the token after a given one
     private static final int NEXT = 1;
 
+    // Taken from a size to give the last index
+    private static final int LAST_OFFSET = 1;
+
+    // A parameter needs a type and a name
+    private static final int MIN_PARAMETER_WORDS = 2;
+
     // The number of tokens in an annotation such as @Override
     private static final int ANNOTATION_LENGTH = 2;
 
@@ -181,7 +187,7 @@ public class SignatureReader {
         List<String> modifiers = words.subList(0, modifierCount);
         boolean isStatic = modifiers.contains(STATIC_WORD);
         boolean isPrivate = words.contains(PRIVATE_WORD);
-        int nameIndex = words.size() - NEXT;
+        int nameIndex = words.size() - LAST_OFFSET;
         String name = words.get(nameIndex);
         String returnType = TextUtils.join("", words.subList(modifierCount,
                 nameIndex));
@@ -247,10 +253,10 @@ public class SignatureReader {
         for (List<String> parameter : splitParameters(parameters)) {
             List<String> words = new ArrayList<>(parameter);
             words.remove(FINAL_WORD);
-            if (words.size() <= NEXT) {
+            if (words.size() < MIN_PARAMETER_WORDS) {
                 return false;
             }
-            int nameIndex = words.size() - NEXT;
+            int nameIndex = words.size() - LAST_OFFSET;
             String name = words.get(nameIndex).toLowerCase();
             String type = TextUtils.join("", words.subList(0, nameIndex));
             if (name.contains(FILE_WORD) || !isSupportedParameter(type)) {

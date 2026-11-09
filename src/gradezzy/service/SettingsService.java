@@ -443,10 +443,11 @@ public class SettingsService {
         for (String key : config.getKeys()) {
             // The model answers folder is checked when it is used, so a
             // moved folder skips those checks instead of stopping the app
-            boolean mustExist = contains(EXISTING_FOLDER_KEYS, key)
+            boolean isCheckedElsewhere =
+                    contains(EXISTING_FOLDER_KEYS, key)
                     || contains(EXISTING_FILE_KEYS, key)
                     || key.equals(ConfigKeys.MODEL_ANSWERS_DIR);
-            if (!mustExist) {
+            if (!isCheckedElsewhere) {
                 String message = validate(key, config.getString(key));
                 if (!message.isEmpty()) {
                     problems.add(message);
