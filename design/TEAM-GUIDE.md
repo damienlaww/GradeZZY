@@ -599,22 +599,24 @@ How the flags work (never a change of mark):
   (`detection.*.enabled`). If one fails, it adds a warning saying the
   check could not run; it never fails a submission.
 
-How the similarity check works: `TokenSimilarityDetector` splits each
-answer into tokens, ignoring spacing and comments, and collects every run
-of three tokens. It removes the starter file's runs, so the shared
-skeleton does not count, then compares two students with the Jaccard
-measure (shared runs divided by all runs). Pairs at or above
-`plagiarism.similarity.threshold` are reported. Renaming variables or
-reordering code lowers the score. A pair is only compared when both
-answers have at least 50 runs of their own beyond the starter
-(`MIN_OWN_TRIGRAMS`): short correct answers, such as most Q1b answers,
-look alike even when written separately. A copy of only a short answer
-is therefore not reported; a copy of a whole submission still is,
-through the longer questions. The starter's runs come from the folder
-passed to `findSimilar(submissions, assessment, starterDirectory)`, or
-from `paths.starter.dir` when it is null. `PlagiarismService.check` still
-calls the two-argument `findSimilar`, so until it passes the run's
-`getStarterDirectory()` the check uses `paths.starter.dir`.
+How the similarity check works: `plagiarism.algorithm` picks the
+detector in `ApplicationContext`. The default, `WinnowingSimilarityDetector`,
+splits each answer into tokens, ignoring spacing and comments, turns
+every name into `ID` and every text literal into `STR`, so renaming
+changes nothing, and hashes every run of 5 such tokens. Winnowing
+(`Winnowing.selectFingerprints`) keeps the smallest hash of every 4 in a
+row as a fingerprint, so a shared run of 8 tokens is found wherever it
+is. Fingerprints that are also in the starter file are removed, and two
+students are compared with the Jaccard measure (shared fingerprints
+divided by all fingerprints). A pair is only compared when both answers
+have at least 25 fingerprints of their own (`MIN_OWN_FINGERPRINTS`):
+short correct answers look alike even when written separately. The
+first version, `TokenSimilarityDetector` (`plagiarism.algorithm=trigrams`),
+compares runs of three tokens as written instead, with at least 50 of
+them (`MIN_OWN_TRIGRAMS`), so renaming variables lowers its score. Pairs
+at or above `plagiarism.similarity.threshold` are reported. The starter
+code comes from the run's starter folder, or from `paths.starter.dir`
+when there is none. README "Similar code check" compares the two.
 
 Checked on the six samples: chee.teo and jing.lim get a username folder;
 david's and fen.lai's folders are renamed; the blank headers (Q3 for

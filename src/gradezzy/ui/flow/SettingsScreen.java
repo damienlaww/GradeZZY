@@ -102,6 +102,14 @@ public class SettingsScreen extends FlowScreen {
     private static final String[] LINE_ENDING_NAMES = {
         "CRLF (as eLearn gives it)", "LF (macOS and Linux)"};
 
+    // The values plagiarism.algorithm accepts
+    private static final String[] ALGORITHMS = {"winnowing", "trigrams"};
+
+    // The names shown for the values of plagiarism.algorithm, in the
+    // same order
+    private static final String[] ALGORITHM_NAMES = {"Rename-proof",
+        "Exact tokens (first version)"};
+
     // The export formats that can be offered, and their names
     private static final String[] FORMATS = {"csv,json", "csv", "json"};
     private static final String[] FORMAT_NAMES = {"CSV and JSON",
@@ -442,6 +450,9 @@ public class SettingsScreen extends FlowScreen {
         choice(ConfigKeys.PLAGIARISM_THRESHOLD, "Similarity that counts",
                 "How alike two answers must be to be flagged.",
                 SIMILARITIES).showChoicesAs(similarityNames());
+        choice(ConfigKeys.PLAGIARISM_ALGORITHM, "How code is compared",
+                "Rename-proof still matches renamed names and moved "
+                + "methods.", ALGORITHMS).showChoicesAs(ALGORITHM_NAMES);
 
         startGroup("Statistics");
         listed(ConfigKeys.PASS_MARK_PERCENT, "Pass mark",

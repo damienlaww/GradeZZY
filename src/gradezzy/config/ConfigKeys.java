@@ -267,6 +267,12 @@ public final class ConfigKeys {
             "plagiarism.similarity.threshold";
 
     /**
+     * How answers are compared: winnowing (rename-proof fingerprints) or
+     * trigrams (runs of three tokens as written).
+     */
+    public static final String PLAGIARISM_ALGORITHM = "plagiarism.algorithm";
+
+    /**
      * Comma separated export formats offered by default.
      */
     public static final String EXPORT_FORMATS = "export.formats";

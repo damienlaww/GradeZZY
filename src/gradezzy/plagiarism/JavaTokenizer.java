@@ -6,9 +6,11 @@
  * text literal replaced, so renaming variables does not change it.
  *
  * Where it fits: TokenSimilarityDetector builds its trigrams from the
- * tokens; AnswerGrouper compares shapes to tell the marker which
- * students in an answer group wrote the same code. tokenize also keeps
- * each token's position and line, for the tester strength check.
+ * tokens; Winnowing builds its rename-proof k-grams from shapeToken;
+ * AnswerGrouper compares shapes to tell the marker which students in an
+ * answer group wrote the same code. tokenize also keeps each token's
+ * position and line, for the tester strength check and for the lines
+ * LineComparison marks.
  */
 package gradezzy.plagiarism;
 
