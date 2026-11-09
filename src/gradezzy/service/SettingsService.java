@@ -96,6 +96,9 @@ public class SettingsService {
     // The values export.csv.line.ending accepts
     private static final String[] LINE_ENDINGS = {"CRLF", "LF"};
 
+    // The values plagiarism.algorithm accepts
+    private static final String[] ALGORITHMS = {"winnowing", "trigrams"};
+
     // Newer list settings an older config.properties may not have yet;
     // saving one adds its line at the end of the file.
     private static final String[] ADDABLE_KEYS = {
@@ -238,6 +241,7 @@ public class SettingsService {
         ConfigKeys.RANDOM_INPUTS_COUNT,
         ConfigKeys.PLAGIARISM_ENABLED,
         ConfigKeys.PLAGIARISM_THRESHOLD,
+        ConfigKeys.PLAGIARISM_ALGORITHM,
         ConfigKeys.EXPORT_FORMATS,
         ConfigKeys.CSV_LINE_ENDING,
         ConfigKeys.CSV_ID_PREFIX,
@@ -362,6 +366,10 @@ public class SettingsService {
 
         if (key.equals(ConfigKeys.CSV_LINE_ENDING)) {
             return checkChoice(key, text, LINE_ENDINGS);
+        }
+
+        if (key.equals(ConfigKeys.PLAGIARISM_ALGORITHM)) {
+            return checkChoice(key, text, ALGORITHMS);
         }
 
         if (key.equals(ConfigKeys.ZIP_NAME_PREFIX_PATTERN)) {

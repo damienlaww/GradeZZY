@@ -154,7 +154,7 @@ Rules the code keeps:
 | `testcase` | Where testers come from, their maximum marks, and the per-question folders. | `TestCaseSource`, `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TesterMarks`, `QuestionWorkspace`, `FolderSnapshot` |
 | `exec` | Runs `javac` and `java` as separate processes with limits. | `ProcessRunner`, `SourceCompiler`, `TesterRunner`, `TesterHarness`, `TrustedPrintStream`, `RunningProcesses`, `HarnessWatchdog` |
 | `grading` | The pipeline, its stages, scoring and parallel workers. | `GradingPipeline`, `GradingStage`, the nine `...Stage` classes, `ScoreParser`, `TesterOutputScoreParser`, `ScoreCalculator`, `GradingWorker`, `SubmissionHandout`, `CancellationToken`, `QuestionRerunner` |
-| `plagiarism` | Compares students' code. | `SimilarityDetector`, `TokenSimilarityDetector`, `SimilarityPair`, `LineComparison`, `LineKind` |
+| `plagiarism` | Compares students' code. | `SimilarityDetector`, `WinnowingSimilarityDetector`, `TokenSimilarityDetector`, `Winnowing`, `Fingerprint`, `JavaTokenizer`, `JavaToken`, `SimilarityPair`, `LineComparison`, `LineKind` |
 | `report` | One class per export format. | `Exporter`, `CsvScoreSheetExporter`, `JsonExporter`, `JsonWriter`, `AnomalyReportExporter`, `StudentReportExporter`, `AuditLogExporter` |
 | `stats` | Statistics over runs. | `StatisticsCalculator`, `StatisticsSummary`, `StatisticsFilter`, `MarkBand` |
 | `persistence` | Saves, loads and backs up grading state. | `ResultRepository`, `SqliteResultRepository`, `SqliteSchema`, `RunTables`, `SubmissionTables`, `ReviewTables`, `AdjustmentTable`, `AuditTable`, `JdbcSupport`, `BackupManager` |
@@ -235,6 +235,7 @@ classDiagram
     UploadedTesterSource ..|> TestCaseSource
     TypedTestCaseSource ..|> TestCaseSource
     TesterOutputScoreParser ..|> ScoreParser
+    WinnowingSimilarityDetector ..|> SimilarityDetector
     TokenSimilarityDetector ..|> SimilarityDetector
     SqliteResultRepository ..|> ResultRepository
 ```
@@ -782,41 +783,103 @@ group. Statistics shows the largest groups under "Common mistakes".
 
 ## Similar code check
 
-`TokenSimilarityDetector` compares every pair of students, one question
-at a time:
+The check compares every pair of students, one question at a time,
+reading the question's answer file and its other source files (such as
+`GoldMember.java` next to `Q3.java`). `plagiarism.algorithm` picks one
+of two `SimilarityDetector` classes, both kept so they can be compared.
 
-1. Each answer is split into tokens, ignoring spacing and comments.
-2. Every run of three tokens (a trigram) is collected.
-3. The starter file's trigrams are removed, so the shared skeleton does
-   not count.
-4. Two answers are compared with the Jaccard measure: shared trigrams
-   divided by all trigrams.
-5. Pairs at or above `plagiarism.similarity.threshold` (0.80) get a
-   `SIMILAR_CODE` flag on both students.
+**Rename-proof winnowing (`winnowing`):
+`WinnowingSimilarityDetector`.** It uses the winnowing fingerprint
+algorithm of Schleimer, Wilkerson and Aiken (2003), the one MOSS uses.
 
-A pair is compared only when both answers have at least 50 trigrams of
-their own, because short correct answers look alike even when written
-separately. Renaming variables or reordering code lowers the score; this
-is a basic check that points the instructor at pairs to read, not
-proof. It runs after grading when `plagiarism.enabled` is true, and the
-window's Export step can run it on demand.
+1. Each file is split into tokens, ignoring spacing and comments
+   (`JavaTokenizer.tokenize`).
+2. Every name that is not a Java keyword becomes `ID` and every string
+   or char literal `STR` (`JavaTokenizer.shapeToken`). Numbers and
+   operators stay. `total += price` and `sum += cost` are now the same
+   tokens, so renaming changes nothing.
+3. Every run of 5 such tokens in a row (a k-gram,
+   `Winnowing.KGRAM_LENGTH`) is hashed with `String.hashCode`.
+4. Winnowing: in every 4 hashes in a row (`Winnowing.WINDOW_SIZE`) the
+   smallest is kept as a fingerprint, the rightmost one on a tie, and a
+   position kept by several windows is kept once. Two files that share
+   a run of at least 4 + 5 - 1 = 8 tokens always share a fingerprint,
+   wherever the run is in each file, so moving a method does not hide
+   it.
+5. Fingerprints that are also k-grams of the starter file are removed,
+   so the shared skeleton does not count.
+6. Two answers are compared with the Jaccard measure: shared
+   fingerprints divided by all fingerprints of either answer. Pairs at or
+   above `plagiarism.similarity.threshold` (0.80) get a `SIMILAR_CODE`
+   flag on both students.
+
+A pair is compared only when both answers have at least 25 fingerprints
+of their own (`MIN_OWN_FINGERPRINTS`), because short correct answers
+look alike even when written separately.
+
+**Token trigrams (`trigrams`, the first version and the default):
+`TokenSimilarityDetector`.** It collects every run of three tokens as
+written, names and all, removes the starter file's runs and compares
+with the Jaccard measure. A pair is compared only when both answers
+have at least 50 trigrams of their own.
+
+### Comparing the two algorithms
+
+| | Token trigrams | Rename-proof winnowing |
+|---|---|---|
+| Renamed variables or methods | Lower the score: each renamed name changes every trigram it is in. Renaming every local of a copied answer took it from 1.00 to between 0.20 and 0.49 on all but one question. | No effect: names are all `ID`. The same renamed copies stay at 1.00. |
+| Methods moved | Almost no effect (0.98 to 1.00): a set of trigrams has no order, and only the few trigrams across each join change. | Small effect (0.78 to 0.95): each join changes the k-grams across it, and a k-gram is longer than a trigram. A shared run of 8 tokens or more is always found. |
+| Honest answers written the same way | Kept apart when the students chose different names. | Look alike: two answers with the same plan but different names score up to 1.00. The 25-fingerprint minimum and the starter removal leave out the short answers where this is most common, but long answers with the same structure are still flagged. |
+| What a high score means | The same code, names and all. | The same structure. The instructor must read the pair to tell a copy from a common way of writing the answer. |
+| Cost | One set of trigrams per answer. | Fewer values kept per answer (about one fingerprint for every 2 to 3 tokens), plus the hashing. Both are fast at class size. |
+
+Both are review aids that point the instructor at pairs to read, not
+proof. The check runs after grading when `plagiarism.enabled` is true,
+and the window's Export step can run it on demand.
+
+Measured on the team's test sets, with the default threshold 0.80:
+
+- A 45-student, six-question test set kept outside git: both
+  algorithms flag all 14 expected pairs and none of the 3 "must not"
+  pairs. Trigrams flag nothing else. Winnowing also flags 267 other
+  pairs, because the test set's honest students were made from a few
+  model answers with the names changed, which is exactly what
+  rename-proof matching is built to see through.
+- The 42-student E2E set (`samples/e2e`): trigrams flag 6 of the 8
+  copied pairs long enough to compare, missing Kelvin's Q2b with Jun Wei
+  and with Nicole (he renamed two variables: 0.73). Winnowing flags all
+  8 (1.00). Both also flag Marcus and Priya's Q2b, an honest pair the
+  test set expects to be dismissed. Winnowing also flags 633 other
+  pairs of honest students made the same way as above.
+- The six Lab Test 1 samples: neither flags a pair.
+
+So winnowing finds renamed copies the first version misses, but it
+cannot tell a renamed copy from honest answers that share one
+structure: on a test set built by renaming a few model answers, it
+flags every such pair. That is why trigrams stay the default. Choose
+winnowing ("How code is compared" in Settings, or
+`plagiarism.algorithm=winnowing`) to look for renamed copies, and expect
+to dismiss more pairs.
 
 The window lists each pair with a pill such as "84% similar": red above
 75%, amber at 75% or below (the percent as shown, rounded).
 
 "Compare" on a similar pair, in the Similar code card on Export or on a
 Similar code flag in the student panel, opens both answer files side by
-side, in one box that scrolls as one. `LineComparison` marks each line,
-ignoring spaces: red when the same line is in the other student's file,
-grey with a "starter" tag when it is in the starter file (starter code
-is never red), and plain when it is the student's own. A line holding
-only brackets, such as `}`, takes the colour of the line above it. Each
-side shows how many of its own lines are the same, and "Next same part"
-and "Previous" jump between the red blocks of the first student's file.
-The lines only help the instructor read a pair; the percentage still
-comes from the trigrams above, so a renamed variable makes a line plain
-even though the score may stay high. `PlagiarismService.readPair` is the
-one place that reads the pair back from a flag.
+side, in one box that scrolls as one. `LineComparison` marks each line:
+red when the other student's file holds the same line (ignoring spaces)
+or when every token on the line is inside a k-gram of rename-proof
+tokens that the other file also has, so a line whose only change is a
+renamed variable is red too. A k-gram written word for word in the
+starter file does not count. A line in the starter file is grey with a
+"starter" tag (starter code is never red), and any other line is plain:
+the student's own. A line holding only brackets, such as `}`, takes the
+colour of the line above it. Each side shows how many of its own lines
+are the same, and "Next same part" and "Previous" jump between the red
+blocks of the first student's file. The lines only help the instructor
+read a pair; the percentage comes from the algorithm chosen above.
+`PlagiarismService.readPair` is the one place that reads the pair back
+from a flag.
 
 ## Exports
 
@@ -1050,6 +1113,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `random.inputs.count` | `200` | Inputs per method. |
 | `plagiarism.enabled` | `true` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
+| `plagiarism.algorithm` | `trigrams` | How answers are compared: `winnowing` (rename-proof fingerprints, `WinnowingSimilarityDetector`) or `trigrams` (the first version, `TokenSimilarityDetector`). See "Similar code check". |
 | `export.formats` | `csv,json` | Formats offered by default. |
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
 | `export.csv.id.prefix` | `#` | Character in front of the id and username. |

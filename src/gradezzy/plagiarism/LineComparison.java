@@ -2,11 +2,14 @@
  * File: LineComparison.java
  *
  * Purpose: Compares two students' files line by line, so the lines that
- * are the same on both sides can be shown to the instructor.
+ * are the same on both sides, apart from names, can be shown to the
+ * instructor.
  *
  * Where it fits: Built by the Similar code sheet from a
- * SimilarityDetail. The similarity score itself comes from
- * TokenSimilarityDetector; this only helps the instructor read a pair.
+ * SimilarityDetail. The similarity score itself comes from the
+ * configured SimilarityDetector; this only helps the instructor read a
+ * pair. It uses the same rename-proof k-grams as
+ * WinnowingSimilarityDetector, so a renamed line is still marked.
  */
 package gradezzy.plagiarism;
 
@@ -20,12 +23,18 @@ import gradezzy.util.TextUtils;
 /**
  * The lines of two files, each marked same, own, starter or blank.
  *
- * <p>Spaces are ignored when lines are compared. A line in the starter
- * file is starter code and is never marked same. A starter comment line
- * ending in a colon, such as " * Name:", is a label the student fills
- * in, so any line starting with it is starter code too. A line holding
- * only closing brackets, such as "}" or "});", takes the kind of the
- * line above it, so a block that is the same reads as one piece.
+ * <p>A line is same when the other file holds the same line, ignoring
+ * spaces, or when every token on it is inside a run of
+ * Winnowing.KGRAM_LENGTH rename-proof tokens that is also in the other
+ * file, unless that run is written word for word in the starter file.
+ * So a line whose only change is a renamed variable is still same.
+ *
+ * <p>A line in the starter file is starter code and is never marked
+ * same. A starter comment line ending in a colon, such as " * Name:", is
+ * a label the student fills in, so any line starting with it is starter
+ * code too. A line holding only closing brackets, such as "}" or "});",
+ * takes the kind of the line above it, so a block that is the same reads
+ * as one piece.
  *
  * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
@@ -48,6 +57,9 @@ public class LineComparison {
 
     // How a line comment starts
     private static final String LINE_COMMENT_START = "//";
+
+    // The number of the first line of a file
+    private static final int FIRST_LINE = 1;
 
     // The first file's lines
     private final List<String> firstLines;
@@ -74,10 +86,22 @@ public class LineComparison {
         secondLines = splitLines(secondCode);
         Set<String> starter = collectLines(splitLines(starterCode));
         List<String> labels = collectLabels(starter);
+
+        List<JavaToken> firstTokens = tokenize(firstCode);
+        List<JavaToken> secondTokens = tokenize(secondCode);
+        Set<Integer> starterKGrams = new HashSet<>(hashWrittenKGrams(
+                tokenize(starterCode)));
+        Set<Integer> firstKGrams = new HashSet<>(hashKGrams(firstTokens));
+        Set<Integer> secondKGrams = new HashSet<>(hashKGrams(secondTokens));
+        Set<Integer> firstShared = findSharedLines(firstTokens,
+                secondKGrams, starterKGrams);
+        Set<Integer> secondShared = findSharedLines(secondTokens,
+                firstKGrams, starterKGrams);
+
         firstKinds = markLines(firstLines, collectLines(secondLines),
-                starter, labels);
+                firstShared, starter, labels);
         secondKinds = markLines(secondLines, collectLines(firstLines),
-                starter, labels);
+                secondShared, starter, labels);
     }
 
     /**
@@ -177,6 +201,82 @@ public class LineComparison {
         return lines;
     }
 
+    // Splits code into tokens, with every kind of line ending made a
+    // plain new line first so the tokens' line numbers match splitLines.
+    private static List<JavaToken> tokenize(String code) {
+        if (code == null) {
+            return new ArrayList<>();
+        }
+        return JavaTokenizer.tokenize(TextUtils.normaliseLineEndings(code));
+    }
+
+    // Hashes every k-gram of rename-proof tokens, as the winnowing check
+    // does; the hash at position p is of the k-gram starting at token p.
+    private static List<Integer> hashKGrams(List<JavaToken> tokens) {
+        List<String> shapes = Winnowing.normalise(tokens);
+        return Winnowing.hashKGrams(shapes, Winnowing.KGRAM_LENGTH);
+    }
+
+    // Hashes every k-gram of tokens as written, names and all, so only
+    // code copied from the starter word for word matches the starter.
+    private static List<Integer> hashWrittenKGrams(List<JavaToken> tokens) {
+        List<String> texts = new ArrayList<>();
+        for (JavaToken token : tokens) {
+            texts.add(token.getText());
+        }
+        return Winnowing.hashKGrams(texts, Winnowing.KGRAM_LENGTH);
+    }
+
+    // Finds the lines, counted from 1, whose every token is inside a
+    // rename-proof k-gram that the other file also has, leaving out
+    // k-grams written word for word in the starter file.
+    private static Set<Integer> findSharedLines(List<JavaToken> tokens,
+            Set<Integer> otherKGrams, Set<Integer> starterKGrams) {
+        List<Integer> hashes = hashKGrams(tokens);
+        List<Integer> writtenHashes = hashWrittenKGrams(tokens);
+        boolean[] covered = new boolean[tokens.size()];
+
+        for (int start = 0; start < hashes.size(); start++) {
+            boolean inOtherFile = otherKGrams.contains(hashes.get(start));
+            boolean inStarter = starterKGrams.contains(
+                    writtenHashes.get(start));
+            boolean shared = inOtherFile && !inStarter;
+            if (shared) {
+                markCovered(covered, start);
+            }
+        }
+
+        return collectCoveredLines(tokens, covered);
+    }
+
+    // Marks the tokens of the k-gram that starts at a position.
+    private static void markCovered(boolean[] covered, int start) {
+        int end = start + Winnowing.KGRAM_LENGTH;
+        for (int position = start; position < end; position++) {
+            covered[position] = true;
+        }
+    }
+
+    // Collects the lines that hold at least one token and no token left
+    // uncovered.
+    private static Set<Integer> collectCoveredLines(List<JavaToken> tokens,
+            boolean[] covered) {
+        Set<Integer> coveredLines = new HashSet<>();
+        Set<Integer> uncoveredLines = new HashSet<>();
+
+        for (int position = 0; position < tokens.size(); position++) {
+            int line = tokens.get(position).getLine();
+            if (covered[position]) {
+                coveredLines.add(line);
+            } else {
+                uncoveredLines.add(line);
+            }
+        }
+
+        coveredLines.removeAll(uncoveredLines);
+        return coveredLines;
+    }
+
     // Collects the lines with something on them, with spaces removed.
     private static Set<String> collectLines(List<String> lines) {
         Set<String> found = new HashSet<>();
@@ -223,14 +323,18 @@ public class LineComparison {
         return false;
     }
 
-    // Works out the kind of every line of one file.
+    // Works out the kind of every line of one file. sharedLines holds
+    // the lines, counted from 1, that findSharedLines found.
     private static List<LineKind> markLines(List<String> lines,
-            Set<String> otherLines, Set<String> starter,
-            List<String> labels) {
+            Set<String> otherLines, Set<Integer> sharedLines,
+            Set<String> starter, List<String> labels) {
         List<LineKind> kinds = new ArrayList<>();
         LineKind previous = LineKind.OWN;
-        for (String line : lines) {
-            String key = removeSpaces(line);
+        for (int index = 0; index < lines.size(); index++) {
+            String key = removeSpaces(lines.get(index));
+            int lineNumber = index + FIRST_LINE;
+            boolean same = otherLines.contains(key)
+                    || sharedLines.contains(lineNumber);
             LineKind kind = LineKind.OWN;
             if (key.isEmpty()) {
                 kind = LineKind.BLANK;
@@ -238,7 +342,7 @@ public class LineComparison {
                 kind = previous;
             } else if (isStarter(key, starter, labels)) {
                 kind = LineKind.STARTER;
-            } else if (otherLines.contains(key)) {
+            } else if (same) {
                 kind = LineKind.SAME;
             }
 
