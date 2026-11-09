@@ -3,7 +3,7 @@
  *
  * Purpose: A short sheet that explains the five tabs (with the four
  * steps of Grading), the keyboard shortcuts and where files are saved,
- * and tells a first-time user where to start.
+ * and starts the guided tour for a first-time user.
  *
  * Where it fits: Opened from Help in the top bar, over any screen.
  * Replaces the old Help screen. The folders are read from the settings.
@@ -90,8 +90,8 @@ public final class HelpSheet {
             {"Assessments", backend.getSetting(
                     ConfigKeys.ASSESSMENTS_DIR)},
         };
-        Label start = Parts.muted("New here? Start on Home: it lists the "
-                + "first three steps. Click any \"?\" to see "
+        Label start = Parts.muted("New here? Take the tour: it points at "
+                + "each part of the window. Click any \"?\" to see "
                 + "what a word means.");
         start.setWrapText(true);
         start.setMaxWidth(TAB_NAME_WIDTH + TAB_TEXT_WIDTH + COLUMN_GAP);
@@ -102,9 +102,12 @@ public final class HelpSheet {
                 Parts.title("Where files are saved"),
                 table(files, KEY_NAME_WIDTH, KEY_TEXT_WIDTH));
         HBox halves = new HBox(HALF_GAP, tabs, other);
+        Button tour = Parts.secondary("Take the tour",
+                () -> window.startTour());
         Button close = Parts.secondary("Close", () -> window.closeSheet());
         return new VBox(Parts.GAP, halves,
-                Parts.row(0, new Node[] {Parts.grow(), close}));
+                Parts.row(Parts.GAP_SMALL, new Node[] {tour, Parts.grow(),
+                    close}));
     }
 
     // Lays out pairs of words in two columns of fixed width.

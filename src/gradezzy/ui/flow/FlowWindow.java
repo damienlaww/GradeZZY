@@ -107,8 +107,14 @@ public class FlowWindow {
     // Sets the AtlantaFX theme
     private final ThemeManager themes = new ThemeManager();
 
+    // The root of the scene: the outer layout, with the tour on top
+    private final StackPane root = new StackPane();
+
     // The outer layout
     private final BorderPane frame = new BorderPane();
+
+    // The guided tour, created when first started
+    private GuidedTour tour = null;
 
     // Holds the screen, with sheets and notices on top
     private final StackPane layers = new StackPane();
@@ -190,9 +196,10 @@ public class FlowWindow {
         StackPane.setAlignment(notice, Pos.BOTTOM_CENTER);
         layers.getChildren().addAll(content, notice);
         frame.setCenter(layers);
+        root.getChildren().add(frame);
         applyDarkClass();
 
-        Scene scene = new Scene(frame, width, height);
+        Scene scene = new Scene(root, width, height);
         URL css = FlowWindow.class.getResource(STYLESHEET);
         if (css != null) {
             scene.getStylesheets().add(css.toExternalForm());
@@ -543,6 +550,51 @@ public class FlowWindow {
      */
     public void showHelp() {
         showSheet(HelpSheet.create(this));
+    }
+
+    /**
+     * Closes any sheet and starts the guided tour. COULD.
+     */
+    public void startTour() {
+        closeSheet();
+        if (tour == null) {
+            tour = new GuidedTour(this);
+        }
+        tour.start();
+    }
+
+    /**
+     * Offers the guided tour, the first time GradeZZY opens only. COULD.
+     */
+    public void offerTourOnce() {
+        if (!GuidedTour.firstOffer(backend)) {
+            return;
+        }
+        choose("New to GradeZZY?", "A one-minute tour points at each "
+                + "part of the window and says what it does. You can take "
+                + "it later from Help.", "Not now", () -> closeSheet(),
+                "Take the tour", () -> startTour());
+    }
+
+    /**
+     * Returns the guided tour, for the developer checks.
+     *
+     * @return the tour, or null before it was first started
+     */
+    public GuidedTour getTour() {
+        return tour;
+    }
+
+    // Lays the tour over the whole window, top bar and bottom bar too.
+    void showOverlay(Node overlay) {
+        if (!root.getChildren().contains(overlay)) {
+            root.getChildren().add(overlay);
+        }
+    }
+
+    // Takes the tour off the window.
+    void hideOverlay(Node overlay) {
+        root.getChildren().remove(overlay);
     }
 
     /**
@@ -1160,12 +1212,15 @@ public class FlowWindow {
      * Acts on a key press before any control sees it: Ctrl or Cmd and
      * Enter presses the blue button, Ctrl or Cmd and F puts the cursor
      * in the Review search, Escape closes a sheet or goes back, and Ctrl
-     * or Cmd and 1 to 4 open a step.
+     * or Cmd and 1 to 4 open a step. While the tour is on screen, the
+     * tour takes every key instead.
      *
      * @param event the key press; consumed when it was a shortcut
      */
     private void handleShortcut(KeyEvent event) {
-        if (NEXT_KEYS.match(event)) {
+        if (tour != null && tour.isOpen()) {
+            tour.handleKey(event);
+        } else if (NEXT_KEYS.match(event)) {
             actionBar.firePrimary();
             event.consume();
         } else if (FIND_KEYS.match(event) && isReviewShown()) {
@@ -1202,11 +1257,14 @@ public class FlowWindow {
         return ThemeManager.LIGHT_THEME;
     }
 
-    // Adds or removes the dark class on the root.
+    // Adds or removes the dark class on the outer layout and on the root
+    // of the scene, which also holds the tour.
     private void applyDarkClass() {
         frame.getStyleClass().remove("dark");
+        root.getStyleClass().remove("dark");
         if (dark) {
             frame.getStyleClass().add("dark");
+            root.getStyleClass().add("dark");
         }
     }
 }
