@@ -380,17 +380,17 @@ public class ImportBatch {
             return firstCopy > secondCopy;
         }
 
-        boolean firstLower = isLowerCase(first.getUsername());
-        boolean secondLower = isLowerCase(second.getUsername());
+        boolean firstLower = isLowerCase(first.getName());
+        boolean secondLower = isLowerCase(second.getName());
         if (firstLower != secondLower) {
             return firstLower;
         }
         return items.indexOf(first) < items.indexOf(second);
     }
 
-    // Says whether a username has no capital letter.
-    private boolean isLowerCase(String username) {
-        return username.equals(username.toLowerCase(Locale.ROOT));
+    // Says whether a file name has no capital letter.
+    private boolean isLowerCase(String name) {
+        return name.equals(name.toLowerCase(Locale.ROOT));
     }
 
     // Lists the students of every usable submission, in the order
