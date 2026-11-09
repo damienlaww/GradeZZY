@@ -379,15 +379,17 @@ missing, and the files of a missing folder are not reported one by one.
 **Which folder is graded.** One rule, `util.AnswerFolderRule`, picks the
 folder that holds the question folders, for the checks, the fixes and
 grading (`QuestionFolderFinder`) alike. Every place that holds question
-folders counts: the top of the zip, and each top folder that holds them
-directly or through extra folders (`src` in an IntelliJ project, or a
-chain of folders that each hold only one folder, such as
-`Users/jy/Desktop/ping.lee.2023` from a command-line zip). `out`, `bin`,
+folders counts: the top of the zip, and inside each top folder the
+folder itself when it holds them directly, and each extra folder that
+leads to them (`src` in an IntelliJ project, a chain of folders that
+each hold only one folder, such as `Users/jy/Desktop/ping.lee.2023` from
+a command-line zip, or any other folder such as `backup`). `out`, `bin`,
 `__MACOSX` and hidden folders never count, and when there are several
 places, one whose question folders hold no `.java` file (a stray `Q1`
 with notes in it) is dropped. When more than one place is left, as with
-`ping.lee.2023/` and `ping.lee.2023 (2)/`, or a starter folder with work
-in it beside the username folder, GradeZZY does not guess: one
+`ping.lee.2023/` and `ping.lee.2023 (2)/`, a starter folder with work
+in it beside the username folder, `alice/Q1` beside `alice/src/Q1`, or
+`alice/backup/Q1` beside `alice/Q1`, GradeZZY does not guess: one
 `MISSING_QUESTION_FOLDER` error names the folders, and every question
 gets 0 until the student says which is their answer.
 
@@ -586,23 +588,27 @@ number cannot be read, so each passed case earns what its own
 a case worth 0.5 counts as 0.5 and one worth 2 as 2. A skipped case
 never earns marks, even when a tester that expects an exception catches
 the skip and prints `Passed`. A finished run's printed total is kept
-unless it is more than its passed cases earn, which student code can
-cause by setting the tester's score field by reflection; then the
-passed cases' marks are given and flagged. When no case printed a
-verdict at all, nothing can check the total, so it is kept and flagged,
-but only if the run printed no case header or the header of every case
-the tester has: student code that hides the tester's lines hides some
-headers too, and then the passed cases' marks are given instead.
+only if it is not more than its passed cases earn, so a total that no
+case's verdict backs is never believed: student code can hide the
+tester's lines and set its score field by reflection. A total above
+what the passed cases earn is replaced by their marks and flagged. When
+no case printed a verdict at all, no case passed, so the question gets
+0; the run's "not fully recognised" flag says that the printed total
+could not be checked against any verdict, and that a tester which words
+its verdicts differently needs its "Passed line" and "Failed line" set
+in Settings (`grading.pass.marker`, `grading.fail.marker`).
 A total above the question's maximum is cut to it and flagged, because
 the maximum read from the tester may be wrong (for example a
-`score += 0.5` inside a helper called once per case). When an unfinished
-run's cases cannot be matched one for one to the tester's score lines,
-each pass gets the smallest mark a case is worth, and a `RUNTIME_ERROR`
-says so. A run that ends normally but whose last line is not a total,
-that printed no case, or whose cases have no verdict (as when student
-code replaces `System.out`) gets a `RUNTIME_ERROR` saying the output was
-not fully recognised, so missing marks are checked by hand. None of
-these flags changes a mark by itself.
+`score += 0.5` inside a helper called once per case). When the cases of
+a run with no total (unfinished, or whose last line is not a number)
+cannot be matched one for one to the tester's score lines, each pass
+gets the smallest mark a case is worth, and a `RUNTIME_ERROR` says so.
+A run that ends normally but whose last line is not a total, that
+printed no case, or whose cases have no verdict (as when student code
+replaces `System.out`, or the tester words its verdicts differently)
+gets a `RUNTIME_ERROR` saying the output was not fully recognised, so
+missing marks are checked by hand. None of these flags changes a mark
+by itself.
 
 ### 8. Score and 9. Persist
 
@@ -966,7 +972,7 @@ folder of the section (`paths.output.dir.by.section`, else
 
 | Format | Class | Contents |
 |---|---|---|
-| Score sheet CSV | `CsvScoreSheetExporter` | The provided score sheet, unchanged except for `Calculated Final Grade Numerator` of each student graded in the run; a row with no graded submission keeps what it held, so a mark entered before stays. Columns, `#` prefixes, the `#` end marker, quotes and the encoding (UTF-8 with or without a byte order mark, or Windows-1252) stay as they were. Every line ends with `export.csv.line.ending` (CRLF by default, as in the provided sheet), so a sheet re-saved with LF endings is written with CRLF. Usernames are matched without the spaces around them. |
+| Score sheet CSV | `CsvScoreSheetExporter` | The provided score sheet, unchanged except for `Calculated Final Grade Numerator` of each student graded in the run; a row whose student has no graded submission in the run (grading failed, or nothing was submitted or chosen) gets an empty numerator, even if the sheet held a mark, so the instructor notices, as the Export step's "left blank" count says. Columns, `#` prefixes, the `#` end marker, quotes and the encoding (UTF-8 with or without a byte order mark, or Windows-1252) stay as they were. Every line ends with `export.csv.line.ending` (CRLF by default, as in the provided sheet), so a sheet re-saved with LF endings is written with CRLF. Usernames are matched without the spaces around them. |
 | JSON | `JsonExporter`, `JsonWriter` | Every student, question, test case and problem, written by hand without a library. |
 | Problem report | `AnomalyReportExporter` | One row per problem, with its fix status. |
 | Student reports | `StudentReportExporter` | A readable report per student: marks per question, test cases and problems. |

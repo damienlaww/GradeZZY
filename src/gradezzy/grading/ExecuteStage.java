@@ -83,6 +83,13 @@ public class ExecuteStage implements GradingStage {
     // Separates the file names in a message
     private static final String NAME_SEPARATOR = ", ";
 
+    // What the instructor can do about a printed total no verdict backs
+    private static final String CHECK_VERDICTS_ACTION = "Read the test "
+            + "output on Review and change the mark if it is wrong. If the "
+            + "tester words its verdicts differently, set \"Passed line\" "
+            + "and \"Failed line\" in Settings (" + ConfigKeys.PASS_MARKER
+            + NAME_SEPARATOR + ConfigKeys.FAIL_MARKER + ").";
+
     // Stands for "no test case hung"
     private static final int NO_CASE = 0;
 
@@ -256,14 +263,13 @@ public class ExecuteStage implements GradingStage {
      * finish never printed its total, and a total that is not a number
      * cannot be read, so the marks of the passed cases are added up. A
      * total above the question's maximum is cut to it and flagged. A
-     * total is kept unless it is more than the passed cases earn: student
-     * code can set the tester's score field by reflection, and a tester
-     * that expects an exception counts a skipped case as passed. Only
-     * when no case printed a verdict at all, so nothing can check it, is
-     * the total kept as it is, and then only if the tester printed no
-     * case header or every one of them: student code that hides the
-     * tester's lines hides some headers too. reportUnrecognised flags
-     * a total kept this way.
+     * total is kept only if it is not more than the passed cases earn:
+     * student code can hide the tester's lines and set its score field by
+     * reflection, and a tester that expects an exception counts a skipped
+     * case as passed. A total that no case's verdict backs is never
+     * believed: when no case printed a verdict at all, no case passed, so
+     * the question gets 0 with no flag here, because reportUnrecognised
+     * already flags the run.
      *
      * @param submission the submission, which gets a flag if the printed
      *        total is too high
@@ -280,27 +286,30 @@ public class ExecuteStage implements GradingStage {
             Question question, QuestionResult parsed, QuestionResult result,
             Double printedTotal, ProcessResult run,
             List<Integer> skippedCases) {
-        boolean finished = finishedNormally(run);
+        // Only a finished run's printed total can cap the passed cases'
+        // marks; with no total the marks are all there is, so they are
+        // read as for a run that did not finish
+        boolean totalPrinted = finishedNormally(run) && printedTotal != null;
         double earned = marksEarned(submission, tester, question, result,
-                finished);
-        if (!finished || printedTotal == null) {
+                totalPrinted);
+        if (!totalPrinted) {
             return Math.min(earned, question.getMaxScore());
         }
 
+        // No verdict backs the total: reportUnrecognised flags the run
+        if (!hasVerdict(result)) {
+            return earned;
+        }
+
         double total = capAtMaximum(submission, question, printedTotal);
-        boolean noVerdict = !hasVerdict(result) && skippedCases.isEmpty();
-        boolean nothingToCheck = noVerdict
-                && printedEveryHeaderOrNone(tester, result);
-        boolean totalBelieved = nothingToCheck
-                || total <= earned + SCORE_TOLERANCE;
-        if (totalBelieved) {
+        if (total <= earned + SCORE_TOLERANCE) {
             return total;
         }
 
         // The tester's own count, with the skipped cases it caught as
         // passed, explains the total: no flag, the skip message says why
         double earnedAsPrinted = marksEarned(submission, tester, question,
-                parsed, finished);
+                parsed, totalPrinted);
         boolean skipCounted = !skippedCases.isEmpty()
                 && total <= earnedAsPrinted + SCORE_TOLERANCE;
         if (!skipCounted) {
@@ -410,7 +419,9 @@ public class ExecuteStage implements GradingStage {
      * recognised, so marks may be missing with no other flag: its last
      * line is not a total, it printed no case GradeZZY recognises, or a
      * case has no verdict, as when student code replaces System.out and
-     * hides the tester's later lines.
+     * hides the tester's later lines, or when the tester words its
+     * verdicts differently. A printed total that no verdict backs was not
+     * given, and the message says so.
      *
      * @param submission the submission
      * @param context the context
@@ -449,11 +460,37 @@ public class ExecuteStage implements GradingStage {
             return;
         }
 
-        addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
-                + question.getId() + " tester's output was not fully "
-                + "recognised: " + TextUtils.join(REASON_SEPARATOR, reasons)
-                + ". " + question.getId() + " was given " + result.getScore()
+        String start = "The " + question.getId() + " tester's output was "
+                + "not fully recognised: "
+                + TextUtils.join(REASON_SEPARATOR, reasons) + ". ";
+        if (totalRefused(result, printedTotal)) {
+            addAnomaly(submission, AnomalyType.RUNTIME_ERROR, start
+                    + "The printed total of " + printedTotal + " could not "
+                    + "be checked against any verdict, so the passed "
+                    + "cases' marks were given: " + question.getId()
+                    + " was given " + result.getScore() + ".",
+                    CHECK_VERDICTS_ACTION);
+            return;
+        }
+        addAnomaly(submission, AnomalyType.RUNTIME_ERROR, start
+                + question.getId() + " was given " + result.getScore()
                 + "; marks may be missing.", CHECK_OUTPUT_ACTION);
+    }
+
+    /**
+     * Says whether a printed total was not given because no case printed
+     * a verdict that could back it.
+     *
+     * @param result the question's result, with its score set
+     * @param printedTotal the total the last run printed, or null
+     * @return true if the total was printed, unbacked and not given
+     */
+    private boolean totalRefused(QuestionResult result,
+            Double printedTotal) {
+        if (printedTotal == null || hasVerdict(result)) {
+            return false;
+        }
+        return result.getScore() + SCORE_TOLERANCE < printedTotal;
     }
 
     /**
@@ -476,26 +513,6 @@ public class ExecuteStage implements GradingStage {
             }
         }
         return missing;
-    }
-
-    /**
-     * Says whether a run printed the header of no case, or of every case
-     * the tester has, as a tester that names its verdicts in other words
-     * does. A run that shows only some headers had its output hidden.
-     *
-     * @param tester the tester of the question
-     * @param result the question's result
-     * @return true if no header or every header was printed
-     */
-    private boolean printedEveryHeaderOrNone(TesterFile tester,
-            QuestionResult result) {
-        int caseCount = result.getTestCaseResults().size();
-        if (caseCount == 0) {
-            return true;
-        }
-
-        List<Double> caseMarks = readCaseMarks(tester);
-        return caseMarks != null && caseCount == caseMarks.size();
     }
 
     /**
@@ -713,23 +730,24 @@ public class ExecuteStage implements GradingStage {
      * Adds up what the passed cases earn. Each case is worth what its own
      * "score +=" line in the tester gives, so a case worth 0.5 counts as
      * 0.5 and one worth 2 counts as 2. When the tester's lines cannot be
-     * matched to its cases one for one, a finished run's passed cases are
-     * taken to be worth the most they can be, because this only caps the
-     * printed total, so no earned mark is taken away. A run that did not
-     * finish has no total, so its passed cases are taken to be worth the
-     * least they can be, and the instructor is told.
+     * matched to its cases one for one, the passed cases of a run that
+     * printed its total are taken to be worth the most they can be,
+     * because this only caps that total, so no earned mark is taken away.
+     * A run with no total, unfinished or with a last line that is not a
+     * number, has only these marks, so its passed cases are taken to be
+     * worth the least they can be, and the instructor is told.
      *
-     * @param submission the submission, which gets a flag when an
-     *        unfinished run cannot be matched
+     * @param submission the submission, which gets a flag when a run with
+     *        no total cannot be matched
      * @param tester the tester of the question
      * @param question the question
      * @param parsed the parsed run
-     * @param finished true if the run reached its end, so every case of
-     *        the tester was run
+     * @param totalPrinted true if the run reached its end and printed a
+     *        total, so every case of the tester was run
      * @return what the passed cases earn
      */
     private double marksEarned(Submission submission, TesterFile tester,
-            Question question, QuestionResult parsed, boolean finished) {
+            Question question, QuestionResult parsed, boolean totalPrinted) {
         int passes = passCount(parsed);
         if (passes == 0) {
             return 0.0;
@@ -741,8 +759,8 @@ public class ExecuteStage implements GradingStage {
             // The tester cannot be read now, so every case counts the same
             return passes * question.getMaxScore() / cases.size();
         }
-        boolean matched = matchesCases(caseMarks, cases, finished);
-        if (!matched && finished) {
+        boolean matched = matchesCases(caseMarks, cases, totalPrinted);
+        if (!matched && totalPrinted) {
             return TesterMarks.sumLargest(caseMarks, passes);
         }
         if (!matched) {
@@ -801,17 +819,18 @@ public class ExecuteStage implements GradingStage {
 
     /**
      * Says whether a tester has one mark for each of its cases, so that
-     * case n is worth the n-th mark. A run that did not reach its end
-     * printed only its first cases, so it only needs a mark for each.
+     * case n is worth the n-th mark. A run with no total may have printed
+     * only its first cases, so it only needs a mark for each.
      *
      * @param caseMarks the tester's marks in order
      * @param cases the cases of the run
-     * @param finished true if the run reached its end
+     * @param totalPrinted true if the run reached its end and printed a
+     *        total
      * @return true if every case has its own mark
      */
     private boolean matchesCases(List<Double> caseMarks,
-            List<TestCaseResult> cases, boolean finished) {
-        if (finished) {
+            List<TestCaseResult> cases, boolean totalPrinted) {
+        if (totalPrinted) {
             return caseMarks.size() == cases.size();
         }
         for (TestCaseResult testCase : cases) {

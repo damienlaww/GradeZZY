@@ -468,6 +468,46 @@ public class IngestRegressionTest {
         check(AnswerFolderRule.findExtraFolder(ide.resolve("u"), names)
                 .equals(ide.resolve("u/src")),
                 "IDE output beside src is not a second answer");
+        check(AnswerFolderRule.findContentRoot(ide, "u", names)
+                .equals(ide.resolve("u")),
+                "an IntelliJ project is graded from its top folder");
+        Path twice = root.resolve("twice");
+        write(twice.resolve("u/u/Q1/Q1a.java"), "class Q1a {}");
+        check(AnswerFolderRule.findContentRoot(twice, "u", names)
+                .equals(twice.resolve("u")),
+                "a folder inside one of the same name is one answer");
+        Path stale = root.resolve("stale");
+        write(stale.resolve("alice/Q1/Q1a.java"), "class Q1a {}");
+        for (String folder : names) {
+            write(stale.resolve("alice/src/" + folder + "/A.java"),
+                    "class A {}");
+        }
+        check(AnswerFolderRule.findContentRoot(stale, "alice", names) == null
+                && AnswerFolderRule.findAnswerHolders(stale, names).equals(
+                List.of(stale.resolve("alice"), stale.resolve("alice/src"))),
+                "question folders in a top folder and in its src are two "
+                + "answers");
+        Submission staleUpload = new Submission("alice", SECTION, stale);
+        staleUpload.setWorkingCopyPath(stale);
+        List<Anomaly> staleFound = new StructureValidator().validate(
+                staleUpload, new AssessmentFactory(config).create());
+        check(staleFound.size() == 1
+                && staleFound.get(0).getMessage().contains(
+                "2 places (alice and alice/src)"),
+                "one error names both answer places");
+        Path backup = root.resolve("backup");
+        for (String folder : names) {
+            write(backup.resolve("alice/" + folder + "/A.java"),
+                    "class A {}");
+        }
+        write(backup.resolve("alice/backup/Q1/A.java"), "class A {}");
+        write(backup.resolve("alice/backup/Q3/A.java"), "class A {}");
+        check(AnswerFolderRule.findContentRoot(backup, "alice", names) == null
+                && AnswerFolderRule.findAnswerHolders(backup, names).equals(
+                List.of(backup.resolve("alice"),
+                backup.resolve("alice/backup"))),
+                "a backup of question folders beside them is a second "
+                + "answer");
         Path nested = root.resolve("nested");
         write(nested.resolve("Q1/Q1/Q1a.java"), "class Q1a {}");
         write(nested.resolve("Q1/Shape.class"), "x");
@@ -529,8 +569,8 @@ public class IngestRegressionTest {
     }
 
     // Checks the fixes for names with spaces at the end, Excel rows,
-    // spaces around roster values, prefilled marks, .zip.zip, bulk zip
-    // times, copy-numbered files and header labels.
+    // spaces around roster values, prefilled marks of ungraded students,
+    // .zip.zip, bulk zip times, copy-numbered files and header labels.
     private static void checkInputFixes(Path root, AppConfig config,
             SubmissionLoader loader) throws Exception {
         Files.createDirectories(root);
@@ -571,9 +611,10 @@ public class IngestRegressionTest {
                 + "First Name,Email,Calculated Final Grade Numerator\n"
                 + "#1,#bob ,B,Bob,bob@example.com,\n"
                 + "#2,# carl,C,Carl,carl@example.com,12.5\n"
+                + "#3,#dave,D,Dave,dave@example.com,9\n"
                 + ",,,,,\n,,,,,\n");
         List<Student> students = new RosterReader(config).readRoster(sheet);
-        check(students.size() == 2
+        check(students.size() == 3
                 && students.get(0).getUsername().equals("bob")
                 && students.get(1).getUsername().equals("carl"),
                 "empty Excel rows are skipped and roster values trimmed");
@@ -583,14 +624,20 @@ public class IngestRegressionTest {
         Submission bob = new Submission("bob", SECTION, sheet);
         bob.setStatus(SubmissionStatus.GRADED);
         run.addSubmission(bob);
+        Submission carl = new Submission("carl", SECTION, sheet);
+        carl.setStatus(SubmissionStatus.FAILED);
+        run.addSubmission(carl);
         run.setScoreSheetFile(sheet);
         Path csv = root.resolve("trim-export.csv");
         new CsvScoreSheetExporter(config, sheet).export(run, csv);
         String exported = Files.readString(csv);
         check(exported.contains("#bob ,B,Bob,bob@example.com,0")
-                && exported.contains("# carl,C,Carl,carl@example.com,12.5"),
-                "export matches a trimmed username and keeps a mark "
-                + "already in the sheet");
+                && exported.contains("# carl,C,Carl,carl@example.com,")
+                && !exported.contains("12.5")
+                && exported.contains("#dave,D,Dave,dave@example.com,")
+                && !exported.contains("dave@example.com,9"),
+                "export matches a trimmed username and blanks a mark "
+                + "already in the sheet for a failed or missing student");
 
         check(loader.extractUsername("2023-2024-dan.zip.zip").equals("dan"),
                 "a name ending .zip.zip gives the username");

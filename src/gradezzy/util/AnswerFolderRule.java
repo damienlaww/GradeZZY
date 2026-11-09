@@ -26,15 +26,18 @@ import java.util.Locale;
  * there is more than one.
  *
  * <p>The rule: every place that holds question folders is a candidate.
- * That is the top of the working copy, and each top folder that holds
- * them directly or through an extra folder (see findExtraFolder). Folders
- * an IDE or macOS fills with copies (out, bin, __MACOSX) and hidden
- * folders never count. When there are several candidates, those whose
- * question folders hold no Java file, such as a stray Q1 folder with only
- * notes in it, are dropped. One candidate left is the content root; more
- * than one means GradeZZY cannot tell which to grade, and the content
- * root is null. With no candidate, the folder named after the username is
- * used, else the only top folder, else none.
+ * That is the top of the working copy, and inside each top folder the
+ * folder itself when it holds them directly, and each extra folder that
+ * leads to them (src in an IntelliJ project, a chain of single folders,
+ * or any other sub-folder that holds them). Folders an IDE or macOS fills
+ * with copies (out, bin, __MACOSX) and hidden folders never count. When
+ * there are several candidates, those whose question folders hold no Java
+ * file, such as a stray Q1 folder with only notes in it, are dropped. A
+ * top folder with one candidate left inside it counts as that top folder.
+ * One candidate left in all is the content root; more than one means
+ * GradeZZY cannot tell which to grade, and the content root is null. With
+ * no candidate, the folder named after the username is used, else the
+ * only top folder, else none.
  *
  * <p>Tier: MUST.
  */
@@ -106,10 +109,12 @@ public final class AnswerFolderRule {
 
     /**
      * Lists the places that hold question folders: the working copy
-     * itself when they are at its top, and each top folder that holds
-     * them directly or through an extra folder. When there are several,
-     * those whose question folders hold no Java file are left out, unless
-     * that would leave none.
+     * itself when they are at its top, and each top folder that leads to
+     * them, directly or through one extra folder. A top folder that holds
+     * them in several places, such as directly and also inside src, gives
+     * each of those places instead. When there are several, those whose
+     * question folders hold no Java file are left out, unless that would
+     * leave none.
      *
      * @param workingCopy the working copy
      * @param folderNames the question folder names
@@ -120,6 +125,8 @@ public final class AnswerFolderRule {
     public static List<Path> findAnswerHolders(Path workingCopy,
             List<String> folderNames) throws IOException {
         List<Path> holders = new ArrayList<>();
+        // The folder that holds the question folders, for each holder
+        List<Path> places = new ArrayList<>();
         boolean noFolder = workingCopy == null
                 || !Files.isDirectory(workingCopy, LinkOption.NOFOLLOW_LINKS);
         if (noFolder) {
@@ -129,21 +136,18 @@ public final class AnswerFolderRule {
         List<Path> topFolders = listFolders(workingCopy);
         if (holdsQuestionFolder(topFolders, folderNames)) {
             holders.add(workingCopy);
+            places.add(workingCopy);
         }
         for (Path folder : topFolders) {
-            String name = folder.getFileName().toString();
-            boolean candidate = !isQuestionFolderName(name, folderNames)
-                    && !isSkippedFolder(name)
-                    && findQuestionPlace(folder, folderNames) != null;
-            if (candidate) {
-                holders.add(folder);
+            if (mayLeadToAnswers(folder, folderNames)) {
+                addPlacesInside(folder, folderNames, holders, places);
             }
         }
 
         if (holders.size() <= SINGLE_FOLDER) {
             return holders;
         }
-        return keepHoldersWithJava(holders, folderNames);
+        return keepHoldersWithJava(holders, places, folderNames);
     }
 
     /**
@@ -165,9 +169,7 @@ public final class AnswerFolderRule {
             List<String> folderNames) throws IOException {
         List<Path> extraFolders = new ArrayList<>();
         for (Path folder : listFolders(contentRoot)) {
-            String name = folder.getFileName().toString();
-            boolean extra = !isQuestionFolderName(name, folderNames)
-                    && !isSkippedFolder(name)
+            boolean extra = mayLeadToAnswers(folder, folderNames)
                     && findChainEnd(folder, folderNames) != null;
             if (extra) {
                 extraFolders.add(folder);
@@ -299,34 +301,87 @@ public final class AnswerFolderRule {
         return folders;
     }
 
-    // Returns the folder that holds the question folders inside a top
-    // folder: the folder itself, or the end of its extra folder's chain,
-    // or null when it leads to none.
-    private static Path findQuestionPlace(Path folder,
-            List<String> folderNames) throws IOException {
-        if (holdsQuestionFolder(listFolders(folder), folderNames)) {
-            return folder;
+    // Says whether a folder may hold or lead to question folders: it is
+    // not a question folder itself, nor one an IDE or macOS fills.
+    private static boolean mayLeadToAnswers(Path folder,
+            List<String> folderNames) {
+        String name = folder.getFileName().toString();
+        return !isQuestionFolderName(name, folderNames)
+                && !isSkippedFolder(name);
+    }
+
+    // Adds the places inside one top folder that hold question folders.
+    // One place, after those without Java are dropped, counts as the top
+    // folder itself, as the fixes then move an extra folder's question
+    // folders up; several places each count, so none is chosen.
+    private static void addPlacesInside(Path folder,
+            List<String> folderNames, List<Path> holders, List<Path> places)
+            throws IOException {
+        List<Path> inside = listPlacesInside(folder, folderNames);
+        if (inside.size() > SINGLE_FOLDER) {
+            inside = keepPlacesWithJava(inside, folderNames);
+        }
+        if (inside.size() == SINGLE_FOLDER) {
+            holders.add(folder);
+            places.add(inside.get(0));
+            return;
         }
 
-        Path extraFolder = findExtraFolder(folder, folderNames);
-        if (extraFolder == null) {
-            return null;
+        for (Path place : inside) {
+            holders.add(place);
+            places.add(place);
         }
-        return findChainEnd(extraFolder, folderNames);
+    }
+
+    // Lists the folders inside a top folder that hold question folders:
+    // the top folder itself when it holds them directly, then the end of
+    // the chain of each extra folder, in name order.
+    private static List<Path> listPlacesInside(Path folder,
+            List<String> folderNames) throws IOException {
+        List<Path> inside = new ArrayList<>();
+        List<Path> subfolders = listFolders(folder);
+        if (holdsQuestionFolder(subfolders, folderNames)) {
+            inside.add(folder);
+        }
+        for (Path subfolder : subfolders) {
+            Path chainEnd = null;
+            if (mayLeadToAnswers(subfolder, folderNames)) {
+                chainEnd = findChainEnd(subfolder, folderNames);
+            }
+            if (chainEnd != null) {
+                inside.add(chainEnd);
+            }
+        }
+        return inside;
     }
 
     // Keeps the places whose question folders hold a Java file, or all of
     // them when none does.
-    private static List<Path> keepHoldersWithJava(List<Path> holders,
+    private static List<Path> keepPlacesWithJava(List<Path> places,
             List<String> folderNames) throws IOException {
         List<Path> withJava = new ArrayList<>();
-        for (Path holder : holders) {
-            Path place = holder;
-            if (!holdsQuestionFolder(listFolders(holder), folderNames)) {
-                place = findQuestionPlace(holder, folderNames);
-            }
+        for (Path place : places) {
             if (questionFoldersHoldJava(place, folderNames)) {
-                withJava.add(holder);
+                withJava.add(place);
+            }
+        }
+
+        if (withJava.isEmpty()) {
+            return places;
+        }
+        return withJava;
+    }
+
+    // Keeps the holders whose place, at the same index, has question
+    // folders that hold a Java file, or all of them when none does.
+    private static List<Path> keepHoldersWithJava(List<Path> holders,
+            List<Path> places, List<String> folderNames)
+            throws IOException {
+        List<Path> withJava = new ArrayList<>();
+        for (int index = 0; index < holders.size(); index++) {
+            Path place = places.get(index);
+            if (questionFoldersHoldJava(place, folderNames)) {
+                withJava.add(holders.get(index));
             }
         }
 

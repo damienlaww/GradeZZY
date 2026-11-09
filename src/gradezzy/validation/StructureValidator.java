@@ -222,6 +222,15 @@ public class StructureValidator extends AbstractValidator {
         return shown;
     }
 
+    // Shows where a folder is inside the working copy, such as alice/src.
+    private String showInside(Path workingCopy, Path folder) {
+        List<String> parts = new ArrayList<>();
+        for (Path part : workingCopy.relativize(folder)) {
+            parts.add(part.toString());
+        }
+        return TextUtils.join(FOLDER_SEPARATOR, parts);
+    }
+
     // Names the top of the upload: a ZIP file, or a folder unzipped by
     // hand.
     private String describeUpload(Submission submission) {
@@ -306,12 +315,13 @@ public class StructureValidator extends AbstractValidator {
     private String describeSeveralAnswers(List<Path> holders,
             Submission submission) {
         List<String> names = new ArrayList<>();
+        Path workingCopy = submission.getWorkingCopyPath();
 
         for (Path holder : holders) {
-            if (holder.equals(submission.getWorkingCopyPath())) {
+            if (holder.equals(workingCopy)) {
                 names.add(TOP_LEVEL_NAME);
             } else {
-                names.add(holder.getFileName().toString());
+                names.add(showInside(workingCopy, holder));
             }
         }
 
