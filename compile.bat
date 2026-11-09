@@ -45,7 +45,7 @@ mkdir classes
 if /i "%~1"=="core" goto compile_core
 
 rem A line that ends with ^ continues on the next line.
-javac -encoding UTF-8 -d classes --module-path "%JAVAFX_DIR%" ^
+javac --release 25 -encoding UTF-8 -d classes --module-path "%JAVAFX_DIR%" ^
     --add-modules javafx.controls,javafx.fxml -cp "lib\*" ^
     %CORE_SOURCES% %UI_SOURCES%
 if errorlevel 1 goto failed
@@ -68,7 +68,7 @@ exit /b 0
 
 :compile_core
 rem No JavaFX and no jar on the classpath: proves the core stands alone.
-javac -encoding UTF-8 -d classes %CORE_SOURCES%
+javac --release 25 -encoding UTF-8 -d classes %CORE_SOURCES%
 if errorlevel 1 goto failed
 echo Compiled the grading core into classes\ (no JavaFX).
 exit /b 0

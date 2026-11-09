@@ -741,7 +741,7 @@ public class FolderHierarchyFixer extends AbstractFixer {
             int movedCount, FixException failure) {
         for (int i = 0; i < movedCount; i++) {
             try {
-                Files.move(targets.get(i), folders.get(i));
+                FileUtils.moveWithRetry(targets.get(i), folders.get(i));
             } catch (IOException exception) {
                 failure.addSuppressed(exception);
             }
@@ -758,7 +758,7 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
 
         try {
-            Files.move(folder, target);
+            FileUtils.moveWithRetry(folder, target);
         } catch (IOException exception) {
             throw new FixException("Could not move " + folder.getFileName()
                     + ": " + exception.getMessage(), exception);
@@ -794,7 +794,7 @@ public class FolderHierarchyFixer extends AbstractFixer {
         try {
             for (Path entry : entries) {
                 Path target = to.resolve(entry.getFileName());
-                Files.move(entry, target);
+                FileUtils.moveWithRetry(entry, target);
                 moved.add(target);
             }
         } catch (IOException exception) {
@@ -809,7 +809,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
             IOException failure) {
         for (Path entry : moved) {
             try {
-                Files.move(entry, from.resolve(entry.getFileName()));
+                Path original = from.resolve(entry.getFileName());
+                FileUtils.moveWithRetry(entry, original);
             } catch (IOException exception) {
                 failure.addSuppressed(exception);
             }

@@ -546,10 +546,10 @@ public abstract class AbstractFixer implements Fixer {
             if (targetExists) {
                 String stepName = from.getFileName() + CASE_RENAME_SUFFIX;
                 Path step = from.resolveSibling(stepName);
-                Files.move(from, step);
-                Files.move(step, to);
+                FileUtils.moveWithRetry(from, step);
+                FileUtils.moveWithRetry(step, to);
             } else {
-                Files.move(from, to);
+                FileUtils.moveWithRetry(from, to);
             }
         } catch (IOException exception) {
             throw new FixException("Could not rename "

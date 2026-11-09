@@ -20,6 +20,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -369,7 +370,7 @@ public class LiveBackend implements DashboardBackend {
                 return unreadable(kind, path);
             }
             String name = String.valueOf(path.getFileName());
-            if (!name.toLowerCase().endsWith(CSV_EXTENSION)) {
+            if (!name.toLowerCase(Locale.ROOT).endsWith(CSV_EXTENSION)) {
                 return new ImportItem(kind, path, "", ImportState.INVALID,
                         "Choose the score sheet CSV file.");
             }

@@ -12,6 +12,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import javafx.scene.Node;
 import javafx.scene.input.DragEvent;
@@ -115,7 +116,7 @@ public class DragDropHandler {
     private List<File> acceptedFiles(Dragboard board) {
         List<File> accepted = new ArrayList<>();
         for (File file : board.getFiles()) {
-            boolean isZip = file.getName().toLowerCase().endsWith(
+            boolean isZip = file.getName().toLowerCase(Locale.ROOT).endsWith(
                     ZIP_EXTENSION);
             if (file.isDirectory() || isZip) {
                 accepted.add(file);

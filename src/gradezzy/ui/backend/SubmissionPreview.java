@@ -86,7 +86,7 @@ public class SubmissionPreview {
      */
     public ImportItem inspectFile(Path file) {
         String name = String.valueOf(file.getFileName());
-        if (!name.toLowerCase().endsWith(ZIP_EXTENSION)) {
+        if (!name.toLowerCase(Locale.ROOT).endsWith(ZIP_EXTENSION)) {
             return new ImportItem(InputKind.SUBMISSION, file, "",
                     ImportState.INVALID, "This is not a ZIP file.");
         }
@@ -428,7 +428,7 @@ public class SubmissionPreview {
     private int countZips(List<String> names) {
         int zips = 0;
         for (String name : names) {
-            if (name.toLowerCase().endsWith(ZIP_EXTENSION)) {
+            if (name.toLowerCase(Locale.ROOT).endsWith(ZIP_EXTENSION)) {
                 zips++;
             }
         }

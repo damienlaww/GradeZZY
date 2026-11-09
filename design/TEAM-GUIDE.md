@@ -881,7 +881,13 @@ Notes:
 
 - The JavaFX jars differ per platform, so there are three copies, in
   `lib/javafx/mac`, `lib/javafx/mac-aarch64` and `lib/javafx/win`. The
-  scripts choose one.
+  scripts choose one. On a Mac they ask the JDK which processor it is
+  built for (`os.arch`), not the shell, so an Intel JDK on an Apple
+  Silicon Mac, or a terminal running under Rosetta, still gets the
+  matching jars.
+- `compile.sh` and `compile.bat` pass `--release 25` to `javac`, so an
+  older JDK stops with "release version 25 not supported" instead of a
+  confusing class file version error.
 - JSON export uses a small hand-written `JsonWriter` instead of a library,
   so there is one jar fewer and every line can be explained.
 - No Excel library is included. Exports are CSV and JSON only.
