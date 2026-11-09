@@ -354,7 +354,7 @@ public final class ConfigKeys {
     public static final String QUESTION_FILE_SUFFIX = ".file";
 
     /**
-     * Not used: every method here is static.
+     * Not used: the class only holds constants.
      */
     private ConfigKeys() {
         // utility class, never instantiated

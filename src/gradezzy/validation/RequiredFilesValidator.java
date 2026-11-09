@@ -30,6 +30,8 @@ import gradezzy.model.Submission;
  * folder is missing is left to StructureValidator for the same reason.
  * When the file is there with another ending, such as Q1b.java.txt, the
  * message names it; the mark is not changed.
+ *
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class RequiredFilesValidator extends AbstractValidator {
 
@@ -88,10 +90,10 @@ public class RequiredFilesValidator extends AbstractValidator {
                 continue;
             }
             if (isMissing(folder, question.getFileName())) {
+                Path otherEnding = findOtherEnding(folder, question);
                 anomalies.add(createAnomaly(submission,
                         AnomalyType.MISSING_FILE, Severity.ERROR,
-                        describeMissing(question,
-                        findOtherEnding(folder, question))));
+                        describeMissing(question, otherEnding)));
             }
             // A second class the student writes, such as GoldMember.java
             for (String extraFile : question.getExtraFileNames()) {
@@ -138,11 +140,11 @@ public class RequiredFilesValidator extends AbstractValidator {
     // when there is one.
     private String describeMissing(Question question, Path otherEnding) {
         String folderName = question.getFolderName();
-        String message = folderName + "/" + question.getFileName()
-                + " is missing";
+        String message = folderName + FOLDER_SEPARATOR
+                + question.getFileName() + " is missing";
 
         if (otherEnding != null) {
-            message += ", but " + folderName + "/"
+            message += ", but " + folderName + FOLDER_SEPARATOR
                     + otherEnding.getFileName() + " is there. It may need "
                     + "renaming";
         }
@@ -156,11 +158,12 @@ public class RequiredFilesValidator extends AbstractValidator {
     private boolean isMissing(Path folder, String fileName)
             throws IOException {
         String wanted = fileName.toLowerCase(Locale.ROOT);
+        String wantedWithEnding = wanted + ENDING_SEPARATOR;
         for (Path file : listFiles(folder)) {
             String name = file.getFileName().toString().toLowerCase(
                     Locale.ROOT);
             boolean sameName = name.equals(wanted)
-                    || name.startsWith(wanted + ENDING_SEPARATOR);
+                    || name.startsWith(wantedWithEnding);
             if (sameName) {
                 return false;
             }

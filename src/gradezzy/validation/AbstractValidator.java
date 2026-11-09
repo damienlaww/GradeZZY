@@ -28,6 +28,8 @@ import gradezzy.util.FileUtils;
 
 /**
  * Shared code for all validators.
+ *
+ * <p>Tier: MUST. Owner: Seth.
  */
 public abstract class AbstractValidator implements Validator {
 
@@ -111,10 +113,11 @@ public abstract class AbstractValidator implements Validator {
     protected List<Anomaly> reportUnreadable(Submission submission,
             IOException exception) {
         List<Anomaly> anomalies = new ArrayList<>();
+        String message = "The check '" + name + "' could not read "
+                + "the working copy: " + exception.getMessage();
 
         anomalies.add(createAnomaly(submission, AnomalyType.INTERNAL_ERROR,
-                Severity.ERROR, "The check '" + name + "' could not read "
-                + "the working copy: " + exception.getMessage()));
+                Severity.ERROR, message));
 
         return anomalies;
     }
@@ -135,9 +138,10 @@ public abstract class AbstractValidator implements Validator {
     protected Path findContentRoot(Submission submission,
             Assessment assessment) throws IOException {
         Path workingCopy = submission.getWorkingCopyPath();
+        boolean noFolder = workingCopy == null
+                || !Files.isDirectory(workingCopy, LinkOption.NOFOLLOW_LINKS);
 
-        if (workingCopy == null
-                || !Files.isDirectory(workingCopy, LinkOption.NOFOLLOW_LINKS)) {
+        if (noFolder) {
             return null;
         }
 
@@ -223,9 +227,11 @@ public abstract class AbstractValidator implements Validator {
             children = Files.newDirectoryStream(directory);
             for (Path child : children) {
                 String childName = child.getFileName().toString();
+                boolean visibleFolder = Files.isDirectory(child,
+                        LinkOption.NOFOLLOW_LINKS)
+                        && !childName.startsWith(HIDDEN_PREFIX);
 
-                if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
-                        && !childName.startsWith(HIDDEN_PREFIX)) {
+                if (visibleFolder) {
                     folders.add(child);
                 }
             }

@@ -14,6 +14,8 @@ import java.util.Map;
 
 /**
  * Compares two compile error reasons by how often they happened.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ErrorCountComparator implements Comparator<String> {
 

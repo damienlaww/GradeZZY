@@ -20,6 +20,8 @@ import gradezzy.grading.ValidateStage;
 
 /**
  * The grading stages, in order.
+ *
+ * <p>Tier: MUST.
  */
 public final class PipelineStages {
 

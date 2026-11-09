@@ -32,6 +32,8 @@ import gradezzy.util.FileUtils;
  * Corrects a wrong folder hierarchy: adds a missing username folder,
  * moves question folders up out of an extra folder, or makes the missing
  * question folders for answer files left loose.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class FolderHierarchyFixer extends AbstractFixer {
 
@@ -107,8 +109,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
         }
 
         String username = submission.getUsername();
-        if (Files.exists(workingCopy.resolve(username),
-                LinkOption.NOFOLLOW_LINKS)) {
+        Path usernameFolder = workingCopy.resolve(username);
+        if (Files.exists(usernameFolder, LinkOption.NOFOLLOW_LINKS)) {
             throw new FixException("A " + username + " folder already "
                     + "exists, so the folders were left where they are.");
         }
@@ -179,8 +181,9 @@ public class FolderHierarchyFixer extends AbstractFixer {
         String folderName = findMissingFolderName(submission, anomaly,
                 contentRoot, folderNames);
         Path extraFolder = findExtraFolder(contentRoot, folderNames);
-        if (folderName == null || extraFolder == null
-                || !canMoveUp(folderName, contentRoot, extraFolder)) {
+        boolean cannotMoveUp = folderName == null || extraFolder == null
+                || !canMoveUp(folderName, contentRoot, extraFolder);
+        if (cannotMoveUp) {
             return null;
         }
         return extraFolder;
@@ -354,8 +357,8 @@ public class FolderHierarchyFixer extends AbstractFixer {
                     + " folder is no longer there, so nothing was moved.");
         }
 
-        moveEntries(listEntries(usernameFolder, true), usernameFolder,
-                workingCopy);
+        List<Path> entries = listEntries(usernameFolder, true);
+        moveEntries(entries, usernameFolder, workingCopy);
         try {
             Files.delete(usernameFolder);
         } catch (IOException exception) {
@@ -695,9 +698,9 @@ public class FolderHierarchyFixer extends AbstractFixer {
         List<Path> extraFolders = new ArrayList<>();
         for (Path folder : listFolders(contentRoot)) {
             String name = folder.getFileName().toString();
-            if (!isQuestionFolderName(name, folderNames)
-                    && holdsQuestionFolder(listFolders(folder),
-                    folderNames)) {
+            boolean isExtra = !isQuestionFolderName(name, folderNames)
+                    && holdsQuestionFolder(listFolders(folder), folderNames);
+            if (isExtra) {
                 extraFolders.add(folder);
             }
         }

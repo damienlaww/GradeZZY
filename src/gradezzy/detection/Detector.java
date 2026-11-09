@@ -16,6 +16,8 @@ import gradezzy.model.Submission;
 
 /**
  * One check that flags a suspicious answer for review.
+ *
+ * <p>Tier: SHOULD. Owner: Jun Sheng.
  */
 public interface Detector {
 

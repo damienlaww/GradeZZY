@@ -10,6 +10,8 @@ package gradezzy.ui.backend;
 
 /**
  * A group of input files.
+ *
+ * <p>Tier: MUST.
  */
 public enum InputKind {
 

@@ -18,8 +18,16 @@ import gradezzy.model.Submission;
 
 /**
  * Plain words for problem types.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class Problems {
+
+    // What ends a path inside a message
+    private static final char PATH_END = ' ';
+
+    // The separator of the short paths shown on screen
+    private static final char FORWARD_SLASH = '/';
 
     // Not used: every method is static.
     private Problems() {
@@ -120,19 +128,20 @@ public final class Problems {
     // Removes a folder from the start of the path that follows it in the
     // message, and writes the rest with forward slashes.
     private static String shortenFrom(String message, String folder) {
-        int start = message.indexOf(folder + File.separator);
+        String folderStart = folder + File.separator;
+        int start = message.indexOf(folderStart);
         if (start < 0) {
             return message;
         }
         String before = message.substring(0, start);
-        String rest = message.substring(start + folder.length()
-                + File.separator.length());
-        int end = rest.indexOf(' ');
+        int restStart = start + folderStart.length();
+        String rest = message.substring(restStart);
+        int end = rest.indexOf(PATH_END);
         if (end < 0) {
             end = rest.length();
         }
         String path = rest.substring(0, end).replace(File.separatorChar,
-                '/');
+                FORWARD_SLASH);
         return before + path + rest.substring(end);
     }
 

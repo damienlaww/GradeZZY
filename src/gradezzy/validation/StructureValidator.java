@@ -21,10 +21,13 @@ import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
+import gradezzy.util.TextUtils;
 
 /**
  * Checks the folder layout: a username folder holding one folder per question
  * group.
+ *
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class StructureValidator extends AbstractValidator {
 
@@ -37,6 +40,12 @@ public class StructureValidator extends AbstractValidator {
     // folder unzipped by hand
     private static final String ZIP_TOP = "the ZIP file";
     private static final String FOLDER_TOP = "the uploaded folder";
+
+    // Separates a folder and the folder inside it in a message
+    private static final String FOLDER_SEPARATOR = "/";
+
+    // Comes between two folder names in a list in a message
+    private static final String LIST_SEPARATOR = ", ";
 
     /**
      * Creates a new structure validator.
@@ -93,11 +102,12 @@ public class StructureValidator extends AbstractValidator {
         String topName = contentRoot.getFileName().toString();
 
         if (contentRoot.equals(workingCopy)) {
+            String message = "The question folders were at the top of "
+                    + describeUpload(submission) + " instead of inside a "
+                    + "folder named " + username + ".";
             anomalies.add(createAnomaly(submission,
                     AnomalyType.MISSING_WRAPPER_FOLDER, Severity.INFO,
-                    "The question folders were at the top of "
-                    + describeUpload(submission) + " instead of inside a "
-                    + "folder named " + username + "."));
+                    message));
         } else if (!topName.equals(username)) {
             anomalies.add(createAnomaly(submission,
                     AnomalyType.WRONG_FOLDER_NAME, Severity.WARNING,
@@ -124,13 +134,18 @@ public class StructureValidator extends AbstractValidator {
             boolean present = findExact(folders, folderName) != null;
             Path nearMatch = findIgnoringCase(folders, folderName);
 
-            if (!present && nearMatch != null) {
+            if (present) {
+                continue;
+            }
+
+            if (nearMatch != null) {
+                String message = "The " + folderName + " folder is missing. "
+                        + "A folder named " + nearMatch.getFileName()
+                        + " was found, but folder names must match exactly.";
                 anomalies.add(createAnomaly(submission,
                         AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
-                        "The " + folderName + " folder is missing. A folder "
-                        + "named " + nearMatch.getFileName() + " was found, "
-                        + "but folder names must match exactly."));
-            } else if (!present && isInside(extraFolder, folderName)) {
+                        message));
+            } else if (isInside(extraFolder, folderName)) {
                 // The fix moves every nested folder at once and keeps only
                 // the first card, so that card names them all
                 String subject = folderName + " was";
@@ -138,16 +153,18 @@ public class StructureValidator extends AbstractValidator {
                     subject = joinNames(nestedNames) + " were";
                 }
                 firstNested = false;
+                String message = subject + " one level too deep, inside "
+                        + contentRoot.getFileName() + FOLDER_SEPARATOR
+                        + extraFolder.getFileName() + ".";
                 anomalies.add(createAnomaly(submission,
                         AnomalyType.MISSING_QUESTION_FOLDER,
-                        Severity.WARNING, subject + " one level too "
-                        + "deep, inside " + contentRoot.getFileName() + "/"
-                        + extraFolder.getFileName() + "."));
-            } else if (!present) {
+                        Severity.WARNING, message));
+            } else {
+                String message = "The " + folderName + " folder is missing."
+                        + nestingHint;
                 anomalies.add(createAnomaly(submission,
                         AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
-                        "The " + folderName + " folder is missing."
-                        + nestingHint));
+                        message));
             }
         }
     }
@@ -165,8 +182,9 @@ public class StructureValidator extends AbstractValidator {
         for (Path folder : folders) {
             String name = folder.getFileName().toString();
             boolean questionFolder = isQuestionFolderName(name, folderNames);
-            if (!questionFolder
-                    && holdsQuestionFolder(listFolders(folder), assessment)) {
+            boolean holder = !questionFolder
+                    && holdsQuestionFolder(listFolders(folder), assessment);
+            if (holder) {
                 holders.add(folder);
             }
         }
@@ -225,7 +243,7 @@ public class StructureValidator extends AbstractValidator {
         String joined = names.get(0);
 
         for (int index = 1; index < last; index++) {
-            joined = joined + ", " + names.get(index);
+            joined = joined + LIST_SEPARATOR + names.get(index);
         }
         if (last > 0) {
             joined = joined + " and " + names.get(last);
@@ -249,17 +267,19 @@ public class StructureValidator extends AbstractValidator {
         }
 
         return " The question folders were found one level too deep, in "
-                + contentRoot.getFileName() + "/" + extraFolder.getFileName()
-                + ".";
+                + contentRoot.getFileName() + FOLDER_SEPARATOR
+                + extraFolder.getFileName() + ".";
     }
 
     // Reports every question folder as missing, with the same reason.
     private void addAllFoldersMissing(List<Anomaly> anomalies,
             Submission submission, Assessment assessment, String reason) {
         for (String folderName : getQuestionFolderNames(assessment)) {
+            String message = "The " + folderName + " folder is missing. "
+                    + reason;
             anomalies.add(createAnomaly(submission,
                     AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
-                    "The " + folderName + " folder is missing. " + reason));
+                    message));
         }
     }
 
@@ -286,11 +306,12 @@ public class StructureValidator extends AbstractValidator {
             return "The ZIP file holds no folder.";
         }
 
-        String names = topFolders.get(0).getFileName().toString();
+        List<String> folderNames = new ArrayList<>();
 
-        for (int i = 1; i < topFolders.size(); i++) {
-            names += ", " + topFolders.get(i).getFileName();
+        for (Path topFolder : topFolders) {
+            folderNames.add(topFolder.getFileName().toString());
         }
+        String names = TextUtils.join(LIST_SEPARATOR, folderNames);
 
         return "The ZIP file holds several folders (" + names + ") and "
                 + "none is named " + submission.getUsername() + ".";

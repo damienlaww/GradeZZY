@@ -10,6 +10,8 @@ package gradezzy.ui.flow;
 
 /**
  * One step of grading a section.
+ *
+ * <p>Tier: SHOULD.
  */
 public enum Step {
 
@@ -58,9 +60,10 @@ public enum Step {
      */
     public Step next() {
         Step[] steps = values();
-        if (ordinal() + 1 >= steps.length) {
+        int nextIndex = ordinal() + 1;
+        if (nextIndex >= steps.length) {
             return this;
         }
-        return steps[ordinal() + 1];
+        return steps[nextIndex];
     }
 }

@@ -26,9 +26,11 @@ import gradezzy.model.AuditEntry;
  */
 final class AuditTable {
 
+    // Saves one row of the audit log
     private static final String INSERT_AUDIT = "INSERT INTO audit_entries "
             + "(logged_at, action, detail) VALUES (?, ?, ?)";
 
+    // Lists the whole audit log in the order it was written
     private static final String SELECT_AUDIT = "SELECT logged_at, action, "
             + "detail FROM audit_entries ORDER BY entry_id";
 

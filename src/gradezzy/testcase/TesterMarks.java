@@ -56,6 +56,66 @@ public final class TesterMarks {
     private static final int TEXT = 3;
     private static final int CHARACTER = 4;
 
+    // The characters that start and end comments
+    private static final char SLASH = '/';
+    private static final char STAR = '*';
+
+    // The quotes around a text and around a character
+    private static final char DOUBLE_QUOTE = '"';
+    private static final char SINGLE_QUOTE = '\'';
+
+    // Starts an escaped character inside quotes, such as \"
+    private static final char BACKSLASH = '\\';
+
+    // Ends a line of the tester
+    private static final char LINE_END = '\n';
+
+    // Replaces a blanked character; also stands in after the last one
+    private static final char BLANK = ' ';
+
+    // The characters skipped between "score" and its operator
+    private static final char SPACE = ' ';
+    private static final char TAB = '\t';
+
+    // The brackets followed to know when a loop starts and ends
+    private static final char OPEN_PARENTHESIS = '(';
+    private static final char CLOSE_PARENTHESIS = ')';
+    private static final char OPEN_BRACE = '{';
+    private static final char CLOSE_BRACE = '}';
+
+    // Ends a statement
+    private static final char SEMICOLON = ';';
+
+    // The two characters other than letters and digits a Java name holds
+    private static final char UNDERSCORE = '_';
+    private static final char DOLLAR = '$';
+
+    // The point of a decimal number such as 2.5
+    private static final char DECIMAL_POINT = '.';
+
+    // The most points a plain number can have
+    private static final int MAX_POINTS = 1;
+
+    // The operators that change the score in a way that cannot be counted
+    private static final String INCREMENT = "++";
+    private static final String DECREMENT = "--";
+    private static final String SUBTRACT_FROM = "-=";
+    private static final String MULTIPLY_BY = "*=";
+    private static final String DIVIDE_BY = "/=";
+
+    // The operator of a countable statement such as score += 1
+    private static final String ADD_TO = "+=";
+
+    // Sets the score; the comparison starts the same way
+    private static final String ASSIGN = "=";
+    private static final String EQUALS = "==";
+
+    // Comes between "score" and the rest of a statement in a message
+    private static final String WORD_SEPARATOR = " ";
+
+    // Comes between the file name and the line number in a message
+    private static final String LINE_LABEL = " line ";
+
     // A utility class is never created
     private TesterMarks() {
     }
@@ -71,8 +131,10 @@ public final class TesterMarks {
      */
     public static double readMaxScore(Path testerSource) throws IOException {
         List<String> problems = new ArrayList<>();
-        double total = countMarks(readCode(testerSource),
-                fileNameOf(testerSource), problems, new ArrayList<>());
+        String code = readCode(testerSource);
+        String fileName = fileNameOf(testerSource);
+        List<Double> marks = new ArrayList<>();
+        double total = countMarks(code, fileName, problems, marks);
         if (!problems.isEmpty()) {
             return UNKNOWN;
         }
@@ -111,8 +173,10 @@ public final class TesterMarks {
     public static List<Double> readCaseMarks(Path testerSource)
             throws IOException {
         List<Double> marks = new ArrayList<>();
-        countMarks(readCode(testerSource), fileNameOf(testerSource),
-                new ArrayList<>(), marks);
+        String code = readCode(testerSource);
+        String fileName = fileNameOf(testerSource);
+        List<String> problems = new ArrayList<>();
+        countMarks(code, fileName, problems, marks);
         return marks;
     }
 
@@ -129,9 +193,11 @@ public final class TesterMarks {
             throws IOException {
         List<String> problems = new ArrayList<>();
         String fileName = fileNameOf(testerSource);
-        double total = countMarks(readCode(testerSource), fileName,
-                problems, new ArrayList<>());
-        if (problems.isEmpty() && total <= UNKNOWN) {
+        String code = readCode(testerSource);
+        List<Double> marks = new ArrayList<>();
+        double total = countMarks(code, fileName, problems, marks);
+        boolean noMarks = problems.isEmpty() && total <= UNKNOWN;
+        if (noMarks) {
             problems.add(fileName + " has no \"score += <number>;\" line, "
                     + "so its question has no maximum mark. Add one per "
                     + "test case.");
@@ -149,8 +215,8 @@ public final class TesterMarks {
      * @throws IOException if the file cannot be read
      */
     public static String readCode(Path testerSource) throws IOException {
-        String source = new String(Files.readAllBytes(testerSource),
-                StandardCharsets.ISO_8859_1);
+        byte[] bytes = Files.readAllBytes(testerSource);
+        String source = new String(bytes, StandardCharsets.ISO_8859_1);
         return removeCommentsAndText(source);
     }
 
@@ -167,37 +233,28 @@ public final class TesterMarks {
         int index = 0;
         while (index < code.length) {
             char current = code[index];
-            char next = ' ';
-            if (index + 1 < code.length) {
-                next = code[index + 1];
+            int nextIndex = index + 1;
+            char next = BLANK;
+            if (nextIndex < code.length) {
+                next = code[nextIndex];
             }
 
             if (state == CODE) {
-                if (current == '/' && next == '/') {
-                    state = LINE_COMMENT;
-                    code[index] = ' ';
-                } else if (current == '/' && next == '*') {
-                    state = BLOCK_COMMENT;
-                    code[index] = ' ';
-                } else if (current == '"') {
-                    state = TEXT;
-                } else if (current == '\'') {
-                    state = CHARACTER;
-                }
+                state = stateAfterCode(code, index, next);
             } else if (state == LINE_COMMENT) {
-                if (current == '\n') {
+                if (current == LINE_END) {
                     state = CODE;
                 } else {
-                    code[index] = ' ';
+                    code[index] = BLANK;
                 }
             } else if (state == BLOCK_COMMENT) {
-                if (current == '*' && next == '/') {
-                    code[index] = ' ';
-                    code[index + 1] = ' ';
+                if (current == STAR && next == SLASH) {
+                    code[index] = BLANK;
+                    code[nextIndex] = BLANK;
                     index++;
                     state = CODE;
-                } else if (current != '\n') {
-                    code[index] = ' ';
+                } else if (current != LINE_END) {
+                    code[index] = BLANK;
                 }
             } else {
                 index = blankQuoted(code, index, state);
@@ -208,26 +265,61 @@ public final class TesterMarks {
         return new String(code);
     }
 
+    // Returns what a character of code starts: a comment, a quoted text
+    // or character, or nothing. The first slash of a comment is blanked.
+    private static int stateAfterCode(char[] code, int index, char next) {
+        char current = code[index];
+        if (current == SLASH && next == SLASH) {
+            code[index] = BLANK;
+            return LINE_COMMENT;
+        }
+        if (current == SLASH && next == STAR) {
+            code[index] = BLANK;
+            return BLOCK_COMMENT;
+        }
+        if (current == DOUBLE_QUOTE) {
+            return TEXT;
+        }
+        if (current == SINGLE_QUOTE) {
+            return CHARACTER;
+        }
+        return CODE;
+    }
+
     // Blanks the inside of a quoted text or character, starting just
     // after its opening quote, and returns the index of the closing quote
     private static int blankQuoted(char[] code, int start, int state) {
-        char quote = '"';
+        char quote = DOUBLE_QUOTE;
         if (state == CHARACTER) {
-            quote = '\'';
+            quote = SINGLE_QUOTE;
         }
 
         int index = start;
-        while (index < code.length && code[index] != quote
-                && code[index] != '\n') {
-            if (code[index] == '\\' && index + 1 < code.length) {
+        while (isInsideQuote(code, index, quote)) {
+            int nextIndex = index + 1;
+            boolean escaped = code[index] == BACKSLASH
+                    && nextIndex < code.length;
+            if (escaped) {
                 // An escaped character such as \" belongs to the text
-                code[index] = ' ';
+                code[index] = BLANK;
                 index++;
             }
-            code[index] = ' ';
+            code[index] = BLANK;
             index++;
         }
         return index;
+    }
+
+    // Says whether an index is still inside a quoted text or character:
+    // not past the end, at the closing quote or at the end of the line
+    private static boolean isInsideQuote(char[] code, int index,
+            char quote) {
+        if (index >= code.length) {
+            return false;
+        }
+        boolean closing = code[index] == quote;
+        boolean lineEnds = code[index] == LINE_END;
+        return !closing && !lineEnds;
     }
 
     // Adds up the score += <number> statements and lists every other
@@ -252,8 +344,9 @@ public final class TesterMarks {
                     loopStarting = true;
                 } else if (word.equals(SCORE)) {
                     boolean inLoop = loopDepth > 0 || loopStarting;
+                    String where = fileName + LINE_LABEL + lineNumber;
                     double mark = readChange(code, index, wordEnd, inLoop,
-                            fileName + " line " + lineNumber, problems);
+                            where, problems);
                     total += mark;
                     if (mark > 0) {
                         marks.add(mark);
@@ -261,23 +354,25 @@ public final class TesterMarks {
                 }
                 index = wordEnd;
             } else {
-                if (current == '\n') {
+                if (current == LINE_END) {
                     lineNumber++;
-                } else if (current == '(') {
+                } else if (current == OPEN_PARENTHESIS) {
                     parenDepth++;
-                } else if (current == ')') {
+                } else if (current == CLOSE_PARENTHESIS) {
                     parenDepth--;
-                } else if (current == '{') {
+                } else if (current == OPEN_BRACE) {
                     braceIsLoop.add(loopStarting);
                     if (loopStarting) {
                         loopDepth++;
                     }
                     loopStarting = false;
-                } else if (current == '}' && !braceIsLoop.isEmpty()) {
-                    if (braceIsLoop.remove(braceIsLoop.size() - 1)) {
+                } else if (current == CLOSE_BRACE && !braceIsLoop.isEmpty()) {
+                    int lastBrace = braceIsLoop.size() - 1;
+                    boolean closesLoop = braceIsLoop.remove(lastBrace);
+                    if (closesLoop) {
                         loopDepth--;
                     }
-                } else if (current == ';' && parenDepth == 0) {
+                } else if (current == SEMICOLON && parenDepth == 0) {
                     // A loop with no braces ends with its one statement
                     loopStarting = false;
                 }
@@ -297,17 +392,22 @@ public final class TesterMarks {
         String before = code.substring(0, wordStart).trim();
         int operatorStart = skipSpaces(code, wordEnd);
         String after = code.substring(operatorStart);
-        String statement = SCORE + " " + readUntilEnd(after);
+        String statement = SCORE + WORD_SEPARATOR + readUntilEnd(after);
 
-        if (before.endsWith("++") || before.endsWith("--")
-                || after.startsWith("++") || after.startsWith("--")
-                || after.startsWith("-=") || after.startsWith("*=")
-                || after.startsWith("/=")) {
+        boolean stepsBefore = before.endsWith(INCREMENT)
+                || before.endsWith(DECREMENT);
+        boolean stepsAfter = after.startsWith(INCREMENT)
+                || after.startsWith(DECREMENT);
+        boolean otherOperator = after.startsWith(SUBTRACT_FROM)
+                || after.startsWith(MULTIPLY_BY)
+                || after.startsWith(DIVIDE_BY);
+        boolean uncountable = stepsBefore || stepsAfter || otherOperator;
+        if (uncountable) {
             problems.add(cannotCount(where, statement));
             return 0.0;
-        } else if (after.startsWith("+=")) {
-            String amount = readUntilEnd(after.substring(
-                    "+=".length())).trim();
+        } else if (after.startsWith(ADD_TO)) {
+            String added = after.substring(ADD_TO.length());
+            String amount = readUntilEnd(added).trim();
             if (inLoop) {
                 problems.add(where + " adds to the score inside a loop (\""
                         + statement + "\"), so GradeZZY cannot tell how "
@@ -318,10 +418,10 @@ public final class TesterMarks {
                 return 0.0;
             }
             return Double.parseDouble(amount);
-        } else if (after.startsWith("=") && !after.startsWith("==")) {
+        } else if (after.startsWith(ASSIGN) && !after.startsWith(EQUALS)) {
             // Setting the score back to 0 adds no marks
-            String value = readUntilEnd(after.substring(
-                    "=".length())).trim();
+            String assigned = after.substring(ASSIGN.length());
+            String value = readUntilEnd(assigned).trim();
             if (!isZero(value)) {
                 problems.add(cannotCount(where, statement));
             }
@@ -338,9 +438,11 @@ public final class TesterMarks {
 
     // The text up to the end of the statement, without the semicolon
     private static String readUntilEnd(String text) {
-        int end = text.indexOf(';');
-        int lineEnd = text.indexOf('\n');
-        if (end < 0 || (lineEnd >= 0 && lineEnd < end)) {
+        int end = text.indexOf(SEMICOLON);
+        int lineEnd = text.indexOf(LINE_END);
+        boolean lineEndsFirst = lineEnd >= 0 && lineEnd < end;
+        boolean useLineEnd = end < 0 || lineEndsFirst;
+        if (useLineEnd) {
             end = lineEnd;
         }
         if (end < 0) {
@@ -357,13 +459,13 @@ public final class TesterMarks {
             char current = text.charAt(index);
             if (Character.isDigit(current)) {
                 digits++;
-            } else if (current == '.') {
+            } else if (current == DECIMAL_POINT) {
                 points++;
             } else {
                 return false;
             }
         }
-        return digits > 0 && points <= 1;
+        return digits > 0 && points <= MAX_POINTS;
     }
 
     // Says whether text is a plain number equal to 0, such as 0 or 0.0
@@ -375,9 +477,16 @@ public final class TesterMarks {
     // continue the word before it
     private static boolean isWordStart(String code, int index) {
         char current = code.charAt(index);
-        boolean starts = Character.isLetter(current) || current == '_'
-                || current == '$';
-        return starts && (index == 0 || !isWordPart(code.charAt(index - 1)));
+        boolean letter = Character.isLetter(current);
+        boolean starts = letter || current == UNDERSCORE || current == DOLLAR;
+        if (!starts) {
+            return false;
+        }
+        if (index == 0) {
+            return true;
+        }
+        int before = index - 1;
+        return !isWordPart(code.charAt(before));
     }
 
     // Returns the index just after the word that starts at index
@@ -391,8 +500,9 @@ public final class TesterMarks {
 
     // Says whether a character can be part of a Java name
     private static boolean isWordPart(char character) {
-        return Character.isLetterOrDigit(character) || character == '_'
-                || character == '$';
+        boolean letterOrDigit = Character.isLetterOrDigit(character);
+        return letterOrDigit || character == UNDERSCORE
+                || character == DOLLAR;
     }
 
     // Says whether a word starts a loop
@@ -409,10 +519,19 @@ public final class TesterMarks {
     // not a space or a tab
     private static int skipSpaces(String code, int index) {
         int position = index;
-        while (position < code.length() && (code.charAt(position) == ' '
-                || code.charAt(position) == '\t')) {
+        while (isSpaceAt(code, position)) {
             position++;
         }
         return position;
+    }
+
+    // Says whether the character at a position is a space or a tab;
+    // nothing is past the end
+    private static boolean isSpaceAt(String code, int position) {
+        if (position >= code.length()) {
+            return false;
+        }
+        char current = code.charAt(position);
+        return current == SPACE || current == TAB;
     }
 }

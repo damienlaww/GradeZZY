@@ -23,6 +23,8 @@ import gradezzy.testcase.TesterMarks;
 
 /**
  * One question's row in the assessment editor.
+ *
+ * <p>Tier: SHOULD.
  */
 public class QuestionFields {
 
@@ -220,12 +222,21 @@ public class QuestionFields {
     // gives Q1 and Q3 stays Q3.
     private String leadingFolder(String typed) {
         int end = typed.length();
-        while (end > 0 && Character.isLetter(typed.charAt(end - 1))) {
+        while (letterBefore(typed, end)) {
             end--;
         }
         if (end == 0) {
             return typed;
         }
         return typed.substring(0, end);
+    }
+
+    // Returns true when the character just before end is a letter.
+    private boolean letterBefore(String typed, int end) {
+        if (end == 0) {
+            return false;
+        }
+        int lastIndex = end - 1;
+        return Character.isLetter(typed.charAt(lastIndex));
     }
 }

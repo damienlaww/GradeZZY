@@ -14,6 +14,8 @@ import gradezzy.model.Submission;
 
 /**
  * Compares two students by their names in lower case.
+ *
+ * <p>Tier: SHOULD.
  */
 public class StudentNameComparator implements Comparator<Submission> {
 

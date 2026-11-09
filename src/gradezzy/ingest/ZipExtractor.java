@@ -85,6 +85,20 @@ public class ZipExtractor {
     // The end of a sentence in a message
     private static final String FULL_STOP = ".";
 
+    // A plain one-part entry name, used to check the target folder itself
+    private static final String PROBE_ENTRY = "entry";
+
+    // The colon of a Windows drive or of an NTFS alternate stream
+    private static final String COLON = ":";
+
+    // Windows drops a dot or a space at the end of a name
+    private static final String TRAILING_DOT = ".";
+    private static final String TRAILING_SPACE = " ";
+
+    // A name holding a character Windows does not allow in a file name
+    private static final String FORBIDDEN_CHARACTERS =
+            ".*[<>\"|?*\\p{Cntrl}].*";
+
     // What the instructor is asked to do about a zip that cannot be used
     private static final String NEW_COPY_ADVICE =
             " Ask the student for a new copy.";
@@ -140,7 +154,7 @@ public class ZipExtractor {
     public Path extract(Path zipFile, Path targetDirectory,
             List<String> skippedNames) throws IngestException {
         Path target = targetDirectory.toAbsolutePath().normalize();
-        if (!isSafeEntry("entry", target)) {
+        if (!isSafeEntry(PROBE_ENTRY, target)) {
             throw new IngestException("Choose a target without symbolic "
                     + "links: " + target);
         }
@@ -150,15 +164,7 @@ public class ZipExtractor {
                 throw new IOException("The archive is inside its target.");
             }
             Files.createDirectories(target);
-            DirectoryStream<Path> children = null;
-            try {
-                children = Files.newDirectoryStream(target);
-                if (children.iterator().hasNext()) {
-                    throw new IOException("The target must be empty.");
-                }
-            } finally {
-                FileUtils.closeIfOpen(children);
-            }
+            requireEmpty(target);
             ready = true;
             unpack(zipFile, target, skippedNames);
             return target;
@@ -174,6 +180,20 @@ public class ZipExtractor {
             // Only thrown while unpacking, so the target is always ready
             removeUnpacked(target, exception);
             throw exception;
+        }
+    }
+
+    // Refuses a target folder that already holds something, so existing
+    // files are never overwritten.
+    private void requireEmpty(Path target) throws IOException {
+        DirectoryStream<Path> children = null;
+        try {
+            children = Files.newDirectoryStream(target);
+            if (children.iterator().hasNext()) {
+                throw new IOException("The target must be empty.");
+            }
+        } finally {
+            FileUtils.closeIfOpen(children);
         }
     }
 
@@ -232,24 +252,20 @@ public class ZipExtractor {
      * @return true if the entry is safe to write
      */
     public boolean isSafeEntry(String entryName, Path targetDirectory) {
-        if (entryName == null || entryName.isEmpty()
-                || entryName.contains(":")) {
+        boolean noName = entryName == null || entryName.isEmpty()
+                || entryName.contains(COLON);
+        if (noName) {
             return false;
         }
         try {
-            Path entry = Path.of(entryName.replace(WINDOWS_SEPARATOR,
-                    ENTRY_SEPARATOR));
+            String slashedName = entryName.replace(WINDOWS_SEPARATOR,
+                    ENTRY_SEPARATOR);
+            Path entry = Path.of(slashedName);
             if (entry.isAbsolute()) {
                 return false;
             }
             for (Path part : entry) {
-                String name = part.toString();
-                if (name.equals(SAME_FOLDER)) {
-                    continue;
-                }
-                if (name.equals(PARENT_FOLDER) || name.endsWith(".")
-                        || name.endsWith(" ") || name.matches(WINDOWS_DEVICE)
-                        || name.matches(".*[<>\"|?*\\p{Cntrl}].*")) {
+                if (isUnsafePart(part.toString())) {
                     return false;
                 }
             }
@@ -258,17 +274,35 @@ public class ZipExtractor {
             if (destination.equals(root) || !destination.startsWith(root)) {
                 return false;
             }
-            Path current = destination;
-            while (current != null) {
-                if (Files.isSymbolicLink(current)) {
-                    return false;
-                }
-                current = current.getParent();
-            }
-            return true;
+            return !hasLinkOnPath(destination);
         } catch (InvalidPathException exception) {
             return false;
         }
+    }
+
+    // Says whether one part of an entry name climbs out of its folder or
+    // cannot be saved on Windows. A "." part names its own folder and is
+    // safe.
+    private boolean isUnsafePart(String name) {
+        if (name.equals(SAME_FOLDER)) {
+            return false;
+        }
+        return name.equals(PARENT_FOLDER) || name.endsWith(TRAILING_DOT)
+                || name.endsWith(TRAILING_SPACE)
+                || name.matches(WINDOWS_DEVICE)
+                || name.matches(FORBIDDEN_CHARACTERS);
+    }
+
+    // Says whether the path, or any folder above it, is a symbolic link.
+    private boolean hasLinkOnPath(Path destination) {
+        Path current = destination;
+        while (current != null) {
+            if (Files.isSymbolicLink(current)) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
     }
 
     // ZipFile checks the central directory, unlike a stream accepting
@@ -277,8 +311,10 @@ public class ZipExtractor {
             throws IOException, InvalidArchiveException {
         long maxMegabytes = config.getLong(ConfigKeys.MAX_ZIP_SIZE_MB);
         int maxEntries = config.getInt(ConfigKeys.MAX_ZIP_ENTRIES);
-        if (maxMegabytes <= 0 || maxMegabytes > Long.MAX_VALUE / BYTES_PER_MB
-                || maxEntries <= 0) {
+        boolean limitsOutOfRange = maxMegabytes <= 0
+                || maxMegabytes > Long.MAX_VALUE / BYTES_PER_MB
+                || maxEntries <= 0;
+        if (limitsOutOfRange) {
             throw new IOException("Extraction limits are out of range.");
         }
         long maxBytes = maxMegabytes * BYTES_PER_MB;
@@ -308,35 +344,22 @@ public class ZipExtractor {
                     continue;
                 }
 
-                // Ignored names are checked first, so an odd name inside
-                // __MACOSX never matters
-                boolean skip = isIgnored(entryName, ignored);
-                if (!skip && !isSafeEntry(entryName, target)) {
-                    if (escapesFolder(entryName)
-                            || isInQuestionFolder(entryName)) {
-                        throw unsafe(entryName);
-                    }
-                    skippedNames.add(printable(entryName));
-                    skip = true;
-                }
-
+                boolean skip = shouldSkip(entryName, ignored, target,
+                        skippedNames);
                 if (entryName.endsWith(ENTRY_SEPARATOR)) {
                     if (!skip) {
-                        Files.createDirectories(target.resolve(entryName)
-                                .normalize());
+                        Path folder = target.resolve(entryName).normalize();
+                        Files.createDirectories(folder);
                     }
                 } else {
                     Path output = null;
                     if (!skip) {
-                        output = target.resolve(entryName).normalize();
-                        String key = target.relativize(output).toString()
-                                .toLowerCase(Locale.ROOT);
-                        if (!writtenPaths.add(key)) {
-                            throw clash(entryName, null);
-                        }
+                        output = reserveOutput(target, entryName,
+                                writtenPaths);
                     }
+                    long remaining = maxBytes - totalBytes;
                     long written = extractFile(zip, entry, output,
-                            maxBytes - totalBytes, maxMegabytes, maxEntries);
+                            remaining, maxMegabytes, maxEntries);
                     totalBytes += written;
                     if (!skip) {
                         fileCount++;
@@ -355,6 +378,42 @@ public class ZipExtractor {
             throw new InvalidArchiveException("This zip file holds no files "
                     + "to grade." + NEW_COPY_ADVICE);
         }
+    }
+
+    // Says whether an entry is left out: an ignored name, or a name that
+    // cannot be saved here, which is added to skippedNames. Ignored names
+    // are checked first, so an odd name inside __MACOSX never matters. A
+    // name that climbs out of the target or lies in a question folder
+    // stops the whole zip instead.
+    private boolean shouldSkip(String entryName, List<String> ignored,
+            Path target, List<String> skippedNames)
+            throws InvalidArchiveException {
+        if (isIgnored(entryName, ignored)) {
+            return true;
+        }
+        if (isSafeEntry(entryName, target)) {
+            return false;
+        }
+        boolean mustStop = escapesFolder(entryName)
+                || isInQuestionFolder(entryName);
+        if (mustStop) {
+            throw unsafe(entryName);
+        }
+        skippedNames.add(printable(entryName));
+        return true;
+    }
+
+    // Returns where a file entry is written, after checking that no file
+    // with the same lower-case path was written before.
+    private Path reserveOutput(Path target, String entryName,
+            Set<String> writtenPaths) throws InvalidArchiveException {
+        Path output = target.resolve(entryName).normalize();
+        String key = target.relativize(output).toString()
+                .toLowerCase(Locale.ROOT);
+        if (!writtenPaths.add(key)) {
+            throw clash(entryName, null);
+        }
+        return output;
     }
 
     // Opens a zip. Windows Explorer writes a name that is not plain
@@ -416,8 +475,9 @@ public class ZipExtractor {
                 total += count;
                 count = reader.read(buffer);
             }
-            if (checksum.getValue() != entry.getCrc()
-                    || total != entry.getSize()) {
+            boolean damagedEntry = checksum.getValue() != entry.getCrc()
+                    || total != entry.getSize();
+            if (damagedEntry) {
                 throw damaged(null);
             }
             return total;
@@ -474,8 +534,9 @@ public class ZipExtractor {
     // Says whether an entry name points outside the folder it is unpacked
     // into: an absolute name, a drive such as C: or a ".." part.
     private boolean escapesFolder(String entryName) {
-        if (entryName.startsWith(ENTRY_SEPARATOR)
-                || entryName.matches(DRIVE_PATTERN)) {
+        boolean absolute = entryName.startsWith(ENTRY_SEPARATOR)
+                || entryName.matches(DRIVE_PATTERN);
+        if (absolute) {
             return true;
         }
         for (String part : entryName.split(ENTRY_SEPARATOR)) {
@@ -491,7 +552,8 @@ public class ZipExtractor {
     private boolean isInQuestionFolder(String entryName) {
         String[] parts = entryName.split(ENTRY_SEPARATOR);
         // The last part is the entry's own name
-        for (int index = 0; index < parts.length - 1; index++) {
+        int folderCount = parts.length - 1;
+        for (int index = 0; index < folderCount; index++) {
             if (isQuestionFolderName(parts[index])) {
                 return true;
             }
@@ -503,8 +565,9 @@ public class ZipExtractor {
     // Q1, in any case.
     private boolean isQuestionFolderName(String name) {
         for (String id : config.getList(ConfigKeys.QUESTION_IDS)) {
-            String folder = config.getString(ConfigKeys.QUESTION_PREFIX
-                    + id + ConfigKeys.QUESTION_FOLDER_SUFFIX);
+            String key = ConfigKeys.QUESTION_PREFIX + id
+                    + ConfigKeys.QUESTION_FOLDER_SUFFIX;
+            String folder = config.getString(key);
             if (folder.equalsIgnoreCase(name)) {
                 return true;
             }
@@ -544,8 +607,9 @@ public class ZipExtractor {
     // and the macOS resource fork beside each file, such as ._Q1a.java.
     private boolean isIgnored(String entryName, List<String> ignored) {
         for (String part : entryName.split(ENTRY_SEPARATOR)) {
-            if (ignored.contains(part)
-                    || part.startsWith(RESOURCE_FORK_PREFIX)) {
+            boolean ignoredPart = ignored.contains(part)
+                    || part.startsWith(RESOURCE_FORK_PREFIX);
+            if (ignoredPart) {
                 return true;
             }
         }

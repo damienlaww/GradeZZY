@@ -25,9 +25,12 @@ import gradezzy.model.AnomalyType;
 import gradezzy.model.FixStatus;
 import gradezzy.model.Submission;
 import gradezzy.util.FileUtils;
+import gradezzy.util.TextUtils;
 
 /**
  * Shared code for all fixers.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public abstract class AbstractFixer implements Fixer {
 
@@ -195,8 +198,9 @@ public abstract class AbstractFixer implements Fixer {
      * @return the folder name, such as Q1
      */
     protected String readFolderName(AppConfig config, String questionId) {
-        return config.getString(ConfigKeys.QUESTION_PREFIX + questionId
-                + ConfigKeys.QUESTION_FOLDER_SUFFIX);
+        String key = ConfigKeys.QUESTION_PREFIX + questionId
+                + ConfigKeys.QUESTION_FOLDER_SUFFIX;
+        return config.getString(key);
     }
 
     /**
@@ -207,8 +211,9 @@ public abstract class AbstractFixer implements Fixer {
      * @return the file name, such as Q1a.java
      */
     protected String readFileName(AppConfig config, String questionId) {
-        return config.getString(ConfigKeys.QUESTION_PREFIX + questionId
-                + ConfigKeys.QUESTION_FILE_SUFFIX);
+        String key = ConfigKeys.QUESTION_PREFIX + questionId
+                + ConfigKeys.QUESTION_FILE_SUFFIX;
+        return config.getString(key);
     }
 
     /**
@@ -283,15 +288,15 @@ public abstract class AbstractFixer implements Fixer {
      * @return the names joined
      */
     protected String joinNames(List<String> names) {
-        String joined = names.get(0);
         int last = names.size() - 1;
-        for (int i = 1; i < last; i++) {
-            joined += LIST_SEPARATOR + names.get(i);
+        String lastName = names.get(last);
+        if (last == 0) {
+            return lastName;
         }
-        if (last > 0) {
-            joined += LAST_SEPARATOR + names.get(last);
-        }
-        return joined;
+
+        List<String> allButLast = names.subList(0, last);
+        return TextUtils.join(LIST_SEPARATOR, allButLast) + LAST_SEPARATOR
+                + lastName;
     }
 
     /**
@@ -358,8 +363,12 @@ public abstract class AbstractFixer implements Fixer {
         for (Anomaly other : submission.getAnomalies()) {
             if (other.getId().equals(anomaly.getId())) {
                 return pickAt(stillAbsent, place);
-            } else if (other.getType() == AnomalyType.MISSING_QUESTION_FOLDER
-                    && other.getFixStatus() != FixStatus.APPLIED) {
+            }
+
+            boolean unfixedMissingFolder = other.getType()
+                    == AnomalyType.MISSING_QUESTION_FOLDER
+                    && other.getFixStatus() != FixStatus.APPLIED;
+            if (unfixedMissingFolder) {
                 place++;
             }
         }
@@ -380,8 +389,10 @@ public abstract class AbstractFixer implements Fixer {
             String start = readFolderName(config, questionId)
                     + FOLDER_SEPARATOR + readFileName(config, questionId)
                     + PATH_END;
-            if (message.length() >= start.length() && message.substring(0,
-                    start.length()).equalsIgnoreCase(start)) {
+            boolean startsWithPath = message.length() >= start.length()
+                    && message.substring(0, start.length())
+                            .equalsIgnoreCase(start);
+            if (startsWithPath) {
                 return questionId;
             }
         }
@@ -400,8 +411,9 @@ public abstract class AbstractFixer implements Fixer {
 
         try {
             for (Path child : readFolder(folder)) {
-                if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
-                        && !isHidden(child)) {
+                boolean visibleFolder = Files.isDirectory(child,
+                        LinkOption.NOFOLLOW_LINKS) && !isHidden(child);
+                if (visibleFolder) {
                     folders.add(child);
                 }
             }
@@ -532,8 +544,8 @@ public abstract class AbstractFixer implements Fixer {
             }
 
             if (targetExists) {
-                Path step = from.resolveSibling(from.getFileName()
-                        + CASE_RENAME_SUFFIX);
+                String stepName = from.getFileName() + CASE_RENAME_SUFFIX;
+                Path step = from.resolveSibling(stepName);
                 Files.move(from, step);
                 Files.move(step, to);
             } else {

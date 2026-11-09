@@ -27,6 +27,8 @@ import gradezzy.ui.backend.ResultState;
 
 /**
  * Statistics for a demo run.
+ *
+ * <p>Tier: COULD.
  */
 public final class DemoStatistics {
 
@@ -38,6 +40,9 @@ public final class DemoStatistics {
 
     // The text in a compile error message before the reason
     private static final String COMPILE_PREFIX = "did not compile: ";
+
+    // The character that ends the reason in a compile error message
+    private static final char REASON_END = '.';
 
     // Utility class, never instantiated.
     private DemoStatistics() {
@@ -87,10 +92,12 @@ public final class DemoStatistics {
             totals[index] = sortedTotals.get(index);
         }
 
+        double mean = sum / totals.length;
+        double passRate = (double) passed / totals.length;
         StatisticsSummary summary = new StatisticsSummary();
-        summary.setMean(sum / totals.length);
+        summary.setMean(mean);
         summary.setMedian(median(totals));
-        summary.setPassRate((double) passed / totals.length);
+        summary.setPassRate(passRate);
         addMarkBands(summary, totals, maxTotal, bandWidthPercent);
         addQuestionPassRates(summary, run, graded, passMarkPercent);
         summary.setMostFailedTest(mostFailedTest(graded));
@@ -110,7 +117,8 @@ public final class DemoStatistics {
         if (sorted.length % HALF == 1) {
             return sorted[middle];
         }
-        return (sorted[middle - 1] + sorted[middle]) / HALF;
+        int before = middle - 1;
+        return (sorted[before] + sorted[middle]) / HALF;
     }
 
     // Counts the students in each mark band; the last includes full marks.
@@ -118,7 +126,8 @@ public final class DemoStatistics {
             double[] totals, double maxTotal, double bandWidthPercent) {
         for (double lower = 0.0; lower < FULL_PERCENT;
                 lower += bandWidthPercent) {
-            double upper = Math.min(lower + bandWidthPercent, FULL_PERCENT);
+            double nextLower = lower + bandWidthPercent;
+            double upper = Math.min(nextLower, FULL_PERCENT);
             int count = 0;
             for (double total : totals) {
                 double percent = total / maxTotal * FULL_PERCENT;
@@ -138,15 +147,17 @@ public final class DemoStatistics {
             double passMarkPercent) {
         for (Question question : run.getAssessment().getQuestions()) {
             int passed = 0;
+            double max = question.getMaxScore();
             for (Submission submission : graded) {
                 QuestionResult result = find(submission, question.getId());
-                if (result != null && isPass(result.getScore(),
-                        question.getMaxScore(), passMarkPercent)) {
+                boolean questionPassed = result != null
+                        && isPass(result.getScore(), max, passMarkPercent);
+                if (questionPassed) {
                     passed++;
                 }
             }
-            summary.getQuestionPassRates().put(question.getId(),
-                    (double) passed / graded.size());
+            double passRate = (double) passed / graded.size();
+            summary.getQuestionPassRates().put(question.getId(), passRate);
         }
     }
 
@@ -200,7 +211,8 @@ public final class DemoStatistics {
                 if (errors.containsKey(reason)) {
                     count = errors.get(reason);
                 }
-                errors.put(reason, count + 1);
+                int newCount = count + 1;
+                errors.put(reason, newCount);
             }
         }
     }
@@ -211,8 +223,9 @@ public final class DemoStatistics {
         if (start < 0) {
             return message;
         }
-        String rest = message.substring(start + COMPILE_PREFIX.length());
-        int end = rest.indexOf('.');
+        int reasonStart = start + COMPILE_PREFIX.length();
+        String rest = message.substring(reasonStart);
+        int end = rest.indexOf(REASON_END);
         if (end < 0) {
             return rest;
         }

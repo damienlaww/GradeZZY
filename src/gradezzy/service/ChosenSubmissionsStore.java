@@ -26,9 +26,12 @@ import java.util.Map;
 import java.util.Properties;
 
 import gradezzy.util.FileUtils;
+import gradezzy.util.TextUtils;
 
 /**
  * Saves and reads the chosen submission paths of each section.
+ *
+ * <p>Tier: COULD.
  */
 public class ChosenSubmissionsStore {
 
@@ -94,7 +97,7 @@ public class ChosenSubmissionsStore {
             for (Path path : chosen.get(section)) {
                 texts.add(path.toAbsolutePath().toString());
             }
-            values.setProperty(section, String.join(SEPARATOR, texts));
+            values.setProperty(section, TextUtils.join(SEPARATOR, texts));
         }
 
         try {

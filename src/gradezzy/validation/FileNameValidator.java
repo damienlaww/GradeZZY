@@ -28,6 +28,8 @@ import gradezzy.model.Submission;
  * Q1a.java.txt from Notepad. Java needs the exact name, so such a file
  * would not compile. The answer file of each question is checked, and so
  * are the other files the starter has for it, such as GoldMember.java.
+ *
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class FileNameValidator extends AbstractValidator {
 
@@ -144,7 +146,8 @@ public class FileNameValidator extends AbstractValidator {
             String wantedName) {
         String folderName = question.getFolderName();
 
-        return folderName + "/" + misnamed.getFileName() + " should be named "
+        return folderName + FOLDER_SEPARATOR + misnamed.getFileName()
+                + " should be named "
                 + folderName + FOLDER_SEPARATOR + wantedName + ".";
     }
 }

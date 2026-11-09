@@ -31,8 +31,13 @@ import gradezzy.ui.backend.RepairItem;
 /**
  * A background task that undoes one fix or several, or applies one
  * again, and grades each student again.
+ *
+ * <p>Tier: SHOULD.
  */
 public class UndoFixJob extends Task<ActionResult> {
+
+    // The name of the thread the job runs on
+    private static final String THREAD_NAME = "gradezzy-fix";
 
     // The backend that undoes the fix
     private final DashboardBackend backend;
@@ -121,7 +126,7 @@ public class UndoFixJob extends Task<ActionResult> {
         }
         state.setFixesInProgress(anomaliesFrom(0));
         // A daemon thread does not keep GradeZZY open
-        Thread worker = new Thread(this, "gradezzy-fix");
+        Thread worker = new Thread(this, THREAD_NAME);
         worker.setDaemon(true);
         worker.start();
         return true;
@@ -212,7 +217,8 @@ public class UndoFixJob extends Task<ActionResult> {
             } else if (firstProblem.isEmpty()) {
                 firstProblem = result.getMessage();
             }
-            updateProgress(index + 1, repairs.size());
+            int done = index + 1;
+            updateProgress(done, repairs.size());
         }
         return describeRejected(rejected, firstProblem);
     }

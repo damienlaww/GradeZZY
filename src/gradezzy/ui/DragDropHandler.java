@@ -20,6 +20,8 @@ import javafx.scene.input.TransferMode;
 
 /**
  * Lets the instructor drop files onto the window.
+ *
+ * <p>Tier: COULD.
  */
 public class DragDropHandler {
 
@@ -63,15 +65,6 @@ public class DragDropHandler {
     }
 
     /**
-     * Removes the hover highlight when the files leave the target.
-     *
-     * @param target the target
-     */
-    private void clearDragOver(Node target) {
-        target.getStyleClass().remove(DRAG_OVER_CLASS);
-    }
-
-    /**
      * Returns the files dropped most recently.
      *
      * @return the dropped paths
@@ -90,6 +83,11 @@ public class DragDropHandler {
             }
         }
         event.consume();
+    }
+
+    // Removes the hover highlight when the files leave the target.
+    private void clearDragOver(Node target) {
+        target.getStyleClass().remove(DRAG_OVER_CLASS);
     }
 
     // Keeps the accepted paths and tells the screen.

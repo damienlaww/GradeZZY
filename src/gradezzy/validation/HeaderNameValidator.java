@@ -28,6 +28,8 @@ import gradezzy.util.TextUtils;
  * Checks that each Java file has the student name and email in its header
  * comment. Only the required files of the assessment are checked, as
  * agreed by the team; extra helper classes are not.
+ *
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class HeaderNameValidator extends AbstractValidator {
 
@@ -38,6 +40,9 @@ public class HeaderNameValidator extends AbstractValidator {
 
     // The character every line ending becomes after normalising
     private static final String NEW_LINE = "\n";
+
+    // Separates the folder and the file in a message
+    private static final String FOLDER_SEPARATOR = "/";
 
     // The application settings, or null when none were given
     private final AppConfig config;
@@ -104,11 +109,12 @@ public class HeaderNameValidator extends AbstractValidator {
             }
 
             if (problem != null) {
+                String message = question.getFolderName() + FOLDER_SEPARATOR
+                        + question.getFileName() + " has " + problem
+                        + " in its header.";
                 anomalies.add(createAnomaly(submission,
                         AnomalyType.MISSING_HEADER_NAME, Severity.WARNING,
-                        question.getFolderName() + "/"
-                        + question.getFileName() + " has " + problem
-                        + " in its header."));
+                        message));
             }
         }
 
@@ -184,7 +190,8 @@ public class HeaderNameValidator extends AbstractValidator {
             int position = line.indexOf(label);
 
             if (position >= 0) {
-                return line.substring(position + label.length()).trim();
+                int valueStart = position + label.length();
+                return line.substring(valueStart).trim();
             }
         }
 

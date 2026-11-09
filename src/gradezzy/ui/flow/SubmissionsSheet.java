@@ -26,6 +26,8 @@ import javafx.scene.layout.VBox;
 
 /**
  * A sheet listing every chosen submission, with a filter.
+ *
+ * <p>Tier: SHOULD.
  */
 public class SubmissionsSheet {
 
@@ -177,7 +179,8 @@ public class SubmissionsSheet {
             return;
         }
 
+        int lastIndex = shown.size() - 1;
         shown.get(0).getStyleClass().add("first");
-        shown.get(shown.size() - 1).getStyleClass().add("last");
+        shown.get(lastIndex).getStyleClass().add("last");
     }
 }

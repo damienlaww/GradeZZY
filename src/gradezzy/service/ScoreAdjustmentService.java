@@ -33,6 +33,8 @@ import gradezzy.report.ScoreFormatter;
 
 /**
  * Marks changed by hand.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ScoreAdjustmentService {
 
@@ -95,7 +97,9 @@ public class ScoreAdjustmentService {
                     + "change. It is kept with the new mark.");
         }
         double max = result.getQuestion().getMaxScore();
-        if (Double.isNaN(newScore) || newScore < 0.0 || newScore > max) {
+        boolean outOfRange = Double.isNaN(newScore) || newScore < 0.0
+                || newScore > max;
+        if (outOfRange) {
             throw new IllegalArgumentException("Enter a mark from 0 to "
                     + ScoreFormatter.format(max) + ".");
         }
@@ -140,14 +144,8 @@ public class ScoreAdjustmentService {
                     + " was graded again after this change, so its mark "
                     + "is no longer the changed one.");
         }
-        ScoreAdjustment newest = null;
-        for (ScoreAdjustment other : changes) {
-            if (other.getUsername().equals(change.getUsername())
-                    && other.getQuestionId().equals(
-                    change.getQuestionId())) {
-                newest = other;
-            }
-        }
+        ScoreAdjustment newest = findNewest(changes, change.getUsername(),
+                change.getQuestionId());
         if (newest != change) {
             throw new IllegalArgumentException("Undo the later change of "
                     + change.getQuestionId() + " first.");
@@ -156,6 +154,25 @@ public class ScoreAdjustmentService {
         changes.remove(change);
         resultOf.remove(change);
         save(run, submission, change, false);
+    }
+
+    // Returns the newest change of one question of a student, or null.
+    private ScoreAdjustment findNewest(List<ScoreAdjustment> changes,
+            String username, String questionId) {
+        ScoreAdjustment newest = null;
+        for (ScoreAdjustment other : changes) {
+            if (isChangeOf(other, username, questionId)) {
+                newest = other;
+            }
+        }
+        return newest;
+    }
+
+    // Says whether a change is of one question of a student.
+    private boolean isChangeOf(ScoreAdjustment change, String username,
+            String questionId) {
+        return change.getUsername().equals(username)
+                && change.getQuestionId().equals(questionId);
     }
 
     /**
@@ -256,7 +273,9 @@ public class ScoreAdjustmentService {
     private void saveKept(GradingRun run, Submission submission,
             List<ScoreAdjustment> kept) {
         saveProblem = "";
-        if (kept.isEmpty() || !isSaving() || run.getId() == null) {
+        boolean nothingToSave = kept.isEmpty() || !isSaving()
+                || run.getId() == null;
+        if (nothingToSave) {
             return;
         }
         try {
@@ -329,20 +348,26 @@ public class ScoreAdjustmentService {
     private void dropOutdated(GradingRun run, Submission submission) {
         List<ScoreAdjustment> changes = changesOf(run);
         Map<String, ScoreAdjustment> newest = new HashMap<>();
+        // The keys of newest, in the order the questions first appear
+        List<String> questionIds = new ArrayList<>();
         for (ScoreAdjustment change : changes) {
             if (change.getUsername().equals(submission.getUsername())) {
-                newest.put(change.getQuestionId(), change);
+                String questionId = change.getQuestionId();
+                if (!questionIds.contains(questionId)) {
+                    questionIds.add(questionId);
+                }
+                newest.put(questionId, change);
             }
         }
-        for (String questionId : newest.keySet()) {
+        for (String questionId : questionIds) {
             ScoreAdjustment change = newest.get(questionId);
             QuestionResult result = findResult(submission, questionId);
-            if (!isOutdated(change, result)) {
+            if (isOutdated(change, result)) {
+                dropQuestion(run, submission.getUsername(), questionId);
+            } else {
                 // A change read from the store is tied to the result it
                 // describes the first time it is checked
                 resultOf.put(change, result);
-            } else {
-                dropQuestion(run, submission.getUsername(), questionId);
             }
         }
     }
@@ -358,8 +383,8 @@ public class ScoreAdjustmentService {
         if (madeOn != null && madeOn != result) {
             return true;
         }
-        return Math.abs(result.getScore() - change.getNewScore())
-                >= SAME_MARK;
+        double difference = result.getScore() - change.getNewScore();
+        return Math.abs(difference) >= SAME_MARK;
     }
 
     // Forgets every change of one question of a student, here and in the
@@ -369,8 +394,7 @@ public class ScoreAdjustmentService {
         List<ScoreAdjustment> changes = changesOf(run);
         List<ScoreAdjustment> outdated = new ArrayList<>();
         for (ScoreAdjustment change : changes) {
-            if (change.getUsername().equals(username)
-                    && change.getQuestionId().equals(questionId)) {
+            if (isChangeOf(change, username, questionId)) {
                 outdated.add(change);
             }
         }
@@ -426,8 +450,9 @@ public class ScoreAdjustmentService {
     private QuestionResult findResult(Submission submission,
             String questionId) {
         for (QuestionResult result : submission.getQuestionResults()) {
-            if (result.getQuestion() != null
-                    && result.getQuestion().getId().equals(questionId)) {
+            boolean isQuestion = result.getQuestion() != null
+                    && result.getQuestion().getId().equals(questionId);
+            if (isQuestion) {
                 return result;
             }
         }

@@ -14,6 +14,8 @@ import gradezzy.model.Anomaly;
 
 /**
  * A record of one automatic correction and how to reverse it.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class FixRecord {
 
@@ -114,8 +116,9 @@ public class FixRecord {
     public static String makeFixKey(String fixerName, Path workingCopy,
             Path path) {
         String relativePath = workingCopy.relativize(path).toString();
-        return fixerName + KEY_SEPARATOR + relativePath.replace(
-                WINDOWS_SEPARATOR, KEY_FOLDER_SEPARATOR);
+        String keyPath = relativePath.replace(WINDOWS_SEPARATOR,
+                KEY_FOLDER_SEPARATOR);
+        return fixerName + KEY_SEPARATOR + keyPath;
     }
 
     /**
@@ -234,6 +237,7 @@ public class FixRecord {
         if (!pathAfter.startsWith(fixedPath)) {
             return pathAfter;
         }
-        return originalPath.resolve(fixedPath.relativize(pathAfter));
+        Path insideFixed = fixedPath.relativize(pathAfter);
+        return originalPath.resolve(insideFixed);
     }
 }

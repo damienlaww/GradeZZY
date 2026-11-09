@@ -22,6 +22,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
 import gradezzy.config.ConfigKeys;
@@ -32,6 +33,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * Adds a module or a section, after checking it.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class CourseSheets {
 
@@ -46,6 +49,15 @@ public final class CourseSheets {
 
     // The separator between codes in the settings
     private static final String LIST_SEPARATOR = ",";
+
+    // Comes between the module and the section in a "CS102/G1=..."
+    // setting
+    private static final String KEY_SEPARATOR = "/";
+
+    // Where an entry of a "CS102/G1=..." setting keeps its module and
+    // section, and where it keeps its value
+    private static final int ENTRY_KEY = 0;
+    private static final int ENTRY_VALUE = 1;
 
     // Not used: every method is static.
     private CourseSheets() {
@@ -73,14 +85,22 @@ public final class CourseSheets {
         Button add = Parts.primary("Add module");
         add.setOnAction(event -> addModule(window, code, problem, onAdded));
         code.setOnAction(event -> addModule(window, code, problem, onAdded));
+        HBox buttons = Parts.row(Parts.GAP,
+                new Node[] {Parts.grow(), cancel, add});
         VBox body = new VBox(Parts.GAP, Parts.title("Add a module"),
                 Parts.subtitle("A course code you teach. It starts with no "
                 + "sections; add its own sections next."),
-                code, problem, Parts.row(Parts.GAP, new Node[] {
-                Parts.grow(), cancel, add}));
+                code, problem, buttons);
         body.setMaxWidth(Parts.TEXT_WIDTH);
         window.showSheet(body);
         code.requestFocus();
+    }
+
+    // Says whether a typed module or section code has the right letters
+    // and is not too long.
+    private static boolean isValidCode(String code) {
+        return code.matches(SECTION_PATTERN)
+                && code.length() <= MAX_SECTION_LENGTH;
     }
 
     // Adds a module to the settings after checking it, and shows it.
@@ -88,8 +108,7 @@ public final class CourseSheets {
             Label problem, Consumer<String> onAdded) {
         String code = codeField.getText().trim();
         String message = "";
-        if (!code.matches(SECTION_PATTERN)
-                || code.length() > MAX_SECTION_LENGTH) {
+        if (!isValidCode(code)) {
             message = "Use letters, digits and dashes only, such as IS442.";
         }
         for (String existing : window.getBackend().getModuleCodes()) {
@@ -153,8 +172,9 @@ public final class CourseSheets {
         onlyHere.setSelected(true);
         // A module with only its own sections does not get the sections
         // every module has, so that choice would not show here
-        if (ModuleSections.hasOwnOnly(window.getBackend().getSetting(
-                ConfigKeys.OWN_SECTIONS_ONLY_MODULES), module)) {
+        String ownOnlySetting = window.getBackend().getSetting(
+                ConfigKeys.OWN_SECTIONS_ONLY_MODULES);
+        if (ModuleSections.hasOwnOnly(ownOnlySetting, module)) {
             everywhere.setVisible(false);
             everywhere.setManaged(false);
         }
@@ -170,12 +190,13 @@ public final class CourseSheets {
                 problem, onAdded));
         code.setOnAction(event -> addSection(window, module, code, onlyHere,
                 problem, onAdded));
+        VBox choices = new VBox(Parts.GAP_SMALL, onlyHere, everywhere);
+        HBox buttons = Parts.row(Parts.GAP,
+                new Node[] {Parts.grow(), cancel, add});
         VBox body = new VBox(Parts.GAP, Parts.title("Add a section"),
                 Parts.subtitle("A class group you teach. Its card appears "
                 + "on Home and it can be picked on Set up."),
-                code, new VBox(Parts.GAP_SMALL, onlyHere, everywhere),
-                problem, Parts.row(Parts.GAP, new Node[] {Parts.grow(),
-                cancel, add}));
+                code, choices, problem, buttons);
         body.setMaxWidth(Parts.TEXT_WIDTH);
         window.showSheet(body);
         code.requestFocus();
@@ -189,8 +210,7 @@ public final class CourseSheets {
         String code = codeField.getText().trim();
         boolean onlyHere = onlyHereButton.isSelected();
         String message = "";
-        if (!code.matches(SECTION_PATTERN)
-                || code.length() > MAX_SECTION_LENGTH) {
+        if (!isValidCode(code)) {
             message = "Use letters, digits and dashes only, such as G11.";
         }
         for (String existing : window.getBackend().getSectionCodes(module)) {
@@ -279,8 +299,9 @@ public final class CourseSheets {
     public static String whyNotDelete(FlowWindow window, String module,
             String code) {
         FlowState state = window.getState();
-        if (state.isGrading()
-                && code.equalsIgnoreCase(state.getSectionCode())) {
+        boolean beingGraded = state.isGrading()
+                && code.equalsIgnoreCase(state.getSectionCode());
+        if (beingGraded) {
             return "Wait until " + code + " has finished grading.";
         }
         boolean own = ModuleSections.isOwnSection(window.getBackend()
@@ -305,23 +326,12 @@ public final class CourseSheets {
             changes.put(ConfigKeys.SECTION_CODES, sharedWithout(window,
                     code));
         }
-        String[] entryKeys = {ConfigKeys.SCORE_SHEET_BY_SECTION,
-            ConfigKeys.OUTPUT_DIR_BY_SECTION};
         // What the section had, so Undo can put it back
-        List<String[]> sheets = sectionEntries(window, entryKeys[0], module,
-                code, own);
-        List<String[]> folders = sectionEntries(window, entryKeys[1],
-                module, code, own);
-        for (String key : entryKeys) {
-            String value = window.getBackend().getSetting(key);
-            if (own) {
-                value = ExportFolders.remove(value, ExportFolders.keyOf(
-                        module, code));
-            } else {
-                value = ExportFolders.removeSection(value, code);
-            }
-            changes.put(key, value);
-        }
+        List<String[]> sheets = sectionEntries(window,
+                ConfigKeys.SCORE_SHEET_BY_SECTION, module, code, own);
+        List<String[]> folders = sectionEntries(window,
+                ConfigKeys.OUTPUT_DIR_BY_SECTION, module, code, own);
+        removeEntries(window, changes, module, code, own);
         ActionResult result = window.getBackend().saveSettings(changes);
         if (!result.isDone()) {
             window.notify(result.getMessage());
@@ -338,6 +348,25 @@ public final class CourseSheets {
                 folders));
         window.notify("Deleted section " + code + ".", "Undo",
                 () -> undoDelete(window, restore, onChanged));
+    }
+
+    // Takes a section's score sheets and export folders out of the
+    // settings, for its module alone or for every module.
+    private static void removeEntries(FlowWindow window,
+            Map<String, String> changes, String module, String code,
+            boolean own) {
+        String[] entryKeys = {ConfigKeys.SCORE_SHEET_BY_SECTION,
+            ConfigKeys.OUTPUT_DIR_BY_SECTION};
+        for (String key : entryKeys) {
+            String value = window.getBackend().getSetting(key);
+            if (own) {
+                String sectionKey = ExportFolders.keyOf(module, code);
+                value = ExportFolders.remove(value, sectionKey);
+            } else {
+                value = ExportFolders.removeSection(value, code);
+            }
+            changes.put(key, value);
+        }
     }
 
     // Puts a deleted section back, saying so if it could not be.
@@ -357,9 +386,11 @@ public final class CourseSheets {
         String value = window.getBackend().getSetting(
                 ConfigKeys.SECTION_CODES);
         for (String shared : value.split(LIST_SEPARATOR)) {
-            if (!shared.trim().isEmpty()
-                    && !shared.trim().equalsIgnoreCase(code)) {
-                kept.add(shared.trim());
+            String trimmed = shared.trim();
+            boolean keep = !trimmed.isEmpty()
+                    && !trimmed.equalsIgnoreCase(code);
+            if (keep) {
+                kept.add(trimmed);
             }
         }
         return TextUtils.join(LIST_SEPARATOR, kept);
@@ -370,15 +401,15 @@ public final class CourseSheets {
     private static List<String[]> sectionEntries(FlowWindow window,
             String key, String module, String code, boolean own) {
         List<String[]> found = new ArrayList<>();
-        String ending = ("/" + code).toLowerCase(Locale.ROOT);
-        for (String[] entry : ExportFolders.list(window.getBackend()
-                .getSetting(key))) {
-            String who = entry[0];
-            if (own && who.equalsIgnoreCase(ExportFolders.keyOf(module,
-                    code))) {
-                found.add(entry);
-            } else if (!own && who.toLowerCase(Locale.ROOT).endsWith(
-                    ending)) {
+        String ending = (KEY_SEPARATOR + code).toLowerCase(Locale.ROOT);
+        String value = window.getBackend().getSetting(key);
+        for (String[] entry : ExportFolders.list(value)) {
+            String who = entry[ENTRY_KEY];
+            boolean ownEntry = own && who.equalsIgnoreCase(
+                    ExportFolders.keyOf(module, code));
+            boolean sharedEntry = !own
+                    && who.toLowerCase(Locale.ROOT).endsWith(ending);
+            if (ownEntry || sharedEntry) {
                 found.add(entry);
             }
         }
@@ -429,8 +460,9 @@ public final class CourseSheets {
         }
         String value = window.getBackend().getSetting(key);
         for (String[] entry : entries) {
-            if (ExportFolders.exact(value, entry[0]).isEmpty()) {
-                value = ExportFolders.put(value, entry[0], entry[1]);
+            String who = entry[ENTRY_KEY];
+            if (ExportFolders.exact(value, who).isEmpty()) {
+                value = ExportFolders.put(value, who, entry[ENTRY_VALUE]);
             }
         }
         changes.put(key, value);

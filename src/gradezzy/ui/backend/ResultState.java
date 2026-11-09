@@ -17,6 +17,8 @@ import gradezzy.model.SubmissionStatus;
 
 /**
  * The state shown for one student's result.
+ *
+ * <p>Tier: MUST.
  */
 public enum ResultState {
 
@@ -90,40 +92,10 @@ public enum ResultState {
         if (status == SubmissionStatus.FAILED) {
             return COULD_NOT_GRADE;
         }
-        if (status != SubmissionStatus.GRADED
-                || submission.getQuestionResults().isEmpty()) {
+        if (!hasTotal(submission)) {
             return UNGRADED;
         }
-        // A compile error or timeout shows only while its flag is open:
-        // once the instructor has checked it, the student is graded
-        boolean waiting = false;
-        boolean compileOpen = false;
-        boolean timeoutOpen = false;
-        boolean timeoutFlagged = false;
-        for (Anomaly anomaly : submission.getAnomalies()) {
-            boolean open = backend.needsReview(anomaly);
-            waiting = waiting || open;
-            if (anomaly.getType() == AnomalyType.COMPILE_ERROR && open) {
-                compileOpen = true;
-            } else if (anomaly.getType() == AnomalyType.TIMEOUT) {
-                timeoutFlagged = true;
-                timeoutOpen = timeoutOpen || open;
-            }
-        }
-        if (compileOpen) {
-            return COMPILE_ERROR;
-        }
-        // A timeout with no flag to check cannot be settled, so it shows
-        if (timeoutOpen || (!timeoutFlagged && anyTimedOut(submission))) {
-            return TIMED_OUT;
-        }
-        if (waiting) {
-            return NEEDS_REVIEW;
-        }
-        if (submission.getTotalScore() == 0.0) {
-            return ZERO;
-        }
-        return COMPLETED;
+        return gradedState(submission, backend);
     }
 
     /**
@@ -161,8 +133,9 @@ public enum ResultState {
      */
     public static boolean isRejectedUpload(Submission submission) {
         for (Anomaly anomaly : submission.getAnomalies()) {
-            if (anomaly.getType() == AnomalyType.INVALID_ARCHIVE
-                    && anomaly.getSeverity() == Severity.ERROR) {
+            boolean refused = anomaly.getType() == AnomalyType.INVALID_ARCHIVE
+                    && anomaly.getSeverity() == Severity.ERROR;
+            if (refused) {
                 return true;
             }
         }
@@ -190,6 +163,43 @@ public enum ResultState {
     public static boolean hasTotal(Submission submission) {
         return submission.getStatus() == SubmissionStatus.GRADED
                 && !submission.getQuestionResults().isEmpty();
+    }
+
+    // Works out the state of a graded submission from its open flags and
+    // its total. A compile error or timeout shows only while its flag is
+    // open: once the instructor has checked it, the student is graded.
+    private static ResultState gradedState(Submission submission,
+            DashboardBackend backend) {
+        boolean waiting = false;
+        boolean compileOpen = false;
+        boolean timeoutOpen = false;
+        boolean timeoutFlagged = false;
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            boolean open = backend.needsReview(anomaly);
+            waiting = waiting || open;
+            if (anomaly.getType() == AnomalyType.COMPILE_ERROR && open) {
+                compileOpen = true;
+            } else if (anomaly.getType() == AnomalyType.TIMEOUT) {
+                timeoutFlagged = true;
+                timeoutOpen = timeoutOpen || open;
+            }
+        }
+        if (compileOpen) {
+            return COMPILE_ERROR;
+        }
+        // A timeout with no flag to check cannot be settled, so it shows
+        boolean unflaggedTimeout = !timeoutFlagged
+                && anyTimedOut(submission);
+        if (timeoutOpen || unflaggedTimeout) {
+            return TIMED_OUT;
+        }
+        if (waiting) {
+            return NEEDS_REVIEW;
+        }
+        if (submission.getTotalScore() == 0.0) {
+            return ZERO;
+        }
+        return COMPLETED;
     }
 
     // Says whether any tester of the submission timed out.

@@ -11,6 +11,8 @@ package gradezzy.ui.flow;
 
 /**
  * Maps a range of values onto a range of pixels.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class ChartScale {
 
@@ -58,6 +60,8 @@ public final class ChartScale {
     public double clampMap(double value) {
         double low = Math.min(fromValue, toValue);
         double high = Math.max(fromValue, toValue);
-        return map(Math.max(low, Math.min(high, value)));
+        double notAbove = Math.min(high, value);
+        double kept = Math.max(low, notAbove);
+        return map(kept);
     }
 }

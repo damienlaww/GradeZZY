@@ -92,8 +92,8 @@ public class SqliteResultRepository implements ResultRepository {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            connection = DriverManager.getConnection(JDBC_URL_PREFIX
-                    + databaseFile);
+            String address = JDBC_URL_PREFIX + databaseFile;
+            connection = DriverManager.getConnection(address);
             createTables();
         } catch (IOException exception) {
             throw new PersistenceException("The folder for the database "
@@ -256,8 +256,9 @@ public class SqliteResultRepository implements ResultRepository {
     public synchronized void saveSubmission(String runId,
             Submission submission) throws PersistenceException {
         requireOpen();
-        if (runId == null || submission == null
-                || submission.getUsername() == null) {
+        boolean nothingToSave = runId == null || submission == null
+                || submission.getUsername() == null;
+        if (nothingToSave) {
             throw new PersistenceException("There is no submission to "
                     + "save.");
         }

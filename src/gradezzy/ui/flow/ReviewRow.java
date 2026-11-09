@@ -18,6 +18,8 @@ import gradezzy.model.Submission;
 
 /**
  * A row of the Review table that marks itself when it is the last.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ReviewRow extends TableRow<Submission> {
 
@@ -62,8 +64,8 @@ public class ReviewRow extends TableRow<Submission> {
 
     // Sets the last-row style when this row shows the last student.
     private void markLast() {
-        boolean last = !isEmpty()
-                && getIndex() == table.getItems().size() - 1;
+        int lastIndex = table.getItems().size() - 1;
+        boolean last = !isEmpty() && getIndex() == lastIndex;
         pseudoClassStateChanged(LAST_ROW, last);
     }
 }

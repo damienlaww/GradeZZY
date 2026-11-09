@@ -56,6 +56,19 @@ public class WorkingCopyManager {
     // The text in front of the id of every anomaly raised here
     private static final String ANOMALY_ID_PREFIX = "INGEST-";
 
+    // Separates the names in the warning about files left out
+    private static final String NAME_SEPARATOR = ", ";
+
+    // Names that point at the current or the parent folder
+    private static final String CURRENT_FOLDER = ".";
+    private static final String PARENT_FOLDER = "..";
+
+    // Characters that would make a username a path instead of one name:
+    // the macOS and Linux separator, the Windows one and a drive colon
+    private static final String SLASH = "/";
+    private static final String BACKSLASH = "\\";
+    private static final String COLON = ":";
+
     // The application settings
     private final AppConfig config;
 
@@ -165,10 +178,7 @@ public class WorkingCopyManager {
                     ConfigKeys.PROVIDED_CLASS_FILES);
             removeClassFiles(workingCopy, provided);
 
-            Path starter = starterDirectory;
-            if (starter == null) {
-                starter = Path.of(config.getString(ConfigKeys.STARTER_DIR));
-            }
+            Path starter = chooseStarter(starterDirectory);
             if (assessment != null) {
                 copyFromStarter(workingCopy, starter, assessment, provided);
             }
@@ -196,10 +206,7 @@ public class WorkingCopyManager {
      */
     public void copyProvidedClassFiles(Path workingCopy,
             Assessment assessment, Path starterDirectory) {
-        Path starter = starterDirectory;
-        if (starter == null) {
-            starter = Path.of(config.getString(ConfigKeys.STARTER_DIR));
-        }
+        Path starter = chooseStarter(starterDirectory);
         try {
             requireWorkingChild(workingCopy);
             copyFromStarter(workingCopy, starter, assessment,
@@ -208,6 +215,15 @@ public class WorkingCopyManager {
             throw new UncheckedIOException("Could not copy the provided "
                     + "class files: " + exception.getMessage(), exception);
         }
+    }
+
+    // Returns the starter folder chosen for the batch, or the one in
+    // paths.starter.dir when none was chosen.
+    private Path chooseStarter(Path starterDirectory) {
+        if (starterDirectory == null) {
+            return Path.of(config.getString(ConfigKeys.STARTER_DIR));
+        }
+        return starterDirectory;
     }
 
     // Removes the half-built staging folder, if any, and builds the error
@@ -245,8 +261,8 @@ public class WorkingCopyManager {
         Path holder = Files.createTempDirectory(folder.getParent(),
                 INNER_ZIP_PREFIX);
         try {
-            Path moved = Files.move(innerZip,
-                    holder.resolve(innerZip.getFileName()));
+            Path destination = holder.resolve(innerZip.getFileName());
+            Path moved = Files.move(innerZip, destination);
             zipExtractor.extract(moved, folder, skippedNames);
         } finally {
             FileUtils.deleteDirectory(holder);
@@ -271,8 +287,9 @@ public class WorkingCopyManager {
         }
         Path only = children.get(0);
         String name = only.getFileName().toString().toLowerCase(Locale.ROOT);
-        if (Files.isRegularFile(only, LinkOption.NOFOLLOW_LINKS)
-                && name.endsWith(ZIP_EXTENSION)) {
+        boolean zipFile = Files.isRegularFile(only, LinkOption.NOFOLLOW_LINKS)
+                && name.endsWith(ZIP_EXTENSION);
+        if (zipFile) {
             return only;
         }
         return null;
@@ -285,12 +302,12 @@ public class WorkingCopyManager {
         if (skippedNames.isEmpty()) {
             return;
         }
-        submission.addAnomaly(new Anomaly(ANOMALY_ID_PREFIX
-                + UUID.randomUUID(), AnomalyType.INVALID_ARCHIVE,
+        String id = ANOMALY_ID_PREFIX + UUID.randomUUID();
+        String names = TextUtils.join(NAME_SEPARATOR, skippedNames);
+        submission.addAnomaly(new Anomaly(id, AnomalyType.INVALID_ARCHIVE,
                 Severity.WARNING, submission.getUsername(),
                 "Left out of the zip file, because the name cannot be "
-                + "saved on this computer: "
-                + TextUtils.join(", ", skippedNames) + ".",
+                + "saved on this computer: " + names + ".",
                 "Check that no answer file is missing."));
     }
 
@@ -308,9 +325,10 @@ public class WorkingCopyManager {
         for (String folderName : folderNames) {
             for (String className : provided) {
                 Path source = starter.resolve(folderName).resolve(className);
-                if (className.endsWith(CLASS_EXTENSION)
+                boolean providedHere = className.endsWith(CLASS_EXTENSION)
                         && Files.isRegularFile(source,
-                                LinkOption.NOFOLLOW_LINKS)) {
+                                LinkOption.NOFOLLOW_LINKS);
+                if (providedHere) {
                     copyIntoQuestionFolders(workingCopy, folderName,
                             source);
                 }
@@ -331,7 +349,8 @@ public class WorkingCopyManager {
                         LinkOption.NOFOLLOW_LINKS);
                 String name = child.getFileName().toString();
                 if (folder && name.equalsIgnoreCase(folderName)) {
-                    Files.copy(source, child.resolve(source.getFileName()),
+                    Path target = child.resolve(source.getFileName());
+                    Files.copy(source, target,
                             StandardCopyOption.REPLACE_EXISTING);
                 } else if (folder) {
                     copyIntoQuestionFolders(child, folderName, source);
@@ -345,9 +364,13 @@ public class WorkingCopyManager {
     // A username is one directory name, never an arbitrary path.
     private Path workingPath(Submission submission) throws IOException {
         String username = submission.getUsername();
-        if (TextUtils.isBlank(username) || username.equals(".")
-                || username.equals("..") || username.contains("/")
-                || username.contains("\\") || username.contains(":")) {
+        boolean notOneName = TextUtils.isBlank(username)
+                || username.equals(CURRENT_FOLDER)
+                || username.equals(PARENT_FOLDER)
+                || username.contains(SLASH)
+                || username.contains(BACKSLASH)
+                || username.contains(COLON);
+        if (notOneName) {
             throw new IOException("Invalid submission username.");
         }
         Path root = Path.of(config.getString(ConfigKeys.WORKING_DIR))
@@ -365,8 +388,8 @@ public class WorkingCopyManager {
         if (!root.equals(target.getParent())) {
             throw new IOException("Path is outside the working folder.");
         }
-        if (!zipExtractor.isSafeEntry(target.getFileName().toString(),
-                root)) {
+        String name = target.getFileName().toString();
+        if (!zipExtractor.isSafeEntry(name, root)) {
             throw new IOException("Working path contains a symbolic link.");
         }
     }
@@ -385,8 +408,9 @@ public class WorkingCopyManager {
                     removeClassFiles(child, provided);
                 } else {
                     String name = child.getFileName().toString();
-                    if (name.endsWith(CLASS_EXTENSION)
-                            && !provided.contains(name)) {
+                    boolean studentClass = name.endsWith(CLASS_EXTENSION)
+                            && !provided.contains(name);
+                    if (studentClass) {
                         Files.delete(child);
                     }
                 }

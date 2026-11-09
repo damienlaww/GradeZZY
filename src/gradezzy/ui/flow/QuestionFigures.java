@@ -19,11 +19,16 @@ import gradezzy.model.Submission;
 
 /**
  * Averages of each question of a run.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class QuestionFigures {
 
     /** Returned by hardest when there is no question to compare. */
     public static final int NONE = -1;
+
+    // Shown in place of a question when no question has marks to lose
+    private static final String NO_QUESTION = "-";
 
     // Not used: every method is static.
     private QuestionFigures() {
@@ -70,8 +75,9 @@ public final class QuestionFigures {
         double lowest = Double.MAX_VALUE;
         for (int index = 0; index < questions.size(); index++) {
             double max = questions.get(index).getMaxScore();
-            if (max > 0 && averages[index] / max < lowest) {
-                lowest = averages[index] / max;
+            double share = averages[index] / max;
+            if (max > 0 && share < lowest) {
+                lowest = share;
                 found = index;
             }
         }
@@ -89,7 +95,7 @@ public final class QuestionFigures {
             List<Question> questions) {
         int index = hardest(averages(submissions, questions), questions);
         if (index == NONE) {
-            return "-";
+            return NO_QUESTION;
         }
         return questions.get(index).getId();
     }

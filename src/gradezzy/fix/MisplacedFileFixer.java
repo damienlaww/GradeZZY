@@ -144,8 +144,9 @@ public class MisplacedFileFixer extends AbstractFixer {
         String questionId = findQuestionId(config, anomaly);
         String folderName = readFolderName(config, questionId);
         String fileName = readFileName(config, questionId);
-        Path questionFolder = findExact(listFolders(
-                misplaced.getParent().getParent()), folderName);
+        Path contentRoot = misplaced.getParent().getParent();
+        Path questionFolder = findExact(listFolders(contentRoot),
+                folderName);
         if (questionFolder == null) {
             throw new FixException("The " + folderName + " folder is not "
                     + "there, so " + fileName + " was not moved.");
@@ -181,11 +182,14 @@ public class MisplacedFileFixer extends AbstractFixer {
         Path fixedPath = fixRecord.getFixedPath();
         Path originalPath = fixRecord.getOriginalPath();
 
+        String movedFolderName =
+                fixedPath.getParent().getFileName().toString();
+        String oldFolderName =
+                originalPath.getParent().getFileName().toString();
         Path movedFolder = findQuestionFolderNow(workingCopy, username,
-                folderNames, fixedPath.getParent().getFileName().toString());
+                folderNames, movedFolderName);
         Path oldFolder = findQuestionFolderNow(workingCopy, username,
-                folderNames,
-                originalPath.getParent().getFileName().toString());
+                folderNames, oldFolderName);
         Path moved = null;
         if (movedFolder != null) {
             moved = movedFolder.resolve(fixedPath.getFileName());
@@ -197,7 +201,8 @@ public class MisplacedFileFixer extends AbstractFixer {
             throw new FixException(fixedPath.getFileName() + " or its old "
                     + "folder is no longer there, so nothing was moved.");
         }
-        rename(moved, oldFolder.resolve(originalPath.getFileName()));
+        Path movedBack = oldFolder.resolve(originalPath.getFileName());
+        rename(moved, movedBack);
     }
 
     // Says whether a folder name is a question folder name, in any case.

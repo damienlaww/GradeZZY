@@ -18,6 +18,8 @@ import javafx.scene.image.Image;
 
 /**
  * Loads the logo pictures from the class path.
+ *
+ * <p>Tier: COULD.
  */
 public final class AppIcons {
 

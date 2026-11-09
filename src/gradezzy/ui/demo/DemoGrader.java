@@ -24,6 +24,8 @@ import gradezzy.ui.backend.PipelineStages;
 
 /**
  * A simulated grading run.
+ *
+ * <p>Tier: COULD.
  */
 public class DemoGrader {
 

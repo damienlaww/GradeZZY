@@ -42,6 +42,7 @@ import gradezzy.util.TextUtils;
  */
 final class SubmissionTables {
 
+    // Saves the row of one submission
     private static final String INSERT_SUBMISSION = "INSERT INTO "
             + "submissions (run_id, username, position, status, "
             + "original_path, working_copy_path, ingest_failure, "
@@ -49,15 +50,18 @@ final class SubmissionTables {
             + "email, rejected_fixes) "
             + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+    // Saves the result of one question
     private static final String INSERT_QUESTION_RESULT = "INSERT INTO "
             + "question_results (run_id, username, position, question_id, "
             + "score, compiled, timed_out, output) "
             + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
+    // Saves one test case of a question result
     private static final String INSERT_TEST_CASE = "INSERT INTO "
             + "test_case_results (run_id, username, question_id, position, "
             + "test_number, passed, detail) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
+    // Saves one anomaly of a submission
     private static final String INSERT_ANOMALY = "INSERT INTO anomalies "
             + "(run_id, username, position, anomaly_id, type, severity, "
             + "message, suggested_action, fix_status) "
@@ -79,22 +83,26 @@ final class SubmissionTables {
         "DELETE FROM submissions WHERE run_id = ? AND username = ?"
     };
 
+    // Lists the submissions of a run in their saved order
     private static final String SELECT_SUBMISSIONS = "SELECT username, "
             + "status, original_path, working_copy_path, ingest_failure, "
             + "org_defined_id, student_username, last_name, first_name, "
             + "email, rejected_fixes FROM submissions WHERE run_id = ? "
             + "ORDER BY position";
 
+    // Lists the question results of a run
     private static final String SELECT_QUESTION_RESULTS = "SELECT "
             + "username, question_id, score, compiled, timed_out, output "
             + "FROM question_results WHERE run_id = ? "
             + "ORDER BY username, position";
 
+    // Lists the test cases of a run
     private static final String SELECT_TEST_CASES = "SELECT username, "
             + "question_id, test_number, passed, detail "
             + "FROM test_case_results WHERE run_id = ? "
             + "ORDER BY username, question_id, position";
 
+    // Lists the anomalies of a run
     private static final String SELECT_ANOMALIES = "SELECT username, "
             + "anomaly_id, type, severity, message, suggested_action, "
             + "fix_status FROM anomalies WHERE run_id = ? "
@@ -300,23 +308,30 @@ final class SubmissionTables {
                 resultStatement.setString(8, result.getOutput());
                 resultStatement.executeUpdate();
 
-                List<TestCaseResult> testCases = result.getTestCaseResults();
-                for (int testIndex = 0; testIndex < testCases.size();
-                        testIndex++) {
-                    TestCaseResult testCase = testCases.get(testIndex);
-                    testStatement.setString(1, runId);
-                    testStatement.setString(2, username);
-                    testStatement.setString(3, questionId);
-                    testStatement.setInt(4, testIndex);
-                    testStatement.setInt(5, testCase.getTestNumber());
-                    testStatement.setBoolean(6, testCase.isPassed());
-                    testStatement.setString(7, testCase.getDetail());
-                    testStatement.executeUpdate();
-                }
+                insertTestCases(testStatement, runId, username, questionId,
+                        result.getTestCaseResults());
             }
         } finally {
             // Closed in the opposite order to opening
             JdbcSupport.closeStatements(testStatement, resultStatement);
+        }
+    }
+
+    // Writes each test case of one question result with the statement
+    // that insertQuestionResults prepared
+    private static void insertTestCases(PreparedStatement testStatement,
+            String runId, String username, String questionId,
+            List<TestCaseResult> testCases) throws SQLException {
+        for (int testIndex = 0; testIndex < testCases.size(); testIndex++) {
+            TestCaseResult testCase = testCases.get(testIndex);
+            testStatement.setString(1, runId);
+            testStatement.setString(2, username);
+            testStatement.setString(3, questionId);
+            testStatement.setInt(4, testIndex);
+            testStatement.setInt(5, testCase.getTestNumber());
+            testStatement.setBoolean(6, testCase.isPassed());
+            testStatement.setString(7, testCase.getDetail());
+            testStatement.executeUpdate();
         }
     }
 
@@ -413,7 +428,9 @@ final class SubmissionTables {
         // Undone fixes stay undone when the run is resumed or retried
         String rejectedFixes = row.getString(
                 SqliteSchema.REJECTED_FIXES_COLUMN);
-        if (rejectedFixes != null && !rejectedFixes.isEmpty()) {
+        boolean hasRejected = rejectedFixes != null
+                && !rejectedFixes.isEmpty();
+        if (hasRejected) {
             for (String fixKey : rejectedFixes.split(KEY_SEPARATOR)) {
                 submission.rejectFix(fixKey);
             }
@@ -455,14 +472,18 @@ final class SubmissionTables {
                     result.setTimedOut(rows.getBoolean("timed_out"));
                     result.setOutput(rows.getString("output"));
                     submission.addQuestionResult(result);
-                    results.put(username + KEY_SEPARATOR + questionId,
-                            result);
+                    results.put(resultKey(username, questionId), result);
                 }
             }
         } finally {
             JdbcSupport.closeQuery(rows, statement);
         }
         return results;
+    }
+
+    // The map key of one student's result for one question
+    private static String resultKey(String username, String questionId) {
+        return username + KEY_SEPARATOR + questionId;
     }
 
     // Adds each saved test case to its question result
@@ -475,9 +496,10 @@ final class SubmissionTables {
             statement.setString(1, runId);
             rows = statement.executeQuery();
             while (rows.next()) {
+                String username = rows.getString("username");
+                String questionId = rows.getString("question_id");
                 QuestionResult result = results.get(
-                        rows.getString("username") + KEY_SEPARATOR
-                        + rows.getString("question_id"));
+                        resultKey(username, questionId));
                 if (result != null) {
                     result.addTestCaseResult(new TestCaseResult(
                             rows.getInt("test_number"),

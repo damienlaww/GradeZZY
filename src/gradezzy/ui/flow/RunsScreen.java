@@ -58,6 +58,8 @@ import gradezzy.ui.backend.RunRecord;
 
 /**
  * The Runs tab.
+ *
+ * <p>Tier: SHOULD.
  */
 public class RunsScreen extends FlowScreen {
 
@@ -132,6 +134,30 @@ public class RunsScreen extends FlowScreen {
 
     // The most activity rows drawn at once
     private static final int MAX_ACTIVITY_ROWS = 500;
+
+    // Writes a mark with one decimal place, such as 12.4
+    private static final String ONE_DECIMAL_FORMAT = "%.1f";
+
+    // Separates words; a student's username has none
+    private static final String SPACE = " ";
+
+    // The activity log actions of a fix decision, as AnomalyService
+    // writes them
+    private static final String FIX_APPROVED = "Fix approved";
+    private static final String FIX_UNDONE = "Fix undone";
+    private static final String FIX_REAPPLIED = "Fix reapplied";
+
+    // Shown in a cell that has no value
+    private static final String NO_VALUE = "-";
+
+    // Separates a module from its section, such as "CS102 · G1"
+    private static final String SECTION_DOT = " · ";
+
+    // Separates a mark from the maximum, such as "12.4 / 20"
+    private static final String OUT_OF = " / ";
+
+    // Separates the graded count from the total, such as "3/40"
+    private static final String COUNT_SLASH = "/";
 
     // The page
     private final VBox page = new VBox(Parts.CARD_GAP);
@@ -266,13 +292,8 @@ public class RunsScreen extends FlowScreen {
         return bar;
     }
 
-    /**
-     * Follows a click on Runs, Backups or Activity. Clicking the button
-     * that is already on would turn every button off, so it stays on.
-     *
-     * @param before the button that was on
-     * @param after the button that is on now, or null for none
-     */
+    // Follows a click on Runs, Backups or Activity. Clicking the button
+    // that is already on would turn every button off, so it stays on.
     private void switchView(Toggle before, Toggle after) {
         if (after == null) {
             before.setSelected(true);
@@ -406,7 +427,7 @@ public class RunsScreen extends FlowScreen {
         }
         String all = labelOf(run);
         if (run.getAssessment() != null) {
-            all += " " + run.getAssessment().getName();
+            all += SPACE + run.getAssessment().getName();
         }
         return all.toLowerCase().contains(text);
     }
@@ -430,15 +451,15 @@ public class RunsScreen extends FlowScreen {
             boolean hasNewer) {
         GradingRun run = record.getRun();
         Section section = run.getSection();
-        String module = "-";
-        String sectionCode = "-";
+        String module = NO_VALUE;
+        String sectionCode = NO_VALUE;
         if (section != null) {
             module = section.getModuleCode();
             sectionCode = section.getSectionCode();
         }
         Label students = new Label(String.valueOf(
                 run.getSubmissions().size()));
-        String assessmentName = "-";
+        String assessmentName = NO_VALUE;
         if (run.getAssessment() != null) {
             assessmentName = run.getAssessment().getName();
         }
@@ -446,7 +467,7 @@ public class RunsScreen extends FlowScreen {
         assessment.setMinWidth(0);
         Parts.tip(assessment, "The assessment this run was graded with. "
                 + "Opening or resuming the run switches to it.");
-        Label name = Parts.strong(module + " · " + sectionCode);
+        Label name = Parts.strong(module + SECTION_DOT + sectionCode);
         name.setMinWidth(Label.USE_PREF_SIZE);
         HBox title = Parts.row(Parts.GAP_SMALL, new Node[] {name,
             assessment});
@@ -470,18 +491,20 @@ public class RunsScreen extends FlowScreen {
     // Shows the average of a run as a small bar and "x / max".
     private Node average(GradingRun run) {
         double max = run.getAssessment().getMaxTotal();
+        double passPercent = MarkStats.parsePassPercent(
+                getBackend().getSetting(ConfigKeys.PASS_MARK_PERCENT));
         MarkStats stats = MarkStats.of(run.getSubmissions(), max,
-                MarkStats.parsePassPercent(getBackend().getSetting(
-                ConfigKeys.PASS_MARK_PERCENT)));
+                passPercent);
         if (stats.isEmpty() || max <= 0) {
-            return Parts.muted("-");
+            return Parts.muted(NO_VALUE);
         }
-        StackPane bar = Parts.track(stats.getMean() / max, null);
+        double share = stats.getMean() / max;
+        StackPane bar = Parts.track(share, null);
         bar.setMinWidth(AVERAGE_BAR_MIN_WIDTH);
         bar.setPrefWidth(AVERAGE_BAR_WIDTH);
         bar.setMaxWidth(AVERAGE_BAR_WIDTH);
-        Label value = new Label(String.format("%.1f", stats.getMean())
-                + " / " + Parts.mark(max));
+        Label value = new Label(String.format(ONE_DECIMAL_FORMAT,
+                stats.getMean()) + OUT_OF + Parts.mark(max));
         value.setMinWidth(Label.USE_PREF_SIZE);
         return Parts.row(Parts.GAP_SMALL, new Node[] {bar, value});
     }
@@ -501,7 +524,8 @@ public class RunsScreen extends FlowScreen {
                     + "instead.";
         } else if (waiting > 0) {
             int total = run.getSubmissions().size();
-            pill = Parts.pill("Stopped " + (total - waiting) + "/" + total,
+            int graded = total - waiting;
+            pill = Parts.pill("Stopped " + graded + COUNT_SLASH + total,
                     Tone.WARN);
             tip = "Grading was cancelled, or GradeZZY closed, before every "
                     + "student was graded. Resume grades the rest; marks "
@@ -517,22 +541,25 @@ public class RunsScreen extends FlowScreen {
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         buttons.setAlignment(Pos.CENTER_RIGHT);
         if (!shown) {
-            if (record.isRestorable()
-                    && getBackend().supports(Capability.RESTORE_PREVIEW)) {
+            boolean canRestore = record.isRestorable()
+                    && getBackend().supports(Capability.RESTORE_PREVIEW);
+            if (canRestore) {
                 buttons.getChildren().add(restoreButton(record));
             }
             return buttons;
         }
 
-        if (countWaiting(run) > 0
-                && getBackend().supports(Capability.RESUME_RUN)) {
+        boolean canResume = countWaiting(run) > 0
+                && getBackend().supports(Capability.RESUME_RUN);
+        boolean hasStatistics = getBackend().supports(Capability.STATISTICS)
+                && run.getSection() != null;
+        if (canResume) {
             Button resume = Parts.small("Resume",
                     () -> getWindow().resumeRun(run));
             Parts.tip(resume, "Grade the students not graded yet. Marks "
                     + "already given are kept.");
             buttons.getChildren().add(resume);
-        } else if (getBackend().supports(Capability.STATISTICS)
-                && run.getSection() != null) {
+        } else if (hasStatistics) {
             Button statistics = Parts.small("Statistics",
                     () -> openStatistics(run));
             Parts.tip(statistics, "Charts and figures for this section.");
@@ -545,11 +572,7 @@ public class RunsScreen extends FlowScreen {
         return buttons;
     }
 
-    /**
-     * Opens the Statistics tab on the section of a run.
-     *
-     * @param run the run, which has a section
-     */
+    // Opens the Statistics tab on the section of a run, which has one.
     private void openStatistics(GradingRun run) {
         getWindow().openStatistics(run.getSection().getModuleCode(),
                 run.getSection().getSectionCode());
@@ -599,12 +622,8 @@ public class RunsScreen extends FlowScreen {
                 "Restore", () -> restoreRun(record));
     }
 
-    /**
-     * Shows an earlier run in place of the one shown now, once the
-     * instructor has confirmed.
-     *
-     * @param record the earlier run
-     */
+    // Shows an earlier run in place of the one shown now, once the
+    // instructor has confirmed.
     private void restoreRun(RunRecord record) {
         if (blockedByGrading()) {
             return;
@@ -615,7 +634,9 @@ public class RunsScreen extends FlowScreen {
             before = getBackend().getRun(record.getRun().getSection());
         }
         ActionResult result = getBackend().restore(record);
-        if (result.isDone() && before != null && before.getId() != null) {
+        boolean canUndo = result.isDone() && before != null
+                && before.getId() != null;
+        if (canUndo) {
             String beforeId = before.getId();
             afterRestore(result, () -> undoRestore(beforeId));
         } else {
@@ -666,8 +687,10 @@ public class RunsScreen extends FlowScreen {
     private int countWaiting(GradingRun run) {
         int waiting = 0;
         for (Submission submission : run.getSubmissions()) {
-            if (submission.getStatus() == SubmissionStatus.CANCELLED
-                    || submission.getStatus() == SubmissionStatus.PENDING) {
+            boolean notGraded =
+                    submission.getStatus() == SubmissionStatus.CANCELLED
+                    || submission.getStatus() == SubmissionStatus.PENDING;
+            if (notGraded) {
                 waiting++;
             }
         }
@@ -692,8 +715,9 @@ public class RunsScreen extends FlowScreen {
                 && !getBackend().isDemo();
         boolean canPreview = getBackend().supports(
                 Capability.RESTORE_PREVIEW);
-        if (savingIsOff() || !(canBackUp || canRestoreFile
-                || canPreview)) {
+        boolean nothingToShow = savingIsOff() || !(canBackUp
+                || canRestoreFile || canPreview);
+        if (nothingToShow) {
             PlainTable none = new PlainTable(ROW_HEIGHT);
             none.showMessage(empty("No backups.", "Saving results is "
                     + "switched off in Settings, so there is nothing to "
@@ -802,13 +826,13 @@ public class RunsScreen extends FlowScreen {
     private void addSnapshotRow(PlainTable table, RunRecord record,
             boolean shown) {
         GradingRun run = record.getRun();
-        String module = "-";
-        String sectionCode = "-";
+        String module = NO_VALUE;
+        String sectionCode = NO_VALUE;
         if (run.getSection() != null) {
             module = run.getSection().getModuleCode();
             sectionCode = run.getSection().getSectionCode();
         }
-        Node shownCell = Parts.muted("-");
+        Node shownCell = Parts.muted(NO_VALUE);
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         buttons.setAlignment(Pos.CENTER_RIGHT);
         if (shown) {
@@ -860,12 +884,8 @@ public class RunsScreen extends FlowScreen {
                 "Restore", () -> restoreFile(backupFile));
     }
 
-    /**
-     * Puts back the saved results from a backup file, once the
-     * instructor has confirmed.
-     *
-     * @param backupFile the backup file
-     */
+    // Puts back the saved results from a backup file, once the
+    // instructor has confirmed.
     private void restoreFile(Path backupFile) {
         if (blockedByGrading()) {
             return;
@@ -902,9 +922,10 @@ public class RunsScreen extends FlowScreen {
         activityTable.clearRows();
         activityDays.getChildren().setAll(activityTable);
         activityCount.setText("");
-        if (!getBackend().supports(Capability.AUDIT_LOG)
+        boolean logOff = !getBackend().supports(Capability.AUDIT_LOG)
                 || FALSE.equalsIgnoreCase(getBackend().getSetting(
-                ConfigKeys.AUDIT_ENABLED))) {
+                ConfigKeys.AUDIT_ENABLED));
+        if (logOff) {
             activitySearch.setDisable(true);
             activityTable.showMessage(empty("The activity log is off.",
                     "Switch on Keep an activity log in Settings.",
@@ -927,13 +948,29 @@ public class RunsScreen extends FlowScreen {
         sorted.sort(new AuditEntryNewestFirstComparator());
         String kind = String.valueOf(kindGroup.getSelectedToggle()
                 .getUserData());
+        activityDays.getChildren().clear();
+        int shown = fillActivityDays(sorted, text, kind);
+        activityCount.setText(Parts.plural(shown, "entry", "entries"));
+        if (shown == 0) {
+            activityDays.getChildren().setAll(activityTable);
+            activityTable.showMessage(empty("No activity matches \""
+                    + activitySearch.getText().trim() + "\".", "Try "
+                    + "another word.", null, null));
+        }
+    }
+
+    // Adds the entries that match the search and the kind, at most
+    // MAX_ACTIVITY_ROWS, under a title and in a table per day, and
+    // returns how many were added.
+    private int fillActivityDays(List<AuditEntry> sorted, String text,
+            String kind) {
         int shown = 0;
         LocalDate day = null;
         PlainTable dayTable = null;
-        activityDays.getChildren().clear();
         for (AuditEntry entry : sorted) {
-            if (shown < MAX_ACTIVITY_ROWS && matches(entry, text)
-                    && isKind(entry, kind)) {
+            boolean listed = shown < MAX_ACTIVITY_ROWS
+                    && matches(entry, text) && isKind(entry, kind);
+            if (listed) {
                 LocalDate entryDay = entry.getTimestamp().toLocalDate();
                 if (!entryDay.equals(day)) {
                     day = entryDay;
@@ -946,13 +983,7 @@ public class RunsScreen extends FlowScreen {
                 shown++;
             }
         }
-        activityCount.setText(Parts.plural(shown, "entry", "entries"));
-        if (shown == 0) {
-            activityDays.getChildren().setAll(activityTable);
-            activityTable.showMessage(empty("No activity matches \""
-                    + activitySearch.getText().trim() + "\".", "Try "
-                    + "another word.", null, null));
-        }
+        return shown;
     }
 
     // Says whether an entry holds the searched text.
@@ -960,7 +991,7 @@ public class RunsScreen extends FlowScreen {
         if (text.isEmpty()) {
             return true;
         }
-        String all = (entry.getAction() + " " + entry.getDetail())
+        String all = (entry.getAction() + SPACE + entry.getDetail())
                 .toLowerCase();
         return all.contains(text);
     }
@@ -988,12 +1019,12 @@ public class RunsScreen extends FlowScreen {
             return null;
         }
         String action = entry.getAction();
-        boolean fix = "Fix approved".equals(action);
-        boolean undone = "Fix undone".equals(action);
-        boolean reapplied = "Fix reapplied".equals(action);
-        boolean decision = ReviewDecision.AUDIT_CHECKED.equals(action)
-                || ReviewDecision.AUDIT_LOOKS_FINE.equals(action);
-        if (!fix && !undone && !reapplied && !decision) {
+        boolean fix = FIX_APPROVED.equals(action);
+        boolean undone = FIX_UNDONE.equals(action);
+        boolean reapplied = FIX_REAPPLIED.equals(action);
+        boolean decision = isDecisionAction(action);
+        boolean undoable = fix || undone || reapplied || decision;
+        if (!undoable) {
             return null;
         }
         // The decision the log line made; Undo is offered only while it
@@ -1010,40 +1041,63 @@ public class RunsScreen extends FlowScreen {
                 if (!submission.getUsername().equals(student)) {
                     continue;
                 }
-                if (decision && logged == ReviewDecision.REVIEWED
+                boolean zeroCheckLine = decision
+                        && logged == ReviewDecision.REVIEWED
                         && DashboardBackend.ZERO_CHECK_WORDS.equals(message)
                         && runNamed
-                        && getBackend().isZeroChecked(submission)) {
+                        && getBackend().isZeroChecked(submission);
+                if (zeroCheckLine) {
                     return () -> takeBackZeroCheck(submission);
                 }
                 for (Anomaly anomaly : submission.getAnomalies()) {
                     if (!isAbout(message, reference, anomaly, !decision)) {
                         continue;
                     }
-                    if (fix && anomaly.getFixStatus() == FixStatus.APPROVED
-                            && getBackend().supports(
-                            Capability.REPAIR_DECISION_UNDO)) {
-                        return () -> takeBackFix(run, anomaly);
-                    }
-                    if (undone && anomaly.getFixStatus() == FixStatus.UNDONE
-                            && UndoFixJob.canApplyAgain(getBackend(),
-                            anomaly)) {
-                        return () -> runFixJob(run, anomaly, true);
-                    }
-                    if (reapplied
-                            && anomaly.getFixStatus() == FixStatus.APPLIED
-                            && getBackend().supports(
-                            Capability.REPAIR_DECISIONS)) {
-                        return () -> runFixJob(run, anomaly, false);
-                    }
-                    if (decision && getBackend().getDecision(anomaly)
-                            == logged) {
-                        return () -> takeBackDecision(anomaly);
+                    Runnable undo = findAnomalyUndo(run, anomaly, action,
+                            logged);
+                    if (undo != null) {
+                        return undo;
                     }
                 }
             }
         }
         return null;
+    }
+
+    // Returns what takes back a log line's action on one anomaly, or null
+    // when the anomaly is no longer in the state the line left it in.
+    private Runnable findAnomalyUndo(GradingRun run, Anomaly anomaly,
+            String action, ReviewDecision logged) {
+        boolean keptFix = FIX_APPROVED.equals(action)
+                && anomaly.getFixStatus() == FixStatus.APPROVED
+                && getBackend().supports(Capability.REPAIR_DECISION_UNDO);
+        if (keptFix) {
+            return () -> takeBackFix(run, anomaly);
+        }
+        boolean undoneFix = FIX_UNDONE.equals(action)
+                && anomaly.getFixStatus() == FixStatus.UNDONE
+                && UndoFixJob.canApplyAgain(getBackend(), anomaly);
+        if (undoneFix) {
+            return () -> runFixJob(run, anomaly, true);
+        }
+        boolean reappliedFix = FIX_REAPPLIED.equals(action)
+                && anomaly.getFixStatus() == FixStatus.APPLIED
+                && getBackend().supports(Capability.REPAIR_DECISIONS);
+        if (reappliedFix) {
+            return () -> runFixJob(run, anomaly, false);
+        }
+        boolean sameDecision = isDecisionAction(action)
+                && getBackend().getDecision(anomaly) == logged;
+        if (sameDecision) {
+            return () -> takeBackDecision(anomaly);
+        }
+        return null;
+    }
+
+    // Says whether a log line's action is a decision on a flag.
+    private static boolean isDecisionAction(String action) {
+        return ReviewDecision.AUDIT_CHECKED.equals(action)
+                || ReviewDecision.AUDIT_LOOKS_FINE.equals(action);
     }
 
     // Shows the kind of activity picked. Picking the chosen kind again
@@ -1083,7 +1137,7 @@ public class RunsScreen extends FlowScreen {
         String words = anomaly.getMessage();
         if (fixLine) {
             return message.equals(words)
-                    || message.startsWith(words + " ");
+                    || message.startsWith(words + SPACE);
         }
         return message.equals(words);
     }
@@ -1106,8 +1160,9 @@ public class RunsScreen extends FlowScreen {
             return;
         }
         UndoFixJob job = new UndoFixJob(backend, repair, applyAgain);
-        if (!job.startOnce(getState(), run,
-                result -> fixJobFinished(result))) {
+        boolean started = job.startOnce(getState(), run,
+                result -> fixJobFinished(result));
+        if (!started) {
             getWindow().notify("Wait until the other fix has finished.");
             return;
         }
@@ -1220,16 +1275,20 @@ public class RunsScreen extends FlowScreen {
     // taken back, undone and cancelled are amber, failures are red.
     private Tone toneOf(String action) {
         String words = action.toLowerCase();
-        if (words.contains("fail") || words.contains("refused")) {
-            return Tone.BAD;
-        } else if (words.contains("deleted") || words.contains("removed")) {
-            return Tone.BAD;
-        } else if (words.contains("undone") || words.contains("cancel")
-                || words.contains("taken back") || words.contains("replaced")) {
-            return Tone.WARN;
-        } else if (words.contains("approved") || words.contains("kept")
+        boolean failed = words.contains("fail") || words.contains("refused");
+        boolean removed = words.contains("deleted")
+                || words.contains("removed");
+        boolean takenBack = words.contains("undone")
+                || words.contains("cancel") || words.contains("taken back")
+                || words.contains("replaced");
+        boolean kept = words.contains("approved") || words.contains("kept")
                 || words.contains("reviewed") || words.contains("made")
-                || words.contains("restored")) {
+                || words.contains("restored");
+        if (failed || removed) {
+            return Tone.BAD;
+        } else if (takenBack) {
+            return Tone.WARN;
+        } else if (kept) {
             return Tone.GOOD;
         }
         return Tone.NEUTRAL;
@@ -1241,11 +1300,12 @@ public class RunsScreen extends FlowScreen {
         String detailText = entry.getShownDetail();
         String student = "";
         int colon = detailText.indexOf(NAME_SEPARATOR);
-        if (colon > 0 && colon < STUDENT_NAME_LIMIT
-                && !detailText.substring(0, colon).contains(" ")) {
+        boolean startsWithName = colon > 0 && colon < STUDENT_NAME_LIMIT
+                && !detailText.substring(0, colon).contains(SPACE);
+        if (startsWithName) {
+            int detailStart = colon + NAME_SEPARATOR.length();
             student = detailText.substring(0, colon);
-            detailText = detailText.substring(colon
-                    + NAME_SEPARATOR.length());
+            detailText = detailText.substring(detailStart);
         }
         Label detail = new Label(Parts.shortenPaths(detailText));
         detail.setMinWidth(0);
@@ -1253,7 +1313,7 @@ public class RunsScreen extends FlowScreen {
         Label time = Parts.muted(entry.getTimestamp().format(TIME));
         String whoText = student;
         if (student.isEmpty()) {
-            whoText = "-";
+            whoText = NO_VALUE;
         }
         Label who = Parts.strong(whoText);
         who.setMinWidth(0);

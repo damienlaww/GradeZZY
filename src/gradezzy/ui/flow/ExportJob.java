@@ -26,11 +26,20 @@ import gradezzy.report.AuditLogExporter;
 import gradezzy.report.StudentReportExporter;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.DashboardBackend;
+import gradezzy.util.TextUtils;
 
 /**
  * A background task that exports the results of a run.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ExportJob extends Task<ActionResult> {
+
+    // The format name of the score sheet, written first
+    private static final String CSV_FORMAT = "csv";
+
+    // Put between the names of the other files saved
+    private static final String LIST_SEPARATOR = ", ";
 
     // The backend that writes the files
     private final DashboardBackend backend;
@@ -68,7 +77,7 @@ public class ExportJob extends Task<ActionResult> {
      * @return done with what was saved, or failed when the CSV failed
      */
     public ActionResult exportNow() {
-        ActionResult csv = backend.export(run, scope, "csv");
+        ActionResult csv = backend.export(run, scope, CSV_FORMAT);
         if (!csv.isDone()) {
             return csv;
         }
@@ -78,19 +87,18 @@ public class ExportJob extends Task<ActionResult> {
                     + "file either.");
         }
 
-        String saved = "";
+        List<String> savedFiles = new ArrayList<>();
         for (String formatName : otherFormats) {
             ActionResult other = backend.export(run, scope, formatName);
-            if (other.isDone() && saved.isEmpty()) {
-                saved = describe(formatName);
-            } else if (other.isDone()) {
-                saved += ", " + describe(formatName);
+            if (other.isDone()) {
+                savedFiles.add(describe(formatName));
             } else {
                 message = message + " Saving " + describe(formatName)
                         + " failed: " + other.getMessage();
             }
         }
-        if (!saved.isEmpty()) {
+        if (!savedFiles.isEmpty()) {
+            String saved = TextUtils.join(LIST_SEPARATOR, savedFiles);
             message = message + " Also saved beside it: " + saved + ".";
         }
         return ActionResult.done(message);

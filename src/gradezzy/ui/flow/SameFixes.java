@@ -53,6 +53,12 @@ public class SameFixes {
     // The style of a value shown in code type, as on the test cases sheet
     private static final String CODE_STYLE = "code-text";
 
+    // Ends a line; a value holding one is longer than one line
+    private static final String LINE_END = "\n";
+
+    // Comes before a sentence added to the end of another
+    private static final String SENTENCE_SEPARATOR = " ";
+
     // The window, for the sheet and the notices
     private final FlowWindow window;
 
@@ -89,10 +95,11 @@ public class SameFixes {
         Anomaly anomaly = repair.getAnomaly();
         for (RepairItem other : backend.listRepairs(run)) {
             Anomaly otherAnomaly = other.getAnomaly();
-            if (!other.isBlocked()
+            boolean sameKindWaiting = !other.isBlocked()
                     && otherAnomaly.getType() == anomaly.getType()
                     && otherAnomaly.getFixStatus() == FixStatus.APPLIED
-                    && !otherAnomaly.getId().equals(anomaly.getId())) {
+                    && !otherAnomaly.getId().equals(anomaly.getId());
+            if (sameKindWaiting) {
                 same.add(other);
             }
         }
@@ -193,19 +200,17 @@ public class SameFixes {
         table.getStyleClass().add("compact");
         table.addColumn("Student", STUDENT_WIDTH, Pos.CENTER_LEFT);
         table.addColumn("Before the fix", PlainTable.GROW, Pos.CENTER_LEFT);
-        int listed = 0;
-        for (RepairItem other : others) {
-            if (listed == MAX_LISTED) {
-                break;
-            }
+        int listed = Math.min(MAX_LISTED, others.size());
+        for (int index = 0; index < listed; index++) {
+            RepairItem other = others.get(index);
             table.addRow(new Node[] {studentCell(other),
                     beforeCell(other)});
-            listed++;
         }
         content.getChildren().addAll(about, table);
-        if (listed < others.size()) {
-            content.getChildren().add(Parts.muted("and "
-                    + (others.size() - listed) + " more"));
+        int more = others.size() - listed;
+        if (more > 0) {
+            content.getChildren().add(Parts.muted("and " + more
+                    + " more"));
         }
 
         Label note = Parts.muted(after);
@@ -237,8 +242,9 @@ public class SameFixes {
     // the student's card instead.
     private Node beforeCell(RepairItem repair) {
         String before = repair.getOriginalValue();
-        if (!window.getBackend().supports(Capability.REPAIR_VALUES)
-                || !isOneLine(before)) {
+        boolean notShown = !window.getBackend().supports(
+                Capability.REPAIR_VALUES) || !isOneLine(before);
+        if (notShown) {
             return Parts.muted("Shown on their card");
         }
         Label value = new Label(before);
@@ -265,7 +271,7 @@ public class SameFixes {
     // Says whether a value is set and fits on one line.
     private static boolean isOneLine(String value) {
         return value != null && !value.trim().isEmpty()
-                && !value.contains("\n");
+                && !value.contains(LINE_END);
     }
 
     // Keeps every fix, and offers Undo when the backend can take a kept
@@ -279,13 +285,14 @@ public class SameFixes {
             if (result.isDone()) {
                 kept.add(repair);
             } else if (firstProblem.isEmpty()) {
-                firstProblem = " " + result.getMessage();
+                firstProblem = SENTENCE_SEPARATOR + result.getMessage();
             }
         }
         String message = "Kept " + Parts.plural(kept.size(), "fix",
                 "fixes") + "." + firstProblem;
-        if (!kept.isEmpty()
-                && backend.supports(Capability.REPAIR_DECISION_UNDO)) {
+        boolean canUndo = !kept.isEmpty()
+                && backend.supports(Capability.REPAIR_DECISION_UNDO);
+        if (canUndo) {
             window.notify(message, "Undo", () -> unkeepAll(kept));
         } else {
             window.notify(message);
@@ -299,14 +306,24 @@ public class SameFixes {
         DashboardBackend backend = window.getBackend();
         int putBack = 0;
         for (RepairItem repair : kept) {
-            if (repair.getAnomaly().getFixStatus() == FixStatus.APPROVED
-                    && backend.undoRepairDecision(repair).isDone()) {
+            if (takeBack(backend, repair)) {
                 putBack++;
             }
         }
         window.notify("Put " + Parts.plural(putBack, "fix", "fixes")
                 + " back to review.");
         onChanged.run();
+    }
+
+    // Takes back one kept fix when it is still kept, and says whether it
+    // was taken back.
+    private static boolean takeBack(DashboardBackend backend,
+            RepairItem repair) {
+        if (repair.getAnomaly().getFixStatus() != FixStatus.APPROVED) {
+            return false;
+        }
+        ActionResult result = backend.undoRepairDecision(repair);
+        return result.isDone();
     }
 
     // Rejects every fix. The demo does it at once; live mode grades each
@@ -319,8 +336,9 @@ public class SameFixes {
             return;
         }
         FlowState state = window.getState();
-        if (!job.startOnce(state, state.getRun(),
-                result -> rejected(result), () -> onChanged.run())) {
+        boolean started = job.startOnce(state, state.getRun(),
+                result -> rejected(result), () -> onChanged.run());
+        if (!started) {
             window.notify("Wait until the other fix has finished.");
             return;
         }

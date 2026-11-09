@@ -52,11 +52,12 @@ import gradezzy.ui.backend.StatusCounts;
 
 /**
  * The Grade step.
+ *
+ * <p>Tier: SHOULD.
  */
 public class GradeScreen extends FlowScreen
         implements ProgressListener, RunCallback {
 
-    // What each step of grading means, in the order of PipelineStages
     // The five steps shown under the bar, and which of them each stage
     // of grading belongs to
     private static final String[] STEP_NAMES = {"Unzip", "Check",
@@ -66,6 +67,7 @@ public class GradeScreen extends FlowScreen
     // Turns a share into a percentage
     private static final double PERCENT = 100.0;
 
+    // What each step of grading means, in the order of PipelineStages
     private static final String[] STAGE_WORDS = {"unzipping",
         "checking the folders and files", "fixing small mistakes",
         "looking for answers to flag", "copying the testers",
@@ -92,6 +94,15 @@ public class GradeScreen extends FlowScreen
     // The separator between parts of a line
     private static final String DOT = " · ";
 
+    // Comes between two of the steps under the bar
+    private static final String STEP_ARROW = "\u203A";
+
+    // Where the first letter of a step's words ends
+    private static final int FIRST_LETTER_END = 1;
+
+    // The fewest seconds said as time left, so it never reads "0 seconds"
+    private static final long FEWEST_SECONDS = 1;
+
     // When a run was graded, such as "15 Oct, 09:42"
     private static final DateTimeFormatter WHEN =
             DateTimeFormatter.ofPattern("d MMM, HH:mm");
@@ -103,6 +114,9 @@ public class GradeScreen extends FlowScreen
     private static final int TIMEOUT = 3;
     private static final int COULD_NOT = 4;
     private static final int WAITING = 5;
+
+    // How many rows the "So far" card has
+    private static final int ROW_COUNT = WAITING + 1;
 
     // The scrolling page
     private final ScrollPane view;
@@ -156,7 +170,7 @@ public class GradeScreen extends FlowScreen
             + "students finish.");
 
     // The count of each row of "So far"
-    private final Label[] counts = new Label[WAITING + 1];
+    private final Label[] counts = new Label[ROW_COUNT];
 
     // Every student of the run that has a result, by username
     private final Map<String, Submission> results = new HashMap<>();
@@ -396,7 +410,7 @@ public class GradeScreen extends FlowScreen
         nowName.setMinWidth(0);
         stageSteps.getChildren().add(stepLabel(STEP_NAMES[0]));
         for (int index = 1; index < STEP_NAMES.length; index++) {
-            Label arrow = Parts.muted("\u203A");
+            Label arrow = Parts.muted(STEP_ARROW);
             arrow.getStyleClass().add("small-text");
             stageSteps.getChildren().add(arrow);
             stageSteps.getChildren().add(stepLabel(STEP_NAMES[index]));
@@ -433,8 +447,9 @@ public class GradeScreen extends FlowScreen
         nowName.setText(Students.name(submission));
         nowStage.setText(words);
         showNowParts(true);
-        nowStage.setVisible(!words.isEmpty());
-        nowStage.setManaged(!words.isEmpty());
+        boolean hasWords = !words.isEmpty();
+        nowStage.setVisible(hasWords);
+        nowStage.setManaged(hasWords);
         int step = -1;
         if (stage >= 0 && stage < STAGE_STEP.length) {
             step = STAGE_STEP[stage];
@@ -567,7 +582,7 @@ public class GradeScreen extends FlowScreen
         if (index >= 0 && index < STAGE_WORDS.length) {
             words = STAGE_WORDS[index];
             words = Character.toUpperCase(words.charAt(0))
-                    + words.substring(1);
+                    + words.substring(FIRST_LETTER_END);
         }
         showNow(submission, words, index);
     }
@@ -706,7 +721,8 @@ public class GradeScreen extends FlowScreen
         if (total > 0) {
             share = (double) finished / total;
         }
-        percent.setText(Math.round(share * PERCENT) + "%");
+        long shownPercent = Math.round(share * PERCENT);
+        percent.setText(shownPercent + Parts.PERCENT_SIGN);
         glideTo(share);
         updateTimeLeft();
         updateChart();
@@ -728,8 +744,9 @@ public class GradeScreen extends FlowScreen
         }
         KeyValue end = new KeyValue(shownProgress, target,
                 Interpolator.LINEAR);
-        progressGlide = new Timeline(new KeyFrame[] {new KeyFrame(
-                Duration.millis(findGlideMillis()), new KeyValue[] {end})});
+        Duration glide = Duration.millis(findGlideMillis());
+        KeyFrame frame = new KeyFrame(glide, new KeyValue[] {end});
+        progressGlide = new Timeline(new KeyFrame[] {frame});
         progressGlide.play();
     }
 
@@ -766,7 +783,9 @@ public class GradeScreen extends FlowScreen
         }
         double elapsed = (System.currentTimeMillis() - startedAt)
                 / MILLIS_PER_SECOND;
-        long seconds = Math.round(elapsed / finished * (total - finished));
+        int remaining = total - finished;
+        double secondsLeft = elapsed / finished * remaining;
+        long seconds = Math.round(secondsLeft);
         timeLeft.setText("About " + describe(seconds) + " left");
     }
 
@@ -782,10 +801,12 @@ public class GradeScreen extends FlowScreen
         if (assessment == null) {
             return;
         }
-        MarkStats stats = MarkStats.of(resultsInOrder(),
-                assessment.getMaxTotal(),
-                MarkStats.parsePassPercent(getBackend().getSetting(
-                ConfigKeys.PASS_MARK_PERCENT)));
+        List<Submission> graded = resultsInOrder();
+        String passSetting = getBackend().getSetting(
+                ConfigKeys.PASS_MARK_PERCENT);
+        double passPercent = MarkStats.parsePassPercent(passSetting);
+        MarkStats stats = MarkStats.of(graded, assessment.getMaxTotal(),
+                passPercent);
         boolean empty = stats.isEmpty();
         if (empty) {
             chart.setStats(null);
@@ -799,7 +820,7 @@ public class GradeScreen extends FlowScreen
     private void updateRows() {
         StatusCounts counted = StatusCounts.of(resultsInOrder(),
                 getBackend());
-        int[] tally = new int[WAITING + 1];
+        int[] tally = new int[ROW_COUNT];
         tally[GRADED] = counted.count(ResultState.COMPLETED);
         // A 0 nobody checked waits for a look like a flag does
         tally[REVIEW] = counted.count(ResultState.NEEDS_REVIEW)
@@ -810,7 +831,8 @@ public class GradeScreen extends FlowScreen
         tally[WAITING] = counted.count(ResultState.UNGRADED);
         // After a failure nobody is waiting: the rest are not graded
         if (failure == null) {
-            tally[WAITING] += Math.max(0, total - finished);
+            int notStarted = total - finished;
+            tally[WAITING] += Math.max(0, notStarted);
         }
         for (int index = 0; index < tally.length; index++) {
             counts[index].setText(String.valueOf(tally[index]));
@@ -820,9 +842,11 @@ public class GradeScreen extends FlowScreen
     // Says a number of seconds in words.
     private String describe(long seconds) {
         if (seconds < SECONDS_PER_MINUTE) {
-            return Parts.plural((int) Math.max(1, seconds), "second");
+            long shownSeconds = Math.max(FEWEST_SECONDS, seconds);
+            return Parts.plural((int) shownSeconds, "second");
         }
-        long minutes = Math.round((double) seconds / SECONDS_PER_MINUTE);
+        double exactMinutes = (double) seconds / SECONDS_PER_MINUTE;
+        long minutes = Math.round(exactMinutes);
         return Parts.plural((int) minutes, "minute");
     }
 

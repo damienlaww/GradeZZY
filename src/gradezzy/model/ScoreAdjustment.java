@@ -3,8 +3,9 @@
  *
  * Purpose: One mark changed by hand, with the reason and the earlier mark.
  *
- * Where it fits: Created by DashboardBackend.adjustScore and listed in
- * the student panel on Review.
+ * Where it fits: Created by ScoreAdjustmentService when
+ * DashboardBackend.adjustScore changes a mark, and listed in the student
+ * panel on Review.
  */
 package gradezzy.model;
 
@@ -12,6 +13,8 @@ import java.time.LocalDateTime;
 
 /**
  * A mark changed by hand.
+ *
+ * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
 public class ScoreAdjustment {
 

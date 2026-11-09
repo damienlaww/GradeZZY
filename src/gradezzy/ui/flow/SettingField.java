@@ -37,6 +37,8 @@ import gradezzy.ui.ThemeManager;
 
 /**
  * One setting with its name, description and control.
+ *
+ * <p>Tier: SHOULD.
  */
 public class SettingField {
 
@@ -83,6 +85,12 @@ public class SettingField {
 
     // The gap between a control and the problem under it
     private static final double CONTROL_GAP = 4.0;
+
+    // Separates the name, description and key in the text a search reads
+    private static final String WORD_SEPARATOR = " ";
+
+    // The quote around a setting's key in a message from the check
+    private static final String QUOTE = "'";
 
     // The window, for file choosers and the theme
     private final FlowWindow window;
@@ -145,12 +153,7 @@ public class SettingField {
         this.kind = kind;
         this.original = savedValue();
         choice.getItems().addAll(choices);
-        // A value set by hand that is not one of the choices is kept as
-        // one more choice, so opening Settings never changes it
-        if (kind == SettingKind.CHOICE && !original.isEmpty()
-                && !choice.getItems().contains(original)) {
-            choice.getItems().add(original);
-        }
+        keepHandSetChoice();
         buildRow();
         setControlValue(original);
         listen();
@@ -254,10 +257,7 @@ public class SettingField {
      */
     public void reload() {
         original = savedValue();
-        if (kind == SettingKind.CHOICE && !original.isEmpty()
-                && !choice.getItems().contains(original)) {
-            choice.getItems().add(original);
-        }
+        keepHandSetChoice();
         setControlValue(original);
     }
 
@@ -279,7 +279,9 @@ public class SettingField {
         if (query.isEmpty()) {
             return true;
         }
-        String all = (name + " " + description + " " + key).toLowerCase();
+        String words = name + WORD_SEPARATOR + description + WORD_SEPARATOR
+                + key;
+        String all = words.toLowerCase();
         return all.contains(query);
     }
 
@@ -328,6 +330,16 @@ public class SettingField {
      */
     public void setOnChange(Runnable action) {
         onChange = action;
+    }
+
+    // Keeps a value set by hand that is not one of the choices as one
+    // more choice, so opening Settings never changes it.
+    private void keepHandSetChoice() {
+        boolean handSet = kind == SettingKind.CHOICE && !original.isEmpty()
+                && !choice.getItems().contains(original);
+        if (handSet) {
+            choice.getItems().add(original);
+        }
     }
 
     // Builds the name column and the control column.
@@ -397,12 +409,8 @@ public class SettingField {
                 -> choiceChanged(after));
     }
 
-    /**
-     * Follows a new value of the list: the theme setting changes the
-     * window's theme at once, then the value is checked as usual.
-     *
-     * @param after the value picked
-     */
+    // Follows a new value of the list: the theme setting changes the
+    // window's theme at once, then the value is checked as usual.
     private void choiceChanged(String after) {
         if (ConfigKeys.UI_THEME.equals(key)) {
             window.setDark(ThemeManager.DARK_THEME.equals(after));
@@ -420,7 +428,8 @@ public class SettingField {
         if (message == null) {
             message = "";
         }
-        message = message.replace("'" + key + "'", name);
+        String quotedKey = QUOTE + key + QUOTE;
+        message = message.replace(quotedKey, name);
         problem.setText(message);
         boolean hasProblem = !message.isEmpty();
         problem.setVisible(hasProblem);

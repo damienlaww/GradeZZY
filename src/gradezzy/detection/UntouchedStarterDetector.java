@@ -21,6 +21,8 @@ import gradezzy.model.Submission;
 
 /**
  * Flags files that are identical to the starter file.
+ *
+ * <p>Tier: COULD. Owner: Jun Sheng.
  */
 public class UntouchedStarterDetector implements Detector {
 
@@ -32,9 +34,11 @@ public class UntouchedStarterDetector implements Detector {
     // The text in front of the id of every flag a detector raises
     private static final String ID_PREFIX = "detection-";
 
-    // What the instructor can do about a whole submission or one file
+    // What the instructor can do about a whole unchanged submission
     private static final String WHOLE_SUBMISSION_ACTION =
             "Ask the student whether the wrong folder was submitted.";
+
+    // What the instructor can do about one unchanged file
     private static final String ONE_FILE_ACTION =
             "Check whether the student attempted this question.";
 
@@ -77,15 +81,16 @@ public class UntouchedStarterDetector implements Detector {
             String starterText = JavaSourceText.readStarterFile(
                     starterDirectory, question);
             boolean bothRead = studentText != null && starterText != null;
+            boolean unchanged = bothRead
+                    && JavaSourceText.isUnchanged(studentText, starterText);
 
-            if (bothRead
-                    && JavaSourceText.isUnchanged(studentText, starterText)) {
+            if (unchanged) {
                 unchangedFiles.add(JavaSourceText.describeFile(question));
             }
         }
 
-        return createFlags(submission, unchangedFiles,
-                assessment.getQuestions().size());
+        int questionCount = assessment.getQuestions().size();
+        return createFlags(submission, unchangedFiles, questionCount);
     }
 
     // Raises one flag if every file is unchanged, otherwise one per file.
@@ -93,8 +98,9 @@ public class UntouchedStarterDetector implements Detector {
             List<String> unchangedFiles, int questionCount) {
         List<Anomaly> flags = new ArrayList<>();
 
-        if (!unchangedFiles.isEmpty()
-                && unchangedFiles.size() == questionCount) {
+        boolean allUnchanged = !unchangedFiles.isEmpty()
+                && unchangedFiles.size() == questionCount;
+        if (allUnchanged) {
             flags.add(createFlag(submission, "The whole submission matches "
                     + "the starter folder: all " + questionCount
                     + " question files are unchanged. The student probably "

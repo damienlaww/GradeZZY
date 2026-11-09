@@ -48,6 +48,15 @@ public class RosterReader {
     // The mark some editors put at the very start of a UTF-8 file
     private static final String BYTE_ORDER_MARK = "﻿";
 
+    // Opens and closes a quoted CSV field
+    private static final char QUOTE = '"';
+
+    // Ends a record once the line endings are normalised
+    private static final char LINE_END = '\n';
+
+    // Ends the sentence of an error message
+    private static final String SENTENCE_END = ".";
+
     /**
      * Returned by readDenominator when the score sheet gives no single
      * denominator.
@@ -91,23 +100,9 @@ public class RosterReader {
             List<Student> students = new ArrayList<>();
             Set<String> usernames = new HashSet<>();
             for (int index = 1; index < records.size(); index++) {
-                List<String> fields = TextUtils.splitCsvLine(
-                        records.get(index));
-                checkColumnCount(header, fields, index + 1);
-                String id = removePrefix(fields.get(header.indexOf(
-                        ID_COLUMN)));
-                String username = removePrefix(fields.get(header.indexOf(
-                        USERNAME_COLUMN)));
-                if (TextUtils.isBlank(id) || TextUtils.isBlank(username)
-                        || !usernames.add(username.toLowerCase(Locale.ROOT))) {
-                    throw new IllegalArgumentException("Missing student ID "
-                            + "or missing/duplicate username in record "
-                            + (index + 1) + ".");
-                }
-                students.add(new Student(id, username,
-                        fields.get(header.indexOf(LAST_NAME_COLUMN)),
-                        fields.get(header.indexOf(FIRST_NAME_COLUMN)),
-                        fields.get(header.indexOf(EMAIL_COLUMN))));
+                int recordNumber = index + 1;
+                students.add(readStudent(header, records.get(index),
+                        recordNumber, usernames));
             }
             // A header with no student row would mark every upload as not
             // on the roster and export an empty sheet
@@ -188,6 +183,29 @@ public class RosterReader {
         return findSingleNumber(values);
     }
 
+    // Reads one student row; usernames holds the lower-case usernames of
+    // the rows before it, and gets this row's username added.
+    private Student readStudent(List<String> header, String record,
+            int recordNumber, Set<String> usernames) {
+        List<String> fields = TextUtils.splitCsvLine(record);
+        checkColumnCount(header, fields, recordNumber);
+        String id = removePrefix(fields.get(header.indexOf(ID_COLUMN)));
+        String username = removePrefix(fields.get(header.indexOf(
+                USERNAME_COLUMN)));
+        boolean badRow = TextUtils.isBlank(id)
+                || TextUtils.isBlank(username)
+                || !usernames.add(username.toLowerCase(Locale.ROOT));
+        if (badRow) {
+            throw new IllegalArgumentException("Missing student ID "
+                    + "or missing/duplicate username in record "
+                    + recordNumber + ".");
+        }
+        return new Student(id, username,
+                fields.get(header.indexOf(LAST_NAME_COLUMN)),
+                fields.get(header.indexOf(FIRST_NAME_COLUMN)),
+                fields.get(header.indexOf(EMAIL_COLUMN)));
+    }
+
     // Reads the score sheet and splits it into records, without a byte
     // order mark. Shared by readRoster and readDenominator.
     private List<String> readRecords(Path scoreSheetFile)
@@ -224,8 +242,8 @@ public class RosterReader {
     private IngestException rosterFailure(Path scoreSheetFile,
             Exception exception) {
         String reason = String.valueOf(exception.getMessage()).trim();
-        if (!reason.endsWith(".")) {
-            reason += ".";
+        if (!reason.endsWith(SENTENCE_END)) {
+            reason += SENTENCE_END;
         }
         return new IngestException("Could not read roster "
                 + scoreSheetFile + ": " + reason
@@ -255,8 +273,9 @@ public class RosterReader {
 
     // Requires a column to appear in the header exactly once.
     private void requireColumn(List<String> header, String name) {
-        if (header.indexOf(name) < 0
-                || header.indexOf(name) != header.lastIndexOf(name)) {
+        boolean missingOrRepeated = header.indexOf(name) < 0
+                || header.indexOf(name) != header.lastIndexOf(name);
+        if (missingOrRepeated) {
             throw new IllegalArgumentException("Missing or repeated column: "
                     + name);
         }
@@ -281,9 +300,9 @@ public class RosterReader {
         boolean quoted = false;
         for (int index = 0; index < text.length(); index++) {
             char current = text.charAt(index);
-            if (current == '"') {
+            if (current == QUOTE) {
                 quoted = !quoted;
-            } else if (current == '\n' && !quoted) {
+            } else if (current == LINE_END && !quoted) {
                 addRecord(records, text.substring(recordStart, index));
                 recordStart = index + 1;
             }

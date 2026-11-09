@@ -114,8 +114,9 @@ public class PlagiarismService {
      *         list when there is no run or plagiarism.enabled is false
      */
     public synchronized List<SimilarityPair> check(GradingRun gradingRun) {
-        if (gradingRun == null
-                || !config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED)) {
+        boolean checkOff = gradingRun == null
+                || !config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED);
+        if (checkOff) {
             return new ArrayList<>();
         }
 
@@ -168,8 +169,12 @@ public class PlagiarismService {
         for (Submission submission : gradingRun.getSubmissions()) {
             for (Anomaly anomaly : submission.getAnomalies()) {
                 SimilarityPair pair = readFlag(anomaly, idStart);
-                if (pair != null && !pairKeys.contains(makePairKey(pair))) {
-                    pairKeys.add(makePairKey(pair));
+                if (pair == null) {
+                    continue;
+                }
+                String pairKey = makePairKey(pair);
+                if (!pairKeys.contains(pairKey)) {
+                    pairKeys.add(pairKey);
                     insertBySimilarity(pairs, pair);
                 }
             }
@@ -201,13 +206,14 @@ public class PlagiarismService {
     // Reads the pair a Similar code flag of the run names, as flag wrote
     // it, or returns null for any other anomaly.
     private SimilarityPair readFlag(Anomaly anomaly, String idStart) {
-        if (anomaly.getType() != AnomalyType.SIMILAR_CODE
-                || !anomaly.getId().startsWith(idStart)) {
+        boolean otherFlag = anomaly.getType() != AnomalyType.SIMILAR_CODE
+                || !anomaly.getId().startsWith(idStart);
+        if (otherFlag) {
             return null;
         }
 
-        String[] parts = anomaly.getId().substring(idStart.length())
-                .split(ID_SEPARATOR);
+        String afterStart = anomaly.getId().substring(idStart.length());
+        String[] parts = afterStart.split(ID_SEPARATOR);
         if (parts.length != ID_PARTS) {
             return null;
         }
@@ -221,11 +227,11 @@ public class PlagiarismService {
         }
 
         try {
-            int percent = Integer.parseInt(message.substring(start.length(),
-                    end));
+            String percentText = message.substring(start.length(), end);
+            int percent = Integer.parseInt(percentText);
+            double similarity = (double) percent / PERCENT;
             return new SimilarityPair(parts[STUDENT_PART],
-                    parts[OTHER_STUDENT_PART], questionId,
-                    (double) percent / PERCENT);
+                    parts[OTHER_STUDENT_PART], questionId, similarity);
         } catch (NumberFormatException exception) {
             return null;
         }
@@ -249,11 +255,21 @@ public class PlagiarismService {
     private void insertBySimilarity(List<SimilarityPair> pairs,
             SimilarityPair pair) {
         int place = 0;
-        while (place < pairs.size()
-                && pairs.get(place).getSimilarity() >= pair.getSimilarity()) {
+        while (isAtLeastAsSimilar(pairs, place, pair)) {
             place++;
         }
         pairs.add(place, pair);
+    }
+
+    // Says whether there is a pair at a place and it is at least as
+    // similar as the new pair, so the new pair goes after it.
+    private boolean isAtLeastAsSimilar(List<SimilarityPair> pairs,
+            int place, SimilarityPair pair) {
+        if (place >= pairs.size()) {
+            return false;
+        }
+        double similarity = pairs.get(place).getSimilarity();
+        return similarity >= pair.getSimilarity();
     }
 
     // Saves the run with its new flags when the database is switched on.
@@ -261,8 +277,9 @@ public class PlagiarismService {
     // app is closed; GradingService already warns when a run cannot be
     // saved.
     private void saveRun(GradingRun gradingRun) {
-        if (repository == null
-                || !config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+        boolean saveOff = repository == null
+                || !config.getBoolean(ConfigKeys.DATABASE_ENABLED);
+        if (saveOff) {
             return;
         }
 

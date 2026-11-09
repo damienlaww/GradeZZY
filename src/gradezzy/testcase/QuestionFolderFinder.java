@@ -67,8 +67,9 @@ public class QuestionFolderFinder {
     private static Path findContentRoot(Submission submission,
             Assessment assessment) throws IOException {
         Path workingCopy = submission.getWorkingCopyPath();
-        if (workingCopy == null
-                || !Files.isDirectory(workingCopy, LinkOption.NOFOLLOW_LINKS)) {
+        boolean noWorkingCopy = workingCopy == null
+                || !Files.isDirectory(workingCopy, LinkOption.NOFOLLOW_LINKS);
+        if (noWorkingCopy) {
             return null;
         }
 
@@ -155,8 +156,10 @@ public class QuestionFolderFinder {
             children = Files.newDirectoryStream(directory);
             for (Path child : children) {
                 String childName = child.getFileName().toString();
-                if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
-                        && !childName.startsWith(HIDDEN_PREFIX)) {
+                boolean shownFolder = Files.isDirectory(child,
+                        LinkOption.NOFOLLOW_LINKS)
+                        && !childName.startsWith(HIDDEN_PREFIX);
+                if (shownFolder) {
                     folders.add(child);
                 }
             }

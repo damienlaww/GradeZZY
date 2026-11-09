@@ -30,23 +30,28 @@ import gradezzy.model.FixStatus;
  */
 final class ReviewTables {
 
+    // Changes the fix status of one anomaly
     private static final String UPDATE_FIX_STATUS = "UPDATE anomalies "
             + "SET fix_status = ? WHERE anomaly_id = ?";
 
+    // Changes the review decision of one anomaly
     private static final String UPDATE_DECISION = "UPDATE anomalies "
             + "SET decision = ? WHERE anomaly_id = ?";
 
+    // Lists the anomalies of a run that have a decision
     private static final String SELECT_DECISIONS = "SELECT anomaly_id, "
             + "decision FROM anomalies WHERE run_id = ? "
             + "AND decision IS NOT NULL";
 
-    // Saves, removes and lists the 0s marked as checked
+    // Saves a 0 marked as checked
     private static final String INSERT_ZERO_CHECK = "INSERT OR IGNORE "
             + "INTO zero_checks (run_id, username) VALUES (?, ?)";
 
+    // Removes the check of a 0
     private static final String DELETE_ZERO_CHECK = "DELETE FROM "
             + "zero_checks WHERE run_id = ? AND username = ?";
 
+    // Lists the 0s marked as checked in a run
     private static final String SELECT_ZERO_CHECKS = "SELECT username "
             + "FROM zero_checks WHERE run_id = ? ORDER BY username";
 

@@ -22,6 +22,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * Export previews for demo mode.
+ *
+ * <p>Tier: COULD.
  */
 public final class DemoExports {
 
@@ -36,6 +38,18 @@ public final class DemoExports {
 
     // The indentation of one JSON level
     private static final String INDENT = "  ";
+
+    // The line ending of the JSON preview
+    private static final String JSON_LINE_END = "\n";
+
+    // The separator between JSON values
+    private static final String JSON_SEPARATOR = ",";
+
+    // The JSON value of a mark that was not graded
+    private static final String JSON_NULL = "null";
+
+    // The character that escapes a quote or a backslash in JSON
+    private static final String BACKSLASH = "\\";
 
     // Utility class, never instantiated.
     private DemoExports() {
@@ -54,7 +68,7 @@ public final class DemoExports {
         for (Question question : run.getAssessment().getQuestions()) {
             csv += COMMA + question.getId();
         }
-        csv += ",Total" + CSV_LINE_END;
+        csv += COMMA + "Total" + CSV_LINE_END;
 
         for (Submission submission : scope) {
             Student student = submission.getStudent();
@@ -86,32 +100,36 @@ public final class DemoExports {
      * @return the JSON text
      */
     public static String toJson(GradingRun run, List<Submission> scope) {
-        String json = "{\n";
-        json += INDENT + "\"run\": " + jsonText(run.getId()) + ",\n";
+        String json = "{" + JSON_LINE_END;
+        json += INDENT + "\"run\": " + jsonText(run.getId())
+                + JSON_SEPARATOR + JSON_LINE_END;
         json += INDENT + "\"section\": "
-                + jsonText(run.getSection().getLabel()) + ",\n";
+                + jsonText(run.getSection().getLabel()) + JSON_SEPARATOR
+                + JSON_LINE_END;
         json += INDENT + "\"students\": [";
 
         List<String> students = new ArrayList<>();
         for (Submission submission : scope) {
             students.add(studentJson(run, submission));
         }
-        json += TextUtils.join(",", students);
-        json += "\n" + INDENT + "]\n}\n";
+        json += TextUtils.join(JSON_SEPARATOR, students);
+        json += JSON_LINE_END + INDENT + "]" + JSON_LINE_END + "}"
+                + JSON_LINE_END;
         return json;
     }
 
     // Returns the JSON object of one student, on a line of its own.
     private static String studentJson(GradingRun run,
             Submission submission) {
-        String json = "\n" + INDENT + INDENT + "{ " + "\"username\": "
-                + jsonText(submission.getUsername()) + ", \"scores\": {";
+        String json = JSON_LINE_END + INDENT + INDENT + "{ "
+                + "\"username\": " + jsonText(submission.getUsername())
+                + ", \"scores\": {";
         json += scoresText(run, submission);
         json += " }, \"total\": ";
         if (ResultState.hasTotal(submission)) {
             json += format(submission.getTotalScore());
         } else {
-            json += "null";
+            json += JSON_NULL;
         }
         json += " }";
         return json;
@@ -127,11 +145,11 @@ public final class DemoExports {
             if (graded && result != null) {
                 mark += format(result.getScore());
             } else {
-                mark += "null";
+                mark += JSON_NULL;
             }
             marks.add(mark);
         }
-        return TextUtils.join(",", marks);
+        return TextUtils.join(JSON_SEPARATOR, marks);
     }
 
     // Finds the result of one question.
@@ -155,8 +173,9 @@ public final class DemoExports {
 
     // Writes a JSON string with quotes and backslashes escaped.
     private static String jsonText(String value) {
-        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"")
-                + "\"";
+        String escaped = value.replace(BACKSLASH, BACKSLASH + BACKSLASH)
+                .replace(QUOTE, BACKSLASH + QUOTE);
+        return QUOTE + escaped + QUOTE;
     }
 
     // Writes a mark without a decimal point when it is whole.

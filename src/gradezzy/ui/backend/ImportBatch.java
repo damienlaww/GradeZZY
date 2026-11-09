@@ -20,6 +20,8 @@ import gradezzy.testcase.TestCase;
 
 /**
  * The files chosen for the next grading run.
+ *
+ * <p>Tier: MUST.
  */
 public class ImportBatch {
 
@@ -168,16 +170,19 @@ public class ImportBatch {
      * @return the file graded instead, or null when this file is graded
      */
     public ImportItem findGradedInstead(ImportItem item) {
-        if (item.getKind() != InputKind.SUBMISSION
-                || !item.getState().isUsable()) {
+        boolean usableSubmission = item.getKind() == InputKind.SUBMISSION
+                && item.getState().isUsable();
+        if (!usableSubmission) {
             return null;
         }
 
         ImportItem kept = item;
         for (ImportItem other : getItems(InputKind.SUBMISSION)) {
-            if (other != item && other.getState().isUsable()
+            boolean keptInstead = other != item
+                    && other.getState().isUsable()
                     && isSameUpload(other, item)
-                    && isGradedBefore(other, kept)) {
+                    && isGradedBefore(other, kept);
+            if (keptInstead) {
                 kept = other;
             }
         }
@@ -197,8 +202,13 @@ public class ImportBatch {
      */
     public boolean isChosenAgain(ImportItem item) {
         ImportItem kept = findGradedInstead(item);
-        return kept != null && kept.getPath().toAbsolutePath().normalize()
-                .equals(item.getPath().toAbsolutePath().normalize());
+        if (kept == null) {
+            return false;
+        }
+
+        Path keptPath = kept.getPath().toAbsolutePath().normalize();
+        Path itemPath = item.getPath().toAbsolutePath().normalize();
+        return keptPath.equals(itemPath);
     }
 
     /**
@@ -301,10 +311,11 @@ public class ImportBatch {
         // Files that cannot be used are skipped, unless nothing else is left
         int invalid = count(InputKind.SUBMISSION, ImportState.INVALID);
         if (invalid > 0 && listStudents().isEmpty()) {
-            reasons.add(invalid + " chosen file" + plural(invalid)
+            String reason = invalid + " chosen file" + plural(invalid)
                     + " or folder" + plural(invalid)
                     + " cannot be used. Replace or remove "
-                    + pronoun(invalid) + ".");
+                    + pronoun(invalid) + ".";
+            reasons.add(reason);
         }
 
         addSingleReason(reasons, InputKind.ROSTER);
@@ -366,9 +377,10 @@ public class ImportBatch {
         if (first.getPath().equals(second.getPath())) {
             return true;
         }
-        return !second.getUsername().isEmpty()
-                && first.getUsername().equalsIgnoreCase(
-                        second.getUsername());
+
+        String username = second.getUsername();
+        return !username.isEmpty()
+                && first.getUsername().equalsIgnoreCase(username);
     }
 
     // Says whether grading keeps the first of two files of one student,
@@ -409,13 +421,16 @@ public class ImportBatch {
     // Adds the reason a required single-file group blocks grading.
     private void addSingleReason(List<String> reasons, InputKind kind) {
         List<ImportItem> chosen = getItems(kind);
+        String title = kind.getTitle().toLowerCase();
         if (chosen.isEmpty()) {
-            reasons.add("Add the " + kind.getTitle().toLowerCase() + ".");
+            reasons.add("Add the " + title + ".");
             return;
         }
-        if (!chosen.get(0).getState().isUsable()) {
-            reasons.add("The " + kind.getTitle().toLowerCase()
-                    + " cannot be used: " + chosen.get(0).getMessage());
+
+        ImportItem first = chosen.get(0);
+        if (!first.getState().isUsable()) {
+            reasons.add("The " + title + " cannot be used: "
+                    + first.getMessage());
         }
     }
 

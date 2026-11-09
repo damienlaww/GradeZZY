@@ -15,6 +15,8 @@ import javafx.util.StringConverter;
 
 /**
  * Turns the saved values of a list into the names shown, and back.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ChoiceNameConverter extends StringConverter<String> {
 

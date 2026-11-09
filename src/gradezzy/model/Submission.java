@@ -269,6 +269,7 @@ public class Submission {
             total += questionResult.getScore();
         }
 
-        return Math.round(total * ROUNDING_FACTOR) / ROUNDING_FACTOR;
+        double scaledTotal = total * ROUNDING_FACTOR;
+        return Math.round(scaledTotal) / ROUNDING_FACTOR;
     }
 }

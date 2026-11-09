@@ -16,6 +16,8 @@ import javafx.stage.FileChooser;
 
 /**
  * The last folder used by a file dialog, kept while GradeZZY is open.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class Choosers {
 

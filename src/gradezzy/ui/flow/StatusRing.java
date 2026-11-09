@@ -21,6 +21,8 @@ import javafx.scene.text.Text;
 
 /**
  * A ring chart of status counts.
+ *
+ * <p>Tier: SHOULD.
  */
 public class StatusRing extends Region {
 
@@ -41,6 +43,12 @@ public class StatusRing extends Region {
 
     // The gap between the number and the word under it
     private static final double TEXT_GAP = 2.0;
+
+    // Divides a length in two, to find a middle
+    private static final double HALF = 2.0;
+
+    // Separates a part's name from its count in the part's tip
+    private static final String TIP_SEPARATOR = ": ";
 
     // The name of each part
     private final List<String> names = new ArrayList<>();
@@ -92,12 +100,16 @@ public class StatusRing extends Region {
         for (int count : counts) {
             total += count;
         }
-        double centre = SIZE / 2;
+        double centre = SIZE / HALF;
         double radius = centre - INSET;
         if (total > 0) {
             drawParts(total, centre, radius);
         }
+        drawTotal(total, centre);
+    }
 
+    // Draws the number of students and the word under it in the middle.
+    private void drawTotal(int total, double centre) {
         Text number = new Text(String.valueOf(total));
         number.getStyleClass().add("ring-total");
         String unit = "students";
@@ -111,12 +123,17 @@ public class StatusRing extends Region {
         word.applyCss();
         double numberHeight = number.getLayoutBounds().getHeight();
         double wordHeight = word.getLayoutBounds().getHeight();
-        double top = centre - (numberHeight + TEXT_GAP + wordHeight) / 2;
-        number.setLayoutX(centre - number.getLayoutBounds().getWidth() / 2);
-        number.setLayoutY(top - number.getLayoutBounds().getMinY());
-        word.setLayoutX(centre - word.getLayoutBounds().getWidth() / 2);
-        word.setLayoutY(top + numberHeight + TEXT_GAP
-                - word.getLayoutBounds().getMinY());
+        double textHeight = numberHeight + TEXT_GAP + wordHeight;
+        double top = centre - textHeight / HALF;
+        double numberX = centre - number.getLayoutBounds().getWidth() / HALF;
+        double numberY = top - number.getLayoutBounds().getMinY();
+        double wordX = centre - word.getLayoutBounds().getWidth() / HALF;
+        double wordY = top + numberHeight + TEXT_GAP
+                - word.getLayoutBounds().getMinY();
+        number.setLayoutX(numberX);
+        number.setLayoutY(numberY);
+        word.setLayoutX(wordX);
+        word.setLayoutY(wordY);
     }
 
     // Draws one arc per part with a small gap between parts.
@@ -136,13 +153,15 @@ public class StatusRing extends Region {
             int count = counts.get(index);
             if (count > 0) {
                 double length = FULL_TURN * count / total;
+                double drawn = Math.max(0, length - gap);
                 Arc arc = new Arc(centre, centre, radius, radius,
-                        start, -Math.max(0, length - gap));
+                        start, -drawn);
                 arc.setType(ArcType.OPEN);
                 arc.getStyleClass().addAll("ring-part",
                         colours.get(index));
-                Tooltip.install(arc, new Tooltip(names.get(index) + ": "
-                        + Parts.plural(count, "student")));
+                String tip = names.get(index) + TIP_SEPARATOR
+                        + Parts.plural(count, "student");
+                Tooltip.install(arc, new Tooltip(tip));
                 getChildren().add(arc);
                 start -= length;
             }

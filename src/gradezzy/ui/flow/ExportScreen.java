@@ -60,6 +60,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * The Export step.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ExportScreen extends FlowScreen {
 
@@ -94,6 +96,26 @@ public class ExportScreen extends FlowScreen {
     // The gap between the export choices
     private static final double CHOICE_GAP = 10.0;
 
+    // The gap between the small bell curve and the figures
+    private static final double GLANCE_GAP = Parts.GAP + Parts.GAP_TINY;
+
+    // Put between the items of a list in a sentence
+    private static final String LIST_SEPARATOR = ", ";
+
+    // Put between a student's name and mark in the picker
+    private static final String PICKER_SEPARATOR = "  ·  ";
+
+    // Put between a mark and the maximum mark
+    private static final String OUT_OF = " / ";
+
+    // Put before the maximum mark beside a figure
+    private static final String MAX_PREFIX = "/ ";
+
+    // The names of the background threads
+    private static final String SHEET_THREAD = "gradezzy-score-sheet";
+    private static final String SIMILARITY_THREAD = "gradezzy-similarity";
+    private static final String EXPORT_THREAD = "gradezzy-export";
+
     // The scrolling page
     private final ScrollPane view;
 
@@ -107,7 +129,7 @@ public class ExportScreen extends FlowScreen {
     private final VBox figures = new VBox();
 
     // The chart and figures, or a note when nobody is graded
-    private final HBox glance = Parts.row(Parts.GAP + Parts.GAP_TINY);
+    private final HBox glance = Parts.row(GLANCE_GAP);
 
     // Shown instead of the chart when nobody is graded
     private final Label noMarks = Parts.muted("No student has a mark "
@@ -246,8 +268,9 @@ public class ExportScreen extends FlowScreen {
     @Override
     public void onShow() {
         // A note about another run, or from before grading again, is old
-        if (!currentRunId().equals(noteRunId)
-                || noteFromGrading != getState().getGradingCount()) {
+        boolean oldNote = !currentRunId().equals(noteRunId)
+                || noteFromGrading != getState().getGradingCount();
+        if (oldNote) {
             clearNote();
         }
         GradingRun run = getState().getRun();
@@ -279,8 +302,9 @@ public class ExportScreen extends FlowScreen {
      */
     public boolean openSimilarPair(int index) {
         GradingRun run = getState().getRun();
-        if (run == null
-                || !getBackend().supports(Capability.SIMILARITY_DETAIL)) {
+        boolean cannotCompare = run == null
+                || !getBackend().supports(Capability.SIMILARITY_DETAIL);
+        if (cannotCompare) {
             return false;
         }
         if (index < 0 || index >= shownPairs.size()) {
@@ -457,7 +481,9 @@ public class ExportScreen extends FlowScreen {
         // Drops chosen students who are no longer in the run
         getState().getExportPicked().retainAll(run.getSubmissions());
         int picked = getState().getExportPicked().size();
-        if (supported && getState().isExportOnlyPicked() && picked > 0) {
+        boolean keepTicked = supported && getState().isExportOnlyPicked()
+                && picked > 0;
+        if (keepTicked) {
             tickedOnly.setSelected(true);
         } else {
             getState().setExportOnlyPicked(false);
@@ -498,14 +524,16 @@ public class ExportScreen extends FlowScreen {
         for (Submission submission : run.getSubmissions()) {
             boolean onSheet = submission.getStudent() != null;
             boolean graded = ResultState.hasTotal(submission);
+            boolean gradingFailed = submission.getStatus()
+                    == SubmissionStatus.FAILED;
+            boolean exported = graded && scope.contains(submission);
             if (!onSheet && graded) {
                 offSheet++;
-            } else if (onSheet && graded && scope.contains(submission)) {
+            } else if (onSheet && exported) {
                 filled++;
             } else if (onSheet && graded) {
                 notTicked++;
-            } else if (onSheet && submission.getStatus()
-                    == SubmissionStatus.FAILED) {
+            } else if (onSheet && gradingFailed) {
                 failed++;
             } else if (onSheet) {
                 waiting++;
@@ -521,35 +549,44 @@ public class ExportScreen extends FlowScreen {
         addReason(reasons, notTicked, "not chosen");
         addReason(reasons, noSubmission, "no submission");
         int blank = failed + notOpened + waiting + notTicked + noSubmission;
-        if (filled + blank + offSheet == 0) {
+        int counted = filled + blank + offSheet;
+        if (counted == 0) {
             return;
         }
 
         filledCount.setText(String.valueOf(filled));
         blankCount.setText(String.valueOf(blank));
         blankWhy.setText("left blank");
+        String reasonList = TextUtils.join(LIST_SEPARATOR, reasons);
         if (blank > 0) {
-            blankWhy.setText("left blank: " + TextUtils.join(", ",
-                    reasons));
+            blankWhy.setText("left blank: " + reasonList);
         }
         offCount.setText(String.valueOf(offSheet));
         offCell.setVisible(offSheet > 0);
         offCell.setManaged(offSheet > 0);
         showOutcome(true);
         refreshWarning(run, filled, offSheet, missing.size());
-        refreshOtherRun(run, filled + failed + waiting + notTicked, missing);
+        int inRun = filled + failed + waiting + notTicked;
+        refreshOtherRun(run, inRun, missing);
+        blankSummary = summarise(filled, blank, offSheet, reasonList);
+    }
 
-        blankSummary = Parts.plural(filled, "mark") + " filled";
+    // Puts the counts of the score sheet in one sentence, for the
+    // message after an export.
+    private String summarise(int filled, int blank, int offSheet,
+            String reasonList) {
+        String summary = Parts.plural(filled, "mark") + " filled";
         if (blank == 0) {
-            blankSummary = blankSummary + ", none left blank.";
+            summary = summary + ", none left blank.";
         } else {
-            blankSummary = blankSummary + ", " + blank + " left blank: "
-                    + TextUtils.join(", ", reasons) + ".";
+            summary = summary + ", " + blank + " left blank: "
+                    + reasonList + ".";
         }
         if (offSheet > 0) {
-            blankSummary = blankSummary + " " + offSheet + " not on the "
+            summary = summary + " " + offSheet + " not on the "
                     + "score sheet.";
         }
+        return summary;
     }
 
     // Says when another run of this section has students this run lacks.
@@ -593,14 +630,16 @@ public class ExportScreen extends FlowScreen {
 
     // Says whether a run is another run of the same module and section.
     private boolean isOtherRunOfSection(GradingRun run, GradingRun other) {
-        if (other == null || other.getSection() == null
-                || other.getId().equals(run.getId())) {
+        boolean notOther = other == null || other.getSection() == null
+                || other.getId().equals(run.getId());
+        if (notOther) {
             return false;
         }
-        return other.getSection().getModuleCode().equals(
-                run.getSection().getModuleCode())
-                && other.getSection().getSectionCode().equals(
-                run.getSection().getSectionCode());
+        String module = run.getSection().getModuleCode();
+        String section = run.getSection().getSectionCode();
+        boolean sameModule = other.getSection().getModuleCode().equals(module);
+        return sameModule
+                && other.getSection().getSectionCode().equals(section);
     }
 
     // Counts the students with a submission in a run.
@@ -697,7 +736,7 @@ public class ExportScreen extends FlowScreen {
         }
         search.setOnSucceeded(event -> sheetSearched(search));
         search.setOnFailed(event -> sheetNotSearched(search));
-        Thread worker = new Thread(search, "gradezzy-score-sheet");
+        Thread worker = new Thread(search, SHEET_THREAD);
         worker.setDaemon(true);
         worker.start();
         return false;
@@ -730,8 +769,9 @@ public class ExportScreen extends FlowScreen {
     // without grading again. The change runs on a background thread.
     private void useBetterSheet() {
         GradingRun run = getState().getRun();
-        if (run == null || changingSheet || exporting
-                || betterSheet == null || !betterSheet.hasSuggestion()) {
+        boolean blocked = run == null || changingSheet || exporting
+                || betterSheet == null || !betterSheet.hasSuggestion();
+        if (blocked) {
             return;
         }
         ScoreSheetChange change = new ScoreSheetChange(getBackend(), run,
@@ -744,7 +784,7 @@ public class ExportScreen extends FlowScreen {
         change.setOnFailed(event -> sheetNotChanged(run, change));
         changingSheet = true;
         refreshActions();
-        Thread worker = new Thread(change, "gradezzy-score-sheet");
+        Thread worker = new Thread(change, SHEET_THREAD);
         worker.setDaemon(true);
         worker.start();
     }
@@ -796,12 +836,16 @@ public class ExportScreen extends FlowScreen {
             String itemUser = item.getUsername().toLowerCase();
             if (itemUser.equals(wanted)) {
                 return true;
-            } else if (itemUser.isEmpty()
-                    && item.getName().toLowerCase().contains(wanted)) {
+            } else if (itemUser.isEmpty() && nameHas(item, wanted)) {
                 return true;
             }
         }
         return false;
+    }
+
+    // Says whether a file's name holds a lower case username.
+    private boolean nameHas(ImportItem item, String wanted) {
+        return item.getName().toLowerCase().contains(wanted);
     }
 
     // Adds "N reason" to the reasons when the count is above zero.
@@ -848,8 +892,9 @@ public class ExportScreen extends FlowScreen {
         for (Submission submission : run.getSubmissions()) {
             // Only students with a total can be exported
             if (ResultState.hasTotal(submission)) {
-                CheckBox box = new CheckBox(Students.name(submission) + "  ·  "
-                        + Parts.mark(submission.getTotalScore()) + " / "
+                CheckBox box = new CheckBox(Students.name(submission)
+                        + PICKER_SEPARATOR
+                        + Parts.mark(submission.getTotalScore()) + OUT_OF
                         + Parts.mark(run.getAssessment().getMaxTotal()));
                 box.setSelected(picked.contains(submission));
                 box.setAccessibleText("Export " + Students.name(submission));
@@ -919,10 +964,11 @@ public class ExportScreen extends FlowScreen {
         figures.getChildren().clear();
         MarkStats stats = null;
         if (run != null) {
+            String passSetting = getBackend().getSetting(
+                    ConfigKeys.PASS_MARK_PERCENT);
+            double passPercent = MarkStats.parsePassPercent(passSetting);
             stats = MarkStats.of(run.getSubmissions(),
-                    run.getAssessment().getMaxTotal(),
-                    MarkStats.parsePassPercent(getBackend().getSetting(
-                    ConfigKeys.PASS_MARK_PERCENT)));
+                    run.getAssessment().getMaxTotal(), passPercent);
         }
         boolean empty = stats == null || stats.isEmpty();
         glance.setVisible(!empty);
@@ -934,18 +980,20 @@ public class ExportScreen extends FlowScreen {
             return;
         }
         chart.setStats(stats);
-        String max = "/ " + Parts.mark(stats.getMaxTotal());
+        String max = MAX_PREFIX + Parts.mark(stats.getMaxTotal());
         double mean = Math.round(stats.getMean() * ONE_DECIMAL)
                 / ONE_DECIMAL;
         HBox first = figure("Average", Parts.mark(mean), max);
         first.getStyleClass().add("first");
         HBox last = figure("Highest", Parts.mark(stats.getHighest()), max);
         last.getStyleClass().add("last");
+        String passName = "Passed (pass mark "
+                + Parts.mark(stats.getPassMark()) + ")";
+        long passPercent = Math.round(stats.getPassRate() * PERCENT);
+        String passRate = passPercent + Parts.PERCENT_SIGN;
         figures.getChildren().addAll(first,
                 figure("Median", Parts.mark(stats.getMedian()), max),
-                figure("Passed (pass mark " + Parts.mark(stats.getPassMark())
-                + ")", Math.round(stats.getPassRate() * PERCENT)
-                + "%", null), last);
+                figure(passName, passRate, null), last);
     }
 
     // Builds one row of the figure list: the name on the left and the
@@ -977,8 +1025,9 @@ public class ExportScreen extends FlowScreen {
             checksFromGrading = getState().getGradingCount();
         }
         SimilarityCheck check = checks.get(run.getId());
-        if (check != null && check.getRun() == run
-                && check.getState() != Worker.State.SUCCEEDED) {
+        boolean unfinished = check != null && check.getRun() == run
+                && check.getState() != Worker.State.SUCCEEDED;
+        if (unfinished) {
             showCheck(check);
             return;
         }
@@ -992,7 +1041,7 @@ public class ExportScreen extends FlowScreen {
         check.setOnSucceeded(event -> showCheck(check));
         check.setOnFailed(event -> showCheck(check));
         checks.put(run.getId(), check);
-        Thread worker = new Thread(check, "gradezzy-similarity");
+        Thread worker = new Thread(check, SIMILARITY_THREAD);
         worker.setDaemon(true);
         worker.start();
         return check;
@@ -1011,17 +1060,19 @@ public class ExportScreen extends FlowScreen {
     // Does nothing when another run or a newer check is shown since.
     private void showCheck(SimilarityCheck check) {
         GradingRun run = getState().getRun();
-        if (!similar.isVisible() || run != check.getRun()
-                || checks.get(run.getId()) != check) {
+        boolean outdated = !similar.isVisible() || run != check.getRun()
+                || checks.get(run.getId()) != check;
+        if (outdated) {
             return;
         }
         if (check.getState() == Worker.State.SUCCEEDED) {
             showPairs(run, check.getValue());
         } else if (check.getState() == Worker.State.FAILED) {
-            similar.getChildren().setAll(Parts.title("Similar code"),
-                    Parts.muted("The check for similar code did not "
-                    + "finish."), Parts.link("Try again",
-                    () -> checkAgain()));
+            Label failed = Parts.muted("The check for similar code did not "
+                    + "finish.");
+            Hyperlink retry = Parts.link("Try again", () -> checkAgain());
+            similar.getChildren().setAll(Parts.title("Similar code"), failed,
+                    retry);
         } else {
             similar.getChildren().setAll(Parts.title("Similar code"),
                     Parts.muted("Comparing the students' answers. This "
@@ -1066,19 +1117,20 @@ public class ExportScreen extends FlowScreen {
 
     // Builds one row of the similar code card.
     private HBox pairRow(GradingRun run, SimilarityPair pair) {
-        Label names = Parts.strong(SimilaritySheet.nameOf(run,
-                pair.getFirstUsername()) + " and "
-                + SimilaritySheet.nameOf(run, pair.getSecondUsername()));
+        String first = SimilaritySheet.nameOf(run, pair.getFirstUsername());
+        String second = SimilaritySheet.nameOf(run,
+                pair.getSecondUsername());
+        Label names = Parts.strong(first + " and " + second);
         names.setMinWidth(0);
         Label question = Parts.muted(pair.getQuestionId());
         question.setMinWidth(Label.USE_PREF_SIZE);
         Node grow = Parts.grow();
-        Label similar = SimilaritySheet.similarityPill(pair);
+        Label similarPill = SimilaritySheet.similarityPill(pair);
         HBox row = Parts.row(Parts.GAP,
-                new Node[] {names, question, grow, similar});
+                new Node[] {names, question, grow, similarPill});
         if (getBackend().supports(Capability.SIMILARITY_DETAIL)) {
-            Hyperlink compare = Parts.link("Compare", () -> compare(run,
-                    pair));
+            Hyperlink compare = Parts.link("Compare",
+                    () -> compare(run, pair));
             compare.setMinWidth(LINK_WIDTH);
             compare.setPrefWidth(LINK_WIDTH);
             compare.setAlignment(Pos.CENTER_RIGHT);
@@ -1154,7 +1206,8 @@ public class ExportScreen extends FlowScreen {
     // once the instructor confirms.
     private void export() {
         GradingRun run = getState().getRun();
-        if (run == null || exporting || changingSheet) {
+        boolean blocked = run == null || exporting || changingSheet;
+        if (blocked) {
             return;
         }
         List<Submission> scope = chooseScope(run);
@@ -1162,8 +1215,9 @@ public class ExportScreen extends FlowScreen {
         int total = run.getSubmissions().size();
         String who = "every student";
         if (count < total) {
+            int others = total - count;
             who = "the " + count + " chosen students ("
-                    + listNames(scope) + "). The other " + (total - count)
+                    + listNames(scope) + "). The other " + others
                     + " rows of the score sheet are left as they are";
         }
         String detail = "The marks of " + who + " are filled into a copy "
@@ -1227,10 +1281,11 @@ public class ExportScreen extends FlowScreen {
         }
 
         int count = files.size();
-        String last = files.remove(count - 1);
+        int lastIndex = count - 1;
+        String last = files.remove(lastIndex);
         String text = last;
         if (!files.isEmpty()) {
-            text = TextUtils.join(", ", files) + " and " + last;
+            text = TextUtils.join(LIST_SEPARATOR, files) + " and " + last;
         }
         String first = text.substring(0, 1).toUpperCase(Locale.ROOT);
         return " " + first + text.substring(1) + " "
@@ -1247,9 +1302,10 @@ public class ExportScreen extends FlowScreen {
                 shown++;
             }
         }
-        String text = TextUtils.join(", ", names);
+        String text = TextUtils.join(LIST_SEPARATOR, names);
         if (scope.size() > shown) {
-            text += " and " + (scope.size() - shown) + " more";
+            int more = scope.size() - shown;
+            text += " and " + more + " more";
         }
         return text;
     }
@@ -1271,7 +1327,8 @@ public class ExportScreen extends FlowScreen {
     // mode writes on a background thread; the demo writes no file.
     private void exportNow(List<Submission> scope) {
         GradingRun run = getState().getRun();
-        if (run == null || exporting || changingSheet) {
+        boolean blocked = run == null || exporting || changingSheet;
+        if (blocked) {
             return;
         }
         ExportJob job = new ExportJob(getBackend(), run, scope,
@@ -1286,7 +1343,7 @@ public class ExportScreen extends FlowScreen {
         job.setOnFailed(event -> exportFailed(run, job));
         exporting = true;
         refreshActions();
-        Thread worker = new Thread(job, "gradezzy-export");
+        Thread worker = new Thread(job, EXPORT_THREAD);
         worker.setDaemon(true);
         worker.start();
     }

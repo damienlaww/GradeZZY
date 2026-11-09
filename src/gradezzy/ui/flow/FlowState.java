@@ -28,8 +28,13 @@ import gradezzy.ui.backend.InputKind;
 
 /**
  * The shared state of the guided window.
+ *
+ * <p>Tier: SHOULD.
  */
 public class FlowState {
+
+    // Separates the module and section in a key such as CS102/G2
+    private static final String KEY_SEPARATOR = "/";
 
     // The chosen module, such as CS102
     private String moduleCode = "";
@@ -164,7 +169,7 @@ public class FlowState {
 
     // Names the chosen module and section, such as CS102/G2.
     private String sectionKey() {
-        return moduleCode + "/" + sectionCode;
+        return moduleCode + KEY_SEPARATOR + sectionCode;
     }
 
     // Keeps each section's chosen submissions apart: after the module or
