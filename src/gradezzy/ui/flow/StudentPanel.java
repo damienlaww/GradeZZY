@@ -101,6 +101,9 @@ public class StudentPanel extends ScrollPane {
     // True while a card is built for the code sheet, not the panel
     private boolean buildingForSheet = false;
 
+    // Keeps or rejects the same kind of fix of other students together
+    private final SameFixes sameFixes;
+
     /**
      * Creates an empty panel.
      *
@@ -113,6 +116,7 @@ public class StudentPanel extends ScrollPane {
         this.window = window;
         this.onChanged = onChanged;
         this.onClosed = onClosed;
+        this.sameFixes = new SameFixes(window, () -> changed());
         getStyleClass().add("student-panel");
         body.getStyleClass().add("student-panel-body");
         setContent(body);
@@ -551,21 +555,18 @@ public class StudentPanel extends ScrollPane {
     private VBox createFixCard(RepairItem repair, DashboardBackend backend) {
         Anomaly anomaly = repair.getAnomaly();
         FixStatus status = anomaly.getFixStatus();
-        Label tag;
-        String title = Problems.fixedTitle(anomaly.getType());
+        Label tag = Parts.pill("Checked", Tone.NEUTRAL);
+        String title = Problems.title(anomaly.getType());
         if (status == FixStatus.APPROVED) {
             tag = Parts.pill("Fix kept", Tone.GOOD);
+            title = Problems.fixedTitle(anomaly.getType());
         } else if (status == FixStatus.UNDONE) {
             tag = Parts.pill("Fix rejected", Tone.NEUTRAL);
-            title = Problems.title(anomaly.getType());
         } else if (status == FixStatus.APPLIED) {
             tag = Parts.pill("Fixed for you", Tone.WARN);
+            title = Problems.fixedTitle(anomaly.getType());
         } else if (backend.needsReview(anomaly)) {
             tag = Parts.pill("Could not fix", Tone.BAD);
-            title = Problems.title(anomaly.getType());
-        } else {
-            tag = Parts.pill("Checked", Tone.NEUTRAL);
-            title = Problems.title(anomaly.getType());
         }
         VBox card = createCard(tag, title, anomaly);
 
@@ -598,7 +599,7 @@ public class StudentPanel extends ScrollPane {
                     Parts.small("Reject fix",
                     () -> rejectRepair(backend, repair), Tone.BAD));
         } else if (status == FixStatus.UNDONE
-                && UndoFixJob.canApplyAgain(backend)) {
+                && UndoFixJob.canApplyAgain(backend, anomaly)) {
             Button again = Parts.small("Apply fix again",
                     () -> reapplyRepair(backend, repair));
             Parts.tip(again, "Grades the student again with this fix.");
@@ -736,15 +737,23 @@ public class StudentPanel extends ScrollPane {
         }
         FixStatus status = anomaly.getFixStatus();
         return status == FixStatus.APPLIED || (status == FixStatus.UNDONE
-                && UndoFixJob.canApplyAgain(backend));
+                && UndoFixJob.canApplyAgain(backend, anomaly));
     }
 
     // Says, in place of the buttons, that a fix is being undone or
     // applied again.
     private void addFixJobNote(VBox card, Anomaly anomaly) {
+        FlowState state = window.getState();
         String text = "Wait until the other fix has finished.";
-        boolean running = anomaly == window.getState().getFixInProgress();
-        if (running && anomaly.getFixStatus() == FixStatus.UNDONE) {
+        if (state.countFixesInProgress() > 1) {
+            text = "Wait until the other fixes have finished.";
+        }
+        boolean running = anomaly == state.getFixInProgress();
+        if (!running && state.isFixInProgress(anomaly)) {
+            text = "Waiting its turn: this fix is undone and the student "
+                    + "graded again after the ones before it. You can keep "
+                    + "reviewing.";
+        } else if (running && anomaly.getFixStatus() == FixStatus.UNDONE) {
             text = "Applying the fix again and grading this student again. "
                     + "This can take a minute; you can keep reviewing.";
         } else if (running) {
@@ -899,13 +908,11 @@ public class StudentPanel extends ScrollPane {
         boolean flag = Problems.isFlag(anomaly.getType());
         ReviewDecision decision = backend.getDecision(anomaly);
         boolean open = backend.needsReview(anomaly);
-        Label tag;
+        Label tag = Parts.pill("Problem", Tone.BAD);
         if (!open) {
             tag = Parts.pill(decisionWords(decision, flag), Tone.NEUTRAL);
         } else if (flag) {
             tag = Parts.pill("Flag", Tone.WARN);
-        } else {
-            tag = Parts.pill("Problem", Tone.BAD);
         }
         VBox card = createCard(tag, Problems.title(anomaly.getType()),
                 anomaly);
@@ -1072,12 +1079,25 @@ public class StudentPanel extends ScrollPane {
     }
 
     /**
-     * Approves a fix made for the student.
+     * Approves a fix made for the student. When other students have the
+     * same kind of fix waiting, asks first whether to keep them too.
      *
      * @param backend the backend that keeps the fixes
      * @param repair the fix
      */
     private void approveRepair(DashboardBackend backend, RepairItem repair) {
+        List<RepairItem> others = SameFixes.find(backend,
+                window.getState().getRun(), repair);
+        if (others.isEmpty()) {
+            keepRepair(backend, repair);
+            return;
+        }
+        sameFixes.askKeep(repair, others,
+                () -> keepRepair(backend, repair));
+    }
+
+    // Approves just this fix, and offers Undo.
+    private void keepRepair(DashboardBackend backend, RepairItem repair) {
         ActionResult result = backend.approveRepair(repair);
         apply(result, false);
         if (result.isDone()
@@ -1106,14 +1126,26 @@ public class StudentPanel extends ScrollPane {
     }
 
     /**
-     * Undoes a fix made for the student. Live mode grades the student
-     * again, so it runs on a background thread and the card says so
-     * until it ends.
+     * Undoes a fix made for the student. When other students have the
+     * same kind of fix waiting, asks first whether to reject them too.
      *
      * @param backend the backend that keeps the fixes
      * @param repair the fix
      */
     private void rejectRepair(DashboardBackend backend, RepairItem repair) {
+        List<RepairItem> others = SameFixes.find(backend,
+                window.getState().getRun(), repair);
+        if (others.isEmpty()) {
+            rejectOne(backend, repair);
+            return;
+        }
+        sameFixes.askReject(repair, others,
+                () -> rejectOne(backend, repair));
+    }
+
+    // Undoes just this fix. Live mode grades the student again, so it
+    // runs on a background thread and the card says so until it ends.
+    private void rejectOne(DashboardBackend backend, RepairItem repair) {
         if (backend.isDemo()) {
             apply(backend.rejectRepair(repair), false);
             return;

@@ -45,7 +45,7 @@ public final class GradingSettingsSheet {
     public static void open(FlowWindow window, Runnable onSaved) {
         List<SettingField> fields = new ArrayList<>();
         fields.add(listed(window, ConfigKeys.RUN_TIMEOUT_SECONDS,
-                "Time limit per test", "A tester that runs longer is "
+                "Time limit per test run", "A tester that runs longer is "
                 + "stopped.", SettingsScreen.RUN_SECONDS, " seconds"));
         fields.add(listed(window, ConfigKeys.COMPILE_TIMEOUT_SECONDS,
                 "Compile time limit", "For one question folder.",

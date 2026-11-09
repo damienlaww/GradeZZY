@@ -112,7 +112,9 @@ public class SectionView {
     // The most compile errors listed
     private static final int MOST_ERRORS = 5;
 
-    // Statuses in the order the ring and legend show them
+    // The grid column of the pass rate, after id, bar and average
+    private static final int PASS_COLUMN = 3;
+
     // The style class that colours each status in STATE_ORDER, so no
     // two problems share a colour
     private static final String[] STATE_COLOURS = {"good", "zero", "warn",
@@ -146,6 +148,7 @@ public class SectionView {
     private static final double FAILED_NAME_WIDTH = 96.0;
     private static final double FAILED_BAR_MIN = 60.0;
 
+    // Statuses in the order the ring and legend show them
     private static final ResultState[] STATE_ORDER = {
         ResultState.COMPLETED, ResultState.ZERO, ResultState.NEEDS_REVIEW,
         ResultState.COMPILE_ERROR, ResultState.TIMED_OUT,
@@ -590,7 +593,7 @@ public class SectionView {
         table.addRow(0, headLabel("Question"), headLabel("Average mark"),
                 headLabel("Average"));
         if (withPass) {
-            table.add(headLabel("Passed"), 3, 0);
+            table.add(headLabel("Passed"), PASS_COLUMN, 0);
         }
         table.getRowConstraints().add(rowHeight(QUESTION_HEAD_HEIGHT));
     }
@@ -616,7 +619,7 @@ public class SectionView {
             }
             Label pass = Parts.muted(text);
             pass.setMinWidth(Region.USE_PREF_SIZE);
-            table.add(pass, 3, row);
+            table.add(pass, PASS_COLUMN, row);
         }
         table.getRowConstraints().add(rowHeight(QUESTION_ROW_HEIGHT));
     }
@@ -702,13 +705,11 @@ public class SectionView {
             count.setMinWidth(Region.USE_PREF_SIZE);
             HBox row = Parts.row(Parts.GAP, new Node[] {words, count});
             row.getStyleClass().add("card-row");
-            if (index == 0) {
-                row.getStyleClass().add("first");
-            }
-            if (index == shown - 1) {
-                row.getStyleClass().add("last");
-            }
             list.getChildren().add(row);
+        }
+        if (shown > 0) {
+            list.getChildren().get(0).getStyleClass().add("first");
+            list.getChildren().get(shown - 1).getStyleClass().add("last");
         }
         return card(Parts.title("Common compile errors"), list);
     }

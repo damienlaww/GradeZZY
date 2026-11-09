@@ -141,22 +141,6 @@ public class TokenSimilarityDetector implements SimilarityDetector {
         return pairs;
     }
 
-    /**
-     * Measures how alike two source texts are.
-     *
-     * @param firstSource the first source
-     * @param secondSource the second source
-     * @return the similarity, from 0 to 1
-     */
-    public double similarity(String firstSource, String secondSource) {
-        if (firstSource == null || secondSource == null) {
-            return NO_SIMILARITY;
-        }
-
-        return jaccard(buildTrigrams(firstSource),
-                buildTrigrams(secondSource));
-    }
-
     // Finds the pairs of students whose new code for a question is alike.
     private List<SimilarityPair> compareQuestion(List<Submission> submissions,
             Assessment assessment, Question question, Path starter,

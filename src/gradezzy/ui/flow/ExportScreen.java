@@ -3,7 +3,8 @@
  *
  * Purpose: Step 4. Shows the results at a glance (a small bell curve,
  * the average, median, pass rate and highest mark), exports the score
- * sheet and the JSON file, and lists similar code when that check is on.
+ * sheet, the JSON file and the reports, and lists similar code when
+ * that check is on.
  *
  * Where it fits: Replaces the old Statistics and Similarity Review
  * screens and the export buttons of Results. The figures come from
@@ -17,6 +18,7 @@ package gradezzy.ui.flow;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import javafx.concurrent.Worker;
@@ -42,12 +44,17 @@ import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.plagiarism.SimilarityPair;
+import gradezzy.report.AnomalyReportExporter;
+import gradezzy.report.AuditLogExporter;
+import gradezzy.report.JsonExporter;
+import gradezzy.report.StudentReportExporter;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.ResultState;
+import gradezzy.ui.backend.RunRecord;
 import gradezzy.ui.backend.StatusCounts;
 import gradezzy.util.TextUtils;
 
@@ -84,6 +91,9 @@ public class ExportScreen extends FlowScreen {
     // How many ticked students the export question names
     private static final int NAMES_IN_CONFIRM = 3;
 
+    // The gap between the export choices
+    private static final double CHOICE_GAP = 10.0;
+
     // The scrolling page
     private final ScrollPane view;
 
@@ -97,7 +107,7 @@ public class ExportScreen extends FlowScreen {
     private final VBox figures = new VBox();
 
     // The chart and figures, or a note when nobody is graded
-    private final HBox glance = Parts.row(Parts.GAP + Parts.GAP_SMALL / 2);
+    private final HBox glance = Parts.row(Parts.GAP + Parts.GAP_TINY);
 
     // Shown instead of the chart when nobody is graded
     private final Label noMarks = Parts.muted("No student has a mark "
@@ -114,11 +124,23 @@ public class ExportScreen extends FlowScreen {
             () -> openPicker());
 
     // The ticked choice and its reason
-    private final VBox tickedRow = new VBox(Parts.GAP_SMALL / 2);
+    private final VBox tickedRow = new VBox(Parts.GAP_TINY);
 
     // Also write the JSON file
     private final CheckBox json = new CheckBox(
             "Also save a JSON file with every question and test");
+
+    // Also write one CSV row per problem found in each submission
+    private final CheckBox problemReport = new CheckBox(
+            "Also save a list of the problems found");
+
+    // Also write one text file with a report on each student
+    private final CheckBox studentReport = new CheckBox(
+            "Also save a report on each student");
+
+    // Also write the activity log
+    private final CheckBox activityLog = new CheckBox(
+            "Also save the activity log");
 
     // Where the files are saved
     private final Label savedTo = Parts.muted("");
@@ -152,6 +174,9 @@ public class ExportScreen extends FlowScreen {
 
     // What the score sheet will get, under its title
     private final VBox outcome = new VBox(Parts.GAP_SMALL);
+
+    // Says when another run of the section holds students this one lacks
+    private final HBox otherRunNote = Parts.row(Parts.GAP_SMALL);
 
     // The three counts of "What the score sheet will get"
     private final Label filledCount = new Label();
@@ -296,8 +321,8 @@ public class ExportScreen extends FlowScreen {
         json.setSelected(true);
         tickedReason.getStyleClass().addAll("small-text", "choice-reason");
         tickedRow.getChildren().addAll(tickedOnly, tickedReason);
-        VBox choices = new VBox(Parts.GAP_SMALL + 2, everyone, tickedRow,
-                json);
+        VBox choices = new VBox(CHOICE_GAP, everyone, tickedRow,
+                json, problemReport, studentReport, activityLog);
         choices.getStyleClass().add("export-choices");
 
         Label about = Parts.muted("Your score sheet with each student's "
@@ -320,7 +345,7 @@ public class ExportScreen extends FlowScreen {
         suggestionName.getStyleClass().addAll("sheet-suggestion-text",
                 "sheet-suggestion-name");
         suggestionDetail.getStyleClass().add("sheet-suggestion-text");
-        VBox words = new VBox(Parts.GAP_SMALL / 2, warningTitle,
+        VBox words = new VBox(Parts.GAP_TINY, warningTitle,
                 warningText, suggestionLine);
         words.setMinWidth(0);
         HBox.setHgrow(words, Priority.ALWAYS);
@@ -348,8 +373,10 @@ public class ExportScreen extends FlowScreen {
         HBox.setHgrow(offCell, Priority.ALWAYS);
         offCell.setMaxWidth(Double.MAX_VALUE);
         cells.getStyleClass().add("outcome-cells");
+        otherRunNote.setVisible(false);
+        otherRunNote.setManaged(false);
         outcome.getChildren().addAll(sectionLabel(
-                "What the score sheet will get"), cells);
+                "What the score sheet will get"), cells, otherRunNote);
         outcome.setVisible(false);
         outcome.setManaged(false);
         return outcome;
@@ -503,6 +530,7 @@ public class ExportScreen extends FlowScreen {
         offCell.setManaged(offSheet > 0);
         showOutcome(true);
         refreshWarning(run, filled, offSheet, missing.size());
+        refreshOtherRun(run, filled + failed + waiting + notTicked, missing);
 
         blankSummary = Parts.plural(filled, "mark") + " filled";
         if (blank == 0) {
@@ -515,6 +543,78 @@ public class ExportScreen extends FlowScreen {
             blankSummary = blankSummary + " " + offSheet + " not on the "
                     + "score sheet.";
         }
+    }
+
+    // Says when another run of this section has students this run lacks.
+    private void refreshOtherRun(GradingRun run, int inRun,
+            List<Student> missing) {
+        otherRunNote.getChildren().clear();
+        int more = 0;
+        if (!missing.isEmpty() && run.getSection() != null) {
+            more = countInOtherRun(run, missing);
+        }
+        boolean shown = more > 0;
+        otherRunNote.setVisible(shown);
+        otherRunNote.setManaged(shown);
+        if (!shown) {
+            return;
+        }
+        int onSheet = inRun + missing.size();
+        Label text = Parts.muted("This run has " + inRun + " of " + onSheet
+                + " students. Another " + run.getSection().getSectionCode()
+                + " run has " + more + " more.");
+        text.setWrapText(true);
+        text.setMinWidth(0);
+        otherRunNote.getChildren().addAll(Parts.pill(
+                "Not the whole section", Tone.WARN), text);
+    }
+
+    // Counts the missing students graded in the other run that has most.
+    private int countInOtherRun(GradingRun run, List<Student> missing) {
+        int most = 0;
+        for (RunRecord record : getBackend().listRuns()) {
+            GradingRun other = record.getRun();
+            if (isOtherRunOfSection(run, other)) {
+                int found = countIn(other, missing);
+                if (found > most) {
+                    most = found;
+                }
+            }
+        }
+        return most;
+    }
+
+    // Says whether a run is another run of the same module and section.
+    private boolean isOtherRunOfSection(GradingRun run, GradingRun other) {
+        if (other == null || other.getSection() == null
+                || other.getId().equals(run.getId())) {
+            return false;
+        }
+        return other.getSection().getModuleCode().equals(
+                run.getSection().getModuleCode())
+                && other.getSection().getSectionCode().equals(
+                run.getSection().getSectionCode());
+    }
+
+    // Counts the students with a submission in a run.
+    private int countIn(GradingRun other, List<Student> students) {
+        int count = 0;
+        for (Student student : students) {
+            if (hasSubmission(other, student.getUsername())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Says whether a run has a submission of a username.
+    private boolean hasSubmission(GradingRun other, String username) {
+        for (Submission submission : other.getSubmissions()) {
+            if (username.equalsIgnoreCase(submission.getUsername())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Shows or hides "What the score sheet will get" and the warning.
@@ -633,13 +733,18 @@ public class ExportScreen extends FlowScreen {
             sheetChanged(run, change.changeNow());
             return;
         }
-        change.setOnSucceeded(event -> sheetChanged(run, change.getValue()));
+        change.setOnSucceeded(event -> sheetChangeDone(run, change));
         change.setOnFailed(event -> sheetNotChanged(run, change));
         changingSheet = true;
         refreshActions();
         Thread worker = new Thread(change, "gradezzy-score-sheet");
         worker.setDaemon(true);
         worker.start();
+    }
+
+    // Shows the outcome of a change of score sheet that finished.
+    private void sheetChangeDone(GradingRun run, ScoreSheetChange change) {
+        sheetChanged(run, change.getValue());
     }
 
     // Shows why a change of score sheet stopped before it finished.
@@ -941,17 +1046,14 @@ public class ExportScreen extends FlowScreen {
                 + "read both before deciding.");
         about.setWrapText(true);
         VBox rows = new VBox();
-        for (int index = 0; index < pairs.size(); index++) {
-            HBox row = pairRow(run, pairs.get(index));
+        for (SimilarityPair pair : pairs) {
+            HBox row = pairRow(run, pair);
             row.getStyleClass().add("card-row");
-            if (index == 0) {
-                row.getStyleClass().add("first");
-            }
-            if (index == pairs.size() - 1) {
-                row.getStyleClass().add("last");
-            }
             rows.getChildren().add(row);
         }
+        int lastRow = rows.getChildren().size() - 1;
+        rows.getChildren().get(0).getStyleClass().add("first");
+        rows.getChildren().get(lastRow).getStyleClass().add("last");
         similar.getChildren().addAll(about, rows);
     }
 
@@ -1059,10 +1161,7 @@ public class ExportScreen extends FlowScreen {
         String detail = "The marks of " + who + " are filled into a copy "
                 + "of the score sheet for " + run.getSection().getLabel()
                 + ", saved in " + exportFolder() + ".";
-        if (json.isSelected()) {
-            detail += " A JSON file with every question and test is saved "
-                    + "beside it.";
-        }
+        detail += describeOtherFiles();
         int open = countNeedingReview(scope);
         if (open > 0) {
             detail += " Still needing a look: "
@@ -1074,19 +1173,67 @@ public class ExportScreen extends FlowScreen {
                 "Export " + students, () -> exportNow(scope));
     }
 
+    // Lists the format names of the files chosen besides the CSV, in the
+    // order they are written.
+    private List<String> listOtherFormats() {
+        List<String> formats = new ArrayList<>();
+        if (json.isSelected()) {
+            formats.add(JsonExporter.FORMAT_NAME);
+        }
+        if (problemReport.isSelected()) {
+            formats.add(AnomalyReportExporter.FORMAT_NAME);
+        }
+        if (studentReport.isSelected()) {
+            formats.add(StudentReportExporter.FORMAT_NAME);
+        }
+        if (activityLog.isSelected()) {
+            formats.add(AuditLogExporter.FORMAT_NAME);
+        }
+        return formats;
+    }
+
+    // Says which files are saved beside the score sheet, for the export
+    // question, or "" when none is chosen.
+    private String describeOtherFiles() {
+        List<String> files = new ArrayList<>();
+        if (json.isSelected()) {
+            files.add("a JSON file with every question and test");
+        }
+        if (problemReport.isSelected()) {
+            files.add("a list of the problems found");
+        }
+        if (studentReport.isSelected()) {
+            files.add("a report on each student");
+        }
+        if (activityLog.isSelected()) {
+            files.add("the activity log");
+        }
+        if (files.isEmpty()) {
+            return "";
+        }
+
+        int count = files.size();
+        String last = files.remove(count - 1);
+        String text = last;
+        if (!files.isEmpty()) {
+            text = TextUtils.join(", ", files) + " and " + last;
+        }
+        String first = text.substring(0, 1).toUpperCase(Locale.ROOT);
+        return " " + first + text.substring(1) + " "
+                + isOrAre(count) + " saved beside it.";
+    }
+
     // Names up to three students, then says how many more.
     private String listNames(List<Submission> scope) {
-        String text = "";
+        List<String> names = new ArrayList<>();
         int shown = 0;
         for (Submission submission : scope) {
             if (shown < NAMES_IN_CONFIRM) {
-                if (!text.isEmpty()) {
-                    text += ", ";
-                }
-                text += Students.name(submission);
+                names.add(Students.name(submission));
                 shown++;
             }
         }
+        String text = TextUtils.join(", ", names);
         if (scope.size() > shown) {
             text += " and " + (scope.size() - shown) + " more";
         }
@@ -1106,28 +1253,34 @@ public class ExportScreen extends FlowScreen {
         return "are";
     }
 
-    // Writes the CSV and, if chosen, the JSON file. Live mode writes on a
-    // background thread; the demo writes no file.
+    // Writes the CSV and, if chosen, the JSON file and the reports. Live
+    // mode writes on a background thread; the demo writes no file.
     private void exportNow(List<Submission> scope) {
         GradingRun run = getState().getRun();
         if (run == null || exporting || changingSheet) {
             return;
         }
         ExportJob job = new ExportJob(getBackend(), run, scope,
-                json.isSelected());
+                listOtherFormats());
         // Only an export of every student marks the run as exported
         boolean wholeRun = scope.size() == run.getSubmissions().size();
         if (getBackend().isDemo()) {
             exportDone(run, wholeRun, job.exportNow());
             return;
         }
-        job.setOnSucceeded(event -> exportDone(run, wholeRun, job.getValue()));
+        job.setOnSucceeded(event -> exportFinished(run, wholeRun, job));
         job.setOnFailed(event -> exportFailed(run, job));
         exporting = true;
         refreshActions();
         Thread worker = new Thread(job, "gradezzy-export");
         worker.setDaemon(true);
         worker.start();
+    }
+
+    // Shows the outcome of an export that finished.
+    private void exportFinished(GradingRun run, boolean wholeRun,
+            ExportJob job) {
+        exportDone(run, wholeRun, job.getValue());
     }
 
     // Shows why an export stopped before it finished.

@@ -29,6 +29,8 @@ public final class ScoreFormatter {
 
     private static final String ZERO = "0";
 
+    private static final String DECIMAL_POINT = ".";
+
     // A utility class is never created
     private ScoreFormatter() {
     }
@@ -51,10 +53,10 @@ public final class ScoreFormatter {
 
         // Drop the zeros after the point, then the point itself. The
         // format always writes a point, so the loop stops there.
-        while (text.endsWith("0")) {
+        while (text.endsWith(ZERO)) {
             text = text.substring(0, text.length() - 1);
         }
-        if (text.endsWith(".")) {
+        if (text.endsWith(DECIMAL_POINT)) {
             text = text.substring(0, text.length() - 1);
         }
 

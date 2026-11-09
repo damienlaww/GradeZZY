@@ -874,8 +874,10 @@ public class GradingService {
             lastContext.getRoster().clear();
             lastContext.getRoster().addAll(roster);
         }
-        auditService.record(SCORE_SHEET_CHANGED, "Run " + gradingRun.getId()
-                + " now uses " + scoreSheetFile + ": " + onSheet + " of "
+        // Named by its section, as the instructor never sees a run's id
+        auditService.record(SCORE_SHEET_CHANGED, "The run of "
+                + gradingRun.getSection().getLabel() + " now uses "
+                + scoreSheetFile + ": " + onSheet + " of "
                 + gradingRun.getSubmissions().size() + " submission(s) are "
                 + "on it.");
         saveRun(gradingRun, true);
@@ -1040,7 +1042,7 @@ public class GradingService {
 
         auditService.record(STUDENTS_ADDED, "Grading "
                 + batchRun.getSubmissions().size() + " submission(s) into "
-                + gradingRun.getId() + " for "
+                + "the earlier run of "
                 + gradingRun.getSection().getLabel() + ".");
         saveRun(gradingRun, false);
 
@@ -1405,7 +1407,7 @@ public class GradingService {
                     + "switched off, so it cannot be resumed.");
         }
 
-        GradingRun savedRun;
+        GradingRun savedRun = null;
         try {
             savedRun = repository.loadRun(runId);
         } catch (PersistenceException exception) {

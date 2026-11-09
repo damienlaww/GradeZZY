@@ -17,12 +17,11 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -428,20 +427,22 @@ public class AssessmentLibrary {
     // Copies an assessment's settings into config.properties. Every value
     // is checked before any is changed, so a bad one changes nothing.
     private void apply(SavedAssessment chosen) throws IOException {
-        Map<String, String> values = toSettings(chosen);
+        List<String> keys = new ArrayList<>();
+        Map<String, String> values = new HashMap<>();
+        toSettings(chosen, keys, values);
         // A new question's settings must exist before they can be checked
-        for (String key : values.keySet()) {
+        for (String key : keys) {
             if (!config.hasKey(key)) {
                 config.setString(key, values.get(key));
             }
         }
-        for (String key : values.keySet()) {
+        for (String key : keys) {
             String problem = settings.validate(key, values.get(key));
             if (!problem.isEmpty()) {
                 throw new IllegalArgumentException(problem);
             }
         }
-        for (String key : values.keySet()) {
+        for (String key : keys) {
             settings.updateSetting(key, values.get(key));
         }
         settings.save();
@@ -449,32 +450,44 @@ public class AssessmentLibrary {
 
     // Lists an assessment's settings, the questions' own settings before
     // the list of ids, as SettingsService checks that each id has them.
-    private Map<String, String> toSettings(SavedAssessment assessment) {
-        Map<String, String> values = new LinkedHashMap<>();
+    // The keys go in order into keys and their values into values.
+    private void toSettings(SavedAssessment assessment, List<String> keys,
+            Map<String, String> values) {
         List<String> ids = new ArrayList<>();
         for (Question question : assessment.getQuestions()) {
             String id = question.getId().trim();
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
-            values.put(prefix + ConfigKeys.QUESTION_FOLDER_SUFFIX,
+            putSetting(keys, values, prefix
+                    + ConfigKeys.QUESTION_FOLDER_SUFFIX,
                     question.getFolderName().trim());
-            values.put(prefix + ConfigKeys.QUESTION_FILE_SUFFIX,
+            putSetting(keys, values, prefix
+                    + ConfigKeys.QUESTION_FILE_SUFFIX,
                     question.getFileName().trim());
             ids.add(id);
         }
-        values.put(ConfigKeys.QUESTION_IDS, joinList(ids));
-        values.put(ConfigKeys.ASSESSMENT_NAME, assessment.getName().trim());
-        values.put(ConfigKeys.TESTERS_DIR,
+        putSetting(keys, values, ConfigKeys.QUESTION_IDS, joinList(ids));
+        putSetting(keys, values, ConfigKeys.ASSESSMENT_NAME,
+                assessment.getName().trim());
+        putSetting(keys, values, ConfigKeys.TESTERS_DIR,
                 assessment.getTestersDirectory().trim());
-        values.put(ConfigKeys.STARTER_DIR,
+        putSetting(keys, values, ConfigKeys.STARTER_DIR,
                 assessment.getStarterDirectory().trim());
 
-        values.put(ConfigKeys.PROVIDED_CLASS_FILES,
+        putSetting(keys, values, ConfigKeys.PROVIDED_CLASS_FILES,
                 joinList(assessment.getProvidedClassFiles()));
-        values.put(ConfigKeys.TESTER_DATA_FILES,
+        putSetting(keys, values, ConfigKeys.TESTER_DATA_FILES,
                 joinList(assessment.getTesterDataFiles()));
-        values.put(ConfigKeys.PLACEHOLDER_FOLDER_NAMES,
+        putSetting(keys, values, ConfigKeys.PLACEHOLDER_FOLDER_NAMES,
                 joinList(assessment.getPlaceholderFolderNames()));
-        return values;
+    }
+
+    // Sets a value; a key seen before keeps its first place in the order.
+    private void putSetting(List<String> keys, Map<String, String> values,
+            String key, String value) {
+        if (!values.containsKey(key)) {
+            keys.add(key);
+        }
+        values.put(key, value);
     }
 
     // Reads every saved assessment that can be read.
@@ -554,8 +567,10 @@ public class AssessmentLibrary {
     private void write(SavedAssessment assessment, Path file)
             throws IOException {
         Properties values = new Properties();
-        Map<String, String> settingsOf = toSettings(assessment);
-        for (String key : settingsOf.keySet()) {
+        List<String> keys = new ArrayList<>();
+        Map<String, String> settingsOf = new HashMap<>();
+        toSettings(assessment, keys, settingsOf);
+        for (String key : keys) {
             values.setProperty(key, settingsOf.get(key));
         }
         // The module is kept in the file only; it is not a setting

@@ -18,6 +18,7 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.exec.ProcessExecutionException;
 import gradezzy.exec.ProcessResult;
 import gradezzy.exec.SkippedCaseException;
+import gradezzy.exec.TesterHarness;
 import gradezzy.exec.TesterRunner;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
@@ -53,6 +54,11 @@ public class ExecuteStage implements GradingStage {
     // What the instructor can do about a tester that ended with an error
     private static final String RUNTIME_ERROR_ACTION =
             "Open code and test output on Review to read the tester output.";
+
+    // What the instructor can do about a run that ended before its total
+    private static final String EARLY_EXIT_ACTION = "Read the test output "
+            + "on Review before accepting this mark: student code can end "
+            + "the run and leave passes that the tester never confirmed.";
 
     // What the instructor can do about a total its cases do not support
     private static final String TOTAL_TOO_HIGH_ACTION =
@@ -147,7 +153,8 @@ public class ExecuteStage implements GradingStage {
         }
 
         // As the brief says: a case that hangs is removed and the tester
-        // is run again, so the cases after it are still marked. Each pass
+        // is run again, so the cases after it are still marked. A case
+        // that crashes the whole tester is treated the same way. Each pass
         // skips one more case. Each rerun can take the whole time limit,
         // so after the setting's number of reruns the cases not yet run
         // are left to the instructor, as the brief allows.
@@ -162,7 +169,7 @@ public class ExecuteStage implements GradingStage {
         QuestionResult parsed = scoreParser.parse(question, run);
         int stoppedCase = findStoppedCase(run, parsed, skippedCases);
         while (stoppedCase != NO_CASE && skippedCases.size() < maxReruns) {
-            runLogs.add(labelRun(runLogs.size() + 1, stoppedCase,
+            runLogs.add(labelRun(runLogs.size() + 1, run, stoppedCase,
                     parsed.getOutput()));
             skippedCases.add(stoppedCase);
             putBackFiles(snapshot, question);
@@ -176,7 +183,7 @@ public class ExecuteStage implements GradingStage {
         if (runLogs.isEmpty()) {
             result.setOutput(parsed.getOutput());
         } else {
-            runLogs.add(labelRun(runLogs.size() + 1, stoppedCase,
+            runLogs.add(labelRun(runLogs.size() + 1, run, stoppedCase,
                     parsed.getOutput()));
             result.setOutput(fitRunLogs(runLogs, context.getConfig().getInt(
                     ConfigKeys.MAX_OUTPUT_CHARACTERS)));
@@ -223,10 +230,21 @@ public class ExecuteStage implements GradingStage {
                     "Check the loops in " + question.getFileName()
                     + ", then retry " + question.getId() + ".");
         } else if (firstRun.getExitCode() == TesterRunner.EARLY_EXIT_CODE) {
+            // The tester never printed its own total, so nothing confirms
+            // the passes: the mark stands, but the instructor is told
             addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
                     + question.getId() + " tester did not reach its end: "
                     + "the program was ended early, for example by "
                     + "System.exit in " + question.getFileName() + ". "
+                    + passCount(parsed) + " case(s) passed before it ended. "
+                    + "A run that ends early never prints the tester's "
+                    + "total, so these passes could not be checked against "
+                    + "it.", EARLY_EXIT_ACTION);
+        } else if (firstRun.getExitCode() == TesterHarness.CRASH_EXIT_CODE) {
+            addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
+                    + question.getId() + " tester stopped because a case "
+                    + "threw an error it cannot catch, such as a "
+                    + "StackOverflowError from recursion that never ends. "
                     + outcome, RUNTIME_ERROR_ACTION);
         } else if (firstRun.getExitCode() != SUCCESS_EXIT_CODE) {
             addAnomaly(submission, AnomalyType.RUNTIME_ERROR, "The "
@@ -237,11 +255,11 @@ public class ExecuteStage implements GradingStage {
     }
 
     /**
-     * Finds the test case that hung in a timed-out run: the last one
-     * started, if it has no result and was not already skipped. A skip
-     * that did not help, as with a tester whose header is outside its try
-     * block, is not tried twice. A run ended by a crash or System.exit is
-     * left as it is: the brief removes only cases that hang.
+     * Finds the test case that stopped the tester: in a run that timed
+     * out or crashed, the last one started, if it has no result and was
+     * not already skipped. A skip that did not help, as with a tester
+     * whose header is outside its try block, is not tried twice. A run
+     * the student's own System.exit ended is left as it is.
      *
      * @param run the finished run
      * @param parsed the parsed result of the run
@@ -251,7 +269,8 @@ public class ExecuteStage implements GradingStage {
     private int findStoppedCase(ProcessResult run, QuestionResult parsed,
             List<Integer> skippedCases) {
         List<TestCaseResult> cases = parsed.getTestCaseResults();
-        if (!run.isTimedOut() || cases.isEmpty()) {
+        boolean crashed = run.getExitCode() == TesterHarness.CRASH_EXIT_CODE;
+        if ((!run.isTimedOut() && !crashed) || cases.isEmpty()) {
             return NO_CASE;
         }
 
@@ -279,22 +298,23 @@ public class ExecuteStage implements GradingStage {
             numbers.add(String.valueOf(skippedCase));
         }
         return " Case(s) " + TextUtils.join(NAME_SEPARATOR, numbers)
-                + " hung, so they got no marks and the tester was run "
-                + "again for the cases after them.";
+                + " stopped the tester (a hang or a crash), so they got "
+                + "no marks and the tester was run again for the cases "
+                + "after them.";
     }
 
     /**
      * Says that the reruns ran out, for the end of a message.
      *
-     * @param stoppedCase the case the last run hung in, or NO_CASE
-     * @return a sentence with a space in front, or empty if none hung
+     * @param stoppedCase the case that stopped the last run, or NO_CASE
+     * @return a sentence with a space in front, or empty if none did
      */
     private String describeNotRun(int stoppedCase) {
         if (stoppedCase == NO_CASE) {
             return "";
         }
-        return " Case " + stoppedCase + " hung and the tester was not "
-                + "run again, so case " + stoppedCase + " and the cases "
+        return " Case " + stoppedCase + " stopped the tester and it was "
+                + "not run again, so case " + stoppedCase + " and the cases "
                 + "after it got no marks. Check them by hand.";
     }
 
@@ -302,16 +322,20 @@ public class ExecuteStage implements GradingStage {
      * Puts a label above the log of one run of a tester.
      *
      * @param runNumber the run, counted from 1
-     * @param stoppedCase the case the run hung in, or NO_CASE
+     * @param run the finished run
+     * @param stoppedCase the case that stopped the run, or NO_CASE
      * @param log the log of the run
      * @return the labelled log
      */
-    private String labelRun(int runNumber, int stoppedCase, String log) {
+    private String labelRun(int runNumber, ProcessResult run,
+            int stoppedCase, String log) {
         String label = "Run " + runNumber;
-        if (stoppedCase != NO_CASE) {
+        if (stoppedCase != NO_CASE && run.isTimedOut()) {
             label += ": stopped at the time limit in case " + stoppedCase;
+        } else if (stoppedCase != NO_CASE) {
+            label += ": crashed in case " + stoppedCase;
         }
-        return "--- " + label + " ---\n" + log;
+        return "--- " + label + " ---" + LINE_END + log;
     }
 
     /**

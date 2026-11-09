@@ -23,18 +23,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import javafx.scene.control.TreeItem;
-
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.config.ModuleSections;
 import gradezzy.exec.ProcessRunner;
 import gradezzy.exec.SourceCompiler;
 import gradezzy.fix.FixRecord;
+import gradezzy.grading.CompileStage;
 import gradezzy.grading.GradingException;
 import gradezzy.grading.ProgressListener;
 import gradezzy.grading.QuestionRerunner;
-import gradezzy.grading.CompileStage;
 import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.model.Anomaly;
@@ -59,6 +57,7 @@ import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.service.ClassFileMatcher;
+import gradezzy.service.ReapplyResult;
 import gradezzy.service.ScoreAdjustmentService;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.service.UndoResult;
@@ -176,8 +175,6 @@ public class LiveBackend implements DashboardBackend {
     public boolean supports(Capability capability) {
         return capability.isWired();
     }
-
-
 
     /**
      * Returns the module codes listed in config.properties.
@@ -346,8 +343,6 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public ImportItem inspect(InputKind kind, Path path) {
-        String name = String.valueOf(path.getFileName());
-
         if (kind == InputKind.SUBMISSION) {
             return inspectSubmission(path);
         }
@@ -356,6 +351,7 @@ public class LiveBackend implements DashboardBackend {
             if (!InputValidator.isReadableFile(path)) {
                 return unreadable(kind, path);
             }
+            String name = String.valueOf(path.getFileName());
             if (!name.toLowerCase().endsWith(CSV_EXTENSION)) {
                 return new ImportItem(kind, path, "", ImportState.INVALID,
                         "Choose the score sheet CSV file.");
@@ -564,6 +560,38 @@ public class LiveBackend implements DashboardBackend {
                 batch.getSinglePath(InputKind.ROSTER),
                 findUsableStarter(batch));
         runInBackground(task, callback, Capability.IMPORT_AND_GRADE);
+    }
+
+    /**
+     * Calls GradingService.findNewestRun. A run with no students has
+     * nothing to join, so it gives null.
+     */
+    @Override
+    public GradingRun findRunToJoin(Section section) {
+        if (section == null) {
+            return null;
+        }
+        GradingRun run = services.getGradingService().findNewestRun(
+                section.getModuleCode(), section.getSectionCode());
+        if (run == null || run.getSubmissions().isEmpty()) {
+            return null;
+        }
+        return run;
+    }
+
+    /**
+     * Starts GradingService.addToRun in a GradingTask. The service refuses
+     * a tester folder or score sheet that is not the run's, and says why.
+     */
+    @Override
+    public void addToRun(GradingRun gradingRun, ImportBatch batch,
+            ProgressListener listener, RunCallback callback) {
+        GradingTask task = new GradingTask(services.getGradingService(),
+                gradingRun, batch.getSubmissionPaths(),
+                createTestCaseSource(batch), listener,
+                batch.getSinglePath(InputKind.ROSTER));
+        setRunGradedAgain(gradingRun.getId());
+        runInBackground(task, callback, Capability.LATE_BATCH);
     }
 
     /**
@@ -817,13 +845,51 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet until the service can apply a rejected
-     * fix again.
+     * Calls AnomalyService.canReapplyFix.
+     */
+    @Override
+    public boolean canReapplyRepair(Anomaly anomaly) {
+        return services.getAnomalyService().canReapplyFix(anomaly);
+    }
+
+    /**
+     * Calls AnomalyService.reapplyFix, which grades the student again
+     * with the fix, and says what the marks became.
      */
     @Override
     public ActionResult reapplyRepair(RepairItem repair) {
-        // Waits for AnomalyService.reapplyFix (Jing Yuan)
-        return ActionResult.notConnected(Capability.REAPPLY_FIX);
+        Anomaly anomaly = repair.getAnomaly();
+        if (!canReapplyRepair(anomaly)) {
+            return ActionResult.failed(explainReapplyFailure(anomaly));
+        }
+
+        GradingRun run = findSessionRunWith(anomaly);
+        ReapplyResult reapplied =
+                services.getAnomalyService().reapplyFix(anomaly);
+        forgetSavedRuns();
+        if (reapplied == null) {
+            return ActionResult.failed(explainReapplyFailure(anomaly));
+        }
+        if (!reapplied.getProblem().isEmpty()) {
+            return ActionResult.failed(reapplied.getMessage());
+        }
+        return ActionResult.done(reapplied.getMessage()
+                + " It waits for you to keep or reject it."
+                + checkAfterUndo(run));
+    }
+
+    // Explains why a rejected fix cannot be applied again.
+    private String explainReapplyFailure(Anomaly anomaly) {
+        String start = "The fix for " + anomaly.getUsername()
+                + " was not applied again. ";
+        if (anomaly.getFixStatus() != FixStatus.UNDONE) {
+            return start + "Only a rejected fix can be applied again.";
+        }
+        if (services.getGradingService().isGrading()) {
+            return start + "Wait until grading has finished.";
+        }
+        return start + "GradeZZY can only apply again a fix rejected "
+                + "since it was opened, or in a run resumed since.";
     }
 
     // Grading the student again cleared their Similar code flags, so the
@@ -870,7 +936,7 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns Not connected yet: no service returns a fix to Applied.
+     * Calls AnomalyService.reopenFix, so a kept fix waits for review again.
      */
     @Override
     public ActionResult undoRepairDecision(RepairItem repair) {
@@ -1145,8 +1211,8 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls HistoryService.restore. It returns nothing, so this says Not
-     * connected yet until the RESTORE capability works.
+     * Calls HistoryService.restore, then forgets every run and decision
+     * so they are read again from the restored history.
      */
     @Override
     public ActionResult restoreBackup(Path backupFile) {
@@ -1376,7 +1442,6 @@ public class LiveBackend implements DashboardBackend {
                 || key.equals(ConfigKeys.ASSESSMENT_NAME)
                 || key.equals(ConfigKeys.TESTERS_DIR)
                 || key.equals(ConfigKeys.STARTER_DIR)
-
                 || key.equals(ConfigKeys.PROVIDED_CLASS_FILES)
                 || key.equals(ConfigKeys.TESTER_DATA_FILES)
                 || key.equals(ConfigKeys.PLACEHOLDER_FOLDER_NAMES);
@@ -1490,10 +1555,84 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Returns null, because no service describes one pair yet.
+     * Reads both students' answer files with readSourceFile, as the check
+     * compares the whole answer file of the question. Returns null when
+     * the run, a student or the question is gone, or neither file can be
+     * read.
      */
     @Override
-    public SimilarityDetail getSimilarityDetail(SimilarityPair pair) {
+    public SimilarityDetail getSimilarityDetail(GradingRun gradingRun,
+            SimilarityPair pair) {
+        if (gradingRun == null || pair == null) {
+            return null;
+        }
+
+        Question question = findQuestion(gradingRun.getAssessment(),
+                pair.getQuestionId());
+        Submission first = findSubmission(gradingRun,
+                pair.getFirstUsername());
+        Submission second = findSubmission(gradingRun,
+                pair.getSecondUsername());
+        if (question == null || first == null || second == null) {
+            return null;
+        }
+
+        String file = question.getFolderName() + FOLDER_SEPARATOR
+                + question.getFileName();
+        String firstCode = readSourceFile(first, file);
+        String secondCode = readSourceFile(second, file);
+        if (firstCode.isEmpty() && secondCode.isEmpty()) {
+            return null;
+        }
+
+        return new SimilarityDetail(pair, file, file, firstCode,
+                secondCode, listLeftOut(gradingRun, question));
+    }
+
+    // Lists what the check leaves out of a question: the starter file's
+    // code, and every other file in the question folder.
+    private List<String> listLeftOut(GradingRun gradingRun,
+            Question question) {
+        Path starter = gradingRun.getStarterDirectory();
+        if (starter == null) {
+            starter = configuredPath(InputKind.STARTER);
+        }
+
+        List<String> leftOut = new ArrayList<>();
+        Path starterFile = starter.resolve(question.getFolderName())
+                .resolve(question.getFileName());
+        if (Files.isRegularFile(starterFile)) {
+            leftOut.add(starterFile.toString() + " (starter code, taken "
+                    + "out before comparing)");
+        }
+        leftOut.add("Every other file in " + question.getFolderName()
+                + ", such as the tester (only " + question.getFileName()
+                + " is compared)");
+        return leftOut;
+    }
+
+    // Returns the question with an id, or null if there is none.
+    private Question findQuestion(Assessment runAssessment,
+            String questionId) {
+        if (runAssessment == null) {
+            return null;
+        }
+        for (Question question : runAssessment.getQuestions()) {
+            if (question.getId().equals(questionId)) {
+                return question;
+            }
+        }
+        return null;
+    }
+
+    // Returns the submission of a username in a run, or null.
+    private Submission findSubmission(GradingRun gradingRun,
+            String username) {
+        for (Submission submission : gradingRun.getSubmissions()) {
+            if (submission.getUsername().equals(username)) {
+                return submission;
+            }
+        }
         return null;
     }
 
@@ -1565,8 +1704,12 @@ public class LiveBackend implements DashboardBackend {
     // folder that can be used.
     private String describeStarterFallback(Path folder) {
         Path configured = getConfiguredPath(InputKind.STARTER);
-        if (!isSameFolder(folder, configured) && inspect(InputKind.STARTER,
-                configured).getState().isUsable()) {
+        boolean otherUsable = false;
+        if (!isSameFolder(folder, configured)) {
+            ImportItem settingsItem = inspect(InputKind.STARTER, configured);
+            otherUsable = settingsItem.getState().isUsable();
+        }
+        if (otherUsable) {
             return "so the starter folder in Settings is used instead.";
         }
         return "so untouched and empty answers cannot be flagged.";
@@ -1803,8 +1946,8 @@ public class LiveBackend implements DashboardBackend {
     // Returns the newest saved run of a section, or null.
     private GradingRun findNewestSavedRun(String sectionLabel) {
         for (GradingRun saved : getSavedRuns()) {
-            if (saved.getSection() != null && sectionLabel.equals(
-                    saved.getSection().getLabel())) {
+            Section section = saved.getSection();
+            if (section != null && sectionLabel.equals(section.getLabel())) {
                 return saved;
             }
         }
@@ -1915,14 +2058,17 @@ public class LiveBackend implements DashboardBackend {
 
     // Joins words as "a", "a and b" or "a, b and c".
     private String joinWords(List<String> words) {
-        String text = "";
-        for (int index = 0; index < words.size(); index++) {
-            if (index > 0 && index == words.size() - 1) {
-                text += " and ";
-            } else if (index > 0) {
-                text += ", ";
-            }
-            text += words.get(index);
+        if (words.isEmpty()) {
+            return "";
+        }
+
+        String text = words.get(0);
+        int last = words.size() - 1;
+        for (int index = 1; index < last; index++) {
+            text += ", " + words.get(index);
+        }
+        if (last > 0) {
+            text += " and " + words.get(last);
         }
         return text;
     }

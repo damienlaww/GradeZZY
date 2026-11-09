@@ -20,8 +20,6 @@ import javafx.scene.layout.VBox;
 
 /**
  * One group of settings: its card, its entry in the list and its rows.
- *
- * <p>Tier: SHOULD.
  */
 public class SettingsGroup {
 
@@ -58,8 +56,6 @@ public class SettingsGroup {
     /**
      * Returns the entry in the list on the left.
      *
-     * <p>Tier: SHOULD.
-     *
      * @return the entry
      */
     public Label getIndexItem() {
@@ -68,8 +64,6 @@ public class SettingsGroup {
 
     /**
      * Returns the card on the right.
-     *
-     * <p>Tier: SHOULD.
      *
      * @return the card
      */
@@ -80,8 +74,6 @@ public class SettingsGroup {
     /**
      * Sets the words the questions row matches in a search.
      *
-     * <p>Tier: SHOULD.
-     *
      * @param text the words, in lower case
      */
     public void setQuestionsText(String text) {
@@ -90,8 +82,6 @@ public class SettingsGroup {
 
     /**
      * Adds a row under the others.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param row the row
      * @param field the setting of the row, or null for the questions
@@ -106,8 +96,6 @@ public class SettingsGroup {
 
     /**
      * Shows the rows that match a search.
-     *
-     * <p>Tier: SHOULD.
      *
      * @param query the search in lower case; empty matches every row
      * @return true when any row is shown
@@ -135,8 +123,6 @@ public class SettingsGroup {
     /**
      * Gives the first shown row no line above it, and the first and last
      * shown rows no gap against the card's edge.
-     *
-     * <p>Tier: SHOULD.
      */
     public void markEnds() {
         HBox last = null;

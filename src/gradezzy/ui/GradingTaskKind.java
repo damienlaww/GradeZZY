@@ -20,5 +20,8 @@ public enum GradingTaskKind {
     RETRY_FAILED,
 
     /** Continue a saved run. */
-    RESUME
+    RESUME,
+
+    /** Grade a late batch into an existing run of the same section. */
+    ADD_TO_RUN
 }

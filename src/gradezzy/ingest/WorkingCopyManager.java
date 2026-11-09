@@ -47,6 +47,9 @@ public class WorkingCopyManager {
     // Start of the folder an inner zip is moved to while it is unpacked
     private static final String INNER_ZIP_PREFIX = ".inner-zip-";
 
+    // Start of the folder a submission is unpacked in before it is moved
+    private static final String STAGING_PREFIX = ".unpacking-";
+
     // A zip of a zip holds exactly this many files
     private static final int SINGLE_FILE = 1;
 
@@ -95,7 +98,7 @@ public class WorkingCopyManager {
             }
             Files.createDirectories(target.getParent());
             staging = Files.createTempDirectory(target.getParent(),
-                    ".unpacking-");
+                    STAGING_PREFIX);
             if (Files.isDirectory(original, LinkOption.NOFOLLOW_LINKS)) {
                 FileUtils.copyDirectory(original, staging);
                 removeIgnoredFiles(staging);
@@ -173,35 +176,6 @@ public class WorkingCopyManager {
         } catch (IOException exception) {
             throw new UncheckedIOException("Could not remove student "
                     + "class files: " + exception.getMessage(), exception);
-        }
-    }
-
-    /**
-     * Removes the working copy of a submission.
-     *
-     * @param submission the submission
-     * @throws UncheckedIOException if the copy cannot safely be removed
-     */
-    public void deleteWorkingCopy(Submission submission) {
-        if (submission.getWorkingCopyPath() == null) {
-            return;
-        }
-        try {
-            Path expected = workingPath(submission);
-            Path actual = submission.getWorkingCopyPath()
-                    .toAbsolutePath().normalize();
-            if (!actual.equals(expected)) {
-                throw new IOException("Unexpected working copy path.");
-            }
-            Path original = submission.getOriginalPath().toRealPath();
-            if (original.startsWith(actual) || actual.startsWith(original)) {
-                throw new IOException("Original and working copy overlap.");
-            }
-            FileUtils.deleteDirectory(actual);
-            submission.setWorkingCopyPath(null);
-        } catch (IOException exception) {
-            throw new UncheckedIOException("Could not delete working copy: "
-                    + exception.getMessage(), exception);
         }
     }
 

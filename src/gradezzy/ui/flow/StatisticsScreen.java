@@ -601,7 +601,7 @@ public class StatisticsScreen extends FlowScreen {
         Label text = Parts.muted(help);
         text.setWrapText(true);
         VBox box = new VBox(EMPTY_GAP, title, text, Parts.link(
-                "Open Grading", () -> getWindow().showPage(Page.MARKING)));
+                "Go to Grading", () -> getWindow().showPage(Page.MARKING)));
         box.getStyleClass().addAll("flow-card", "stats-empty");
         box.setAlignment(Pos.CENTER);
         return box;

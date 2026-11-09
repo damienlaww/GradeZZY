@@ -44,8 +44,13 @@ public final class TesterHarness {
     // Exit code of a run that reached the end of the tester
     private static final int SUCCESS_EXIT_CODE = 0;
 
-    // Exit code java itself uses when main throws
-    private static final int ERROR_EXIT_CODE = 1;
+    /**
+     * Exit code of a run whose tester threw something it did not catch,
+     * such as a StackOverflowError from a student's endless recursion.
+     * It is not 1, which a student's System.exit(1) also gives, so
+     * ExecuteStage can tell a crash from code that ends the program.
+     */
+    public static final int CRASH_EXIT_CODE = 3;
 
     // The system property that chooses how java starts other programs
     private static final String LAUNCH_PROPERTY =
@@ -60,6 +65,12 @@ public final class TesterHarness {
 
     // Milliseconds in a second
     private static final long MILLIS_PER_SECOND = 1000;
+
+    // Positions of the arguments TesterRunner passes, in order
+    private static final int TESTER_ARGUMENT = 0;
+    private static final int STUDENT_LIMIT_ARGUMENT = 1;
+    private static final int TIME_LIMIT_ARGUMENT = 2;
+    private static final int HEADER_MARKER_ARGUMENT = 3;
 
     // Where the numbers of the test cases to skip start in the arguments
     private static final int FIRST_SKIPPED_ARGUMENT = 4;
@@ -82,7 +93,7 @@ public final class TesterHarness {
             throws IOException, ReflectiveOperationException {
         // Started before any student code, and a daemon, so it never
         // keeps the program alive by itself
-        long limitSeconds = Long.parseLong(args[2]);
+        long limitSeconds = Long.parseLong(args[TIME_LIMIT_ARGUMENT]);
         Thread watchdog = new Thread(new HarnessWatchdog(
                 (limitSeconds + GRACE_SECONDS) * MILLIS_PER_SECOND));
         watchdog.setDaemon(true);
@@ -91,11 +102,11 @@ public final class TesterHarness {
         String token = new String(System.in.readAllBytes(),
                 StandardCharsets.UTF_8).trim();
         blockNewPrograms();
-        long studentLimit = Long.parseLong(args[1]);
+        long studentLimit = Long.parseLong(args[STUDENT_LIMIT_ARGUMENT]);
 
         // Loaded without running its static code, so the student's static
         // code runs later, after the marking stream is in place
-        Class<?> tester = Class.forName(args[0], false,
+        Class<?> tester = Class.forName(args[TESTER_ARGUMENT], false,
                 TesterHarness.class.getClassLoader());
         List<Integer> skippedCases = new ArrayList<>();
         for (int index = FIRST_SKIPPED_ARGUMENT; index < args.length;
@@ -104,7 +115,7 @@ public final class TesterHarness {
         }
         TrustedPrintStream trusted = new TrustedPrintStream(System.out,
                 token, Thread.currentThread(), tester, studentLimit,
-                args[FIRST_SKIPPED_ARGUMENT - 1], skippedCases);
+                args[HEADER_MARKER_ARGUMENT], skippedCases);
         System.setOut(trusted);
 
         Method testerMain = tester.getMethod("main", String[].class);
@@ -113,7 +124,7 @@ public final class TesterHarness {
         } catch (InvocationTargetException exception) {
             exception.getCause().printStackTrace();
             trusted.flush();
-            Runtime.getRuntime().halt(ERROR_EXIT_CODE);
+            Runtime.getRuntime().halt(CRASH_EXIT_CODE);
         }
 
         trusted.printMarked(FINISHED_LINE);

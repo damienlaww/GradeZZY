@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-
 import gradezzy.config.ConfigKeys;
 import gradezzy.config.ExportFolders;
 import gradezzy.grading.GradingException;
@@ -20,6 +19,7 @@ import gradezzy.grading.ProgressListener;
 import gradezzy.model.Anomaly;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
+import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
@@ -233,6 +233,28 @@ public interface DashboardBackend {
             ProgressListener listener, RunCallback callback);
 
     /**
+     * Returns the run a late batch of a section would join: its newest
+     * run, from this session or saved.
+     *
+     * @param section the section
+     * @return the run, or null when the section has none to join
+     */
+    GradingRun findRunToJoin(Section section);
+
+    /**
+     * Grades a batch into an existing run of the same section in the
+     * background. A student graded before is graded again, and the new
+     * result replaces the old one.
+     *
+     * @param gradingRun the run the batch joins
+     * @param batch the chosen files
+     * @param listener told about progress, possibly on another thread
+     * @param callback told how the run ended, on the JavaFX thread
+     */
+    void addToRun(GradingRun gradingRun, ImportBatch batch,
+            ProgressListener listener, RunCallback callback);
+
+    /**
      * Stops the batch after the current submission. Results are kept.
      */
     void cancelGrading();
@@ -403,6 +425,19 @@ public interface DashboardBackend {
      * @return what happened
      */
     ActionResult reapplyRepair(RepairItem repair);
+
+    /**
+     * Says whether a rejected repair can be applied again. The demo can
+     * apply any rejected repair again; the live backend only one undone
+     * in this session or in a run resumed since.
+     *
+     * @param anomaly the anomaly of the repair
+     * @return true when reapplyRepair may be offered for it
+     */
+    default boolean canReapplyRepair(Anomaly anomaly) {
+        return anomaly != null
+                && anomaly.getFixStatus() == FixStatus.UNDONE;
+    }
 
     /**
      * Returns a decided repair to Applied, waiting for review again.
@@ -692,10 +727,12 @@ public interface DashboardBackend {
     /**
      * Returns the evidence for one similar pair.
      *
+     * @param gradingRun the run the pair belongs to
      * @param pair the pair
      * @return the evidence, or null when none is available
      */
-    SimilarityDetail getSimilarityDetail(SimilarityPair pair);
+    SimilarityDetail getSimilarityDetail(GradingRun gradingRun,
+            SimilarityPair pair);
 
     /**
      * Says whether the similarity check is switched on.

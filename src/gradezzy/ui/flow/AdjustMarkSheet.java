@@ -95,13 +95,11 @@ public final class AdjustMarkSheet {
         save.setOnAction(event -> save(window, submission, result, mark,
                 reason, problem, onSaved));
         // Save is on only once a different mark and a reason are typed
-        Runnable refreshSave = () -> save.setDisable(!canSave(
-                mark.getText(), reason.getText(), result.getScore()));
         mark.textProperty().addListener((observable, before, after)
-                -> refreshSave.run());
+                -> refreshSave(save, mark, reason, result));
         reason.textProperty().addListener((observable, before, after)
-                -> refreshSave.run());
-        refreshSave.run();
+                -> refreshSave(save, mark, reason, result));
+        refreshSave(save, mark, reason, result);
         HBox buttons = Parts.row(Parts.GAP,
                 new Node[] {Parts.grow(), cancel, save});
 
@@ -113,6 +111,13 @@ public final class AdjustMarkSheet {
         body.getStyleClass().add("adjust-sheet");
         body.setMaxWidth(Parts.TEXT_WIDTH);
         return body;
+    }
+
+    // Turns Save on or off for what is typed.
+    private static void refreshSave(Button save, TextField mark,
+            TextArea reason, QuestionResult result) {
+        save.setDisable(!canSave(mark.getText(), reason.getText(),
+                result.getScore()));
     }
 
     /**
@@ -153,7 +158,7 @@ public final class AdjustMarkSheet {
         if (markText == null || markText.trim().isEmpty()) {
             return notNumber;
         }
-        double score;
+        double score = 0.0;
         try {
             score = Double.parseDouble(markText.trim());
         } catch (NumberFormatException exception) {
@@ -201,12 +206,18 @@ public final class AdjustMarkSheet {
         } else {
             Supplier<ActionResult> undo = ActivityUndo.record(
                     window.getBackend(), ActivityUndo.MARK_CHANGED,
-                    describe(change), () -> window.getBackend()
-                    .undoAdjustment(run, change));
+                    describe(change), () -> undoAdjustment(window, run,
+                    change));
             window.notify(saved.getMessage(), "Undo",
                     () -> undoChange(window, undo, onSaved));
         }
         onSaved.run();
+    }
+
+    // Takes a changed mark back in the backend.
+    private static ActionResult undoAdjustment(FlowWindow window,
+            GradingRun run, ScoreAdjustment change) {
+        return window.getBackend().undoAdjustment(run, change);
     }
 
     // Takes a changed mark back and says how it went.

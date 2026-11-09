@@ -143,6 +143,9 @@ public class ReviewScreen extends FlowScreen {
     // The corner of the table box (twice the 12 pixel radius)
     private static final double CORNER_ARC = 24.0;
 
+    // The corner of the table's clip, a little tighter than the frame
+    private static final double CLIP_ARC = 22.0;
+
     // A class file problem is shown once only when at least this many
     // graded students share it
     private static final int MIN_SHARED_STUDENTS = 3;
@@ -216,11 +219,20 @@ public class ReviewScreen extends FlowScreen {
     // The run the missing rows were made for, or null
     private GradingRun missingRowsRun = null;
 
+    // The students the missing rows were made from, or null; a late batch
+    // looks them up again, which gives a new list
+    private List<Student> missingRowsFrom = null;
+
     // The rows made for chosen files grading skipped
     private final List<Submission> skippedRows = new ArrayList<>();
 
     // The run the skipped rows were made for, or null
     private GradingRun skippedRowsRun = null;
+
+    // The skipped files and graded students the skipped rows were made
+    // with; a late batch changes them
+    private int skippedRowsFiles = 0;
+    private int skippedRowsGraded = 0;
 
     // The search field
     private final CustomTextField search = new CustomTextField();
@@ -274,7 +286,7 @@ public class ReviewScreen extends FlowScreen {
         HBox tools = Parts.row(Parts.GAP,
                 new Node[] {createFilterBar(), Parts.grow()});
         tools.getChildren().add(search);
-        VBox.setMargin(tools, new Insets(Parts.GAP_SMALL / 2, 0, 0, 0));
+        VBox.setMargin(tools, new Insets(Parts.GAP_TINY, 0, 0, 0));
 
         VBox header = new VBox(HEADING_GAP, Parts.heading(
                 "Review the results"), subtitle);
@@ -390,12 +402,17 @@ public class ReviewScreen extends FlowScreen {
 
     // Returns one "Could not open" row per skipped file of an ungraded user.
     private List<Submission> findSkippedRows(GradingRun run) {
-        if (run == skippedRowsRun) {
+        List<ImportItem> files = getState().getSkippedFiles(run);
+        int graded = run.getSubmissions().size();
+        if (run == skippedRowsRun && files.size() == skippedRowsFiles
+                && graded == skippedRowsGraded) {
             return skippedRows;
         }
         skippedRows.clear();
         skippedRowsRun = run;
-        for (ImportItem item : getState().getSkippedFiles(run)) {
+        skippedRowsFiles = files.size();
+        skippedRowsGraded = graded;
+        for (ImportItem item : files) {
             String username = item.getUsername();
             // A student graded from another file is shown as graded
             if (username.isEmpty()) {
@@ -430,16 +447,17 @@ public class ReviewScreen extends FlowScreen {
 
     // Returns a "No submission" row per student with no file, once read.
     private List<Submission> findMissingRows(GradingRun run) {
-        if (run == missingRowsRun) {
-            return missingRows;
-        }
         List<Student> missing = getState().getMissingStudents(run);
         if (missing == null) {
             getWindow().findMissingStudents(run, () -> missingFound());
             return new ArrayList<>();
         }
+        if (run == missingRowsRun && missing == missingRowsFrom) {
+            return missingRows;
+        }
         missingRows.clear();
         missingRowsRun = run;
+        missingRowsFrom = missing;
         for (Student student : missing) {
             Submission skipped = findSkippedRowOf(student);
             if (skipped == null) {
@@ -630,8 +648,8 @@ public class ReviewScreen extends FlowScreen {
         tableFrame.getChildren().add(table);
         tableFrame.getStyleClass().add("table-frame");
         Rectangle corners = new Rectangle();
-        corners.setArcWidth(CORNER_ARC - 2);
-        corners.setArcHeight(CORNER_ARC - 2);
+        corners.setArcWidth(CLIP_ARC);
+        corners.setArcHeight(CLIP_ARC);
         corners.widthProperty().bind(table.widthProperty());
         corners.heightProperty().bind(table.heightProperty());
         table.setClip(corners);
@@ -1192,7 +1210,7 @@ public class ReviewScreen extends FlowScreen {
         List<Anomaly> flags = openFlags();
         if (!flags.isEmpty()) {
             actions.addSecondary(Parts.secondary("Mark all "
-                    + flags.size() + " as checked",
+                    + Parts.plural(flags.size(), "flag") + " as checked",
                     () -> askCheckAll(flags)));
         }
         actions.setPrimary("Continue to export", () -> continueToExport(),
@@ -1202,13 +1220,11 @@ public class ReviewScreen extends FlowScreen {
     // Returns the sentence beside Back.
     private String statusText() {
         int needReview = countNeedingReview();
-        String text;
+        String text = needReview + " students still need a look.";
         if (needReview == 0) {
             text = "Every student is checked.";
         } else if (needReview == 1) {
             text = "1 student still needs a look.";
-        } else {
-            text = needReview + " students still need a look.";
         }
         int ticked = getState().getSelected().size();
         if (ticked > 0) {
@@ -1285,8 +1301,10 @@ public class ReviewScreen extends FlowScreen {
         List<Submission> scope = getState().getSelected();
         for (RepairItem repair : getBackend().listRepairs(run)) {
             Anomaly anomaly = repair.getAnomaly();
+            // A fix being undone in the background is left to that job
             if (anomaly.getFixStatus() == FixStatus.APPLIED
                     && !repair.isBlocked()
+                    && !getState().isFixInProgress(anomaly)
                     && (scope.isEmpty() || isTicked(anomaly.getUsername()))) {
                 open.add(repair);
             }
@@ -1386,7 +1404,8 @@ public class ReviewScreen extends FlowScreen {
             content.getChildren().add(line);
             listed++;
         }
-        getWindow().confirm("Mark all " + flags.size() + " as checked?",
+        getWindow().confirm("Mark all "
+                + Parts.plural(flags.size(), "flag") + " as checked?",
                 content, "Mark all as checked", () -> checkAll(flags));
     }
 
@@ -1405,9 +1424,8 @@ public class ReviewScreen extends FlowScreen {
                 + " as checked.", "Undo", () -> uncheckAll(done));
     }
 
-    // Puts flags marked as checked together back to be checked.
-    // Puts back to check the flags Mark all checked. A flag decided
-    // otherwise since, such as marked as looking fine, keeps that.
+    // Puts the flags Mark all checked set back to be checked. A flag
+    // decided otherwise since, such as marked as looking fine, keeps that.
     private void uncheckAll(List<Anomaly> flags) {
         int reopened = 0;
         for (Anomaly anomaly : flags) {

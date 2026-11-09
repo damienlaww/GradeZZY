@@ -82,15 +82,6 @@ public class GradingPipeline {
     }
 
     /**
-     * Returns the stages in the order they run.
-     *
-     * @return the stages
-     */
-    public List<GradingStage> getStages() {
-        return stages;
-    }
-
-    /**
      * Grades every submission of a run. This method does not throw for a
      * failing submission; it marks that submission as FAILED instead. The
      * number of submissions graded at the same time comes from
@@ -200,9 +191,9 @@ public class GradingPipeline {
         try {
             requested = context.getConfig().getInt(ConfigKeys.THREAD_COUNT);
         } catch (RuntimeException exception) {
-            // A missing or non-numeric setting grades in order rather
-            // than stopping the whole run.
-            requested = SINGLE_THREADED;
+            // Ignored: a missing or non-numeric setting keeps
+            // SINGLE_THREADED and grades in order rather than stopping
+            // the whole run.
         }
 
         if (requested < SINGLE_THREADED) {

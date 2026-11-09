@@ -1,0 +1,254 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="990" viewBox="0 0 1760 990" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="nav" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L10,6 L0,12" fill="none" stroke="#24292f" stroke-width="1.5"/>
+    </marker>
+    <marker id="tri" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L14,8 L0,16 Z" fill="#ffffff" stroke="#24292f" stroke-width="1.5"/>
+    </marker>
+    <marker id="dia" markerWidth="20" markerHeight="12" refX="1" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1,6 L9,1 L17,6 L9,11 Z" fill="#ffffff" stroke="#24292f" stroke-width="1.5"/>
+    </marker>
+    <style>
+      .cls { fill: #ffffff; stroke: #24292f; stroke-width: 1.3; }
+      .stage { fill: #fff5e6; stroke: #24292f; stroke-width: 1.3; }
+      .iface { fill: #eef4ff; stroke: #24292f; stroke-width: 1.3; }
+      .cname { font-size: 14px; font-weight: 600; fill: #24292f; }
+      .iname { font-size: 14px; font-weight: 600; font-style: italic; fill: #24292f; }
+      .stereo { font-size: 11px; fill: #57606a; }
+      .op { font-size: 12px; fill: #24292f; }
+      .num { font-size: 11px; font-weight: 700; fill: #9a6700; }
+      .mult { font-size: 12px; fill: #24292f; }
+      .note { font-size: 12px; font-style: italic; fill: #57606a; }
+      .line { fill: none; stroke: #24292f; stroke-width: 1.4; }
+      .dash { fill: none; stroke: #24292f; stroke-width: 1.4; stroke-dasharray: 7 5; }
+      .sep { stroke: #24292f; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1760" height="990" fill="#ffffff"/>
+
+  <!-- Title and legend -->
+  <text x="40" y="42" font-size="24" font-weight="700" fill="#24292f">Grading pipeline</text>
+  <text x="40" y="66" class="note">UML class diagram of the grading package and the parts each stage uses. Blue = interface, italic = interface or abstract class.</text>
+  <line x1="1250" y1="36" x2="1300" y2="36" class="line" marker-end="url(#nav)"/>
+  <text x="1310" y="40" class="op">has / uses</text>
+  <line x1="1250" y1="60" x2="1300" y2="60" class="line" marker-end="url(#tri)"/>
+  <text x="1310" y="64" class="op">extends</text>
+  <line x1="1420" y1="36" x2="1470" y2="36" class="dash" marker-end="url(#tri)"/>
+  <text x="1480" y="40" class="op">implements</text>
+  <line x1="1420" y1="60" x2="1470" y2="60" class="dash" marker-end="url(#nav)"/>
+  <text x="1480" y="64" class="op">depends on / creates</text>
+
+  <!-- Row A -->
+  <rect x="40" y="100" width="200" height="34" class="cls"/>
+  <text x="140" y="122" class="cname" text-anchor="middle">GradingService</text>
+
+  <rect x="300" y="100" width="260" height="58" class="cls"/>
+  <text x="430" y="121" class="cname" text-anchor="middle">PipelineFactory</text>
+  <line x1="300" y1="130" x2="560" y2="130" class="sep"/>
+  <text x="310" y="149" class="op">+ createPipeline(...) : GradingPipeline</text>
+
+  <rect x="620" y="100" width="330" height="76" class="cls"/>
+  <text x="785" y="121" class="cname" text-anchor="middle">GradingPipeline</text>
+  <line x1="620" y1="130" x2="950" y2="130" class="sep"/>
+  <text x="630" y="149" class="op">+ addStage(GradingStage)</text>
+  <text x="630" y="167" class="op">+ run(GradingRun, GradingContext, ProgressListener)</text>
+
+  <rect x="1060" y="100" width="330" height="90" class="iface"/>
+  <text x="1225" y="116" class="stereo" text-anchor="middle">«interface»</text>
+  <text x="1225" y="134" class="iname" text-anchor="middle">GradingStage</text>
+  <line x1="1060" y1="144" x2="1390" y2="144" class="sep"/>
+  <text x="1070" y="163" class="op">+ getName() : String</text>
+  <text x="1070" y="181" class="op">+ process(Submission, GradingContext)</text>
+
+  <rect x="1450" y="100" width="270" height="112" class="cls"/>
+  <text x="1585" y="121" class="cname" text-anchor="middle">GradingContext</text>
+  <line x1="1450" y1="130" x2="1720" y2="130" class="sep"/>
+  <text x="1460" y="149" class="op">- config : AppConfig</text>
+  <text x="1460" y="167" class="op">- assessment : Assessment</text>
+  <text x="1460" y="185" class="op">- roster : List&lt;Student&gt;</text>
+  <text x="1460" y="203" class="op">- testers : List&lt;TesterFile&gt;</text>
+
+  <line x1="240" y1="117" x2="298" y2="117" class="line" marker-end="url(#nav)"/>
+  <line x1="560" y1="140" x2="618" y2="140" class="dash" marker-end="url(#nav)"/>
+  <text x="589" y="132" class="stereo" text-anchor="middle">«creates»</text>
+  <line x1="950" y1="150" x2="1058" y2="150" class="line" marker-start="url(#dia)" marker-end="url(#nav)"/>
+  <text x="1052" y="143" class="mult" text-anchor="end">1..*  {ordered}</text>
+  <line x1="1390" y1="150" x2="1448" y2="150" class="dash" marker-end="url(#nav)"/>
+
+  <!-- Stages implement GradingStage -->
+  <path d="M 125 270 V 240 H 1645 M 315 270 V 240 M 505 270 V 240 M 695 270 V 240 M 885 270 V 240 M 1075 270 V 240 M 1265 270 V 240 M 1455 270 V 240 M 1645 270 V 240" class="dash"/>
+  <line x1="1225" y1="240" x2="1225" y2="192" class="dash" marker-end="url(#tri)"/>
+
+  <!-- Row B: the nine stages, in the order they run -->
+  <text x="37" y="265" class="num">1</text>
+  <rect x="37" y="270" width="176" height="32" class="stage"/>
+  <text x="125" y="291" class="cname" text-anchor="middle">ExtractStage</text>
+  <text x="227" y="265" class="num">2</text>
+  <rect x="227" y="270" width="176" height="32" class="stage"/>
+  <text x="315" y="291" class="cname" text-anchor="middle">ValidateStage</text>
+  <text x="417" y="265" class="num">3</text>
+  <rect x="417" y="270" width="176" height="32" class="stage"/>
+  <text x="505" y="291" class="cname" text-anchor="middle">FixStage</text>
+  <text x="607" y="265" class="num">4</text>
+  <rect x="607" y="270" width="176" height="32" class="stage"/>
+  <text x="695" y="291" class="cname" text-anchor="middle">DetectStage</text>
+  <text x="797" y="265" class="num">5</text>
+  <rect x="797" y="270" width="176" height="32" class="stage"/>
+  <text x="885" y="291" class="cname" text-anchor="middle">InstallTestersStage</text>
+  <text x="987" y="265" class="num">6</text>
+  <rect x="987" y="270" width="176" height="32" class="stage"/>
+  <text x="1075" y="291" class="cname" text-anchor="middle">CompileStage</text>
+  <text x="1177" y="265" class="num">7</text>
+  <rect x="1177" y="270" width="176" height="32" class="stage"/>
+  <text x="1265" y="291" class="cname" text-anchor="middle">ExecuteStage</text>
+  <text x="1367" y="265" class="num">8</text>
+  <rect x="1367" y="270" width="176" height="32" class="stage"/>
+  <text x="1455" y="291" class="cname" text-anchor="middle">ScoreStage</text>
+  <text x="1557" y="265" class="num">9</text>
+  <rect x="1557" y="270" width="176" height="32" class="stage"/>
+  <text x="1645" y="291" class="cname" text-anchor="middle">PersistStage</text>
+
+  <!-- Row C: what each stage uses -->
+  <rect x="37" y="350" width="176" height="32" class="cls"/>
+  <text x="125" y="371" class="cname" text-anchor="middle">WorkingCopyManager</text>
+  <rect x="227" y="350" width="176" height="32" class="cls"/>
+  <text x="315" y="371" class="cname" text-anchor="middle">ValidationRunner</text>
+  <rect x="417" y="350" width="176" height="32" class="cls"/>
+  <text x="505" y="371" class="cname" text-anchor="middle">FixManager</text>
+  <rect x="797" y="350" width="176" height="32" class="cls"/>
+  <text x="885" y="371" class="cname" text-anchor="middle">TesterInstaller</text>
+  <rect x="987" y="350" width="176" height="32" class="cls"/>
+  <text x="1075" y="371" class="cname" text-anchor="middle">SourceCompiler</text>
+  <rect x="1180" y="350" width="140" height="32" class="cls"/>
+  <text x="1250" y="371" class="cname" text-anchor="middle">TesterRunner</text>
+  <rect x="1367" y="350" width="176" height="32" class="cls"/>
+  <text x="1455" y="371" class="cname" text-anchor="middle">ScoreCalculator</text>
+
+  <line x1="125" y1="302" x2="125" y2="348" class="line" marker-end="url(#nav)"/>
+  <line x1="315" y1="302" x2="315" y2="348" class="line" marker-end="url(#nav)"/>
+  <line x1="505" y1="302" x2="505" y2="348" class="line" marker-end="url(#nav)"/>
+  <line x1="885" y1="302" x2="885" y2="348" class="line" marker-end="url(#nav)"/>
+  <line x1="1075" y1="302" x2="1075" y2="348" class="line" marker-end="url(#nav)"/>
+  <line x1="1250" y1="302" x2="1250" y2="348" class="line" marker-end="url(#nav)"/>
+  <line x1="1455" y1="302" x2="1455" y2="348" class="line" marker-end="url(#nav)"/>
+
+  <!-- ProcessRunner, shared by the compiler and the tester runner -->
+  <rect x="1110" y="404" width="140" height="30" class="cls"/>
+  <text x="1180" y="424" class="cname" text-anchor="middle">ProcessRunner</text>
+  <line x1="1120" y1="382" x2="1120" y2="402" class="line" marker-end="url(#nav)"/>
+  <line x1="1230" y1="382" x2="1230" y2="402" class="line" marker-end="url(#nav)"/>
+
+  <!-- Row D: the interfaces behind the stages -->
+  <rect x="30" y="470" width="300" height="90" class="iface"/>
+  <text x="180" y="486" class="stereo" text-anchor="middle">«interface»</text>
+  <text x="180" y="504" class="iname" text-anchor="middle">Validator</text>
+  <line x1="30" y1="514" x2="330" y2="514" class="sep"/>
+  <text x="40" y="533" class="op">+ getName() : String</text>
+  <text x="40" y="551" class="op">+ validate(Submission, Assessment) : List&lt;Anomaly&gt;</text>
+  <line x1="315" y1="382" x2="315" y2="468" class="line" marker-end="url(#nav)"/>
+  <text x="322" y="460" class="mult">1..*</text>
+
+  <rect x="360" y="470" width="330" height="108" class="iface"/>
+  <text x="525" y="486" class="stereo" text-anchor="middle">«interface»</text>
+  <text x="525" y="504" class="iname" text-anchor="middle">Fixer</text>
+  <line x1="360" y1="514" x2="690" y2="514" class="sep"/>
+  <text x="370" y="533" class="op">+ canFix(Anomaly) : boolean</text>
+  <text x="370" y="551" class="op">+ apply(Submission, Anomaly) : FixRecord</text>
+  <text x="370" y="569" class="op">+ undo(FixRecord)</text>
+  <line x1="505" y1="382" x2="505" y2="468" class="line" marker-end="url(#nav)"/>
+  <text x="512" y="460" class="mult">1..*</text>
+
+  <rect x="715" y="470" width="315" height="90" class="iface"/>
+  <text x="872" y="486" class="stereo" text-anchor="middle">«interface»</text>
+  <text x="872" y="504" class="iname" text-anchor="middle">Detector</text>
+  <line x1="715" y1="514" x2="1030" y2="514" class="sep"/>
+  <text x="725" y="533" class="op">+ getName() : String</text>
+  <text x="725" y="551" class="op">+ detect(Submission, Assessment) : List&lt;Anomaly&gt;</text>
+  <line x1="760" y1="302" x2="760" y2="468" class="line" marker-end="url(#nav)"/>
+  <text x="767" y="460" class="mult">0..*</text>
+
+  <rect x="1055" y="470" width="310" height="72" class="iface"/>
+  <text x="1210" y="486" class="stereo" text-anchor="middle">«interface»</text>
+  <text x="1210" y="504" class="iname" text-anchor="middle">ScoreParser</text>
+  <line x1="1055" y1="514" x2="1365" y2="514" class="sep"/>
+  <text x="1065" y="533" class="op">+ parse(Question, ProcessResult) : QuestionResult</text>
+  <line x1="1340" y1="302" x2="1340" y2="468" class="line" marker-end="url(#nav)"/>
+
+  <rect x="1395" y="470" width="325" height="126" class="iface"/>
+  <text x="1557" y="486" class="stereo" text-anchor="middle">«interface»</text>
+  <text x="1557" y="504" class="iname" text-anchor="middle">ResultRepository</text>
+  <line x1="1395" y1="514" x2="1720" y2="514" class="sep"/>
+  <text x="1405" y="533" class="op">+ saveRun(GradingRun)</text>
+  <text x="1405" y="551" class="op">+ loadRun(String) : GradingRun</text>
+  <text x="1405" y="569" class="op">+ listRuns() : List&lt;GradingRun&gt;</text>
+  <text x="1405" y="587" class="op">+ appendAudit(AuditEntry), and 12 more</text>
+  <line x1="1645" y1="302" x2="1645" y2="468" class="line" marker-end="url(#nav)"/>
+
+  <!-- Row E: abstract classes and single implementations -->
+  <rect x="30" y="600" width="300" height="32" class="cls"/>
+  <text x="180" y="621" class="iname" text-anchor="middle">AbstractValidator</text>
+  <line x1="180" y1="600" x2="180" y2="562" class="dash" marker-end="url(#tri)"/>
+
+  <rect x="360" y="615" width="330" height="32" class="cls"/>
+  <text x="525" y="636" class="iname" text-anchor="middle">AbstractFixer</text>
+  <line x1="525" y1="615" x2="525" y2="580" class="dash" marker-end="url(#tri)"/>
+
+  <rect x="1080" y="590" width="260" height="32" class="cls"/>
+  <text x="1210" y="611" class="cname" text-anchor="middle">TesterOutputScoreParser</text>
+  <line x1="1210" y1="590" x2="1210" y2="544" class="dash" marker-end="url(#tri)"/>
+
+  <rect x="1420" y="640" width="275" height="32" class="cls"/>
+  <text x="1557" y="661" class="cname" text-anchor="middle">SqliteResultRepository</text>
+  <line x1="1557" y1="640" x2="1557" y2="598" class="dash" marker-end="url(#tri)"/>
+
+  <!-- Row F: concrete validators -->
+  <rect x="80" y="685" width="250" height="32" class="cls"/>
+  <text x="205" y="706" class="cname" text-anchor="middle">StructureValidator</text>
+  <rect x="80" y="729" width="250" height="32" class="cls"/>
+  <text x="205" y="750" class="cname" text-anchor="middle">FileNameValidator</text>
+  <rect x="80" y="773" width="250" height="32" class="cls"/>
+  <text x="205" y="794" class="cname" text-anchor="middle">RequiredFilesValidator</text>
+  <rect x="80" y="817" width="250" height="32" class="cls"/>
+  <text x="205" y="838" class="cname" text-anchor="middle">HeaderNameValidator</text>
+  <path d="M 80 701 H 55 M 80 745 H 55 M 80 789 H 55 M 80 833 H 55 V 660 H 180" class="line"/>
+  <line x1="180" y1="660" x2="180" y2="634" class="line" marker-end="url(#tri)"/>
+
+  <!-- Row F: concrete fixers -->
+  <rect x="410" y="700" width="280" height="32" class="cls"/>
+  <text x="550" y="721" class="cname" text-anchor="middle">FolderHierarchyFixer</text>
+  <rect x="410" y="744" width="280" height="32" class="cls"/>
+  <text x="550" y="765" class="cname" text-anchor="middle">FolderNameFixer</text>
+  <rect x="410" y="788" width="280" height="32" class="cls"/>
+  <text x="550" y="809" class="cname" text-anchor="middle">CaseNameFixer</text>
+  <rect x="410" y="832" width="280" height="32" class="cls"/>
+  <text x="550" y="853" class="cname" text-anchor="middle">HeaderNameFixer</text>
+  <rect x="410" y="876" width="280" height="32" class="cls"/>
+  <text x="550" y="897" class="cname" text-anchor="middle">EncodingFixer</text>
+  <path d="M 410 716 H 385 M 410 760 H 385 M 410 804 H 385 M 410 848 H 385 M 410 892 H 385 V 675 H 525" class="line"/>
+  <line x1="525" y1="675" x2="525" y2="649" class="line" marker-end="url(#tri)"/>
+
+  <!-- Row F: concrete detectors -->
+  <rect x="765" y="610" width="265" height="32" class="cls"/>
+  <text x="897" y="631" class="cname" text-anchor="middle">UntouchedStarterDetector</text>
+  <rect x="765" y="654" width="265" height="32" class="cls"/>
+  <text x="897" y="675" class="cname" text-anchor="middle">EmptyAnswerDetector</text>
+  <rect x="765" y="698" width="265" height="32" class="cls"/>
+  <text x="897" y="719" class="cname" text-anchor="middle">HardCodedAnswerDetector</text>
+  <path d="M 765 626 H 740 M 765 670 H 740 M 765 714 H 740 V 585 H 872" class="dash"/>
+  <line x1="872" y1="585" x2="872" y2="562" class="dash" marker-end="url(#tri)"/>
+
+  <!-- Design notes -->
+  <path d="M 1080 720 H 1700 L 1720 740 V 960 H 1080 Z" fill="#fffbe6" stroke="#9a6700" stroke-width="1.2"/>
+  <path d="M 1700 720 V 740 H 1720" fill="none" stroke="#9a6700" stroke-width="1.2"/>
+  <text x="1098" y="748" font-size="14" font-weight="700" fill="#24292f">How the design keeps one student from stopping the batch</text>
+  <text x="1098" y="776" class="op">A validator or detector never throws for a student's mistake. It returns</text>
+  <text x="1098" y="794" class="op">Anomaly objects, and grading goes on with the next stage.</text>
+  <text x="1098" y="822" class="op">A fixer changes only the working copy, never the uploaded original,</text>
+  <text x="1098" y="840" class="op">and returns a FixRecord so FixManager can undo the fix later.</text>
+  <text x="1098" y="868" class="op">SourceCompiler and TesterRunner start javac and java through</text>
+  <text x="1098" y="886" class="op">ProcessRunner, which stops a program that runs past its time limit.</text>
+  <text x="1098" y="914" class="op">Worker threads (exec.thread.count) share one instance of each stage,</text>
+  <text x="1098" y="932" class="op">so shared fields are final or used in synchronized methods.</text>
+</svg>

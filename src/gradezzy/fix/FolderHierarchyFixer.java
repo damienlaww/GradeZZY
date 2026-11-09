@@ -252,12 +252,16 @@ public class FolderHierarchyFixer extends AbstractFixer {
         boolean removed = removeIfEmpty(extraFolder);
         submission.getAnomalies().removeAll(sameMove);
 
-        return new FolderMoveRecord(anomaly, NAME, describeMove(namesBefore,
-                namesAfter, extraFolder, removed), workingCopy, extraFolder,
-                contentRoot, showFolder(workingCopy, extraFolder)
-                + joinNames(namesBefore), showFolder(workingCopy,
-                contentRoot) + joinNames(namesAfter), pathsBefore,
-                pathsAfter);
+        String description = describeMove(namesBefore, namesAfter,
+                extraFolder, removed);
+        String valueBefore = showFolder(workingCopy, extraFolder)
+                + joinNames(namesBefore);
+        String valueAfter = showFolder(workingCopy, contentRoot)
+                + joinNames(namesAfter);
+
+        return new FolderMoveRecord(anomaly, NAME, description, workingCopy,
+                extraFolder, contentRoot, valueBefore, valueAfter,
+                pathsBefore, pathsAfter);
     }
 
     // Finds the other missing folder problems this move also fixes.
@@ -305,8 +309,7 @@ public class FolderHierarchyFixer extends AbstractFixer {
         return description;
     }
 
-    // Moves the question folders back into the extra folder, old names
-    // and all, wherever the content root is now.
+    // Moves the question folders back into the extra folder.
     private void moveBackDown(FixRecord fixRecord) throws FixException {
         if (!(fixRecord instanceof FolderMoveRecord)) {
             throw new FixException("This fix did not keep the folders it "

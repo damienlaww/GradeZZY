@@ -28,6 +28,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -46,6 +48,7 @@ import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.SavedAssessment;
 import gradezzy.ui.AppFonts;
+import gradezzy.ui.AppIcons;
 import gradezzy.model.Student;
 import gradezzy.ui.ThemeManager;
 import gradezzy.ui.backend.ActionResult;
@@ -63,12 +66,18 @@ public class FlowWindow {
     // How long a notice stays on screen
     private static final Duration NOTICE_TIME = Duration.seconds(3.5);
 
+    // How many times longer a notice with a link stays
+    private static final double ACTION_NOTICE_FACTOR = 2.0;
+
     // How often to check whether a stopped batch has finished, before
     // closing
     private static final Duration CLOSE_CHECK_TIME = Duration.millis(200);
 
     // The size of the icon of the Help button
     private static final double TOP_ICON_SIZE = 16.0;
+
+    // The width and height of the logo in the top bar
+    private static final double LOGO_SIZE = 22.0;
 
     // The shortcut that presses the blue button: Ctrl or Cmd and Enter
     private static final KeyCombination NEXT_KEYS = new KeyCodeCombination(
@@ -98,8 +107,14 @@ public class FlowWindow {
     // Sets the AtlantaFX theme
     private final ThemeManager themes = new ThemeManager();
 
+    // The root of the scene: the outer layout, with the tour on top
+    private final StackPane root = new StackPane();
+
     // The outer layout
     private final BorderPane frame = new BorderPane();
+
+    // The guided tour, created when first started
+    private GuidedTour tour = null;
 
     // Holds the screen, with sheets and notices on top
     private final StackPane layers = new StackPane();
@@ -181,9 +196,10 @@ public class FlowWindow {
         StackPane.setAlignment(notice, Pos.BOTTOM_CENTER);
         layers.getChildren().addAll(content, notice);
         frame.setCenter(layers);
+        root.getChildren().add(frame);
         applyDarkClass();
 
-        Scene scene = new Scene(frame, width, height);
+        Scene scene = new Scene(root, width, height);
         URL css = FlowWindow.class.getResource(STYLESHEET);
         if (css != null) {
             scene.getStylesheets().add(css.toExternalForm());
@@ -387,6 +403,54 @@ public class FlowWindow {
     }
 
     /**
+     * Grades the batch chosen on Set up into the section's existing run
+     * and shows the Grade step. Does nothing while a batch is being
+     * graded.
+     *
+     * @param run the run the batch joins
+     */
+    public void addToRun(GradingRun run) {
+        if (state.isGrading() || !state.getBatch().isReady()) {
+            return;
+        }
+        if (blockedByFix()) {
+            return;
+        }
+        GradeScreen grade = gradeScreen();
+        state.restart();
+        advanceTo(Step.GRADE);
+        grade.startAdding(run);
+    }
+
+    /**
+     * Asks a question with two ways to go on, in a sheet. Esc or a click
+     * outside closes it and does neither.
+     *
+     * @param title the question
+     * @param detail one or two sentences under it
+     * @param otherText the text of the second choice
+     * @param onOther what to do for the second choice
+     * @param primaryText the text of the main choice, filled in
+     * @param onPrimary what to do for the main choice
+     */
+    public void choose(String title, String detail, String otherText,
+            Runnable onOther, String primaryText, Runnable onPrimary) {
+        Label text = Parts.subtitle(detail);
+        text.setMaxWidth(Parts.TEXT_WIDTH);
+        text.setWrapText(true);
+        Button other = Parts.secondary(otherText, () -> confirmed(onOther));
+        Button primary = Parts.secondary(primaryText,
+                () -> confirmed(onPrimary));
+        primary.getStyleClass().add("confirm-ok");
+        HBox buttons = Parts.row(Parts.GAP,
+                new Node[] {Parts.grow(), other, primary});
+        VBox body = new VBox(Parts.GAP, Parts.title(title), text, buttons);
+        body.getStyleClass().add("confirm");
+        showSheet(body);
+        primary.requestFocus();
+    }
+
+    /**
      * Grades the rest of a stopped run and shows the Grade step.
      *
      * @param run the stopped run
@@ -489,6 +553,51 @@ public class FlowWindow {
     }
 
     /**
+     * Closes any sheet and starts the guided tour. COULD.
+     */
+    public void startTour() {
+        closeSheet();
+        if (tour == null) {
+            tour = new GuidedTour(this);
+        }
+        tour.start();
+    }
+
+    /**
+     * Offers the guided tour, the first time GradeZZY opens only. COULD.
+     */
+    public void offerTourOnce() {
+        if (!GuidedTour.firstOffer(backend)) {
+            return;
+        }
+        choose("New to GradeZZY?", "A one-minute tour points at each "
+                + "part of the window and says what it does. You can take "
+                + "it later from Help.", "Not now", () -> closeSheet(),
+                "Take the tour", () -> startTour());
+    }
+
+    /**
+     * Returns the guided tour, for the developer checks.
+     *
+     * @return the tour, or null before it was first started
+     */
+    public GuidedTour getTour() {
+        return tour;
+    }
+
+    // Lays the tour over the whole window, top bar and bottom bar too.
+    void showOverlay(Node overlay) {
+        if (!root.getChildren().contains(overlay)) {
+            root.getChildren().add(overlay);
+        }
+    }
+
+    // Takes the tour off the window.
+    void hideOverlay(Node overlay) {
+        root.getChildren().remove(overlay);
+    }
+
+    /**
      * Shows a sheet over the screen, dimming what is behind it.
      *
      * @param body the sheet's content
@@ -557,9 +666,26 @@ public class FlowWindow {
      */
     public void confirm(String title, Node content, String okText,
             Runnable onOk) {
+        confirm(title, content, null, null, okText, onOk);
+    }
+
+    /**
+     * Asks a question in a sheet with two ways to go ahead besides
+     * Cancel, such as Just this one and Keep all.
+     *
+     * @param title the question
+     * @param content what is shown under the question
+     * @param otherText the text of the plain button that goes ahead the
+     *        other way, or null for none
+     * @param onOther what to do when that button is pressed
+     * @param okText the text of the filled button that goes ahead
+     * @param onOk what to do when the instructor goes ahead
+     */
+    public void confirm(String title, Node content, String otherText,
+            Runnable onOther, String okText, Runnable onOk) {
         Button cancel = Parts.secondary("Cancel", () -> closeSheet());
-        // The two buttons have the same shape; the one that goes ahead
-        // is filled, in red when it deletes something
+        // The buttons have the same shape; the one that goes ahead is
+        // filled, in red when it deletes something
         Button ok = Parts.secondary(okText, () -> confirmed(onOk));
         if (isDestructive(okText)) {
             ok.getStyleClass().add("confirm-danger");
@@ -568,6 +694,13 @@ public class FlowWindow {
         }
         HBox buttons = Parts.row(Parts.GAP,
                 new Node[] {Parts.grow(), cancel, ok});
+        if (otherText != null) {
+            Button other = Parts.secondary(otherText,
+                    () -> confirmed(onOther));
+            // Between Cancel and the filled button
+            buttons.getChildren().add(buttons.getChildren().size() - 1,
+                    other);
+        }
         VBox body = new VBox(Parts.GAP, Parts.title(title), content,
                 buttons);
         body.getStyleClass().add("confirm");
@@ -711,7 +844,7 @@ public class FlowWindow {
 
     /**
      * Gives the window the application's host services, so it can open
-     * a folder in Finder or File Explorer. COULD.
+     * a folder in Finder or File Explorer.
      *
      * @param services the host services, or null for none
      */
@@ -722,7 +855,7 @@ public class FlowWindow {
     /**
      * Opens a folder in Finder or File Explorer. When the folder does
      * not exist yet, or nothing can open it, a notice says where it is
-     * instead. COULD.
+     * instead.
      *
      * @param folder the folder, as the settings give it
      */
@@ -784,7 +917,7 @@ public class FlowWindow {
             notice.setGraphic(link);
             notice.setContentDisplay(ContentDisplay.RIGHT);
             notice.setMouseTransparent(false);
-            time = NOTICE_TIME.multiply(2);
+            time = NOTICE_TIME.multiply(ACTION_NOTICE_FACTOR);
         }
         if (noticeTimer != null) {
             noticeTimer.stop();
@@ -1027,8 +1160,7 @@ public class FlowWindow {
     // Builds the logo on the left, the tabs in the exact middle of the
     // window and Help on the right.
     private StackPane createTopBar() {
-        Label mark = new Label("G");
-        mark.getStyleClass().add("logo-mark");
+        Node mark = createLogoMark();
         Label name = new Label("GradeZZY");
         name.getStyleClass().add("logo-name");
         HBox logo = Parts.row(Parts.GAP_SMALL, new Node[] {mark, name});
@@ -1044,6 +1176,22 @@ public class FlowWindow {
         StackPane bar = new StackPane(logo, tabBar, help);
         bar.getStyleClass().add("top-bar");
         return bar;
+    }
+
+    // Returns the logo picture, or a "G" tile if it cannot be read.
+    private Node createLogoMark() {
+        Image picture = AppIcons.loadTopBarLogo();
+        if (picture == null) {
+            Label tile = new Label("G");
+            tile.getStyleClass().add("logo-mark");
+            return tile;
+        }
+        ImageView logo = new ImageView(picture);
+        logo.setFitWidth(LOGO_SIZE);
+        logo.setFitHeight(LOGO_SIZE);
+        logo.setPreserveRatio(true);
+        logo.setSmooth(true);
+        return logo;
     }
 
     // Builds one text button with an icon for the top bar.
@@ -1064,12 +1212,15 @@ public class FlowWindow {
      * Acts on a key press before any control sees it: Ctrl or Cmd and
      * Enter presses the blue button, Ctrl or Cmd and F puts the cursor
      * in the Review search, Escape closes a sheet or goes back, and Ctrl
-     * or Cmd and 1 to 4 open a step.
+     * or Cmd and 1 to 4 open a step. While the tour is on screen, the
+     * tour takes every key instead.
      *
      * @param event the key press; consumed when it was a shortcut
      */
     private void handleShortcut(KeyEvent event) {
-        if (NEXT_KEYS.match(event)) {
+        if (tour != null && tour.isOpen()) {
+            tour.handleKey(event);
+        } else if (NEXT_KEYS.match(event)) {
             actionBar.firePrimary();
             event.consume();
         } else if (FIND_KEYS.match(event) && isReviewShown()) {
@@ -1106,11 +1257,14 @@ public class FlowWindow {
         return ThemeManager.LIGHT_THEME;
     }
 
-    // Adds or removes the dark class on the root.
+    // Adds or removes the dark class on the outer layout and on the root
+    // of the scene, which also holds the tour.
     private void applyDarkClass() {
         frame.getStyleClass().remove("dark");
+        root.getStyleClass().remove("dark");
         if (dark) {
             frame.getStyleClass().add("dark");
+            root.getStyleClass().add("dark");
         }
     }
 }

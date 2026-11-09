@@ -48,7 +48,7 @@ public class JsonWriter {
      * Creates a new json writer.
      */
     public JsonWriter() {
-        // nothing to set up yet
+        // nothing to set up
     }
 
     /**

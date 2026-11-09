@@ -101,6 +101,7 @@
     -fx-max-height: 48px;
 }
 
+/* The "G" tile, shown only when the logo picture cannot be read */
 .logo-mark {
     -fx-background-color: -color-fg-default;
     -fx-background-radius: 6px;
@@ -2289,4 +2290,51 @@
 
 .chart-label.series-3 {
     -fx-fill: series-three;
+}
+
+/* ---------------------------------------------------------------- tour */
+
+/* The window outside the part the tour lights up */
+.tour-dim {
+    -fx-fill: rgba(0, 0, 0, 0.60);
+}
+
+/* The blue border around the light and the pulse that spreads from it;
+   GuidedTour sets their widths, so none is set here */
+.tour-ring {
+    -fx-fill: transparent;
+    -fx-stroke: -color-accent-emphasis;
+}
+
+/* The card floats above the window, so it has a shadow like a sheet */
+.tour-card {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 12px;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 12px;
+    -fx-padding: 16px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.30), 32, 0, 0, 10);
+}
+
+.tour-area,
+.tour-count {
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.tour-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-default;
+    -fx-padding: 4px 0 0 0;
+}
+
+.tour-text {
+    -fx-text-fill: -color-fg-muted;
+    -fx-padding: 0 0 4px 0;
+}
+
+.hyperlink.tour-skip {
+    -fx-text-fill: -color-fg-muted;
+    -fx-padding: 0;
 }

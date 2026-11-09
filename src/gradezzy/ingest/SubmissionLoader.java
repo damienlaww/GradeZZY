@@ -297,8 +297,10 @@ public class SubmissionLoader {
     /**
      * Works out the username from a zip file or folder name by removing the
      * configured prefix, the .zip ending and a browser's copy number, so
-     * "2023-2024-ping.lee.2023 (1).zip" gives "ping.lee.2023". The window
-     * calls this too, so both show the same username.
+     * "2023-2024-ping.lee.2023 (1).zip" gives "ping.lee.2023". The
+     * username is in lower case, as on the roster, so "PING.LEE.2023.zip"
+     * gives "ping.lee.2023" too. The window calls this too, so both show
+     * the same username.
      *
      * @param zipFileName the zip file or folder name
      * @return the username, or an empty string if none is found
@@ -310,7 +312,8 @@ public class SubmissionLoader {
         String username = removeZipExtension(zipFileName.replaceFirst(
                 config.getString(ConfigKeys.ZIP_NAME_PREFIX_PATTERN), ""));
         // A second download of the same file is saved as "name (1).zip"
-        return username.trim().replaceFirst(COPY_NUMBER_PATTERN, "").trim();
+        username = username.trim().replaceFirst(COPY_NUMBER_PATTERN, "");
+        return username.trim().toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -617,6 +620,7 @@ public class SubmissionLoader {
         return submissions;
     }
 
+    // Marks a submission as failed and records why as an anomaly.
     private void reject(Submission submission, String message) {
         submission.setIngestFailure(message);
         submission.setStatus(SubmissionStatus.FAILED);
@@ -641,7 +645,7 @@ public class SubmissionLoader {
     // uploads a fixed version gets it saved as "name (1).zip"; for two
     // files of the same name in two chosen folders, the newer one, or on
     // a tie the one chosen later, as a late batch replaces an earlier
-    // result; else a username already in lower case, as on the roster.
+    // result; else a file name in lower case, as usernames are.
     private boolean isPreferred(Submission candidate, Submission current) {
         Path candidatePath = candidate.getOriginalPath();
         Path currentPath = current.getOriginalPath();
@@ -654,8 +658,8 @@ public class SubmissionLoader {
             return readModifiedMillis(candidatePath)
                     >= readModifiedMillis(currentPath);
         }
-        return isLowerCase(candidate.getUsername())
-                && !isLowerCase(current.getUsername());
+        return isLowerCase(fileNameOf(candidatePath))
+                && !isLowerCase(fileNameOf(currentPath));
     }
 
     // Says whether two different files share a name and were found in
@@ -688,9 +692,9 @@ public class SubmissionLoader {
         }
     }
 
-    // Says whether a username has no capital letter.
-    private boolean isLowerCase(String username) {
-        return username.equals(username.toLowerCase(Locale.ROOT));
+    // Says whether a name has no capital letter.
+    private boolean isLowerCase(String name) {
+        return name.equals(name.toLowerCase(Locale.ROOT));
     }
 
     // Tells the instructor, on the graded submission, which file of the

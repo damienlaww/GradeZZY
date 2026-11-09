@@ -41,10 +41,10 @@ public class GradingTask extends Task<GradingRun> {
     private final List<Path> inputPaths;
 
     // The roster chosen for this batch, or null to use the config
-    private Path scoreSheetFile;
+    private Path scoreSheetFile = null;
 
     // The starter folder chosen for this batch, or null to use the config
-    private Path starterDirectory;
+    private Path starterDirectory = null;
 
     // The section the batch belongs to
     private final Section section;
@@ -126,6 +126,30 @@ public class GradingTask extends Task<GradingRun> {
     }
 
     /**
+     * Creates a task that grades a late batch into an existing run of the
+     * same section.
+     *
+     * @param gradingService the grading service
+     * @param gradingRun the run the batch joins
+     * @param inputPaths the chosen zip files or folders
+     * @param testCaseSource where the testers come from
+     * @param listener the progress listener, on the background thread
+     * @param scoreSheetFile the roster chosen on Set up, or null
+     */
+    public GradingTask(GradingService gradingService, GradingRun gradingRun,
+            List<Path> inputPaths, TestCaseSource testCaseSource,
+            ProgressListener listener, Path scoreSheetFile) {
+        this.gradingService = gradingService;
+        this.kind = GradingTaskKind.ADD_TO_RUN;
+        this.inputPaths = inputPaths;
+        this.section = gradingRun.getSection();
+        this.testCaseSource = testCaseSource;
+        this.gradingRun = gradingRun;
+        this.listener = listener;
+        this.scoreSheetFile = scoreSheetFile;
+    }
+
+    /**
      * Runs the similar code check on the run once grading ends.
      *
      * @param plagiarismService the service that runs the check
@@ -173,12 +197,15 @@ public class GradingTask extends Task<GradingRun> {
         }
     }
 
-    // Asks the service to grade, retry or resume the batch.
+    // Asks the service to grade, retry, resume or add to the batch.
     private GradingRun grade() throws Exception {
         if (kind == GradingTaskKind.RETRY_FAILED) {
             return gradingService.retryFailed(gradingRun, listener);
         } else if (kind == GradingTaskKind.RESUME) {
             return gradingService.resume(gradingRun.getId(), listener);
+        } else if (kind == GradingTaskKind.ADD_TO_RUN) {
+            return gradingService.addToRun(gradingRun, inputPaths,
+                    testCaseSource, listener, scoreSheetFile);
         }
         // A null roster or starter folder means the one in the settings
         return gradingService.startGrading(inputPaths, section,

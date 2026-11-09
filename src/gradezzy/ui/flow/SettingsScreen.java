@@ -51,8 +51,6 @@ import gradezzy.util.TextUtils;
 
 /**
  * The Settings tab.
- *
- * <p>Tier: SHOULD.
  */
 public class SettingsScreen extends FlowScreen {
 
@@ -230,8 +228,6 @@ public class SettingsScreen extends FlowScreen {
     /**
      * Creates the Settings tab.
      *
-     * <p>Tier: SHOULD.
-     *
      * @param window the window
      */
     public SettingsScreen(FlowWindow window) {
@@ -330,8 +326,6 @@ public class SettingsScreen extends FlowScreen {
      * Puts a value in a setting's control without saving it, as if it
      * was typed. Used by the developer checks.
      *
-     * <p>Tier: COULD.
-     *
      * @param key the setting's name in config.properties
      * @param value the value
      */
@@ -346,8 +340,6 @@ public class SettingsScreen extends FlowScreen {
     /**
      * Says whether any setting has a change that is not saved yet.
      *
-     * <p>Tier: SHOULD.
-     *
      * @return true if a setting was changed and not saved
      */
     public boolean hasUnsavedChanges() {
@@ -361,8 +353,6 @@ public class SettingsScreen extends FlowScreen {
 
     /**
      * Puts every saved value back in its control.
-     *
-     * <p>Tier: SHOULD.
      */
     public void discardChanges() {
         for (SettingField field : fields) {
@@ -380,8 +370,6 @@ public class SettingsScreen extends FlowScreen {
 
     /**
      * Scrolls the cards to the top or to the bottom.
-     *
-     * <p>Tier: COULD.
      *
      * @param bottom true for the bottom
      */
@@ -433,7 +421,7 @@ public class SettingsScreen extends FlowScreen {
         listed(ConfigKeys.RUN_TIMEOUT_SECONDS, "Time limit per test run",
                 "A tester that runs longer is stopped.", RUN_SECONDS,
                 " seconds");
-        listed(ConfigKeys.COMPILE_TIMEOUT_SECONDS, "Time limit to compile",
+        listed(ConfigKeys.COMPILE_TIMEOUT_SECONDS, "Compile time limit",
                 "For one question folder.", COMPILE_SECONDS, " seconds");
         String[] threads = threadChoices();
         choice(ConfigKeys.THREAD_COUNT, "Students graded at once",
@@ -886,9 +874,8 @@ public class SettingsScreen extends FlowScreen {
         if (module != null) {
             title = "Change the export folder";
         }
-        save.setOnAction(event -> saveExportFolder(original,
-                modules.getValue(), sections.getValue(),
-                folder.getText().trim(), problem));
+        save.setOnAction(event -> saveExportFolderFrom(original, modules,
+                sections, folder, problem));
         VBox body = new VBox(Parts.GAP,
                 Parts.title(title),
                 Parts.subtitle("Exports of this module or section are saved "
@@ -965,6 +952,14 @@ public class SettingsScreen extends FlowScreen {
             return null;
         }
         return section;
+    }
+
+    // Saves the export folder typed in the sheet's fields.
+    private void saveExportFolderFrom(String original,
+            ComboBox<String> modules, ComboBox<String> sections,
+            TextField folder, Label problem) {
+        saveExportFolder(original, modules.getValue(), sections.getValue(),
+                folder.getText().trim(), problem);
     }
 
     // Checks and saves a module or section's export folder.
@@ -1051,12 +1046,9 @@ public class SettingsScreen extends FlowScreen {
         moduleList.setOnAction(event -> fillSections());
         boolean editable = getBackend().supports(Capability.SETTINGS);
         Button addModule = Parts.small("Add module",
-                () -> CourseSheets.openAddModule(getWindow(),
-                code -> moduleAdded(code)));
+                () -> openAddModule());
         Button addSection = Parts.small("Add section",
-                () -> CourseSheets.openAddSection(getWindow(),
-                moduleList.getValue(), code -> fillCourse(
-                moduleList.getValue())));
+                () -> openAddSection());
         addModule.setGraphic(Parts.icon(Parts.PLUS, SEARCH_ICON_SIZE));
         addSection.setGraphic(Parts.icon(Parts.PLUS, SEARCH_ICON_SIZE));
         addModule.setDisable(!editable);
@@ -1158,8 +1150,7 @@ public class SettingsScreen extends FlowScreen {
             } else {
                 Parts.tip(delete, refused);
             }
-            delete.setOnAction(event -> CourseSheets.askDeleteSection(
-                    getWindow(), module, code, () -> fillCourse(module)));
+            delete.setOnAction(event -> askDeleteSection(module, code));
             HBox chip = new HBox(CHIP_GAP, name, delete);
             chip.setAlignment(Pos.CENTER_LEFT);
             chip.getStyleClass().add("section-chip");
@@ -1266,10 +1257,32 @@ public class SettingsScreen extends FlowScreen {
         fillExportFolders();
     }
 
+    // Opens the sheet that adds a module.
+    private void openAddModule() {
+        CourseSheets.openAddModule(getWindow(), code -> moduleAdded(code));
+    }
+
     // Shows a module just added.
     private void moduleAdded(String code) {
         fillCourse(code);
         getWindow().notify("Added module " + code + ".");
+    }
+
+    // Opens the sheet that adds a section to the chosen module.
+    private void openAddSection() {
+        CourseSheets.openAddSection(getWindow(), moduleList.getValue(),
+                code -> fillChosenModule());
+    }
+
+    // Shows the chosen module's sections again.
+    private void fillChosenModule() {
+        fillCourse(moduleList.getValue());
+    }
+
+    // Asks before deleting a section, then shows its module again.
+    private void askDeleteSection(String module, String code) {
+        CourseSheets.askDeleteSection(getWindow(), module, code,
+                () -> fillCourse(module));
     }
 
     // Adds a deleted module back with its own sections and folders,
@@ -1345,11 +1358,6 @@ public class SettingsScreen extends FlowScreen {
         }
         return found;
     }
-
-    // Adds a change only for a setting this config.properties has; an
-    // older file may not have the newer lists, and saving one it lacks
-    // is refused.
-
 
     // Shows why an Undo did not work.
     private void notifyIfFailed(ActionResult result) {

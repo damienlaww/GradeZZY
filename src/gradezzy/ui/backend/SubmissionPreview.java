@@ -375,13 +375,14 @@ public class SubmissionPreview {
 
     // Lists the first few names, then says how many more there are.
     private String listNames(List<String> names) {
-        String text = "";
+        if (names.isEmpty()) {
+            return "";
+        }
+
+        String text = names.get(0);
         int shown = Math.min(names.size(), MAX_NAMES_SHOWN);
-        for (int index = 0; index < shown; index++) {
-            if (index > 0) {
-                text += ", ";
-            }
-            text += names.get(index);
+        for (int index = 1; index < shown; index++) {
+            text += ", " + names.get(index);
         }
         if (names.size() > shown) {
             text += " and " + (names.size() - shown) + " more";

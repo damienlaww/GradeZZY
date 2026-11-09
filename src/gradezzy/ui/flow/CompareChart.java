@@ -182,19 +182,24 @@ public class CompareChart extends Region {
     // Draws the horizontal gridlines and their percentages.
     private void drawGrid(int step, double yMax, double from, double to,
             double top, double plotHeight) {
-        for (int value = 0; value <= yMax; value += step) {
+        // The axis is the line at 0%, so 0% gets only its number
+        addGridNumber(0, from, top + plotHeight);
+        for (int value = step; value <= yMax; value += step) {
             double at = top + plotHeight - plotHeight * value / yMax;
-            if (value > 0) {
-                Line line = new Line(from, at, to, at);
-                line.getStyleClass().add("chart-grid");
-                getChildren().add(line);
-            }
-            Text label = addText(value + "%", "chart-tick");
-            label.setLayoutX(from - LABEL_GAP
-                    - label.getLayoutBounds().getWidth());
-            label.setLayoutY(at - label.getLayoutBounds().getMinY()
-                    - label.getLayoutBounds().getHeight() / 2);
+            Line line = new Line(from, at, to, at);
+            line.getStyleClass().add("chart-grid");
+            getChildren().add(line);
+            addGridNumber(value, from, at);
         }
+    }
+
+    // Writes the percentage of one gridline on its left.
+    private void addGridNumber(int value, double from, double at) {
+        Text label = addText(value + "%", "chart-tick");
+        label.setLayoutX(from - LABEL_GAP
+                - label.getLayoutBounds().getWidth());
+        label.setLayoutY(at - label.getLayoutBounds().getMinY()
+                - label.getLayoutBounds().getHeight() / 2);
     }
 
     // Draws one section's curve with a light fill under it.
@@ -211,10 +216,10 @@ public class CompareChart extends Region {
         for (int i = 0; i <= CURVE_STEPS; i++) {
             double mark = max * i / CURVE_STEPS;
             double share = Math.min(yMax, share(one, mark));
-            double x = left + plotWidth * mark / max;
-            double y = bottom - plotHeight * share / yMax;
-            curve.getPoints().addAll(x, y);
-            fill.getPoints().addAll(x, y);
+            double pixelX = left + plotWidth * mark / max;
+            double pixelY = bottom - plotHeight * share / yMax;
+            curve.getPoints().addAll(pixelX, pixelY);
+            fill.getPoints().addAll(pixelX, pixelY);
         }
         fill.getPoints().addAll(left + plotWidth, bottom);
         String series = seriesClass(index);
@@ -250,8 +255,8 @@ public class CompareChart extends Region {
             List<Integer> members = groups.get(groupMean);
             MarkStats first = stats.get(members.get(0));
             double mean = Math.max(0, Math.min(max, first.getMean()));
-            double x = left + plotWidth * mean / max;
-            Line line = new Line(x, top, x, bottom);
+            double lineX = left + plotWidth * mean / max;
+            Line line = new Line(lineX, top, lineX, bottom);
             line.getStyleClass().add("compare-mean-line");
             if (members.size() == 1) {
                 line.getStyleClass().add(seriesClass(members.get(0)));
@@ -262,9 +267,9 @@ public class CompareChart extends Region {
             List<String> who = new ArrayList<>();
             for (int index : members) {
                 who.add(names.get(index));
-                double y = bottom - plotHeight
+                double dotY = bottom - plotHeight
                         * Math.min(yMax, peak(stats.get(index))) / yMax;
-                Circle dot = new Circle(x, y, DOT_RADIUS);
+                Circle dot = new Circle(lineX, dotY, DOT_RADIUS);
                 dot.getStyleClass().addAll("compare-dot", seriesClass(index));
                 getChildren().add(dot);
             }
@@ -277,7 +282,7 @@ public class CompareChart extends Region {
             double height = label.getLayoutBounds().getHeight();
             // Kept inside the plot, beside the line's top
             double labelX = Math.min(left + plotWidth - width,
-                    Math.max(left, x + LABEL_GAP));
+                    Math.max(left, lineX + LABEL_GAP));
             double labelTop = top;
             Bounds box = new BoundingBox(labelX, labelTop, width, height);
             boolean moved = true;
@@ -335,8 +340,9 @@ public class CompareChart extends Region {
     // of its students expected to get that mark.
     private static double share(MarkStats one, double mark) {
         double spread = one.getSpread();
-        double z = (mark - one.getMean()) / spread;
-        return PERCENT * Math.exp(-z * z / 2) / (spread * ROOT_TWO_PI);
+        double zScore = (mark - one.getMean()) / spread;
+        return PERCENT * Math.exp(-zScore * zScore / 2)
+                / (spread * ROOT_TWO_PI);
     }
 
     // Returns the height of a section's peak. When every student has

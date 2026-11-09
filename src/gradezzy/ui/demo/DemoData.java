@@ -11,7 +11,6 @@ package gradezzy.ui.demo;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -66,6 +65,9 @@ public final class DemoData {
 
     /** The second student of the sample similar pair. */
     public static final String SIMILAR_SECOND_USERNAME = "learner.echo";
+
+    /** The username whose ZIP file holds an extra resources folder. */
+    public static final String EXTRA_FOLDER_USERNAME = "learner.echo";
 
     /** The number of students in the large sample cohort. */
     public static final int LARGE_COHORT_SIZE = 240;
@@ -133,6 +135,9 @@ public final class DemoData {
 
     // The case of Q1a that hangs or throws in the sample run
     private static final int FAILING_CASE = 3;
+
+    // A failed case expects its number times this, and gets one less
+    private static final int EXPECTED_FACTOR = 2;
 
     // The number of characters in the long sample log
     private static final int LONG_LOG_CHARACTERS = 100000;
@@ -686,8 +691,7 @@ public final class DemoData {
                         "Passed"));
             } else {
                 result.addTestCaseResult(new TestCaseResult(number, false,
-                        "Failed: expected " + (number * 2) + " but got "
-                        + (number * 2 - 1)));
+                        failedLine(number)));
             }
         }
         result.setCompiled(true);
@@ -712,12 +716,17 @@ public final class DemoData {
             if (number <= passed) {
                 output += "Passed\n";
             } else {
-                output += "Failed: expected " + (number * 2) + " but got "
-                        + (number * 2 - 1) + "\n";
+                output += failedLine(number) + "\n";
             }
         }
         output += (double) passed;
         return output;
+    }
+
+    // Writes the made-up Failed line of one test case.
+    private static String failedLine(int number) {
+        int expected = number * EXPECTED_FACTOR;
+        return "Failed: expected " + expected + " but got " + (expected - 1);
     }
 
     // Builds a log of about 100,000 characters, to test long output. The

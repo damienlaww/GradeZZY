@@ -46,9 +46,10 @@ public class FlowState {
     // True while a batch is being graded
     private boolean grading = false;
 
-    // The fix being undone or applied again on a background thread, or
-    // null. Only one student is graded again at a time.
-    private Anomaly fixInProgress = null;
+    // The fixes being undone or applied again on a background thread,
+    // the one running now first, or none. Only one job runs at a time,
+    // and it grades one student again at a time.
+    private final List<Anomaly> fixesInProgress = new ArrayList<>();
 
     // How many times grading has started, so a screen can tell that the
     // results may have changed since it last looked
@@ -318,7 +319,10 @@ public class FlowState {
      * @return its anomaly, or null when none is
      */
     public Anomaly getFixInProgress() {
-        return fixInProgress;
+        if (fixesInProgress.isEmpty()) {
+            return null;
+        }
+        return fixesInProgress.get(0);
     }
 
     /**
@@ -327,7 +331,41 @@ public class FlowState {
      * @param anomaly its anomaly, or null once the job has ended
      */
     public void setFixInProgress(Anomaly anomaly) {
-        fixInProgress = anomaly;
+        fixesInProgress.clear();
+        if (anomaly != null) {
+            fixesInProgress.add(anomaly);
+        }
+    }
+
+    /**
+     * Records the fixes a background job still has to undo, the one
+     * running now first.
+     *
+     * @param anomalies their anomalies, or none once the job has ended
+     */
+    public void setFixesInProgress(List<Anomaly> anomalies) {
+        fixesInProgress.clear();
+        fixesInProgress.addAll(anomalies);
+    }
+
+    /**
+     * Says whether a fix is being undone now or waits its turn in the
+     * background job.
+     *
+     * @param anomaly the fix's anomaly
+     * @return true while the job still has it to do
+     */
+    public boolean isFixInProgress(Anomaly anomaly) {
+        return fixesInProgress.contains(anomaly);
+    }
+
+    /**
+     * Counts the fixes the background job still has to do.
+     *
+     * @return the number, 0 when no job runs
+     */
+    public int countFixesInProgress() {
+        return fixesInProgress.size();
     }
 
     /**

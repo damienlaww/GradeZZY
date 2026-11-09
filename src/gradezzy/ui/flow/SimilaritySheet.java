@@ -78,7 +78,7 @@ public final class SimilaritySheet {
         body.getStyleClass().add("similar-sheet");
 
         SimilarityDetail detail = window.getBackend()
-                .getSimilarityDetail(pair);
+                .getSimilarityDetail(run, pair);
         if (detail == null) {
             body.getChildren().add(Parts.muted("The check returned no "
                     + "files to compare for this pair."));
@@ -122,18 +122,18 @@ public final class SimilaritySheet {
         VBox.setVgrow(code, Priority.ALWAYS);
         Label fileLabel = Parts.muted(file);
         fileLabel.getStyleClass().add("small-text");
-        VBox box = new VBox(Parts.GAP_SMALL / 2, Parts.strong(name),
+        VBox box = new VBox(Parts.GAP_TINY, Parts.strong(name),
                 fileLabel, code);
         box.setMinWidth(0);
         box.setPrefWidth(0);
         HBox.setHgrow(box, Priority.ALWAYS);
-        VBox.setMargin(code, new Insets(Parts.GAP_SMALL / 2, 0, 0, 0));
+        VBox.setMargin(code, new Insets(Parts.GAP_TINY, 0, 0, 0));
         return box;
     }
 
     // Lists the files the check left out.
     private static VBox leftOut(SimilarityDetail detail) {
-        VBox box = new VBox(Parts.GAP_SMALL / 2);
+        VBox box = new VBox(Parts.GAP_TINY);
         Label title = Parts.strong("Left out of the comparison");
         box.getChildren().add(title);
         if (detail.getExcludedFiles().isEmpty()) {

@@ -16,7 +16,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.config.ModuleSections;
@@ -30,14 +29,15 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.SavedAssessment;
+import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
-import gradezzy.service.ClassFileMatch;
 import gradezzy.model.TestCaseResult;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.service.AssessmentFactory;
+import gradezzy.service.ClassFileMatch;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.stats.StatisticsSummary;
 import gradezzy.ui.backend.ActionResult;
@@ -53,7 +53,6 @@ import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.backend.ReviewRules;
 import gradezzy.ui.backend.RunCallback;
 import gradezzy.ui.backend.RunRecord;
-import gradezzy.model.ScoreAdjustment;
 import gradezzy.ui.backend.SimilarityDetail;
 
 /**
@@ -270,9 +269,11 @@ public final class DemoBackend implements DashboardBackend {
         // Modules added in this session, after the sample ones
         for (String code : getSetting(ConfigKeys.MODULE_CODES).split(",")) {
             String trimmed = code.trim();
-            if (!trimmed.isEmpty() && !trimmed.equalsIgnoreCase(
-                    DemoData.MODULE_CODE) && !trimmed.equalsIgnoreCase(
-                    DemoData.EMPTY_MODULE_CODE)) {
+            boolean sampleModule = trimmed.equalsIgnoreCase(
+                    DemoData.MODULE_CODE);
+            boolean emptyModule = trimmed.equalsIgnoreCase(
+                    DemoData.EMPTY_MODULE_CODE);
+            if (!trimmed.isEmpty() && !sampleModule && !emptyModule) {
                 codes.add(trimmed);
             }
         }
@@ -436,7 +437,7 @@ public final class DemoBackend implements DashboardBackend {
                     "This file could not be opened as a ZIP archive. "
                     + "Replace it with a new copy.");
         }
-        if (name.startsWith("learner.echo")) {
+        if (name.startsWith(DemoData.EXTRA_FOLDER_USERNAME)) {
             return new ImportItem(kind, path, username, ImportState.WARNING,
                     "Holds an extra resources folder. It will still be "
                     + "graded.");
@@ -453,6 +454,30 @@ public final class DemoBackend implements DashboardBackend {
      */
     @Override
     public void startGrading(ImportBatch batch, Section section,
+            ProgressListener listener, RunCallback callback) {
+        startDemoRun(batch, section, listener, callback);
+    }
+
+    /**
+     * Returns no run: every demo batch starts its own run, so Set up never
+     * asks about a late batch in the demo.
+     */
+    @Override
+    public GradingRun findRunToJoin(Section section) {
+        return null;
+    }
+
+    /**
+     * Grades the batch as a new demo run, as the demo has no run to join.
+     */
+    @Override
+    public void addToRun(GradingRun gradingRun, ImportBatch batch,
+            ProgressListener listener, RunCallback callback) {
+        startDemoRun(batch, gradingRun.getSection(), listener, callback);
+    }
+
+    // Grades a batch of demo students as a new run.
+    private void startDemoRun(ImportBatch batch, Section section,
             ProgressListener listener, RunCallback callback) {
         GradingRun run = new GradingRun(String.format("%03d",
                 nextRunNumber), assessment, section, LocalDateTime.now());
@@ -889,11 +914,15 @@ public final class DemoBackend implements DashboardBackend {
                     + "export.");
         }
 
-        String preview;
+        String preview = "";
         if ("json".equalsIgnoreCase(formatName)) {
             preview = DemoExports.toJson(gradingRun, scope);
-        } else {
+        } else if ("csv".equalsIgnoreCase(formatName)) {
             preview = DemoExports.toCsv(gradingRun, scope);
+        } else {
+            // The reports have no preview; live mode writes them
+            return ActionResult.done("Demo mode writes no " + formatName
+                    + " file.");
         }
         return ActionResult.preview("Previewed " + formatName.toUpperCase()
                 + " for " + scope.size() + " student"
@@ -1220,7 +1249,8 @@ public final class DemoBackend implements DashboardBackend {
      * Returns synthetic excerpts and the files left out of the comparison.
      */
     @Override
-    public SimilarityDetail getSimilarityDetail(SimilarityPair pair) {
+    public SimilarityDetail getSimilarityDetail(GradingRun gradingRun,
+            SimilarityPair pair) {
         List<String> excluded = new ArrayList<>();
         excluded.add("RenameToYourUsername/Q2/Q2a.java (starter file)");
         excluded.add("Q2aTester.java (tester)");
@@ -1305,9 +1335,10 @@ public final class DemoBackend implements DashboardBackend {
         for (Submission submission : run.getSubmissions()) {
             for (Anomaly anomaly : submission.getAnomalies()) {
                 String username = submission.getUsername();
+                boolean approved = username.equals(
+                        DemoData.APPROVED_REPAIR_USERNAME);
                 if (anomaly.getType() == AnomalyType.MISSING_WRAPPER_FOLDER
-                        && username.equals(
-                        DemoData.APPROVED_REPAIR_USERNAME)) {
+                        && approved) {
                     anomaly.setFixStatus(FixStatus.APPROVED);
                 }
                 if (username.equals(DemoData.REVIEWED_USERNAME)) {

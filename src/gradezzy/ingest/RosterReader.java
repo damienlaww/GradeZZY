@@ -45,6 +45,9 @@ public class RosterReader {
     private static final String DENOMINATOR_COLUMN =
             "Calculated Final Grade Denominator";
 
+    // The mark some editors put at the very start of a UTF-8 file
+    private static final String BYTE_ORDER_MARK = "﻿";
+
     /**
      * Returned by readDenominator when the score sheet gives no single
      * denominator.
@@ -190,8 +193,8 @@ public class RosterReader {
     private List<String> readRecords(Path scoreSheetFile)
             throws IOException {
         String text = FileUtils.readText(scoreSheetFile);
-        if (text.startsWith("\uFEFF")) {
-            text = text.substring(1);
+        if (text.startsWith(BYTE_ORDER_MARK)) {
+            text = text.substring(BYTE_ORDER_MARK.length());
         }
         return splitRecords(TextUtils.normaliseLineEndings(text));
     }
@@ -280,8 +283,7 @@ public class RosterReader {
             char current = text.charAt(index);
             if (current == '"') {
                 quoted = !quoted;
-            }
-            if (current == '\n' && !quoted) {
+            } else if (current == '\n' && !quoted) {
                 addRecord(records, text.substring(recordStart, index));
                 recordStart = index + 1;
             }

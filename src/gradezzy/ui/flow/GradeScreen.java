@@ -86,6 +86,9 @@ public class GradeScreen extends FlowScreen
     // The share of the row for each of the two small cards
     private static final double HALF = 50.0;
 
+    // The gap between the share done and the time left
+    private static final double TIME_GAP = 2.0;
+
     // The separator between parts of a line
     private static final String DOT = " · ";
 
@@ -125,7 +128,7 @@ public class GradeScreen extends FlowScreen
     private final Label percent = new Label("0%");
 
     // The five steps each student goes through, with the current one lit
-    private final HBox stageSteps = new HBox(Parts.GAP_SMALL / 2);
+    private final HBox stageSteps = new HBox(Parts.GAP_TINY);
     private final List<Label> stepLabels = new ArrayList<>();
 
     // "Now:", or a message when no student is being graded
@@ -140,10 +143,7 @@ public class GradeScreen extends FlowScreen
     // Why grading could not run, shown only after a failure
     private final Label reason = Parts.muted("");
 
-    // The share of students done, from 0 to 1
-    private final DoubleProperty progress = new SimpleDoubleProperty(0);
-
-    // The share the bar shows: it glides after progress, so it keeps
+    // The share the bar shows: it glides after the share done, so it keeps
     // moving between students instead of jumping when one finishes
     private final DoubleProperty shownProgress = new SimpleDoubleProperty(0);
 
@@ -295,6 +295,23 @@ public class GradeScreen extends FlowScreen
     }
 
     /**
+     * Grades the batch on Set up into the section's existing run, so
+     * Review and Export show the whole section.
+     *
+     * @param run the run the batch joins
+     */
+    public void startAdding(GradingRun run) {
+        prepare(getState().getSection().getLabel());
+        total = getState().getBatch().countStudents();
+        updateCount();
+        getState().setGrading(true);
+        getState().setSkippedFiles(
+                getState().getBatch().getUnusableSubmissions());
+        getBackend().addToRun(run, getState().getBatch(), this, this);
+        refreshActions();
+    }
+
+    /**
      * Grades the submissions of a run that were not graded yet, or also
      * the ones that failed.
      *
@@ -342,13 +359,13 @@ public class GradeScreen extends FlowScreen
         done.setMinWidth(Label.USE_PREF_SIZE);
         ofTotal.setMinWidth(Label.USE_PREF_SIZE);
         timeLeft.setMinWidth(Label.USE_PREF_SIZE);
-        HBox count = new HBox(Parts.GAP_SMALL / 2, done, ofTotal);
+        HBox count = new HBox(Parts.GAP_TINY, done, ofTotal);
         count.setAlignment(Pos.BASELINE_LEFT);
         // The share done and the time left, on the right of the count
         percent.getStyleClass().add("grade-percent");
         percent.setMinWidth(Label.USE_PREF_SIZE);
         timeLeft.getStyleClass().add("small-text");
-        VBox right = new VBox(2, percent, timeLeft);
+        VBox right = new VBox(TIME_GAP, percent, timeLeft);
         right.setAlignment(Pos.CENTER_RIGHT);
         HBox top = new HBox(Parts.GAP, count, Parts.grow(), right);
         top.setAlignment(Pos.CENTER_LEFT);
@@ -379,17 +396,12 @@ public class GradeScreen extends FlowScreen
         nowStage.setMinWidth(Label.USE_PREF_SIZE);
         // A long name is cut, never the stage
         nowName.setMinWidth(0);
-        for (String step : STEP_NAMES) {
-            Label label = new Label(step);
-            label.getStyleClass().addAll("small-text", "grade-step");
-            label.setMinWidth(Label.USE_PREF_SIZE);
-            stepLabels.add(label);
-            if (!stageSteps.getChildren().isEmpty()) {
-                Label arrow = Parts.muted("\u203A");
-                arrow.getStyleClass().add("small-text");
-                stageSteps.getChildren().add(arrow);
-            }
-            stageSteps.getChildren().add(label);
+        stageSteps.getChildren().add(stepLabel(STEP_NAMES[0]));
+        for (int index = 1; index < STEP_NAMES.length; index++) {
+            Label arrow = Parts.muted("\u203A");
+            arrow.getStyleClass().add("small-text");
+            stageSteps.getChildren().add(arrow);
+            stageSteps.getChildren().add(stepLabel(STEP_NAMES[index]));
         }
         stageSteps.setAlignment(Pos.CENTER_RIGHT);
         stageSteps.setMinWidth(HBox.USE_PREF_SIZE);
@@ -399,6 +411,15 @@ public class GradeScreen extends FlowScreen
         line.getStyleClass().add("grade-now-line");
         line.setMinWidth(0);
         return line;
+    }
+
+    // Builds the label of one step and keeps it, so it can be lit.
+    private Label stepLabel(String step) {
+        Label label = new Label(step);
+        label.getStyleClass().addAll("small-text", "grade-step");
+        label.setMinWidth(Label.USE_PREF_SIZE);
+        stepLabels.add(label);
+        return label;
     }
 
     // Shows a message in the line under the bar in place of a student.
@@ -464,14 +485,11 @@ public class GradeScreen extends FlowScreen
             HBox row = Parts.row(Parts.GAP,
                     new Node[] {pill, Parts.grow(), counts[index]});
             row.getStyleClass().add("card-row");
-            if (index == 0) {
-                row.getStyleClass().add("first");
-            }
-            if (index == words.length - 1) {
-                row.getStyleClass().add("last");
-            }
             rows.getChildren().add(row);
         }
+        int lastRow = rows.getChildren().size() - 1;
+        rows.getChildren().get(0).getStyleClass().add("first");
+        rows.getChildren().get(lastRow).getStyleClass().add("last");
         VBox card = Parts.card("So far", new Node[] {rows});
         card.setMaxHeight(Double.MAX_VALUE);
         return card;
@@ -580,6 +598,8 @@ public class GradeScreen extends FlowScreen
         getState().setGrading(false);
         getState().setRun(gradingRun);
         getState().attachSkippedFiles(gradingRun);
+        // A late batch adds students, so who has no submission changes
+        getState().forgetMissingStudents();
         end();
         if (gradingRun != null) {
             for (Submission submission : gradingRun.getSubmissions()) {
@@ -613,6 +633,8 @@ public class GradeScreen extends FlowScreen
     @Override
     public void onFailed(String message) {
         getState().setGrading(false);
+        // No run ended, so the skipped files belong to none
+        getState().attachSkippedFiles(null);
         failure = message;
         end();
         heading.setText("Grading could not run");
@@ -687,7 +709,6 @@ public class GradeScreen extends FlowScreen
             share = (double) finished / total;
         }
         percent.setText(Math.round(share * PERCENT) + "%");
-        progress.set(share);
         glideTo(share);
         updateTimeLeft();
         updateChart();

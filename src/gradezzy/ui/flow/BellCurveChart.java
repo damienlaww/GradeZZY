@@ -176,10 +176,10 @@ public class BellCurveChart extends Region {
         if (small) {
             binCount = SMALL_BINS;
         }
-        int[] counts;
-        double binMarks;
-        double lowMark;
-        double highMark;
+        int[] counts = null;
+        double binMarks = 0.0;
+        double lowMark = 0.0;
+        double highMark = 0.0;
         if (single) {
             counts = countSingle((int) max + 1);
             binMarks = 1.0;
@@ -191,7 +191,7 @@ public class BellCurveChart extends Region {
             lowMark = 0.0;
             highMark = max;
         }
-        ChartScale x = new ChartScale(lowMark, highMark, left,
+        ChartScale xScale = new ChartScale(lowMark, highMark, left,
                 left + plotWidth);
 
         double tallest = 0;
@@ -209,18 +209,18 @@ public class BellCurveChart extends Region {
         int gridStep = gridStep(tallest * HEADROOM);
         double yMax = Math.max(gridStep, Math.ceil(tallest * HEADROOM
                 / gridStep) * gridStep);
-        ChartScale y = new ChartScale(0, yMax, bottom, top);
+        ChartScale yScale = new ChartScale(0, yMax, bottom, top);
 
         if (!small) {
-            drawGrid(y, gridStep, yMax, left, left + plotWidth);
-            drawBand(x, top, plotHeight);
+            drawGrid(yScale, gridStep, yMax, left, left + plotWidth);
+            drawBand(xScale, top, plotHeight);
         }
-        drawBars(counts, x, y, single, binMarks, bottom);
-        drawCurve(x, y, binMarks * curveScale, lowMark, highMark);
+        drawBars(counts, xScale, yScale, single, binMarks, bottom);
+        drawCurve(xScale, yScale, binMarks * curveScale, lowMark, highMark);
         addLine(left, bottom, left + plotWidth, bottom, "chart-axis");
-        drawTicks(x, max, bottom, single);
+        drawTicks(xScale, max, bottom, single);
         if (!small) {
-            drawMarkers(x, top, bottom);
+            drawMarkers(xScale, top, bottom);
             drawAxisNames(left, plotWidth, top, plotHeight, height);
         }
     }
@@ -237,27 +237,32 @@ public class BellCurveChart extends Region {
     }
 
     // Draws the horizontal gridlines and their numbers.
-    private void drawGrid(ChartScale y, int step, double yMax, double from,
-            double to) {
-        for (int value = 0; value <= yMax; value += step) {
-            double at = y.map(value);
-            if (value > 0) {
-                addLine(from, at, to, at, "chart-grid");
-            }
-            Text label = addText(String.valueOf(value), "chart-tick");
-            label.setTextAlignment(TextAlignment.RIGHT);
-            placeRight(label, from - LABEL_GAP, at);
+    private void drawGrid(ChartScale yScale, int step, double yMax,
+            double from, double to) {
+        // The axis is the line at 0, so 0 gets only its number
+        addGridNumber(yScale, 0, from);
+        for (int value = step; value <= yMax; value += step) {
+            double at = yScale.map(value);
+            addLine(from, at, to, at, "chart-grid");
+            addGridNumber(yScale, value, from);
         }
     }
 
+    // Writes the number of one gridline on its left.
+    private void addGridNumber(ChartScale yScale, int value, double from) {
+        Text label = addText(String.valueOf(value), "chart-tick");
+        label.setTextAlignment(TextAlignment.RIGHT);
+        placeRight(label, from - LABEL_GAP, yScale.map(value));
+    }
+
     // Shades the band of the average plus or minus one spread.
-    private void drawBand(ChartScale x, double top, double plotHeight) {
+    private void drawBand(ChartScale xScale, double top, double plotHeight) {
         double spread = stats.getSpread();
         if (spread <= 0) {
             return;
         }
-        double from = x.clampMap(stats.getMean() - spread);
-        double to = x.clampMap(stats.getMean() + spread);
+        double from = xScale.clampMap(stats.getMean() - spread);
+        double to = xScale.clampMap(stats.getMean() + spread);
         Rectangle band = new Rectangle(from, top, to - from, plotHeight);
         band.getStyleClass().add("chart-band");
         band.setMouseTransparent(true);
@@ -265,29 +270,31 @@ public class BellCurveChart extends Region {
     }
 
     // Draws one bar per bin, with a tooltip giving its count.
-    private void drawBars(int[] counts, ChartScale x, ChartScale y,
+    private void drawBars(int[] counts, ChartScale xScale, ChartScale yScale,
             boolean single, double binMarks, double bottom) {
         for (int bin = 0; bin < counts.length; bin++) {
             if (counts[bin] > 0) {
-                drawBar(bin, counts[bin], x, y, single, binMarks, bottom);
+                drawBar(bin, counts[bin], xScale, yScale, single, binMarks,
+                        bottom);
             }
         }
     }
 
     // Draws the bar of one bin.
-    private void drawBar(int bin, int count, ChartScale x, ChartScale y,
-            boolean single, double binMarks, double bottom) {
-        double from;
-        double to;
+    private void drawBar(int bin, int count, ChartScale xScale,
+            ChartScale yScale, boolean single, double binMarks,
+            double bottom) {
+        double from = 0.0;
+        double to = 0.0;
         if (single) {
-            from = x.map(bin - 0.5);
-            to = x.map(bin + 0.5);
+            from = xScale.map(bin - HALF_MARK);
+            to = xScale.map(bin + HALF_MARK);
         } else {
-            from = x.map(bin * binMarks);
-            to = x.map((bin + 1) * binMarks);
+            from = xScale.map(bin * binMarks);
+            to = xScale.map((bin + 1) * binMarks);
         }
         double barWidth = Math.max(1, to - from - BAR_GAP);
-        double barHeight = bottom - y.map(count);
+        double barHeight = bottom - yScale.map(count);
         SVGPath bar = new SVGPath();
         bar.setContent(roundedTop(from + BAR_GAP / 2, bottom, barWidth,
                 barHeight));
@@ -300,22 +307,22 @@ public class BellCurveChart extends Region {
     // Draws the bell curve of the average and spread, with the area under
     // it tinted so the shape reads at a glance. binMarks also carries the
     // stretch that makes the curve's peak meet the tallest bar.
-    private void drawCurve(ChartScale x, ChartScale y, double binMarks,
-            double lowMark, double highMark) {
+    private void drawCurve(ChartScale xScale, ChartScale yScale,
+            double binMarks, double lowMark, double highMark) {
         if (stats.getSpread() <= 0 || stats.getCount() < 2) {
             return;
         }
         Polyline curve = new Polyline();
         Polygon area = new Polygon();
-        area.getPoints().addAll(x.map(lowMark), y.map(0));
+        area.getPoints().addAll(xScale.map(lowMark), yScale.map(0));
         double step = (highMark - lowMark) / CURVE_STEPS;
         for (int i = 0; i <= CURVE_STEPS; i++) {
             double mark = lowMark + i * step;
-            double at = y.map(curveHeight(mark, binMarks));
-            curve.getPoints().addAll(x.map(mark), at);
-            area.getPoints().addAll(x.map(mark), at);
+            double at = yScale.map(curveHeight(mark, binMarks));
+            curve.getPoints().addAll(xScale.map(mark), at);
+            area.getPoints().addAll(xScale.map(mark), at);
         }
-        area.getPoints().addAll(x.map(highMark), y.map(0));
+        area.getPoints().addAll(xScale.map(highMark), yScale.map(0));
         area.getStyleClass().add("chart-curve-area");
         area.setMouseTransparent(true);
         curve.getStyleClass().add("chart-curve");
@@ -324,9 +331,9 @@ public class BellCurveChart extends Region {
     }
 
     // Labels the marks along the bottom.
-    private void drawTicks(ChartScale x, double max, double bottom,
+    private void drawTicks(ChartScale xScale, double max, double bottom,
             boolean single) {
-        double step;
+        double step = 0.0;
         if (small) {
             // One label on each edge between bars
             step = max / SMALL_BINS;
@@ -337,19 +344,19 @@ public class BellCurveChart extends Region {
         }
         for (double mark = 0; mark <= max + step / 2; mark += step) {
             Text label = addText(Parts.mark(round(mark)), "chart-tick");
-            placeCentre(label, x.map(mark), bottom + LABEL_GAP);
+            placeCentre(label, xScale.map(mark), bottom + LABEL_GAP);
         }
     }
 
     // Draws the pass mark and average lines with their names.
-    private void drawMarkers(ChartScale x, double top, double bottom) {
-        double pass = x.clampMap(stats.getPassMark());
+    private void drawMarkers(ChartScale xScale, double top, double bottom) {
+        double pass = xScale.clampMap(stats.getPassMark());
         Line passLine = addLine(pass, top - LINE_RISE, pass, bottom,
                 "chart-pass");
         passLine.setMouseTransparent(true);
         Text passName = addText("Pass mark " + Parts.mark(round(
                 stats.getPassMark())), "chart-note");
-        double mean = x.clampMap(stats.getMean());
+        double mean = xScale.clampMap(stats.getMean());
         Line meanLine = addLine(mean, top - LINE_RISE, mean, bottom,
                 "chart-mean");
         meanLine.setMouseTransparent(true);
@@ -387,8 +394,9 @@ public class BellCurveChart extends Region {
         if (spread <= 0) {
             return 0;
         }
-        double z = (mark - stats.getMean()) / spread;
-        double density = Math.exp(-z * z / 2) / (spread * ROOT_TWO_PI);
+        double zScore = (mark - stats.getMean()) / spread;
+        double density = Math.exp(-zScore * zScore / 2)
+                / (spread * ROOT_TWO_PI);
         return stats.getCount() * density * binMarks;
     }
 
@@ -417,23 +425,23 @@ public class BellCurveChart extends Region {
     }
 
     // Returns the path of a bar with rounded top corners.
-    private static String roundedTop(double x, double bottom, double width,
-            double height) {
+    private static String roundedTop(double leftX, double bottom,
+            double width, double height) {
         double radius = Math.min(BAR_RADIUS, Math.min(width / 2, height));
-        return "M" + x + "," + bottom
+        return "M" + leftX + "," + bottom
                 + " V" + (bottom - height + radius)
-                + " Q" + x + "," + (bottom - height) + " " + (x + radius)
-                + "," + (bottom - height)
-                + " H" + (x + width - radius)
-                + " Q" + (x + width) + "," + (bottom - height) + " "
-                + (x + width) + "," + (bottom - height + radius)
+                + " Q" + leftX + "," + (bottom - height) + " "
+                + (leftX + radius) + "," + (bottom - height)
+                + " H" + (leftX + width - radius)
+                + " Q" + (leftX + width) + "," + (bottom - height) + " "
+                + (leftX + width) + "," + (bottom - height + radius)
                 + " V" + bottom + " Z";
     }
 
     // Adds a line with a style class.
-    private Line addLine(double x1, double y1, double x2, double y2,
-            String styleClass) {
-        Line line = new Line(x1, y1, x2, y2);
+    private Line addLine(double startX, double startY, double endX,
+            double endY, String styleClass) {
+        Line line = new Line(startX, startY, endX, endY);
         line.getStyleClass().add(styleClass);
         getChildren().add(line);
         return line;
@@ -450,23 +458,26 @@ public class BellCurveChart extends Region {
         return text;
     }
 
-    // Places text so its right edge is at x and its middle at y.
-    private static void placeRight(Text text, double x, double y) {
-        text.setLayoutX(x - text.getLayoutBounds().getWidth());
-        text.setLayoutY(y - text.getLayoutBounds().getMinY()
+    // Places text so its right edge is at rightX and its middle at
+    // middleY.
+    private static void placeRight(Text text, double rightX,
+            double middleY) {
+        text.setLayoutX(rightX - text.getLayoutBounds().getWidth());
+        text.setLayoutY(middleY - text.getLayoutBounds().getMinY()
                 - text.getLayoutBounds().getHeight() / 2);
     }
 
-    // Places text so its left edge is at x and its middle at y.
-    private static void placeLeft(Text text, double x, double y) {
-        text.setLayoutX(x);
-        text.setLayoutY(y - text.getLayoutBounds().getMinY()
+    // Places text so its left edge is at leftX and its middle at middleY.
+    private static void placeLeft(Text text, double leftX, double middleY) {
+        text.setLayoutX(leftX);
+        text.setLayoutY(middleY - text.getLayoutBounds().getMinY()
                 - text.getLayoutBounds().getHeight() / 2);
     }
 
-    // Places text so its centre is at x and its top at y.
-    private static void placeCentre(Text text, double x, double y) {
-        text.setLayoutX(x - text.getLayoutBounds().getWidth() / 2);
-        text.setLayoutY(y - text.getLayoutBounds().getMinY());
+    // Places text so its centre is at centreX and its top at topY.
+    private static void placeCentre(Text text, double centreX,
+            double topY) {
+        text.setLayoutX(centreX - text.getLayoutBounds().getWidth() / 2);
+        text.setLayoutY(topY - text.getLayoutBounds().getMinY());
     }
 }

@@ -43,7 +43,6 @@ import gradezzy.service.HistoryService;
 import gradezzy.service.PipelineFactory;
 import gradezzy.service.PlagiarismService;
 import gradezzy.service.ScoreAdjustmentService;
-import gradezzy.service.SearchService;
 import gradezzy.service.ServiceRegistry;
 import gradezzy.service.SettingsService;
 import gradezzy.service.StatisticsService;
@@ -108,7 +107,6 @@ public class ApplicationContext {
                 createExportService(),
                 new StatisticsService(new StatisticsCalculator(config),
                         repository, gradingService),
-                new SearchService(config),
                 auditService,
                 new SettingsService(config, auditService),
                 new HistoryService(config, repository,

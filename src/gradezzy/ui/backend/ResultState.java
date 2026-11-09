@@ -83,10 +83,10 @@ public enum ResultState {
      */
     public static ResultState of(Submission submission,
             DashboardBackend backend) {
-        SubmissionStatus status = submission.getStatus();
         if (isNoSubmission(submission)) {
             return NO_SUBMISSION;
         }
+        SubmissionStatus status = submission.getStatus();
         if (status == SubmissionStatus.FAILED) {
             return COULD_NOT_GRADE;
         }
@@ -190,17 +190,6 @@ public enum ResultState {
     public static boolean hasTotal(Submission submission) {
         return submission.getStatus() == SubmissionStatus.GRADED
                 && !submission.getQuestionResults().isEmpty();
-    }
-
-    // Says whether the submission has an anomaly of one type.
-    private static boolean hasAnomaly(Submission submission,
-            AnomalyType type) {
-        for (Anomaly anomaly : submission.getAnomalies()) {
-            if (anomaly.getType() == type) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // Says whether any tester of the submission timed out.

@@ -51,6 +51,15 @@ public enum Capability {
             CapabilityStatus.WORKS_NOW,
             "Nothing; it works for the last run of this session."),
 
+    /** Adds a late batch to the section's existing run. */
+    LATE_BATCH("Add a late batch to a run",
+            "Adds students to the section's existing run instead of "
+            + "starting a second run, replacing the result of a student "
+            + "graded before.", "Jing Yuan, Seth",
+            "GradingService.findNewestRun, addToRun",
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; Set up asks before grading."),
+
     /** Continues a saved run. */
     RESUME_RUN("Resume a cancelled run",
             "Finishes a cancelled run without grading finished students "
@@ -100,11 +109,11 @@ public enum Capability {
     /** Applies a rejected fix again and grades the student again. */
     REAPPLY_FIX("Apply a rejected fix again",
             "Puts a rejected fix back and grades the student with it "
-            + "again.", "Jing Yuan, Jun Sheng", null,
-            CapabilityStatus.PROPOSED,
-            "A service method, such as AnomalyService.reapplyFix, that "
-            + "takes the fix off the student's rejected list and grades "
-            + "the student again."),
+            + "again.", "Jing Yuan, Jun Sheng",
+            "AnomalyService.reapplyFix, canReapplyFix",
+            CapabilityStatus.WORKS_NOW, "Nothing; it works for a fix "
+            + "rejected since GradeZZY was opened, or in a run resumed "
+            + "since."),
 
     /** Records a review decision on a flag. */
     FLAG_REVIEW("Mark flags reviewed or rejected",
@@ -118,7 +127,8 @@ public enum Capability {
     /** Searches, filters and sorts students. */
     SEARCH("Search, filter and sort",
             "Finds students by name and orders the results table.",
-            "Jing Yuan", "SearchService.search", CapabilityStatus.WORKS_NOW,
+            "Jing Yuan", "ReviewScreen filters the rows itself",
+            CapabilityStatus.WORKS_NOW,
             "Nothing; searching already works."),
 
     /** The folder tree and source files of a working copy. */
@@ -196,9 +206,9 @@ public enum Capability {
     /** Exports the audit log. */
     AUDIT_EXPORT("Export the audit log",
             "Saves the audit log as a file to keep or share.",
-            "Jing Yuan, Huxley", null, CapabilityStatus.PROPOSED,
-            "Register AuditLogExporter in ApplicationContext and add an "
-            + "export method for the audit log."),
+            "Jing Yuan, Huxley", "ExportService.export (Audit log)",
+            CapabilityStatus.WORKS_NOW, "Nothing; Export saves it beside "
+            + "the score sheet when its box is ticked."),
 
     /** Reads, checks and saves settings. */
     SETTINGS("Settings",
@@ -216,10 +226,10 @@ public enum Capability {
 
     /** The compared files and excerpts of one similar pair. */
     SIMILARITY_DETAIL("Compare a similar pair",
-            "Shows the matching code of a pair side by side.", "Jun Sheng",
-            null, CapabilityStatus.PROPOSED,
-            "The compared files, matching excerpts and the excluded "
-            + "starter and tester files of one pair."),
+            "Shows the matching code of a pair side by side.",
+            "Jing Yuan, Jun Sheng", "LiveBackend.readSourceFile",
+            CapabilityStatus.WORKS_NOW,
+            "Nothing; it shows both students' answer files."),
 
     /** Testers from a folder. */
     TESTER_FOLDER("Use a tester folder",
@@ -230,8 +240,10 @@ public enum Capability {
     /** Testers generated from typed test cases. */
     TYPED_TEST_CASES("Typed test cases",
             "Builds testers from test cases you type in the app.", "Zach",
-            "TypedTestCaseSource, TesterGenerator", CapabilityStatus.WAITING,
-            "TypedTestCaseSource.prepareTesters and TesterGenerator."),
+            "TypedTestCaseSource, TesterGenerator",
+            CapabilityStatus.WORKS_NOW, "Nothing; each typed case is "
+            + "worth 1 mark, and the generated testers are kept in the "
+            + "output folder."),
 
     /** Runs the tester of one question again. */
     RETRY_QUESTION("Retry one question",
@@ -271,9 +283,9 @@ public enum Capability {
     /** A report for one student. */
     STUDENT_REPORT_EXPORT("Export one student's report",
             "Saves one student's marks and evidence as a report.",
-            "Jing Yuan, Huxley", null, CapabilityStatus.PROPOSED,
-            "Register StudentReportExporter and add an export method for "
-            + "one submission.");
+            "Jing Yuan, Huxley", "ExportService.export (Student report)",
+            CapabilityStatus.WORKS_NOW, "Nothing; Export saves one file "
+            + "with a report on each chosen student.");
 
     // The short name shown to the instructor
     private final String title;

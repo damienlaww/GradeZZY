@@ -123,7 +123,9 @@ public abstract class AbstractValidator implements Validator {
      * Finds the folder that should hold the question folders. Checks run
      * before any fix, so this is wherever they really are: the top of the
      * working copy when the username folder is missing, the folder named
-     * after the username, or the only folder there is.
+     * after the username, the only folder there is, or the only folder
+     * that holds question folders (RenameToYourUsername next to an IDE
+     * folder such as bin).
      *
      * @param submission the submission
      * @param assessment the assessment
@@ -151,7 +153,38 @@ public abstract class AbstractValidator implements Validator {
             return topFolders.get(0);
         }
 
-        return null;
+        return findOnlyHolder(topFolders, assessment);
+    }
+
+    /**
+     * Returns the folders that hold at least one question folder.
+     *
+     * @param folders the folders to search
+     * @param assessment the assessment
+     * @return the folders that hold a question folder, maybe none
+     * @throws IOException if a folder cannot be listed
+     */
+    protected List<Path> findHolders(List<Path> folders,
+            Assessment assessment) throws IOException {
+        List<Path> holders = new ArrayList<>();
+
+        for (Path folder : folders) {
+            if (holdsQuestionFolder(listFolders(folder), assessment)) {
+                holders.add(folder);
+            }
+        }
+        return holders;
+    }
+
+    // Returns the only folder that holds a question folder, or null.
+    private Path findOnlyHolder(List<Path> folders, Assessment assessment)
+            throws IOException {
+        List<Path> holders = findHolders(folders, assessment);
+
+        if (holders.size() != 1) {
+            return null;
+        }
+        return holders.get(0);
     }
 
     /**

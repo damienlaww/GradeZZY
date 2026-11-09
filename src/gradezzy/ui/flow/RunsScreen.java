@@ -17,7 +17,6 @@ import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -59,8 +58,6 @@ import gradezzy.ui.backend.RunRecord;
 
 /**
  * The Runs tab.
- *
- * <p>Tier: SHOULD.
  */
 public class RunsScreen extends FlowScreen {
 
@@ -92,6 +89,9 @@ public class RunsScreen extends FlowScreen {
     // A student's username is shorter than this
     private static final int STUDENT_NAME_LIMIT = 40;
 
+    // Comes between the student and the rest of an activity's detail
+    private static final String NAME_SEPARATOR = ": ";
+
     // The height of an activity row
     private static final double ACTIVITY_ROW_HEIGHT = 44.0;
 
@@ -113,8 +113,19 @@ public class RunsScreen extends FlowScreen {
     // The width of the average bar
     private static final double AVERAGE_BAR_WIDTH = 90.0;
 
+    // The narrowest the average bar may shrink to
+    private static final double AVERAGE_BAR_MIN_WIDTH =
+            AVERAGE_BAR_WIDTH / 2;
+
     // The width of the activity search field
     private static final double SEARCH_WIDTH = 260.0;
+
+    // The runs search field, a third wider than the activity one
+    private static final double RUNS_SEARCH_WIDTH = SEARCH_WIDTH
+            + SEARCH_WIDTH / 3;
+
+    // The gap between a run's name and when it was graded
+    private static final double RUN_CELL_GAP = 2.0;
 
     // The size of the search icon
     private static final double SEARCH_ICON_SIZE = 14.0;
@@ -174,8 +185,6 @@ public class RunsScreen extends FlowScreen {
     /**
      * Creates the Runs tab.
      *
-     * <p>Tier: SHOULD.
-     *
      * @param window the window
      */
     public RunsScreen(FlowWindow window) {
@@ -218,8 +227,6 @@ public class RunsScreen extends FlowScreen {
 
     /**
      * Shows the table of runs.
-     *
-     * <p>Tier: SHOULD.
      */
     public void showRuns() {
         runsButton.setSelected(true);
@@ -227,8 +234,6 @@ public class RunsScreen extends FlowScreen {
 
     /**
      * Shows the backups.
-     *
-     * <p>Tier: SHOULD.
      */
     public void showBackups() {
         backupsButton.setSelected(true);
@@ -236,8 +241,6 @@ public class RunsScreen extends FlowScreen {
 
     /**
      * Shows the activity log.
-     *
-     * <p>Tier: SHOULD.
      */
     public void showActivity() {
         activityButton.setSelected(true);
@@ -289,8 +292,8 @@ public class RunsScreen extends FlowScreen {
 
         runsSearch.setPromptText("Search by module, section or assessment");
         runsSearch.setLeft(Parts.icon(Parts.SEARCH, SEARCH_ICON_SIZE));
-        runsSearch.setPrefWidth(SEARCH_WIDTH + SEARCH_WIDTH / 3);
-        runsSearch.setMaxWidth(SEARCH_WIDTH + SEARCH_WIDTH / 3);
+        runsSearch.setPrefWidth(RUNS_SEARCH_WIDTH);
+        runsSearch.setMaxWidth(RUNS_SEARCH_WIDTH);
         runsSearch.textProperty().addListener((observable, before,
                 after) -> refresh());
         runsCount.getStyleClass().add("small-text");
@@ -317,20 +320,14 @@ public class RunsScreen extends FlowScreen {
         // The kinds of activity, as a row of filter buttons
         HBox kinds = new HBox();
         kinds.getStyleClass().add("segmented");
-        for (int index = 0; index < KINDS.length; index++) {
-            ToggleButton kind = new ToggleButton(KINDS[index]);
-            kind.setToggleGroup(kindGroup);
-            kind.setUserData(KINDS[index]);
-            if (index == 0) {
-                kind.getStyleClass().add("left-pill");
-                kind.setSelected(true);
-            } else if (index == KINDS.length - 1) {
-                kind.getStyleClass().add("right-pill");
-            } else {
-                kind.getStyleClass().add("center-pill");
-            }
-            kinds.getChildren().add(kind);
+        int lastIndex = KINDS.length - 1;
+        ToggleButton all = createKind(KINDS[0], "left-pill");
+        all.setSelected(true);
+        kinds.getChildren().add(all);
+        for (int index = 1; index < lastIndex; index++) {
+            kinds.getChildren().add(createKind(KINDS[index], "center-pill"));
         }
+        kinds.getChildren().add(createKind(KINDS[lastIndex], "right-pill"));
         kinds.setMinWidth(HBox.USE_PREF_SIZE);
         kindGroup.selectedToggleProperty().addListener((observable,
                 before, after) -> kindChosen(before, after));
@@ -338,6 +335,15 @@ public class RunsScreen extends FlowScreen {
         HBox tools = Parts.row(Parts.GAP, new Node[] {activitySearch,
             kinds, Parts.grow(), activityCount});
         activity.getChildren().addAll(tools, activityDays);
+    }
+
+    // Returns one filter button of the activity, in the shape given.
+    private ToggleButton createKind(String name, String shape) {
+        ToggleButton kind = new ToggleButton(name);
+        kind.setToggleGroup(kindGroup);
+        kind.setUserData(name);
+        kind.getStyleClass().add(shape);
+        return kind;
     }
 
     // Shows the view picked with the switch.
@@ -454,7 +460,7 @@ public class RunsScreen extends FlowScreen {
         }
         Label when = Parts.muted("Graded " + run.getStartedAt().format(WHEN));
         when.getStyleClass().add("small-text");
-        VBox runCell = new VBox(2, title, when);
+        VBox runCell = new VBox(RUN_CELL_GAP, title, when);
         runCell.setAlignment(Pos.CENTER_LEFT);
         runCell.setMinWidth(0);
         runsTable.addRow(new Node[] {runCell, students, average(run),
@@ -471,7 +477,7 @@ public class RunsScreen extends FlowScreen {
             return Parts.muted("-");
         }
         StackPane bar = Parts.track(stats.getMean() / max, null);
-        bar.setMinWidth(AVERAGE_BAR_WIDTH / 2);
+        bar.setMinWidth(AVERAGE_BAR_MIN_WIDTH);
         bar.setPrefWidth(AVERAGE_BAR_WIDTH);
         bar.setMaxWidth(AVERAGE_BAR_WIDTH);
         Label value = new Label(String.format("%.1f", stats.getMean())
@@ -482,8 +488,8 @@ public class RunsScreen extends FlowScreen {
 
     // Returns the pill that says how far a run got.
     private Node status(GradingRun run, boolean shown, boolean hasNewer) {
-        Label pill;
-        String tip;
+        Label pill = Parts.pill("Finished", Tone.GOOD);
+        String tip = "Every student in this run was graded.";
         int waiting = countWaiting(run);
         if (!shown && hasNewer) {
             pill = Parts.pill("Earlier run", Tone.NEUTRAL);
@@ -500,9 +506,6 @@ public class RunsScreen extends FlowScreen {
             tip = "Grading was cancelled, or GradeZZY closed, before every "
                     + "student was graded. Resume grades the rest; marks "
                     + "already given are kept.";
-        } else {
-            pill = Parts.pill("Finished", Tone.GOOD);
-            tip = "Every student in this run was graded.";
         }
         Parts.tip(pill, tip);
         return pill;
@@ -727,7 +730,7 @@ public class RunsScreen extends FlowScreen {
         }
         Label text = Parts.muted(where + gradingNote());
         text.setWrapText(true);
-        VBox words = new VBox(Parts.GAP_SMALL / 2,
+        VBox words = new VBox(Parts.GAP_TINY,
                 Parts.strong("Back up the saved results"), text);
         Node grow = Parts.grow();
         Button backUpButton = Parts.secondary("Back up now",
@@ -744,7 +747,7 @@ public class RunsScreen extends FlowScreen {
                 + "copy in a backup file. The results saved now are backed "
                 + "up first, so the restore can be undone." + gradingNote());
         text.setWrapText(true);
-        VBox words = new VBox(Parts.GAP_SMALL / 2,
+        VBox words = new VBox(Parts.GAP_TINY,
                 Parts.strong("Restore from a backup file"), text);
         Node grow = Parts.grow();
         Button chooseButton = Parts.secondary("Choose a backup",
@@ -921,8 +924,7 @@ public class RunsScreen extends FlowScreen {
         }
 
         List<AuditEntry> sorted = new ArrayList<>(entries);
-        sorted.sort(Comparator.comparing(AuditEntry::getTimestamp)
-                .reversed());
+        sorted.sort(new AuditEntryNewestFirstComparator());
         String kind = String.valueOf(kindGroup.getSelectedToggle()
                 .getUserData());
         int shown = 0;
@@ -1012,8 +1014,7 @@ public class RunsScreen extends FlowScreen {
                         && DashboardBackend.ZERO_CHECK_WORDS.equals(message)
                         && runNamed
                         && getBackend().isZeroChecked(submission)) {
-                    return () -> getWindow().notify(getBackend()
-                            .setZeroChecked(submission, false).getMessage());
+                    return () -> takeBackZeroCheck(submission);
                 }
                 for (Anomaly anomaly : submission.getAnomalies()) {
                     if (!isAbout(message, reference, anomaly, !decision)) {
@@ -1025,7 +1026,8 @@ public class RunsScreen extends FlowScreen {
                         return () -> takeBackFix(run, anomaly);
                     }
                     if (undone && anomaly.getFixStatus() == FixStatus.UNDONE
-                            && UndoFixJob.canApplyAgain(getBackend())) {
+                            && UndoFixJob.canApplyAgain(getBackend(),
+                            anomaly)) {
                         return () -> runFixJob(run, anomaly, true);
                     }
                     if (reapplied
@@ -1145,6 +1147,13 @@ public class RunsScreen extends FlowScreen {
         return runs;
     }
 
+    // Takes back a student's zero check and says so.
+    private void takeBackZeroCheck(Submission submission) {
+        ActionResult result = getBackend().setZeroChecked(submission,
+                false);
+        getWindow().notify(result.getMessage());
+    }
+
     // Takes back a kept fix, so it waits for review again.
     private void takeBackFix(GradingRun run, Anomaly anomaly) {
         RepairItem repair = findRepair(run, anomaly);
@@ -1230,11 +1239,12 @@ public class RunsScreen extends FlowScreen {
     private void addActivityRow(PlainTable table, AuditEntry entry) {
         String detailText = entry.getShownDetail();
         String student = "";
-        int colon = detailText.indexOf(": ");
+        int colon = detailText.indexOf(NAME_SEPARATOR);
         if (colon > 0 && colon < STUDENT_NAME_LIMIT
                 && !detailText.substring(0, colon).contains(" ")) {
             student = detailText.substring(0, colon);
-            detailText = detailText.substring(colon + 2);
+            detailText = detailText.substring(colon
+                    + NAME_SEPARATOR.length());
         }
         Label detail = new Label(Parts.shortenPaths(detailText));
         detail.setMinWidth(0);
@@ -1268,7 +1278,7 @@ public class RunsScreen extends FlowScreen {
     // Builds an empty state: a bold line, a muted line and a link.
     private VBox empty(String title, String detail, String linkText,
             Runnable action) {
-        VBox box = new VBox(Parts.GAP_SMALL / 2, Parts.strong(title),
+        VBox box = new VBox(Parts.GAP_TINY, Parts.strong(title),
                 Parts.muted(detail));
         box.setAlignment(Pos.CENTER);
         if (linkText != null) {

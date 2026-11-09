@@ -137,7 +137,7 @@ public class QuestionRerunner {
                     + "so there is nothing to run. Grade the student again "
                     + "first.");
         }
-        Path folder;
+        Path folder = null;
         try {
             if (QuestionFolderFinder.find(submission, assessment,
                     question) == null) {

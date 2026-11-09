@@ -32,9 +32,6 @@ public class ServiceRegistry {
     // The statistics service
     private final StatisticsService statisticsService;
 
-    // The search service
-    private final SearchService searchService;
-
     // The audit service
     private final AuditService auditService;
 
@@ -61,7 +58,6 @@ public class ServiceRegistry {
      * @param anomalyService the anomaly service
      * @param exportService the export service
      * @param statisticsService the statistics service
-     * @param searchService the search service
      * @param auditService the audit service
      * @param settingsService the settings service
      * @param historyService the history service
@@ -69,16 +65,14 @@ public class ServiceRegistry {
      */
     public ServiceRegistry(AppConfig config, GradingService gradingService,
             AnomalyService anomalyService, ExportService exportService,
-            StatisticsService statisticsService, SearchService searchService,
-            AuditService auditService, SettingsService settingsService,
-            HistoryService historyService,
+            StatisticsService statisticsService, AuditService auditService,
+            SettingsService settingsService, HistoryService historyService,
             PlagiarismService plagiarismService) {
         this.config = config;
         this.gradingService = gradingService;
         this.anomalyService = anomalyService;
         this.exportService = exportService;
         this.statisticsService = statisticsService;
-        this.searchService = searchService;
         this.auditService = auditService;
         this.settingsService = settingsService;
         this.historyService = historyService;
@@ -154,15 +148,6 @@ public class ServiceRegistry {
      */
     public StatisticsService getStatisticsService() {
         return statisticsService;
-    }
-
-    /**
-     * Returns the search service.
-     *
-     * @return the search service
-     */
-    public SearchService getSearchService() {
-        return searchService;
     }
 
     /**

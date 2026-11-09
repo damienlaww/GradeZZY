@@ -1,8 +1,9 @@
 /*
  * File: ExportJob.java
  *
- * Purpose: Writes the score sheet CSV and, if chosen, the JSON file of a
- * run, on a background thread so the window does not freeze.
+ * Purpose: Writes the score sheet CSV and, if chosen, the JSON file and
+ * the reports of a run, on a background thread so the window does not
+ * freeze.
  *
  * Where it fits: ExportScreen starts one in live mode when Export is
  * pressed, and shows the outcome when it succeeds. The demo calls
@@ -20,6 +21,9 @@ import javafx.concurrent.Task;
 
 import gradezzy.model.GradingRun;
 import gradezzy.model.Submission;
+import gradezzy.report.AnomalyReportExporter;
+import gradezzy.report.AuditLogExporter;
+import gradezzy.report.StudentReportExporter;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.DashboardBackend;
 
@@ -37,8 +41,8 @@ public class ExportJob extends Task<ActionResult> {
     // The students to export
     private final List<Submission> scope;
 
-    // True to write the JSON file as well
-    private final boolean withJson;
+    // The other files to write after the CSV, by format name
+    private final List<String> otherFormats;
 
     /**
      * Creates the export of a run.
@@ -46,18 +50,20 @@ public class ExportJob extends Task<ActionResult> {
      * @param backend the backend that writes the files
      * @param run the run to export
      * @param scope the students to export
-     * @param withJson true to write the JSON file as well
+     * @param otherFormats the other files to write after the CSV, by
+     *        format name, such as json or Student report
      */
     public ExportJob(DashboardBackend backend, GradingRun run,
-            List<Submission> scope, boolean withJson) {
+            List<Submission> scope, List<String> otherFormats) {
         this.backend = backend;
         this.run = run;
         this.scope = new ArrayList<>(scope);
-        this.withJson = withJson;
+        this.otherFormats = new ArrayList<>(otherFormats);
     }
 
     /**
-     * Writes the CSV and, if chosen, the JSON file.
+     * Writes the CSV, then each other file chosen. A file that fails
+     * does not stop the ones after it.
      *
      * @return done with what was saved, or failed when the CSV failed
      */
@@ -67,14 +73,40 @@ public class ExportJob extends Task<ActionResult> {
             return csv;
         }
         String message = csv.getMessage();
-        if (withJson) {
-            ActionResult jsonResult = backend.export(run, scope, "json");
-            if (!jsonResult.isDone()) {
-                message = message + " The JSON file failed: "
-                        + jsonResult.getMessage();
+        if (backend.isDemo() && !otherFormats.isEmpty()) {
+            return ActionResult.done(message + " Demo mode saves no other "
+                    + "file either.");
+        }
+
+        String saved = "";
+        for (String formatName : otherFormats) {
+            ActionResult other = backend.export(run, scope, formatName);
+            if (other.isDone() && saved.isEmpty()) {
+                saved = describe(formatName);
+            } else if (other.isDone()) {
+                saved += ", " + describe(formatName);
+            } else {
+                message = message + " Saving " + describe(formatName)
+                        + " failed: " + other.getMessage();
             }
         }
+        if (!saved.isEmpty()) {
+            message = message + " Also saved beside it: " + saved + ".";
+        }
         return ActionResult.done(message);
+    }
+
+    // Names a file the way the Export step does, so a format name such
+    // as Anomaly report never reaches the screen.
+    private String describe(String formatName) {
+        if (AnomalyReportExporter.FORMAT_NAME.equals(formatName)) {
+            return "the list of problems";
+        } else if (StudentReportExporter.FORMAT_NAME.equals(formatName)) {
+            return "the report on each student";
+        } else if (AuditLogExporter.FORMAT_NAME.equals(formatName)) {
+            return "the activity log";
+        }
+        return "the " + formatName + " file";
     }
 
     /**
