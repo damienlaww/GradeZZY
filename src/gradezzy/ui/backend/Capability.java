@@ -127,7 +127,8 @@ public enum Capability {
     /** Searches, filters and sorts students. */
     SEARCH("Search, filter and sort",
             "Finds students by name and orders the results table.",
-            "Jing Yuan", "SearchService.search", CapabilityStatus.WORKS_NOW,
+            "Jing Yuan", "ReviewScreen filters the rows itself",
+            CapabilityStatus.WORKS_NOW,
             "Nothing; searching already works."),
 
     /** The folder tree and source files of a working copy. */
