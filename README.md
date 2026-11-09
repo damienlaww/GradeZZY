@@ -142,7 +142,7 @@ Rules the code keeps:
 | `model` | Plain data with no logic. | `Submission`, `Student`, `Section`, `Assessment`, `Question`, `QuestionResult`, `TestCaseResult`, `Anomaly`, `GradingRun`, `AuditEntry`, `ScoreAdjustment`, `SavedAssessment`, enums `AnomalyType`, `Severity`, `FixStatus`, `SubmissionStatus` |
 | `ingest` | Turns uploads into submissions, unzips them safely, reads the roster. | `SubmissionLoader`, `ZipExtractor`, `WorkingCopyManager`, `RosterReader` |
 | `validation` | One class per structural check. | `Validator`, `AbstractValidator`, `StructureValidator`, `FileNameValidator`, `RequiredFilesValidator`, `HeaderNameValidator`, `ValidationRunner` |
-| `fix` | One class per automatic correction, each with apply and undo. | `Fixer`, `AbstractFixer`, `EncodingFixer`, `FolderHierarchyFixer`, `FolderNameFixer`, `CaseNameFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
+| `fix` | One class per automatic correction, each with apply and undo. | `Fixer`, `AbstractFixer`, `EncodingFixer`, `FolderHierarchyFixer`, `FolderNameFixer`, `CaseNameFixer`, `MisplacedFileFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
 | `detection` | Flags suspicious answers. Never changes a mark. | `Detector`, `UntouchedStarterDetector`, `EmptyAnswerDetector`, `HardCodedAnswerDetector` |
 | `testcase` | Where testers come from, their maximum marks, and the per-question folders. | `TestCaseSource`, `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TesterMarks`, `QuestionWorkspace`, `FolderSnapshot` |
 | `exec` | Runs `javac` and `java` as separate processes with limits. | `ProcessRunner`, `SourceCompiler`, `TesterRunner`, `TesterHarness`, `TrustedPrintStream`, `RunningProcesses`, `HarnessWatchdog` |
@@ -214,6 +214,7 @@ classDiagram
     FolderHierarchyFixer --|> AbstractFixer
     FolderNameFixer --|> AbstractFixer
     CaseNameFixer --|> AbstractFixer
+    MisplacedFileFixer --|> AbstractFixer
     HeaderNameFixer --|> AbstractFixer
     UntouchedStarterDetector ..|> Detector
     EmptyAnswerDetector ..|> Detector
@@ -360,6 +361,7 @@ are in place before names and headers are touched:
 | `FolderHierarchyFixer` | `MISSING_WRAPPER_FOLDER`, `MISSING_QUESTION_FOLDER` | Moves the question folders into a new username folder, or up out of one extra folder level. |
 | `FolderNameFixer` | `WRONG_FOLDER_NAME` | Renames the only top folder to the username. |
 | `CaseNameFixer` | `WRONG_FILE_NAME`, `MISSING_QUESTION_FOLDER` | Renames `q3` to `Q3` or `q1a.java` to `Q1a.java`, through a temporary name because Windows and macOS ignore case. |
+| `MisplacedFileFixer` | `MISSING_FILE` | Moves a required file found in exactly one other question folder, such as `Q2/Q1a.java`, into its own folder. Found in none or in two, it is left for the instructor. |
 | `HeaderNameFixer` | `MISSING_HEADER_NAME` | Writes the roster name and email after the blank labels, keeping the file's own encoding. |
 
 After a fix that moved or renamed something, `FixStage` runs the file

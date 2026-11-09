@@ -82,6 +82,8 @@ public final class Problems {
     public static String fixedTitle(AnomalyType type) {
         if (type == AnomalyType.MISSING_QUESTION_FOLDER) {
             return "A question folder was moved or renamed";
+        } else if (type == AnomalyType.MISSING_FILE) {
+            return "A file was in another question's folder";
         }
         return title(type);
     }
