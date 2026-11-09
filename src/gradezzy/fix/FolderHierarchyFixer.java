@@ -38,6 +38,10 @@ public class FolderHierarchyFixer extends AbstractFixer {
     // Follows the folder names in Before for a missing username folder
     private static final String AT_THE_TOP = " at the top of the ZIP";
 
+    // Follows them instead when the upload was a folder unzipped by hand
+    private static final String AT_THE_TOP_OF_FOLDER =
+            " at the top of the uploaded folder";
+
     // The application settings, which name the question folders
     private final AppConfig config;
 
@@ -197,8 +201,20 @@ public class FolderHierarchyFixer extends AbstractFixer {
         return new FixRecord(anomaly, NAME, "Moved the question folders "
                 + "into a new " + username + " folder.", workingCopy,
                 workingCopy, usernameFolder, null,
-                joinNames(shownBefore) + AT_THE_TOP,
+                joinNames(shownBefore) + describeTop(submission),
                 username + FOLDER_SEPARATOR + joinNames(folderNames));
+    }
+
+    // Says where the question folders were: at the top of the ZIP file,
+    // or of the folder the instructor chose.
+    private String describeTop(Submission submission) {
+        Path upload = submission.getOriginalPath();
+        boolean folder = upload != null
+                && Files.isDirectory(upload, LinkOption.NOFOLLOW_LINKS);
+        if (folder) {
+            return AT_THE_TOP_OF_FOLDER;
+        }
+        return AT_THE_TOP;
     }
 
     // Moves everything back to the top and removes the username folder.

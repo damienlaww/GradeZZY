@@ -22,7 +22,9 @@ import gradezzy.config.ConfigException;
 import gradezzy.config.ConfigKeys;
 import gradezzy.config.ExportFolders;
 import gradezzy.grading.GradingException;
+import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
+import gradezzy.ingest.SubmissionLoader;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
@@ -50,6 +52,9 @@ public class ConsoleMain {
 
     // Turns a similarity from 0 to 1 into a percentage
     private static final int PERCENT = 100;
+
+    // Separates the names in the list of skipped files
+    private static final String SKIPPED_SEPARATOR = ", ";
 
     /**
      * Not used: this class only holds the main method.
@@ -128,10 +133,35 @@ public class ConsoleMain {
         System.out.println("GradeZZY console, section "
                 + section.getLabel());
         printMarks(config, section, testersDirectory);
+        printSkipped(config, inputPaths);
 
         return context.getServices().getGradingService().startGrading(
                 inputPaths, section, testCaseSource,
                 new ConsoleProgressListener());
+    }
+
+    // Names the files and folders in the submissions folder that are not
+    // graded, as the window does, such as a .rar file or a marking note.
+    // Hidden files such as .DS_Store are never named.
+    private static void printSkipped(AppConfig config,
+            List<Path> inputPaths) {
+        SubmissionLoader loader = new SubmissionLoader(config);
+        List<String> names = new ArrayList<>();
+        for (Path input : inputPaths) {
+            try {
+                for (Path skipped : loader.listSkipped(input)) {
+                    names.add(String.valueOf(skipped.getFileName()));
+                }
+            } catch (IngestException exception) {
+                names.add(input + " (could not be read)");
+            }
+        }
+
+        if (!names.isEmpty()) {
+            System.out.println("Skipped, because only ZIP files and "
+                    + "submission folders are graded: "
+                    + TextUtils.join(SKIPPED_SEPARATOR, names) + ".");
+        }
     }
 
     // Returns the typed module or section, or the first configured one
