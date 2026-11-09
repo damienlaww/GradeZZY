@@ -1484,7 +1484,8 @@ public class FlowSelfTest {
         row = rowOf("Failed tests 3 and 4", "plain-row");
         check(row != null && SceneFinder.texts(row, "pill").contains("1 new"),
                 "a student who joined before Confirm shows as 1 new (pills: "
-                + (row == null ? "none" : SceneFinder.texts(row, "pill")) + ")");
+                + (row == null ? "none" : SceneFinder.texts(row, "pill"))
+                + ")");
         alphaQ3.getTestCaseResults().clear();
         for (TestCaseResult test : alphaTests) {
             alphaQ3.addTestCaseResult(test);

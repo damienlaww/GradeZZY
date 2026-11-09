@@ -575,6 +575,7 @@ public final class AssessmentEditor {
         note.setMinWidth(0);
         status.setSpacing(Parts.GAP_SMALL);
         status.getChildren().addAll(pill, note);
+
         Path usable = null;
         if (item.getState() != ImportState.INVALID) {
             usable = Path.of(text);
@@ -589,9 +590,11 @@ public final class AssessmentEditor {
         if (opening || text.equals(lastFilled.get(kind))) {
             return;
         }
+
         Path previous = existingFolder(lastFilled.get(kind));
         lastFilled.put(kind, text);
         fillFromFolder(kind, previous, usable);
+
         if (kind == InputKind.TESTERS) {
             // The new tester folder may have added or removed questions
             checkStarterAgain();
@@ -603,67 +606,37 @@ public final class AssessmentEditor {
         if (text == null || text.isEmpty()) {
             return null;
         }
+
         try {
             Path folder = Path.of(text);
             if (Files.isDirectory(folder)) {
                 return folder;
             }
+            return null;
         } catch (RuntimeException exception) {
             // A path with characters this computer does not allow
+            return null;
         }
-        return null;
     }
 
-    // Brings the questions, data files, provided class files and
-    // unrenamed folder names in line with a newly chosen folder. Names
-    // the previous folder supplied that the new one lacks are removed,
-    // names the new one has are added, and names the instructor typed
-    // are kept. Either folder may be null. A note under the fields says
-    // what changed.
+    // Brings the fields in line with a newly chosen folder. Names the
+    // previous folder supplied that the new one lacks are removed, names
+    // the new one has are added, and names the instructor typed are
+    // kept. Either folder may be null. A note under the fields says what
+    // changed.
     private void fillFromFolder(InputKind kind, Path previous, Path folder) {
         List<String> added = new ArrayList<>();
         List<String> removed = new ArrayList<>();
         if (kind == InputKind.TESTERS) {
-            List<String> oldIds = questionIds(previous);
-            List<String> newIds = questionIds(folder);
-            note(removed, removeQuestionsFrom(oldIds, newIds), "question");
-            List<String> oldData = AssessmentFolderScanner.findDataFiles(
-                    previous);
-            List<String> newData = AssessmentFolderScanner.findDataFiles(
-                    folder);
-            note(removed, removeFrom(dataFiles, oldData, newData),
-                    "tester data file");
-            if (folder != null) {
-                note(added, addQuestionsFrom(folder), "question");
-                note(added, addTo(dataFiles, newData), "tester data file");
-            }
+            fillFromTesters(previous, folder, added, removed);
         } else if (kind == InputKind.STARTER) {
-            List<String> questionFolders = new ArrayList<>();
-            for (QuestionFields fields : questions) {
-                questionFolders.add(fields.getFolder());
-            }
-            List<String> oldClasses = AssessmentFolderScanner
-                    .findProvidedClassFiles(previous);
-            List<String> newClasses = AssessmentFolderScanner
-                    .findProvidedClassFiles(folder);
-            note(removed, removeFrom(classFiles, oldClasses, newClasses),
-                    "provided class file");
-            List<String> oldNames = AssessmentFolderScanner
-                    .findStarterFolderNames(previous, questionFolders);
-            List<String> newNames = AssessmentFolderScanner
-                    .findStarterFolderNames(folder, questionFolders);
-            note(removed, removeFrom(placeholders, oldNames, newNames),
-                    "unrenamed folder name");
-            if (folder != null) {
-                note(added, addTo(classFiles, newClasses),
-                        "provided class file");
-                note(added, addTo(placeholders, newNames),
-                        "unrenamed folder name");
-            }
+            fillFromStarter(previous, folder, added, removed);
         }
+
         if (added.isEmpty() && removed.isEmpty()) {
             return;
         }
+
         List<String> parts = new ArrayList<>();
         if (!added.isEmpty()) {
             parts.add("added " + TextUtils.join(", ", added));
@@ -672,9 +645,62 @@ public final class AssessmentEditor {
             parts.add("removed " + TextUtils.join(", ", removed)
                     + " from the previous folder");
         }
+
         filledNote.setText("Updated from the folder: "
                 + TextUtils.join("; ", parts) + ". Check them below.");
         show(filledNote, true);
+    }
+
+    // Brings the questions and tester data files in line with a new
+    // tester folder, noting what was added and removed.
+    private void fillFromTesters(Path previous, Path folder,
+            List<String> added, List<String> removed) {
+        List<String> oldIds = questionIds(previous);
+        List<String> newIds = questionIds(folder);
+        note(removed, removeQuestionsFrom(oldIds, newIds), "question");
+
+        List<String> oldData = AssessmentFolderScanner.findDataFiles(
+                previous);
+        List<String> newData = AssessmentFolderScanner.findDataFiles(
+                folder);
+        note(removed, removeFrom(dataFiles, oldData, newData),
+                "tester data file");
+
+        if (folder != null) {
+            note(added, addQuestionsFrom(folder), "question");
+            note(added, addTo(dataFiles, newData), "tester data file");
+        }
+    }
+
+    // Brings the provided class files and unrenamed folder names in line
+    // with a new starter folder, noting what was added and removed.
+    private void fillFromStarter(Path previous, Path folder,
+            List<String> added, List<String> removed) {
+        List<String> questionFolders = new ArrayList<>();
+        for (QuestionFields fields : questions) {
+            questionFolders.add(fields.getFolder());
+        }
+
+        List<String> oldClasses = AssessmentFolderScanner
+                .findProvidedClassFiles(previous);
+        List<String> newClasses = AssessmentFolderScanner
+                .findProvidedClassFiles(folder);
+        note(removed, removeFrom(classFiles, oldClasses, newClasses),
+                "provided class file");
+
+        List<String> oldNames = AssessmentFolderScanner
+                .findStarterFolderNames(previous, questionFolders);
+        List<String> newNames = AssessmentFolderScanner
+                .findStarterFolderNames(folder, questionFolders);
+        note(removed, removeFrom(placeholders, oldNames, newNames),
+                "unrenamed folder name");
+
+        if (folder != null) {
+            note(added, addTo(classFiles, newClasses),
+                    "provided class file");
+            note(added, addTo(placeholders, newNames),
+                    "unrenamed folder name");
+        }
     }
 
     // Adds "count noun(s)" to a list of changes when count is above 0.
@@ -691,11 +717,13 @@ public final class AssessmentEditor {
         if (folder == null) {
             return ids;
         }
+
         for (Question question : AssessmentFolderScanner.findQuestions(
                 folder, window.getBackend().getSetting(
                 ConfigKeys.TESTER_CLASS_SUFFIX), null)) {
             ids.add(question.getId());
         }
+
         return ids;
     }
 
@@ -713,10 +741,12 @@ public final class AssessmentEditor {
                 removedCount++;
             }
         }
+
         if (questions.isEmpty()) {
             addQuestion(null);
             updateTotal();
         }
+
         return removedCount;
     }
 
@@ -733,10 +763,12 @@ public final class AssessmentEditor {
                 kept.add(item);
             }
         }
+
         int removedCount = items.size() - kept.size();
         if (removedCount > 0) {
             field.setText(joinList(kept));
         }
+
         return removedCount;
     }
 
@@ -747,6 +779,7 @@ public final class AssessmentEditor {
                 return true;
             }
         }
+
         return false;
     }
 

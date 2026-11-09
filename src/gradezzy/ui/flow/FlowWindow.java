@@ -53,7 +53,6 @@ import gradezzy.model.Student;
 import gradezzy.ui.ThemeManager;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.DashboardBackend;
-import gradezzy.ui.backend.InputKind;
 
 /**
  * The window of GradeZZY.
@@ -291,16 +290,18 @@ public class FlowWindow {
         boolean otherSection = !sectionCode.equals(state.getSectionCode())
                 || !moduleCode.equals(state.getModuleCode());
         if (!otherSection) {
+            // Opening a graded section again shows the files it was
+            // graded with, if they were put away by Grade another
+            if (!state.isGrading()) {
+                state.restoreSubmissions();
+            }
             return true;
         }
         if (state.isGrading()) {
             return false;
         }
-        if (!state.getBatch().getItems(InputKind.SUBMISSION).isEmpty()) {
-            state.getBatch().clear(InputKind.SUBMISSION);
-            notify("Cleared the zip files chosen for "
-                    + state.getSection().getLabel() + ".");
-        }
+        // FlowState puts this section's zip files away and brings back
+        // the ones chosen earlier for the new section
         state.setModuleCode(moduleCode);
         state.setSectionCode(sectionCode);
         return true;

@@ -877,6 +877,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `paths.output.dir.by.section` | empty | Export folders of single modules or sections, such as `CS102/G1=workspace/g1-exports;IS442=workspace/is442`. A section's own folder wins over its module's, then `paths.output.dir`. Deleting a module or section removes its entries here and in `paths.score.sheet.by.section`. |
 | `paths.backup.dir` | `workspace/backup` | Where database backups are kept. |
 | `paths.assessments.dir` | `workspace/assessments` | Where saved assessments are kept, one `.properties` file each. Choosing one on Home or Set up copies its `assessment.*`, `paths.testers.dir` and `paths.starter.dir` settings into `config.properties`. |
+| `paths.chosen.submissions.file` | `workspace/chosen-submissions.properties` | Where the submission files chosen for each section are kept, so Set up lists them again after GradeZZY is reopened. Only paths are kept; the files are checked again when listed, and missing ones are left out. |
 | `ingest.zip.name.prefix.pattern` | `^[0-9]{4}-[0-9]{4}-` | Text in front of the username in a zip file name. |
 | `ingest.ignored.file.names` | `.DS_Store,__MACOSX,Thumbs.db` | Names skipped inside a submission. |
 | `ingest.max.zip.size.mb` | `50` | Largest unzipped size accepted. |

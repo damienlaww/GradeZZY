@@ -35,6 +35,21 @@ public class SubmissionPreview {
     // The extension of a zip file
     private static final String ZIP_EXTENSION = ".zip";
 
+    // Starts each point of a note that lists several
+    private static final String BULLET = "• ";
+
+    // Comes between the points of a note
+    private static final String NEW_LINE = "\n";
+
+    // The note beside a listed file that grading leaves out
+    private static final String SKIPPED_NOTE = "Skipped";
+
+    // The note beside a second file for a student, not graded
+    private static final String NOT_GRADED_NOTE = "Not graded";
+
+    // The note beside a file whose name has no username
+    private static final String NO_USERNAME_NOTE = "No username";
+
     // The most names listed in one message
     private static final int MAX_NAMES_SHOWN = 5;
 
@@ -142,10 +157,13 @@ public class SubmissionPreview {
             return new ImportItem(InputKind.SUBMISSION, file, "",
                     ImportState.INVALID, exception.getMessage());
         }
-        String holds = "A zip of " + count(innerZips.size(),
+        String holds = "Zip of " + count(innerZips.size(),
                 "student ZIP file");
-        return severalStudents(file, holds, innerZips,
-                skippedNote(skipped), new HashMap<>());
+        List<String> notes = new ArrayList<>();
+        addSkippedNote(notes, skipped);
+
+        return severalStudents(file, holds, innerZips, notes,
+                new HashMap<>(), skipped);
     }
 
     // Describes a folder of student zips and unzipped submissions. A zip
@@ -187,23 +205,28 @@ public class SubmissionPreview {
         } catch (IngestException exception) {
             skipped.add("items GradeZZY could not read");
         }
-        String notes = skippedNote(skipped);
+        List<String> notes = new ArrayList<>();
+        addSkippedNote(notes, skipped);
+
         if (!starterFolders.isEmpty()) {
-            notes += " Skipped, because it has the name of the starter "
-                    + "folder: " + listNames(starterFolders) + ".";
+            notes.add("Skipped (starter folder name): "
+                    + listNames(starterFolders));
         }
 
         // Asking the loader which file is graded would unpack a bulk zip,
         // and the preview must change nothing
         Map<String, String> graded = new HashMap<>();
-        String holds = "Holds " + describeParts(zips, folders);
+        String holds = describeParts(zips, folders);
         if (bulkZips.isEmpty()) {
             graded = findGradedFiles(folder);
         } else {
-            holds += ", counting the ZIP files inside "
-                    + listNames(bulkZips);
+            holds += ", incl. those inside " + listNames(bulkZips);
         }
-        return severalStudents(folder, holds, names, notes, graded);
+
+        List<String> notUsed = new ArrayList<>(skipped);
+        notUsed.addAll(starterFolders);
+        return severalStudents(folder, holds, names, notes, graded,
+                notUsed);
     }
 
     // Returns the student zips inside a zip of student zips, or null when
@@ -264,9 +287,13 @@ public class SubmissionPreview {
 
     // Builds the item of a file or folder that holds several students.
     // Each username counts once, as grading grades one file per student;
-    // graded names that file by username when the loader could say.
+    // graded names that file by username when the loader could say. The
+    // message lists each point on its own line. skipped names the files
+    // grading leaves out, which are listed with the others.
     private ImportItem severalStudents(Path path, String holds,
-            List<String> names, String notes, Map<String, String> graded) {
+            List<String> names, List<String> notes,
+            Map<String, String> graded, List<String> skipped) {
+        List<ContainedFile> files = new ArrayList<>();
         List<String> students = new ArrayList<>();
         List<String> seen = new ArrayList<>();
         List<String> noUsername = new ArrayList<>();
@@ -276,8 +303,10 @@ public class SubmissionPreview {
             String username = loader.extractUsername(name);
             String key = username.toLowerCase(Locale.ROOT);
             String gradedFile = graded.get(key);
+            String fileNote = "";
             if (TextUtils.isBlank(username)) {
                 noUsername.add(name);
+                fileNote = NO_USERNAME_NOTE;
             } else if (!seen.contains(key)) {
                 seen.add(key);
                 students.add(username);
@@ -287,44 +316,61 @@ public class SubmissionPreview {
             if (gradedFile != null && !gradedFile.equals(name)) {
                 notGraded.add(name + " (" + gradedFile + " is graded "
                         + "instead)");
+                fileNote = NOT_GRADED_NOTE;
             }
+            files.add(new ContainedFile(name, fileNote));
         }
 
-        int extraFiles = names.size() - noUsername.size() - students.size();
-        String message = holds + ". " + gradedAs(names.size(),
-                names.size() - extraFiles) + notes;
-        if (!notGraded.isEmpty()) {
-            message += " Not graded: " + listNames(notGraded) + ".";
-        } else if (!repeated.isEmpty()) {
-            message += " More than one ZIP file for " + listNames(repeated)
-                    + ": only the newest download, the one with the "
-                    + "highest copy number such as (1), else the one named "
-                    + "in lower case, is graded.";
+        for (String name : skipped) {
+            files.add(new ContainedFile(name, SKIPPED_NOTE));
         }
+        files.sort(new ContainedFileNameComparator());
+
+        int extraFiles = names.size() - noUsername.size() - students.size();
+        List<String> points = new ArrayList<>();
+        points.add(holds);
+        points.add(gradedAs(names.size(), names.size() - extraFiles));
+        points.addAll(notes);
+
+        if (!notGraded.isEmpty()) {
+            points.add("Not graded: " + listNames(notGraded));
+        } else if (!repeated.isEmpty()) {
+            points.add("Several ZIPs for " + listNames(repeated)
+                    + ": only the newest copy is graded");
+        }
+
         if (noUsername.size() == 1) {
-            message += " No username in " + listNames(noUsername)
-                    + ", so grading reports it as failed.";
+            points.add("No username, reported as failed: "
+                    + listNames(noUsername));
         } else if (noUsername.size() > 1) {
-            message += " No username in " + listNames(noUsername)
-                    + ", so grading reports the first as failed and names "
-                    + "the others on it.";
+            points.add("No username, the first reported as failed and "
+                    + "the rest noted on it: " + listNames(noUsername));
         }
 
         ImportState state = ImportState.ACCEPTED;
         if (!notes.isEmpty() || extraFiles > 0 || !noUsername.isEmpty()) {
             state = ImportState.WARNING;
         }
-        return new ImportItem(InputKind.SUBMISSION, path, state, message,
-                students);
+        return new ImportItem(InputKind.SUBMISSION, path, state,
+                toPoints(points), students, files);
     }
 
-    // Returns the note naming the files a folder or zip skips, or "".
-    private String skippedNote(List<String> skipped) {
-        if (skipped.isEmpty()) {
-            return "";
+    // Joins points into a list with one bullet per line.
+    private String toPoints(List<String> points) {
+        List<String> lines = new ArrayList<>();
+        for (String point : points) {
+            lines.add(BULLET + point);
         }
-        return " Skipped, because only ZIP files and submission folders "
-                + "are graded: " + listNames(skipped) + ".";
+
+        return String.join(NEW_LINE, lines);
+    }
+
+    // Adds the note naming the files a folder or zip skips, if any.
+    private void addSkippedNote(List<String> notes, List<String> skipped) {
+        if (!skipped.isEmpty()) {
+            notes.add("Skipped (not a ZIP or folder): "
+                    + listNames(skipped));
+        }
     }
 
     // Says whether a name is a starter folder name, such as
@@ -353,24 +399,23 @@ public class SubmissionPreview {
     // Says how many zips and unzipped folders a folder holds.
     private String describeParts(int zips, int folders) {
         if (folders == 0) {
-            return count(zips, "student ZIP file");
+            return count(zips, "ZIP file");
         } else if (zips == 0) {
-            return count(folders, "folder") + " unzipped by hand";
+            return count(folders, "unzipped folder");
         }
-        return count(zips, "student ZIP file") + " and "
-                + count(folders, "folder") + " unzipped by hand";
+        return count(zips, "ZIP file") + " and "
+                + count(folders, "unzipped folder");
     }
 
     // Says how the zips or folders found are graded: one student each,
     // unless some are a second file for a student.
     private String gradedAs(int found, int graded) {
         if (found == 1) {
-            return "It is graded as one student.";
+            return "Graded as one student";
         } else if (graded == found) {
-            return "Each is graded as one student.";
+            return "One student each";
         }
-        return "They are for " + count(graded, "student") + ", and only "
-                + "one file per student is graded.";
+        return count(graded, "student") + ", one file graded each";
     }
 
     // Lists the first few names, then says how many more there are.
