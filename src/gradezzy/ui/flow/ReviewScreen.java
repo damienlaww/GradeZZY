@@ -110,8 +110,6 @@ public class ReviewScreen extends FlowScreen {
     // The smallest width of the student column
     private static final double STUDENT_WIDTH = 190.0;
 
-
-
     // The widest the student column gets
     // It must be finite: with Double.MAX_VALUE the table makes the
     // column endlessly wide and cuts off the table's right border
