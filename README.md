@@ -638,8 +638,8 @@ Each submission has its own working copy and writes only to its own
 `Submission` object, so workers never share student data. The only
 shared state (the next submission to hand out, the progress listener,
 `FixManager` and the repository) is guarded by `synchronized`. Each
-worker calls the same `gradeOne` method as the single-threaded path, so
-both give the same marks.
+worker calls the same `gradeSafely` method as the single-threaded path,
+so both give the same marks.
 
 ## Problems the backend reports
 

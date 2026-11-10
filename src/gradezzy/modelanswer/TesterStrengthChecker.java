@@ -124,8 +124,8 @@ public class TesterStrengthChecker {
         List<QuestionStrength> results = new ArrayList<>();
 
         for (Question question : assessment.getQuestions()) {
-            QuestionStrength result = new QuestionStrength(question.getId(),
-                    question.getMaxScore());
+            QuestionStrength result = new QuestionStrength(
+                    question.getId());
             Path questionWork = workRoot.resolve(question.getId());
             checkQuestion(result, question, testersDirectory,
                     starterDirectory, modelAnswers, questionWork);

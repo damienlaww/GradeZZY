@@ -70,8 +70,8 @@ final class QuestionRegrade {
     // tester or its random inputs: its id is one the tester, compile,
     // execute or random inputs steps give, or an earlier failed try of
     // this question, and its words name the question or its tester.
-    static boolean isQuestionRunProblem(Anomaly anomaly, Question question,
-            TesterFile tester) {
+    private static boolean isQuestionRunProblem(Anomaly anomaly,
+            Question question, TesterFile tester) {
         String id = anomaly.getId();
         boolean fromRun = id.startsWith(TesterInstaller.ID_PREFIX)
                 || id.startsWith(CompileStage.ID_PREFIX)
@@ -88,7 +88,7 @@ final class QuestionRegrade {
 
     // Says whether a text holds a word on its own, so Q1 is not found in
     // Q1a and Q2b is found in "Q2b.java".
-    static boolean containsWord(String text, String word) {
+    private static boolean containsWord(String text, String word) {
         int index = text.indexOf(word);
         while (index >= 0) {
             int end = index + word.length();

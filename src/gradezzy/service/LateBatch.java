@@ -30,7 +30,7 @@ import gradezzy.report.ScoreFormatter;
 final class LateBatch {
 
     // Written in the audit log for a student who has no total
-    static final String NOT_GRADED = "not graded";
+    private static final String NOT_GRADED = "not graded";
 
     // Not used: every method is static.
     private LateBatch() {
@@ -91,8 +91,9 @@ final class LateBatch {
 
     // Takes the older results of the late students out of the run, so the
     // run never holds two results for one student. The old total is
-    // taken before any copy is removed. See prepareLateBatch for the
-    // three lists that are filled.
+    // taken before any copy is removed. See
+    // GradingService.prepareLateBatch for the three lists that are
+    // filled.
     static void removeOlderResults(GradingRun gradingRun,
             List<String> lateUsernames, List<String> replacedUsernames,
             List<String> oldTotals, List<Submission> removedOlder) {
@@ -112,7 +113,7 @@ final class LateBatch {
     }
 
     // Says whether a list of usernames holds this one, ignoring case.
-    static boolean containsIgnoringCase(List<String> usernames,
+    private static boolean containsIgnoringCase(List<String> usernames,
             String username) {
         for (String listed : usernames) {
             if (listed.equalsIgnoreCase(username)) {

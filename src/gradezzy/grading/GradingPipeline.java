@@ -182,11 +182,12 @@ public class GradingPipeline {
     }
 
     /**
-     * Grades one submission as gradeOne does, and stops a problem
-     * outside the stages, such as one in a listener, from ending the
-     * batch or the worker thread: a submission it stopped before the
-     * end is marked FAILED with the reason, and a finished one keeps
-     * its result. Used by the in-order path and by each GradingWorker.
+     * Grades one submission as gradeOne does, and stops a
+     * RuntimeException outside the stages, such as one in a listener,
+     * from ending the batch or the worker thread: a submission it
+     * stopped before the end is marked FAILED with the reason and the
+     * listener is told it is finished, and a finished one keeps its
+     * result. Used by the in-order path and by each GradingWorker.
      *
      * @param submission the submission to grade
      * @param context the shared information the stages need
@@ -199,7 +200,22 @@ public class GradingPipeline {
         } catch (RuntimeException exception) {
             if (!isFinished(submission)) {
                 recordFailure(submission, exception);
+                tellFinished(submission, listener);
             }
+        }
+    }
+
+    // Tells the listener that a student stopped outside the stages is
+    // finished, so the progress counts every student. The student is
+    // already FAILED, so a listener that fails again is only reported
+    // on the error stream.
+    private void tellFinished(Submission submission,
+            ProgressListener listener) {
+        try {
+            listener.onSubmissionFinished(submission);
+        } catch (RuntimeException exception) {
+            System.err.println("Progress of " + submission.getUsername()
+                    + " could not be shown: " + exception.getMessage());
         }
     }
 

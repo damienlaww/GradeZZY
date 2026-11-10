@@ -28,9 +28,6 @@ public class QuestionStrength {
     // The question, such as Q2b
     private final String questionId;
 
-    // The question's maximum mark, read from its tester
-    private final double maxScore;
-
     // The broken copies tried, with what the tester did with each
     private final List<Mutant> mutants = new ArrayList<>();
 
@@ -43,11 +40,9 @@ public class QuestionStrength {
      * <p>Tier: COULD.
      *
      * @param questionId the question, such as Q2b
-     * @param maxScore the question's maximum mark
      */
-    public QuestionStrength(String questionId, double maxScore) {
+    public QuestionStrength(String questionId) {
         this.questionId = questionId;
-        this.maxScore = maxScore;
     }
 
     /**

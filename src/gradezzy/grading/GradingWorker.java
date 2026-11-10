@@ -15,7 +15,7 @@ import gradezzy.model.Submission;
  * A worker thread that grades submissions until the handout is empty.
  * Each submission is graded by the pipeline's own gradeSafely method, so
  * the parallel path does exactly what the in-order path does, and a
- * problem with one submission never ends the thread.
+ * RuntimeException with one submission does not end the thread.
  *
  * <p>Tier: MUST. Owner: Jing Yuan.
  */

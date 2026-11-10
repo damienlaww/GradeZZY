@@ -132,8 +132,7 @@ public final class Winnowing {
             int picked = findRightmostSmallest(hashes, start, windowEnd);
 
             if (picked != lastPicked) {
-                fingerprints.add(new Fingerprint(hashes.get(picked),
-                        picked));
+                fingerprints.add(new Fingerprint(hashes.get(picked)));
                 lastPicked = picked;
             }
         }
