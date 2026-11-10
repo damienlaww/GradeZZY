@@ -34,11 +34,10 @@ public class Mutant {
     // What the tester did with this copy
     private MutantOutcome outcome = MutantOutcome.NOT_RUN;
 
-    // The marks the tester gave this copy
-    private double score;
-
     /**
      * Creates a new broken copy that has not been run.
+     *
+     * <p>Tier: COULD.
      *
      * @param fileName the file that was changed
      * @param line the line of the change, counted from 1
@@ -58,6 +57,8 @@ public class Mutant {
     /**
      * Returns the file that was changed.
      *
+     * <p>Tier: COULD.
+     *
      * @return the file name, such as Q1.java
      */
     public String getFileName() {
@@ -65,34 +66,9 @@ public class Mutant {
     }
 
     /**
-     * Returns the line of the change, counted from 1.
-     *
-     * @return the line number
-     */
-    public int getLine() {
-        return line;
-    }
-
-    /**
-     * Returns the line as the model answer has it.
-     *
-     * @return the line, without spaces at the ends
-     */
-    public String getOriginalLine() {
-        return originalLine;
-    }
-
-    /**
-     * Returns the change in words.
-     *
-     * @return the change, such as "\"<\" changed to \"<=\""
-     */
-    public String getChange() {
-        return change;
-    }
-
-    /**
      * Returns the whole file with the change made.
+     *
+     * <p>Tier: COULD.
      *
      * @return the changed source
      */
@@ -103,6 +79,8 @@ public class Mutant {
     /**
      * Returns what the tester did with this copy.
      *
+     * <p>Tier: COULD.
+     *
      * @return the outcome
      */
     public MutantOutcome getOutcome() {
@@ -112,6 +90,8 @@ public class Mutant {
     /**
      * Records what the tester did with this copy.
      *
+     * <p>Tier: COULD.
+     *
      * @param outcome the outcome
      */
     public void setOutcome(MutantOutcome outcome) {
@@ -119,26 +99,10 @@ public class Mutant {
     }
 
     /**
-     * Returns the marks the tester gave this copy.
-     *
-     * @return the marks
-     */
-    public double getScore() {
-        return score;
-    }
-
-    /**
-     * Records the marks the tester gave this copy.
-     *
-     * @param score the marks
-     */
-    public void setScore(double score) {
-        this.score = score;
-    }
-
-    /**
      * Describes the change for the report, such as
      * Q1.java line 14 "if (n < 0) {": "<" changed to "<=".
+     *
+     * <p>Tier: COULD.
      *
      * @return the description
      */

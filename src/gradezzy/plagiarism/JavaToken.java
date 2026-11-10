@@ -30,6 +30,8 @@ public class JavaToken {
     /**
      * Creates a new token.
      *
+     * <p>Tier: COULD.
+     *
      * @param text the token as written
      * @param start where the token starts in the source, counted from 0
      * @param line the line the token starts on, counted from 1
@@ -43,6 +45,8 @@ public class JavaToken {
     /**
      * Returns the token as written.
      *
+     * <p>Tier: COULD.
+     *
      * @return the token as written
      */
     public String getText() {
@@ -51,6 +55,8 @@ public class JavaToken {
 
     /**
      * Returns where the token starts in the source, counted from 0.
+     *
+     * <p>Tier: COULD.
      *
      * @return the start position
      */
@@ -61,6 +67,8 @@ public class JavaToken {
     /**
      * Returns the position just after the token's last character.
      *
+     * <p>Tier: COULD.
+     *
      * @return the end position
      */
     public int getEnd() {
@@ -69,6 +77,8 @@ public class JavaToken {
 
     /**
      * Returns the line the token starts on, counted from 1.
+     *
+     * <p>Tier: COULD.
      *
      * @return the line number
      */

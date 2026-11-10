@@ -178,8 +178,7 @@ public class SettingsService {
     // List settings that need at least one item
     private static final String[] REQUIRED_LIST_KEYS = {
         ConfigKeys.MODULE_CODES,
-        ConfigKeys.SECTION_CODES,
-        ConfigKeys.EXPORT_FORMATS
+        ConfigKeys.SECTION_CODES
     };
 
     // List settings that may be empty
@@ -242,7 +241,6 @@ public class SettingsService {
         ConfigKeys.PLAGIARISM_ENABLED,
         ConfigKeys.PLAGIARISM_THRESHOLD,
         ConfigKeys.PLAGIARISM_ALGORITHM,
-        ConfigKeys.EXPORT_FORMATS,
         ConfigKeys.CSV_LINE_ENDING,
         ConfigKeys.CSV_ID_PREFIX,
         ConfigKeys.CSV_END_OF_LINE_MARKER,
@@ -273,6 +271,8 @@ public class SettingsService {
     /**
      * Creates a new settings service that logs nothing.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param config the application settings
      */
     public SettingsService(AppConfig config) {
@@ -282,6 +282,8 @@ public class SettingsService {
     /**
      * Creates a new settings service that writes every save to the audit
      * log, with the settings that changed.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param config the application settings
      * @param auditService the log of instructor actions, or null to log
@@ -294,6 +296,8 @@ public class SettingsService {
 
     /**
      * Returns the current value of a setting.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param key the key
      * @return the value, or an empty string if it is not set
@@ -310,6 +314,8 @@ public class SettingsService {
      * Checks a new value before it is accepted. Spaces at both ends of
      * the value are ignored. Only settings already in config.properties,
      * or one of the newer per-module lists, can be changed.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param key the key
      * @param value the value
@@ -498,6 +504,8 @@ public class SettingsService {
      * Changes a setting in memory after checking it. The file is written
      * by save.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param key the key
      * @param value the value
      * @throws IllegalArgumentException if validate rejects the value; the
@@ -523,6 +531,8 @@ public class SettingsService {
      * and the other settings are copied as they are. Every line ends with
      * the file's own line ending (CRLF if the file uses it, otherwise
      * LF). Nothing is written when no setting changed.
+     *
+     * <p>Tier: SHOULD.
      *
      * @throws IOException if the file cannot be read or written
      */

@@ -66,6 +66,9 @@ public class ApplicationContext {
     // token trigrams; any other valid value picks winnowing
     private static final String TRIGRAM_ALGORITHM = "trigrams";
 
+    // Separates the bad settings in the start-up message
+    private static final String PROBLEM_SEPARATOR = " ";
+
     // The application settings
     private final AppConfig config;
 
@@ -75,14 +78,13 @@ public class ApplicationContext {
     // Every service, ready for the user interface
     private final ServiceRegistry services;
 
-    // Why the database could not be opened, or empty when it is fine
-    private final String startupProblem;
-
     /**
      * Builds every service from the configuration. Every setting is
      * checked first, so a bad value stops the app at once with a message
      * naming all the bad settings, rather than failing later when that
      * setting is first read.
+     *
+     * <p>Tier: MUST.
      *
      * @param config the application settings
      * @throws ConfigException if a setting in config.properties is not
@@ -94,7 +96,7 @@ public class ApplicationContext {
         this.repository = new SqliteResultRepository(
                 config.getString(ConfigKeys.DATABASE_FILE));
 
-        this.startupProblem = openRepository();
+        openRepository();
         FixManager fixManager = createFixManager();
         PipelineFactory pipelineFactory = new PipelineFactory(config,
                 fixManager, repository);
@@ -139,11 +141,13 @@ public class ApplicationContext {
         }
         throw new ConfigException("Fix these settings in "
                 + config.getConfigFile() + ", then start GradeZZY again: "
-                + TextUtils.join(" ", problems));
+                + TextUtils.join(PROBLEM_SEPARATOR, problems));
     }
 
     /**
      * Returns the application settings.
+     *
+     * <p>Tier: MUST.
      *
      * @return the application settings
      */
@@ -154,46 +158,35 @@ public class ApplicationContext {
     /**
      * Returns every service of the application.
      *
+     * <p>Tier: MUST.
+     *
      * @return the service registry
      */
     public ServiceRegistry getServices() {
         return services;
     }
 
-    /**
-     * Returns why the database could not be opened at start-up.
-     *
-     * <p>Grading still works without the database, but nothing is saved,
-     * so a screen should show this message when it is not empty.
-     *
-     * @return the problem, or an empty string when there is none
-     */
-    public String getStartupProblem() {
-        return startupProblem;
-    }
-
     // Opens the database when it is switched on. A failure is reported
-    // on the error stream and returned, but does not stop the app: grading
-    // still works, only saving does not.
-    private String openRepository() {
+    // on the error stream but does not stop the app: grading still
+    // works, only saving does not.
+    private void openRepository() {
         if (!config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
-            return "";
+            return;
         }
 
         try {
             repository.open();
-            return "";
         } catch (PersistenceException exception) {
-            String problem = "Results will not be saved: "
-                    + exception.getMessage();
-            System.err.println(problem);
-            return problem;
+            System.err.println("Results will not be saved: "
+                    + exception.getMessage());
         }
     }
 
     /**
      * Releases what the application holds open, such as the database.
      * Call this once when the application ends.
+     *
+     * <p>Tier: MUST.
      */
     public void close() {
         repository.close();
@@ -230,7 +223,7 @@ public class ApplicationContext {
     // answer groups from answerGroups.
     private ExportService createExportService(
             AnswerGroupSource answerGroups) {
-        ExportService exportService = new ExportService(config);
+        ExportService exportService = new ExportService();
         JsonExporter jsonExporter = new JsonExporter(new JsonWriter());
         jsonExporter.setAnswerGroupSource(answerGroups);
 

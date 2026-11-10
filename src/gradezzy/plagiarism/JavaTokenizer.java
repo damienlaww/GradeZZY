@@ -29,6 +29,16 @@ import gradezzy.util.TextUtils;
  */
 public final class JavaTokenizer {
 
+    /**
+     * What shapeToken makes of a name that is not a keyword.
+     */
+    public static final String NAME_TOKEN = "ID";
+
+    /**
+     * What shapeToken makes of a string or char literal.
+     */
+    public static final String TEXT_TOKEN = "STR";
+
     // The text that starts a comment running to the end of the line
     private static final String LINE_COMMENT = "//";
 
@@ -59,12 +69,6 @@ public final class JavaTokenizer {
 
     // The text placed between the tokens of a shape
     private static final String SHAPE_SEPARATOR = " ";
-
-    // What a name that is not a keyword becomes in a shape
-    private static final String NAME_TOKEN = "ID";
-
-    // What a string or char literal becomes in a shape
-    private static final String TEXT_TOKEN = "STR";
 
     // How far a piece of one character reaches past its start
     private static final int ONE_CHARACTER = 1;

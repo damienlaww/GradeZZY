@@ -56,21 +56,10 @@ public class HistoryService {
     private final Path databaseFile;
 
     /**
-     * Creates a new history service.
-     *
-     * @param config the application settings
-     * @param repository the store results are saved to
-     * @param backupManager the helper that copies the database
-     */
-    public HistoryService(AppConfig config, ResultRepository repository,
-            BackupManager backupManager) {
-        this(config, repository, backupManager,
-                new AuditService(config, repository));
-    }
-
-    /**
      * Creates a new history service that writes backups and restores to
      * the given audit log.
+     *
+     * <p>Tier: COULD.
      *
      * @param config the application settings
      * @param repository the store results are saved to
@@ -110,6 +99,8 @@ public class HistoryService {
     /**
      * Makes a backup of the current state.
      *
+     * <p>Tier: COULD.
+     *
      * @return the backup file, or null if it failed or the database is
      *         switched off
      */
@@ -144,6 +135,8 @@ public class HistoryService {
      * <p>Other threads that use the repository wait until the restore is
      * finished. A grading run still going on saves its next results into
      * the restored database, so restore when no run is being graded.
+     *
+     * <p>Tier: COULD.
      *
      * @param backupFile the backup file
      * @throws IllegalStateException if the database is switched off, the

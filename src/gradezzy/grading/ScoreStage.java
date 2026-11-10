@@ -43,6 +43,8 @@ public class ScoreStage implements GradingStage {
     /**
      * Creates a new score stage.
      *
+     * <p>Tier: MUST.
+     *
      * @param scoreCalculator the helper that adds up scores
      */
     public ScoreStage(ScoreCalculator scoreCalculator) {
@@ -51,6 +53,8 @@ public class ScoreStage implements GradingStage {
 
     /**
      * Returns the name of this stage.
+     *
+     * <p>Tier: MUST.
      *
      * @return the name of this stage
      */
@@ -72,6 +76,8 @@ public class ScoreStage implements GradingStage {
      * would otherwise go into the export unnoticed. A question worth 0,
      * such as one with no typed test case, gets no flag: by design it has
      * no tester and adds nothing to any total.
+     *
+     * <p>Tier: MUST.
      *
      * @param submission the submission
      * @param context the context

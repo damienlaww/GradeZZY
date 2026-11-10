@@ -59,6 +59,10 @@ public class ClassFileMatcher {
     // How many files or folders nearby are tried as a suggestion
     private static final int MAX_CANDIDATES = 80;
 
+    // The count given to a file that cannot be read as a score sheet,
+    // so any readable sheet counts for more
+    private static final int UNREADABLE_SHEET = -1;
+
     // Largest question file read from an upload, in bytes (1 MB)
     private static final int MAX_SOURCE_BYTES = 1048576;
 
@@ -126,6 +130,8 @@ public class ClassFileMatcher {
 
     /**
      * Creates a matcher for the lab test being graded.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param config the application settings
      * @param assessment the questions of the lab test
@@ -264,7 +270,7 @@ public class ClassFileMatcher {
         try {
             return countOnSheet(sheet, wanted);
         } catch (IngestException exception) {
-            return -1;
+            return UNREADABLE_SHEET;
         }
     }
 
@@ -346,22 +352,9 @@ public class ClassFileMatcher {
         String problem = describeOtherTesters(tested, unknownNames);
 
         Path configured = readConfiguredPath(ConfigKeys.TESTERS_DIR);
-        Path best = null;
         List<String> bestTested = new ArrayList<>();
-        int bestFitting = fitting;
-        for (Path candidate : listCandidateFolders(folder, uploads,
-                configured)) {
-            List<String> candidateTested = new ArrayList<>();
-            int candidateFitting = countFittingTesters(candidate,
-                    candidateTested, new ArrayList<>());
-            boolean better = candidateFitting > bestFitting
-                    && candidateFitting * HALF >= candidateTested.size();
-            if (better) {
-                best = candidate;
-                bestTested = candidateTested;
-                bestFitting = candidateFitting;
-            }
-        }
+        Path best = findBetterFolder(folder, uploads, configured, fitting,
+                true, bestTested);
         if (best == null) {
             return new ClassFileMatch(problem, null, "");
         }
@@ -467,22 +460,9 @@ public class ClassFileMatcher {
         }
 
         Path configured = readConfiguredPath(ConfigKeys.STARTER_DIR);
-        Path best = null;
         List<String> bestChecked = new ArrayList<>();
-        int bestFitting = fitting;
-        for (Path candidate : listCandidateFolders(folder, uploads,
-                configured)) {
-            List<String> candidateChecked = new ArrayList<>();
-            int candidateFitting = countFittingStarters(candidate,
-                    candidateChecked, new ArrayList<>());
-            boolean better = candidateFitting > bestFitting
-                    && candidateFitting * HALF >= candidateChecked.size();
-            if (better) {
-                best = candidate;
-                bestChecked = candidateChecked;
-                bestFitting = candidateFitting;
-            }
-        }
+        Path best = findBetterFolder(folder, uploads, configured, fitting,
+                false, bestChecked);
         if (best == null) {
             return new ClassFileMatch(problem, null, "");
         }
@@ -776,6 +756,43 @@ public class ClassFileMatcher {
     }
 
     // ------------------------------------------------------ java source
+
+    // Looks near the chosen folder for one whose testers, or starter files
+    // when testers is false, fit the uploads better than the chosen
+    // folder's count of fitting questions. Fills bestNames with the
+    // questions the better folder covers. Returns that folder, or null
+    // when none is better.
+    private Path findBetterFolder(Path folder, List<Path> uploads,
+            Path configured, int fitting, boolean testers,
+            List<String> bestNames) {
+        Path best = null;
+        int bestFitting = fitting;
+        for (Path candidate : listCandidateFolders(folder, uploads,
+                configured)) {
+            List<String> candidateNames = new ArrayList<>();
+            int candidateFitting = countFitting(candidate, candidateNames,
+                    testers);
+            boolean better = candidateFitting > bestFitting
+                    && candidateFitting * HALF >= candidateNames.size();
+            if (better) {
+                best = candidate;
+                bestNames.clear();
+                bestNames.addAll(candidateNames);
+                bestFitting = candidateFitting;
+            }
+        }
+        return best;
+    }
+
+    // Counts the questions of a folder whose tester, or starter file when
+    // testers is false, fits the uploads, and lists them in names.
+    private int countFitting(Path folder, List<String> names,
+            boolean testers) {
+        if (testers) {
+            return countFittingTesters(folder, names, new ArrayList<>());
+        }
+        return countFittingStarters(folder, names, new ArrayList<>());
+    }
 
     // Returns a question's class name: its file name without ".java".
     private String classNameOf(Question question) {

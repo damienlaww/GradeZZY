@@ -48,6 +48,8 @@ public class ChosenSubmissionsStore {
     /**
      * Creates a store that keeps its paths in a file.
      *
+     * <p>Tier: COULD.
+     *
      * @param file the file to read and write
      */
     public ChosenSubmissionsStore(Path file) {
@@ -56,6 +58,8 @@ public class ChosenSubmissionsStore {
 
     /**
      * Reads the saved paths of every section.
+     *
+     * <p>Tier: COULD.
      *
      * @return the paths by section, such as CS102/G1, with an empty list
      *         for a section whose files were cleared; empty when there is
@@ -86,6 +90,8 @@ public class ChosenSubmissionsStore {
      * Saves the paths of every section, replacing what was saved. An
      * empty list is kept too, so a section cleared on purpose stays
      * cleared.
+     *
+     * <p>Tier: COULD.
      *
      * @param chosen the paths by section, such as CS102/G1
      * @return true when the file was written

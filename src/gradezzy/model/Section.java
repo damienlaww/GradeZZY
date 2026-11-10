@@ -24,6 +24,8 @@ public class Section {
     /**
      * Creates a new section.
      *
+     * <p>Tier: MUST.
+     *
      * @param moduleCode the course code, for example CS102
      * @param sectionCode the section code, for example G1
      */
@@ -35,6 +37,8 @@ public class Section {
     /**
      * Returns the course code, for example CS102.
      *
+     * <p>Tier: MUST.
+     *
      * @return the course code, for example CS102
      */
     public String getModuleCode() {
@@ -44,6 +48,8 @@ public class Section {
     /**
      * Returns the section code, for example G1.
      *
+     * <p>Tier: MUST.
+     *
      * @return the section code, for example G1
      */
     public String getSectionCode() {
@@ -52,6 +58,8 @@ public class Section {
 
     /**
      * Returns the module and section as one label.
+     *
+     * <p>Tier: MUST.
      *
      * @return the label, for example CS102 G1
      */

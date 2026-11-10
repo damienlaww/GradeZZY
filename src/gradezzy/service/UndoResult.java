@@ -19,6 +19,8 @@ public class UndoResult extends RegradeResult {
     /**
      * Creates the result of an undo.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param username the student whose fix was undone
      * @param totalBefore the total before the fix was undone
      * @param totalAfter the total after grading again
@@ -34,6 +36,8 @@ public class UndoResult extends RegradeResult {
      * Returns the sentence for the card, for example "Fix undone. Marks
      * 20 to 16." When the student could not be graded again, it says why
      * and that the marks have not changed yet.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the sentence for the card
      */

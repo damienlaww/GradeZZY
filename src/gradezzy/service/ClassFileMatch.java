@@ -32,6 +32,8 @@ public class ClassFileMatch {
     /**
      * Creates a result.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param problem why the file does not fit, or null when it fits or
      *        the check could not tell
      * @param suggestion a better file or folder, or null when none was
@@ -49,6 +51,8 @@ public class ClassFileMatch {
     /**
      * Returns a result that has nothing to say.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return a result with no problem and no suggestion
      */
     public static ClassFileMatch fits() {
@@ -57,6 +61,8 @@ public class ClassFileMatch {
 
     /**
      * Says whether the file does not seem to belong with the uploads.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return true when there is a problem to show
      */
@@ -67,6 +73,8 @@ public class ClassFileMatch {
     /**
      * Returns why the file does not seem to belong with the uploads.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return one or two sentences, or null when it fits
      */
     public String getProblem() {
@@ -75,6 +83,8 @@ public class ClassFileMatch {
 
     /**
      * Says whether a better file or folder was found.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return true when there is a suggestion to show
      */
@@ -85,6 +95,8 @@ public class ClassFileMatch {
     /**
      * Returns the better file or folder.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return its path, or null when none was found
      */
     public Path getSuggestion() {
@@ -93,6 +105,8 @@ public class ClassFileMatch {
 
     /**
      * Returns the name of the better file or folder, shown in bold.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the name, or an empty string when there is no suggestion
      */
@@ -105,6 +119,8 @@ public class ClassFileMatch {
 
     /**
      * Returns the words shown after the suggestion's name.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return for example ", in the same folder, lists 40 of the 42
      *         uploads."

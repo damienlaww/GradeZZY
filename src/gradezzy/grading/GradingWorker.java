@@ -13,8 +13,9 @@ import gradezzy.model.Submission;
 
 /**
  * A worker thread that grades submissions until the handout is empty.
- * Each submission is graded by the pipeline's own gradeOne method, so the
- * parallel path does exactly what the in-order path does.
+ * Each submission is graded by the pipeline's own gradeSafely method, so
+ * the parallel path does exactly what the in-order path does, and a
+ * RuntimeException with one submission does not end the thread.
  *
  * <p>Tier: MUST. Owner: Jing Yuan.
  */
@@ -51,13 +52,15 @@ class GradingWorker implements Runnable {
     /**
      * Takes submissions from the handout and grades each one, until there
      * are none left.
+     *
+     * <p>Tier: MUST.
      */
     @Override
     public void run() {
         Submission submission = handout.next();
 
         while (submission != null) {
-            pipeline.gradeOne(submission, context, listener);
+            pipeline.gradeSafely(submission, context, listener);
             submission = handout.next();
         }
     }

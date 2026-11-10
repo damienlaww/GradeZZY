@@ -62,6 +62,8 @@ public final class ModuleSections {
      * Returns the sections every module has, then those of one module
      * only, without repeats.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param shared the value of app.section.codes
      * @param byModule the value of app.section.codes.by.module, or null
      * @param moduleCode the module
@@ -85,6 +87,8 @@ public final class ModuleSections {
      * Returns a module's sections: those every module has, unless the
      * module is listed as having only its own, then its own.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param shared the value of app.section.codes
      * @param byModule the value of app.section.codes.by.module, or null
      * @param ownOnly the value of app.module.codes.own.sections.only, or
@@ -102,6 +106,8 @@ public final class ModuleSections {
 
     /**
      * Says whether a module has only its own sections.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param ownOnly the value of app.module.codes.own.sections.only, or
      *        null
@@ -122,6 +128,8 @@ public final class ModuleSections {
 
     /**
      * Returns the value with one more section for one module.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param byModule the value now, or null
      * @param moduleCode the module
@@ -145,6 +153,8 @@ public final class ModuleSections {
 
     /**
      * Returns the value without one section of one module.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param byModule the value now, or null
      * @param moduleCode the module
@@ -178,6 +188,8 @@ public final class ModuleSections {
      * Returns the value without any section of one module, for a module
      * that is deleted.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param byModule the value now, or null
      * @param moduleCode the module
      * @return the new value
@@ -197,6 +209,8 @@ public final class ModuleSections {
 
     /**
      * Says whether a section belongs to one module only.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param byModule the value, or null
      * @param moduleCode the module
@@ -222,6 +236,8 @@ public final class ModuleSections {
 
     /**
      * Checks the value's form.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param value the value
      * @return an empty string when it is valid, or the problem

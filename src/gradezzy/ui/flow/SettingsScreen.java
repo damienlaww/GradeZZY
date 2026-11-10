@@ -112,11 +112,6 @@ public class SettingsScreen extends FlowScreen {
     private static final String[] ALGORITHM_NAMES = {"Rename-proof",
         "Exact tokens (first version)"};
 
-    // The export formats that can be offered, and their names
-    private static final String[] FORMATS = {"csv,json", "csv", "json"};
-    private static final String[] FORMAT_NAMES = {"CSV and JSON",
-        "CSV only", "JSON only"};
-
     // The values each number setting offers in its list. A value set by
     // hand that is not here is kept as one more choice.
     static final String[] RUN_SECONDS = {"5", "10", "15", "20",
@@ -640,8 +635,6 @@ public class SettingsScreen extends FlowScreen {
                 "Start of what a tester prints when a test case fails.");
         text(ConfigKeys.TEST_HEADER_MARKER, "Test case line",
                 "Start of what a tester prints before each test case.");
-        choice(ConfigKeys.EXPORT_FORMATS, "Export formats",
-                "Offered by default.", FORMATS).showChoicesAs(FORMAT_NAMES);
         choice(ConfigKeys.CSV_LINE_ENDING, "CSV line ending",
                 "Keep CRLF unless your tools need LF.", LINE_ENDINGS)
                 .showChoicesAs(LINE_ENDING_NAMES);

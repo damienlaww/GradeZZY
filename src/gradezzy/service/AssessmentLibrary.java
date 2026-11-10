@@ -91,6 +91,8 @@ public class AssessmentLibrary {
     /**
      * Creates the library.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param config the application settings
      * @param settings the service that checks and saves settings
      */
@@ -104,6 +106,8 @@ public class AssessmentLibrary {
      * is always listed: when it has no file yet, as on the first start,
      * one is saved from config.properties. A file that cannot be read is
      * left out.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the assessments
      * @throws IOException if the folder cannot be read or written
@@ -122,6 +126,8 @@ public class AssessmentLibrary {
     /**
      * Returns the name of the assessment in use.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the name in assessment.name
      */
     public String getActiveName() {
@@ -130,6 +136,8 @@ public class AssessmentLibrary {
 
     /**
      * Reads the assessment in use from config.properties.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the assessment in use
      */
@@ -163,6 +171,8 @@ public class AssessmentLibrary {
     /**
      * Checks an assessment before it is saved, without reading any file
      * or folder.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param draft the assessment to check
      * @param originalName the name it had before, or null for a new one
@@ -223,6 +233,8 @@ public class AssessmentLibrary {
      * and that the tester folder has a tester with marks for every
      * question, as grading needs.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param draft the assessment
      * @return what is wrong, in one sentence, or an empty string
      */
@@ -271,6 +283,8 @@ public class AssessmentLibrary {
      * Reads a question's maximum mark from its tester: the sum of its
      * "score += <number>" lines.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param testersDirectory the tester folder
      * @param questionId the question, such as Q1a
      * @return the maximum mark, or TesterMarks.UNKNOWN when the tester is
@@ -301,6 +315,8 @@ public class AssessmentLibrary {
     /**
      * Saves an assessment, replacing the one it was edited from. When
      * that one is in use, GradeZZY switches to the saved version.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param draft the assessment to save
      * @param originalName the name it had before, or null for a new one
@@ -353,6 +369,8 @@ public class AssessmentLibrary {
      * Switches GradeZZY to a saved assessment: its questions, tester
      * folder and starter folder are written to config.properties.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param name the assessment's name
      * @throws IOException if config.properties cannot be written
      * @throws IllegalArgumentException if there is no such assessment, or
@@ -370,6 +388,8 @@ public class AssessmentLibrary {
     /**
      * Deletes a saved assessment. The one in use cannot be deleted.
      * Earlier results graded with it are kept.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param name the assessment's name
      * @throws IOException if the file cannot be deleted
@@ -392,6 +412,8 @@ public class AssessmentLibrary {
     /**
      * Saves the assessment in use again from config.properties, after its
      * settings were changed on the Settings page.
+     *
+     * <p>Tier: SHOULD.
      *
      * @throws IOException if the file cannot be written
      */

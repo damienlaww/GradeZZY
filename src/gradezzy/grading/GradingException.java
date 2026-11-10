@@ -18,6 +18,8 @@ public class GradingException extends Exception {
     /**
      * Creates the exception with a message for the instructor.
      *
+     * <p>Tier: MUST.
+     *
      * @param message what went wrong, in plain words
      */
     public GradingException(String message) {
@@ -26,6 +28,8 @@ public class GradingException extends Exception {
 
     /**
      * Creates the exception and keeps the original cause.
+     *
+     * <p>Tier: MUST.
      *
      * @param message what went wrong, in plain words
      * @param cause the lower level exception that triggered this

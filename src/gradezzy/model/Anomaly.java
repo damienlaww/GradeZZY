@@ -43,6 +43,8 @@ public class Anomaly {
     /**
      * Creates a new anomaly.
      *
+     * <p>Tier: MUST.
+     *
      * @param id the unique id of this anomaly
      * @param type the kind of problem
      * @param severity how serious the problem is
@@ -63,6 +65,8 @@ public class Anomaly {
     /**
      * Returns the unique id of this anomaly.
      *
+     * <p>Tier: MUST.
+     *
      * @return the unique id of this anomaly
      */
     public String getId() {
@@ -71,6 +75,8 @@ public class Anomaly {
 
     /**
      * Returns the kind of problem.
+     *
+     * <p>Tier: MUST.
      *
      * @return the kind of problem
      */
@@ -81,6 +87,8 @@ public class Anomaly {
     /**
      * Returns how serious the problem is.
      *
+     * <p>Tier: MUST.
+     *
      * @return how serious the problem is
      */
     public Severity getSeverity() {
@@ -89,6 +97,8 @@ public class Anomaly {
 
     /**
      * Returns the username of the affected submission.
+     *
+     * <p>Tier: MUST.
      *
      * @return the username of the affected submission
      */
@@ -99,6 +109,8 @@ public class Anomaly {
     /**
      * Returns a plain description of what is wrong.
      *
+     * <p>Tier: MUST.
+     *
      * @return a plain description of what is wrong
      */
     public String getMessage() {
@@ -107,6 +119,8 @@ public class Anomaly {
 
     /**
      * Returns what the instructor can do about it.
+     *
+     * <p>Tier: MUST.
      *
      * @return what the instructor can do about it
      */
@@ -117,6 +131,8 @@ public class Anomaly {
     /**
      * Returns the state of the automatic fix.
      *
+     * <p>Tier: MUST.
+     *
      * @return the state of the automatic fix
      */
     public FixStatus getFixStatus() {
@@ -125,6 +141,8 @@ public class Anomaly {
 
     /**
      * Sets the state of the automatic fix.
+     *
+     * <p>Tier: MUST.
      *
      * @param fixStatus the state of the automatic fix
      */

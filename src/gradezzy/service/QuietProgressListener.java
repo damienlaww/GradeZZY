@@ -22,6 +22,8 @@ public class QuietProgressListener implements ProgressListener {
 
     /**
      * Creates a listener that ignores every event.
+     *
+     * <p>Tier: SHOULD.
      */
     public QuietProgressListener() {
         // nothing to set up
@@ -29,6 +31,8 @@ public class QuietProgressListener implements ProgressListener {
 
     /**
      * Ignores the start of a run.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param totalSubmissions the number of submissions
      */
@@ -40,6 +44,8 @@ public class QuietProgressListener implements ProgressListener {
     /**
      * Ignores the start of a submission.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param submission the submission
      */
     @Override
@@ -49,6 +55,8 @@ public class QuietProgressListener implements ProgressListener {
 
     /**
      * Ignores the start of a step.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param submission the submission
      * @param stageName the name of the step
@@ -61,6 +69,8 @@ public class QuietProgressListener implements ProgressListener {
     /**
      * Ignores the end of a submission.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param submission the submission
      */
     @Override
@@ -70,6 +80,8 @@ public class QuietProgressListener implements ProgressListener {
 
     /**
      * Ignores the end of a run.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param gradingRun the run
      */

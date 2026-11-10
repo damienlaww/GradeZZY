@@ -36,6 +36,8 @@ public abstract class RegradeResult {
     /**
      * Creates the result.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param username the student whose fix changed
      * @param totalBefore the total before the fix changed
      * @param totalAfter the total after grading again
@@ -53,6 +55,8 @@ public abstract class RegradeResult {
     /**
      * Returns the student whose fix changed.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the username
      */
     public String getUsername() {
@@ -61,6 +65,8 @@ public abstract class RegradeResult {
 
     /**
      * Returns the student's total before the fix changed.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the total before
      */
@@ -71,6 +77,8 @@ public abstract class RegradeResult {
     /**
      * Returns the student's total after grading again.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the total after
      */
     public double getTotalAfter() {
@@ -79,6 +87,8 @@ public abstract class RegradeResult {
 
     /**
      * Says whether the student was graded again.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return true if the marks now follow the change to the fix
      */
@@ -89,6 +99,8 @@ public abstract class RegradeResult {
     /**
      * Returns why the student was not graded again.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the reason, or an empty string when they were
      */
     public String getProblem() {
@@ -98,12 +110,16 @@ public abstract class RegradeResult {
     /**
      * Returns the sentence for the Review card.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the sentence for the card
      */
     public abstract String getMessage();
 
     /**
      * Returns "Marks 20 to 16.": the totals before and after.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the change of marks, as a sentence
      */

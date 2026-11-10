@@ -61,6 +61,8 @@ public class RandomInputStage implements GradingStage {
     /**
      * Creates the stage.
      *
+     * <p>Tier: COULD.
+     *
      * @param checker the run's checker, with the run's inputs
      */
     public RandomInputStage(RandomInputChecker checker) {
@@ -69,6 +71,8 @@ public class RandomInputStage implements GradingStage {
 
     /**
      * Returns the name shown while this step runs.
+     *
+     * <p>Tier: COULD.
      *
      * @return the name
      */
@@ -80,6 +84,8 @@ public class RandomInputStage implements GradingStage {
     /**
      * Checks every question that compiled. A question that cannot be
      * checked, such as one whose method takes a file name, is skipped.
+     *
+     * <p>Tier: COULD.
      *
      * @param submission the submission
      * @param context the context

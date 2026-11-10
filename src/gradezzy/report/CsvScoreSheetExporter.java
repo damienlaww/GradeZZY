@@ -206,9 +206,8 @@ public class CsvScoreSheetExporter implements Exporter {
     // The sheet the batch was graded against, so the export lists the
     // same students. A run saved before the sheet was recorded uses its
     // section's own sheet, else the one for everyone, both read from the
-    // settings now (Settings can change them while the app is open), as
-    // the Export warning (ExportService.summarizeScoreSheet) does. A run
-    // with no section uses the template.
+    // settings now (Settings can change them while the app is open). A
+    // run with no section uses the template.
     private Path chooseTemplate(GradingRun gradingRun) {
         if (gradingRun.getScoreSheetFile() != null) {
             return gradingRun.getScoreSheetFile();

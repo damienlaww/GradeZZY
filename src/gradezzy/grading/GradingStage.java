@@ -20,6 +20,8 @@ public interface GradingStage {
     /**
      * Returns the name shown while this stage runs.
      *
+     * <p>Tier: MUST.
+     *
      * @return the name of this stage
      */
     String getName();
@@ -28,6 +30,8 @@ public interface GradingStage {
      * Does this stage's work for one submission. Problems with the student's
      * work are added to the submission as anomalies; throw only when the stage
      * itself cannot go on.
+     *
+     * <p>Tier: MUST.
      *
      * @param submission the submission
      * @param context the context

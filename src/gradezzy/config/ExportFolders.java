@@ -31,6 +31,9 @@ public final class ExportFolders {
     // Separates one entry from the next
     private static final String ENTRY_SEPARATOR = ";";
 
+    // Returned by indexOf when no entry matches
+    private static final int NOT_FOUND = -1;
+
     // Separates who an entry is for from its folder
     private static final String VALUE_SEPARATOR = "=";
 
@@ -73,6 +76,8 @@ public final class ExportFolders {
      * Returns the folder a section's exports are saved in: its own, else
      * its module's, else the folder for everyone.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param defaultFolder the value of paths.output.dir
      * @param folders the value of paths.output.dir.by.section, or null
      * @param moduleCode the module, or null
@@ -101,6 +106,8 @@ public final class ExportFolders {
      * Returns the value kept for exactly one module or section, without
      * falling back to anything else.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param folders the value of the setting, or null
      * @param who the module, or module/section, such as "CS102/G1"
      * @return the value, or "" when none is kept for it
@@ -117,6 +124,8 @@ public final class ExportFolders {
      * Returns who each folder is for, such as "CS102" or "CS102/G1", in
      * the order they were added, with its folder.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param folders the value of paths.output.dir.by.section, or null
      * @return each entry as {who, folder}
      */
@@ -127,6 +136,8 @@ public final class ExportFolders {
     /**
      * Returns the value with one entry set, replacing any for the same
      * module or section.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param folders the value now, or null
      * @param who the module, or module/section, such as "CS102/G1"
@@ -146,6 +157,8 @@ public final class ExportFolders {
     /**
      * Returns the value without the entry of a module or section.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param folders the value now, or null
      * @param who the module, or module/section
      * @return the new value
@@ -162,6 +175,8 @@ public final class ExportFolders {
     /**
      * Returns the value without a module's folder or any of its
      * sections' folders, for a module that is deleted.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param folders the value now, or null
      * @param moduleCode the module
@@ -186,6 +201,8 @@ public final class ExportFolders {
      * Returns the value without the entries of one section in any
      * module, for a section every module has that is deleted.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param folders the value now, or null
      * @param sectionCode the section
      * @return the new value
@@ -204,6 +221,8 @@ public final class ExportFolders {
 
     /**
      * Says who an entry is for, as written in the setting.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param moduleCode the module
      * @param sectionCode the section, or null for the whole module
@@ -270,6 +289,8 @@ public final class ExportFolders {
 
     /**
      * Checks the value's form.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param value the value
      * @return an empty string when it is valid, or the problem
@@ -391,6 +412,6 @@ public final class ExportFolders {
                 return index;
             }
         }
-        return -1;
+        return NOT_FOUND;
     }
 }

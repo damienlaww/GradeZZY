@@ -108,6 +108,8 @@ public class ConsoleMain {
      * and nothing is graded. On a JDK older than 25 it says so and ends
      * at once.
      *
+     * <p>Tier: MUST.
+     *
      * @param args optional: --testers, then the section, or the module
      *        and the section
      */

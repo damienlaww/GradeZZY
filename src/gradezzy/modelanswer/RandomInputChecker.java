@@ -58,15 +58,6 @@ public class RandomInputChecker {
     // Exit code of javac when the files compiled
     private static final int COMPILED = 0;
 
-    // Splits the program's output into lines
-    private static final String LINE_BREAK = "\\R";
-
-    // The parts of one printed line: number, mark, text
-    private static final int FIELD_COUNT = 3;
-    private static final int NUMBER_FIELD = 0;
-    private static final int MARK_FIELD = 1;
-    private static final int TEXT_FIELD = 2;
-
     // Calls are numbered from 1 by InputDriver
     private static final int FIRST_CALL = 1;
 
@@ -76,26 +67,11 @@ public class RandomInputChecker {
     private static final double RELATIVE_MARGIN = 0.000001;
     private static final double SMALLEST_SCALE = 1.0;
 
-    // The most differences shown in a flag, and the longest result shown
-    private static final int MAX_EXAMPLES = 2;
-    private static final int MAX_SHOWN_LENGTH = 40;
-    private static final String CUT_MARK = "...";
-    private static final String EXAMPLE_SEPARATOR = "; ";
+    // Separates the sentences of a flag
     private static final String SENTENCE_SEPARATOR = " ";
 
-    // How a result of these types is quoted when shown, and how a null
-    // result prints
-    private static final String STRING_TYPE = "String";
-    private static final String CHAR_TYPE = "char";
-    private static final String DOUBLE_TYPE = "double";
+    // The boxed type of a decimal result, besides JavaTypes.DOUBLE_TYPE
     private static final String BOXED_DOUBLE_TYPE = "Double";
-    private static final String TEXT_QUOTE = "\"";
-    private static final String CHAR_QUOTE = "'";
-    private static final String NULL_TEXT = "null";
-
-    // The package names the input program writes in full
-    private static final String JAVA_UTIL = "java.util.";
-    private static final String JAVA_LANG = "java.lang.";
 
     // The settings
     private final AppConfig config;
@@ -118,11 +94,17 @@ public class RandomInputChecker {
     private final InputMaker inputMaker;
     private final InputDriver inputDriver = new InputDriver();
 
+    // Reads the program's output, and writes the flag's sentences
+    private final CallResultReader resultReader = new CallResultReader();
+    private final DifferenceMessage message = new DifferenceMessage();
+
     // The methods of each question, ready to check, by question id
     private final Map<String, List<MethodCheck>> prepared = new HashMap<>();
 
     /**
      * Creates a checker for one grading run, with new random inputs.
+     *
+     * <p>Tier: COULD.
      *
      * @param config the settings
      * @param compiler compiles the input program
@@ -173,7 +155,7 @@ public class RandomInputChecker {
             Map<Integer, CallResult> studentResults = runProgram(
                     studentFolder, check.getDriverSource());
             if (studentResults == null) {
-                notCalled.add(describeMethod(check.getMethod()));
+                notCalled.add(message.describeMethod(check.getMethod()));
             } else {
                 compared = compared + countCompared(check, studentResults);
                 different = different + collectDifferences(check,
@@ -183,45 +165,16 @@ public class RandomInputChecker {
 
         List<String> sentences = new ArrayList<>();
         if (different > 0) {
-            sentences.add(describeDifferences(question, different,
+            sentences.add(message.describeDifferences(question, different,
                     compared, examples));
         }
         if (!notCalled.isEmpty()) {
-            sentences.add(describeNotCalled(question, notCalled));
+            sentences.add(message.describeNotCalled(question, notCalled));
         }
         if (sentences.isEmpty()) {
             return null;
         }
         return TextUtils.join(SENTENCE_SEPARATOR, sentences);
-    }
-
-    // Says how many of the compared inputs gave a different answer, with
-    // the examples.
-    private String describeDifferences(Question question, int different,
-            int compared, List<String> examples) {
-        return question.getId() + ": " + different + " of " + compared
-                + " random inputs give a different answer from the model "
-                + "answer, for example "
-                + TextUtils.join(EXAMPLE_SEPARATOR, examples) + ".";
-    }
-
-    // Names the methods that could not be called in the student's folder.
-    // The same program compiled with the model answer, so the folder
-    // holds a changed method or a class named like one of Java's own,
-    // which could be there to dodge this check.
-    private String describeNotCalled(Question question,
-            List<String> notCalled) {
-        return question.getId() + ": "
-                + TextUtils.join(EXAMPLE_SEPARATOR, notCalled)
-                + " could not be called with random inputs here, "
-                + "though it can in the model answer. Check that the "
-                + "method is as the question asks.";
-    }
-
-    // Names a method with its parameter types, such as
-    // countDigit(long, int).
-    private String describeMethod(MethodSignature method) {
-        return method.describeCall(method.getParameterTypes());
     }
 
     /**
@@ -351,46 +304,12 @@ public class RandomInputChecker {
             }
             ProcessResult run = testerRunner.runTester(folder,
                     InputDriver.CLASS_NAME);
-            return readResults(run.getStandardOutput());
+            return resultReader.read(run.getStandardOutput());
         } catch (IOException exception) {
             return new HashMap<>();
         } finally {
             deleteFileQuietly(sourceFile);
             deleteFileQuietly(classFile);
-        }
-    }
-
-    // Reads the program's trusted lines into results by call number.
-    // Lines the student's code printed carry TesterRunner's prefix and
-    // are skipped.
-    private Map<Integer, CallResult> readResults(String output) {
-        Map<Integer, CallResult> results = new HashMap<>();
-        for (String line : output.split(LINE_BREAK)) {
-            boolean fromStudent = line.startsWith(
-                    TesterRunner.STUDENT_LINE_PREFIX);
-            String[] fields = line.split(InputDriver.FIELD_SEPARATOR,
-                    FIELD_COUNT);
-            if (!fromStudent && fields.length == FIELD_COUNT) {
-                addResult(results, fields);
-            }
-        }
-        return results;
-    }
-
-    // Adds the result one line holds, when the line is well formed.
-    private void addResult(Map<Integer, CallResult> results,
-            String[] fields) {
-        String mark = fields[MARK_FIELD];
-        boolean threw = mark.equals(InputDriver.THREW_MARK);
-        boolean value = mark.equals(InputDriver.VALUE_MARK);
-        if (!threw && !value) {
-            return;
-        }
-        try {
-            int number = Integer.parseInt(fields[NUMBER_FIELD]);
-            results.put(number, new CallResult(threw, fields[TEXT_FIELD]));
-        } catch (NumberFormatException exception) {
-            // Not one of the program's lines
         }
     }
 
@@ -403,10 +322,8 @@ public class RandomInputChecker {
         for (int index = 0; index < callCount; index++) {
             int number = index + FIRST_CALL;
             CallResult expected = check.getModelResults().get(number);
-            boolean reached = studentResults.containsKey(number);
-            boolean counted = expected != null && reached
-                    && !expected.hasThrown();
-            if (counted) {
+            CallResult actual = studentResults.get(number);
+            if (isComparable(expected, actual)) {
                 compared++;
             }
         }
@@ -419,19 +336,28 @@ public class RandomInputChecker {
             Map<Integer, CallResult> studentResults, List<String> examples) {
         int different = 0;
         int callCount = check.getInputs().size();
+        boolean decimal = isDecimal(check.getMethod());
         for (int index = 0; index < callCount; index++) {
             int number = index + FIRST_CALL;
             CallResult expected = check.getModelResults().get(number);
             CallResult actual = studentResults.get(number);
-            boolean comparable = expected != null && actual != null
-                    && !expected.hasThrown();
-            boolean decimal = isDecimal(check.getMethod());
-            if (comparable && !isSameAnswer(expected, actual, decimal)) {
+            boolean differs = isComparable(expected, actual)
+                    && !isSameAnswer(expected, actual, decimal);
+            if (differs) {
                 different++;
-                addExample(examples, check, index, expected, actual);
+                message.addExample(examples, check, index, expected,
+                        actual);
             }
         }
         return different;
+    }
+
+    // Says whether one call can be compared: both the model answer and
+    // the student finished it, and the model answer returned a value.
+    // A result that is missing is null, as the results never hold null.
+    private boolean isComparable(CallResult expected, CallResult actual) {
+        boolean bothFinished = expected != null && actual != null;
+        return bothFinished && !expected.hasThrown();
     }
 
     // Says whether two answers are the same: equal text, or, for a
@@ -454,7 +380,8 @@ public class RandomInputChecker {
     // Says whether a method returns a decimal number.
     private boolean isDecimal(MethodSignature method) {
         String type = method.getReturnType();
-        return type.equals(DOUBLE_TYPE) || type.equals(BOXED_DOUBLE_TYPE);
+        boolean primitive = type.equals(JavaTypes.DOUBLE_TYPE);
+        return primitive || type.equals(BOXED_DOUBLE_TYPE);
     }
 
     // Says whether two texts are decimal numbers close enough to be the
@@ -475,56 +402,6 @@ public class RandomInputChecker {
         } catch (NumberFormatException exception) {
             return false;
         }
-    }
-
-    // Adds one difference to the examples, while there are fewer than
-    // MAX_EXAMPLES, such as: compress("aab") returned "a2b" where the
-    // model answer returns "a2b1".
-    private void addExample(List<String> examples, MethodCheck check,
-            int index, CallResult expected, CallResult actual) {
-        if (examples.size() >= MAX_EXAMPLES) {
-            return;
-        }
-        MethodSignature method = check.getMethod();
-        List<String> arguments = check.getInputs().get(index);
-        String call = makeReadable(method.describeCall(arguments));
-        String got = "returned " + showResult(method, actual.getText());
-        if (actual.hasThrown()) {
-            got = "threw " + actual.getText();
-        }
-        examples.add(call + " " + got + " where the model answer returns "
-                + showResult(method, expected.getText()));
-    }
-
-    // Removes the package names the input program writes in full, so a
-    // call reads as the student would write it, such as
-    // new ArrayList<Integer>(Arrays.asList(3, 1)).
-    private String makeReadable(String call) {
-        return call.replace(JAVA_UTIL, "").replace(JAVA_LANG, "");
-    }
-
-    // Writes a result as Java writes the value, so empty text shows as
-    // "" rather than nothing: text in double quotes, a character in
-    // single quotes, anything else as printed. Long results are cut.
-    private String showResult(MethodSignature method, String text) {
-        String shown = shorten(text);
-        String type = method.getReturnType();
-        if (text.equals(NULL_TEXT)) {
-            return shown;
-        } else if (type.equals(STRING_TYPE)) {
-            return TEXT_QUOTE + shown + TEXT_QUOTE;
-        } else if (type.equals(CHAR_TYPE)) {
-            return CHAR_QUOTE + shown + CHAR_QUOTE;
-        }
-        return shown;
-    }
-
-    // Cuts a long result short for a flag.
-    private String shorten(String text) {
-        if (text.length() <= MAX_SHOWN_LENGTH) {
-            return text;
-        }
-        return text.substring(0, MAX_SHOWN_LENGTH) + CUT_MARK;
     }
 
     // Deletes a folder when nothing is left in it. A folder another run
