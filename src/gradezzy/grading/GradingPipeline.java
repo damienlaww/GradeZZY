@@ -111,7 +111,7 @@ public class GradingPipeline {
     private void gradeInOrder(List<Submission> submissions,
             GradingContext context, ProgressListener listener) {
         for (Submission submission : submissions) {
-            gradeOne(submission, context, listener);
+            gradeSafely(submission, context, listener);
         }
     }
 
@@ -161,18 +161,10 @@ public class GradingPipeline {
         }
     }
 
-    /**
-     * Grades one submission: skipped and marked CANCELLED if the run was
-     * cancelled, otherwise run through the stages. Always tells the
-     * listener the submission is finished. Shared by the in-order path
-     * and by each GradingWorker of the parallel path, which is why it is
-     * visible to the rest of the package.
-     *
-     * @param submission the submission to grade
-     * @param context the shared information the stages need
-     * @param listener the object told about progress
-     */
-    void gradeOne(Submission submission, GradingContext context,
+    // Grades one submission: skipped and marked CANCELLED if the run was
+    // cancelled, otherwise run through the stages. Always tells the
+    // listener the submission is finished. Called through gradeSafely.
+    private void gradeOne(Submission submission, GradingContext context,
             ProgressListener listener) {
         if (cancellationToken.isCancelled()) {
             submission.setStatus(SubmissionStatus.CANCELLED);
@@ -181,6 +173,36 @@ public class GradingPipeline {
         }
 
         listener.onSubmissionFinished(submission);
+    }
+
+    /**
+     * Grades one submission as gradeOne does, and stops a problem
+     * outside the stages, such as one in a listener, from ending the
+     * batch or the worker thread: a submission it stopped before the
+     * end is marked FAILED with the reason, and a finished one keeps
+     * its result. Used by the in-order path and by each GradingWorker.
+     *
+     * @param submission the submission to grade
+     * @param context the shared information the stages need
+     * @param listener the object told about progress
+     */
+    void gradeSafely(Submission submission, GradingContext context,
+            ProgressListener listener) {
+        try {
+            gradeOne(submission, context, listener);
+        } catch (RuntimeException exception) {
+            if (!isFinished(submission)) {
+                recordFailure(submission, exception);
+            }
+        }
+    }
+
+    // Says whether a submission already has its final status.
+    private boolean isFinished(Submission submission) {
+        SubmissionStatus status = submission.getStatus();
+        return status == SubmissionStatus.GRADED
+                || status == SubmissionStatus.FAILED
+                || status == SubmissionStatus.CANCELLED;
     }
 
     // Reads exec.thread.count and keeps it within sensible bounds: never

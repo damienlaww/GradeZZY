@@ -690,32 +690,28 @@ public class GradingService {
                     + "instead.");
         }
 
-        // The retried submissions go through the pipeline on their own,
-        // in a run that shares the id, assessment and section.
-        GradingRun retryRun = emptyCopyOf(gradingRun);
-
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (needsRetry(submission)) {
-                resetForRetry(submission);
-                retryRun.addSubmission(submission);
-            }
-        }
-
-        if (retryRun.getSubmissions().isEmpty()) {
-            return gradingRun;
-        }
-
+        // Refused before anything changes, so a Retry pressed while
+        // grading runs leaves the run being graded as it is
         beginOnlyGrading();
         try {
+            // The retried submissions go through the pipeline on their
+            // own, in a run that shares the id, assessment and section.
+            GradingRun retryRun = emptyCopyOf(gradingRun);
+            for (Submission submission : gradingRun.getSubmissions()) {
+                if (needsRetry(submission)) {
+                    resetForRetry(submission);
+                    retryRun.addSubmission(submission);
+                }
+            }
+
+            if (retryRun.getSubmissions().isEmpty()) {
+                return gradingRun;
+            }
+
             auditService.record(GRADING_RETRIED, "Grading "
                     + retryRun.getSubmissions().size() + " submission(s) of "
                     + gradingRun.getId() + " again.");
-            startRun(gradingRun.getId());
-            GradingPipeline pipeline = createPipeline(gradingRun);
-            pipeline.run(retryRun, lastContext,
-                    new RetryProgressListener(listener, gradingRun));
-            checkSimilarity(gradingRun);
-            saveRun(gradingRun, true);
+            gradePart(gradingRun, retryRun, listener);
         } finally {
             endGrading();
         }
@@ -756,17 +752,39 @@ public class GradingService {
             throw new GradingException("Choose a run to resume.");
         }
 
-        // Set when the saved run does not say which testers it used
-        String testerWarning = null;
-        if (lastRun == null || !runId.equals(lastRun.getId())) {
-            testerWarning = switchToSavedRun(runId);
+        // Refused before anything changes, so a Resume pressed while
+        // grading runs neither swaps the last run nor resets students
+        beginOnlyGrading();
+        try {
+            // Set when the saved run does not say which testers it used
+            String testerWarning = null;
+            if (lastRun == null || !runId.equals(lastRun.getId())) {
+                testerWarning = switchToSavedRun(runId);
+            }
+            GradingRun gradingRun = lastRun;
+            GradingRun resumeRun = collectUnfinished(gradingRun,
+                    testerWarning);
+
+            if (resumeRun.getSubmissions().isEmpty()) {
+                return gradingRun;
+            }
+
+            auditService.record(GRADING_RESUMED, "Grading the "
+                    + resumeRun.getSubmissions().size() + " unfinished "
+                    + "submission(s) of " + gradingRun.getId() + ".");
+            gradePart(gradingRun, resumeRun, listener);
+            return gradingRun;
+        } finally {
+            endGrading();
         }
-        GradingRun gradingRun = lastRun;
+    }
 
-        // The unfinished submissions go through the pipeline on their
-        // own, in a run that shares the id, assessment and section.
+    // The unfinished submissions of a run, reset to grade from scratch,
+    // in a run of their own that shares the id, assessment and section.
+    // Each gets the tester warning when there is one.
+    private GradingRun collectUnfinished(GradingRun gradingRun,
+            String testerWarning) {
         GradingRun resumeRun = emptyCopyOf(gradingRun);
-
         for (Submission submission : gradingRun.getSubmissions()) {
             if (needsResume(submission)) {
                 resetForRetry(submission);
@@ -780,26 +798,20 @@ public class GradingService {
                 resumeRun.addSubmission(submission);
             }
         }
+        return resumeRun;
+    }
 
-        if (resumeRun.getSubmissions().isEmpty()) {
-            return gradingRun;
-        }
-
-        beginOnlyGrading();
-        try {
-            auditService.record(GRADING_RESUMED, "Grading the "
-                    + resumeRun.getSubmissions().size() + " unfinished "
-                    + "submission(s) of " + gradingRun.getId() + ".");
-            startRun(gradingRun.getId());
-            GradingPipeline pipeline = createPipeline(gradingRun);
-            pipeline.run(resumeRun, lastContext,
-                    new RetryProgressListener(listener, gradingRun));
-            checkSimilarity(gradingRun);
-            saveRun(gradingRun, true);
-        } finally {
-            endGrading();
-        }
-        return gradingRun;
+    // Grades some submissions of the last run through the full pipeline
+    // with its loaded testers, then checks for similar code and saves
+    // the run. Used by retry and resume.
+    private void gradePart(GradingRun gradingRun, GradingRun part,
+            ProgressListener listener) {
+        startRun(gradingRun.getId());
+        GradingPipeline pipeline = createPipeline(gradingRun);
+        pipeline.run(part, lastContext,
+                new RetryProgressListener(listener, gradingRun));
+        checkSimilarity(gradingRun);
+        saveRun(gradingRun, true);
     }
 
     // Loads a saved run and its shared information and makes it the last
