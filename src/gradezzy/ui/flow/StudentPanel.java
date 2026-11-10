@@ -313,7 +313,6 @@ public class StudentPanel extends ScrollPane {
 
     // Builds the large total, "out of" and the status pill on one line.
     private HBox createTotal() {
-        Assessment assessment = shownAssessment();
         // With no marks, show the dash Review shows, not a total of 0
         boolean hasMarks = !submission.getQuestionResults().isEmpty();
         String totalText = NO_MARK;
@@ -325,6 +324,7 @@ public class StudentPanel extends ScrollPane {
         total.setMinWidth(Region.USE_PREF_SIZE);
         Label max = Parts.muted("");
         max.setMinWidth(Region.USE_PREF_SIZE);
+        Assessment assessment = shownAssessment();
         if (assessment != null && hasMarks) {
             max.setText("out of " + Parts.mark(assessment.getMaxTotal()));
         }
@@ -808,15 +808,14 @@ public class StudentPanel extends ScrollPane {
         int foundLength = 0;
         for (QuestionResult result : submission.getQuestionResults()) {
             Question question = result.getQuestion();
-            if (question == null) {
-                continue;
-            }
-            String[] names = {question.getId(), question.getFileName(),
-                question.getFolderName()};
-            for (String name : names) {
-                if (isLongerName(text, name, foundLength)) {
-                    found = question.getId();
-                    foundLength = name.length();
+            if (question != null) {
+                String[] names = {question.getId(), question.getFileName(),
+                    question.getFolderName()};
+                for (String name : names) {
+                    if (isLongerName(text, name, foundLength)) {
+                        found = question.getId();
+                        foundLength = name.length();
+                    }
                 }
             }
         }
@@ -1388,7 +1387,8 @@ public class StudentPanel extends ScrollPane {
         apply(result, false);
         boolean done = result.isDone() && decision != ReviewDecision.OPEN;
         if (done) {
-            window.notify(decisionNotice(decision), "Undo",
+            boolean flag = Problems.isFlag(flags.get(0).getType());
+            window.notify(decisionNotice(decision, flag), "Undo",
                     () -> restoreAll(backend, flags, before));
         }
     }
@@ -1901,7 +1901,8 @@ public class StudentPanel extends ScrollPane {
      */
     private void undoRepairDecision(DashboardBackend backend,
             RepairItem repair) {
-        apply(backend.undoRepairDecision(repair), false);
+        // Says the fix waits again, as Keep and Reject say what they did
+        apply(backend.undoRepairDecision(repair), true);
     }
 
     /**
@@ -1918,15 +1919,19 @@ public class StudentPanel extends ScrollPane {
         apply(result, false);
         // A decision says what was done and offers to take it back
         if (result.isDone() && decision != ReviewDecision.OPEN) {
-            window.notify(decisionNotice(decision), "Undo",
+            boolean flag = Problems.isFlag(anomaly.getType());
+            window.notify(decisionNotice(decision, flag), "Undo",
                     () -> decide(backend, anomaly, before));
         }
     }
 
-    // Says in a notice what a decision did.
-    private String decisionNotice(ReviewDecision decision) {
+    // Says in a notice what a decision did: a flag that is reviewed was
+    // kept flagged, any other problem was marked as checked.
+    private String decisionNotice(ReviewDecision decision, boolean flag) {
         if (decision == ReviewDecision.REJECTED) {
             return "Marked as looks fine.";
+        } else if (decision == ReviewDecision.REVIEWED && flag) {
+            return "Kept flagged.";
         }
         return "Marked as checked.";
     }

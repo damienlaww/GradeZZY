@@ -36,6 +36,7 @@ public final class SceneFinder {
 
     // Not used: every method is static.
     private SceneFinder() {
+        // nothing to set up
     }
 
     /**

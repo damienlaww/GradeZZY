@@ -100,9 +100,6 @@ public final class CodeSheet {
     // The gap between the question list and the panels
     private static final double COLUMN_GAP = 20.0;
 
-    // A triangle pointing right: run
-    private static final String RUN_ICON = "M8 5v14l11-7z";
-
     // The fewest students an answer group needs for Previous and Next
     private static final int MIN_STEPPED_GROUP = 2;
 
@@ -270,8 +267,6 @@ public final class CodeSheet {
 
     // Builds the sheet and shows a question.
     private Node build(String questionId) {
-        HBox top = createTop();
-
         // Each panel keeps a gap from the line between them, so the code
         // and the output read as two separate boxes
         StackPane codeHolder = new StackPane(createCodePanel());
@@ -286,6 +281,7 @@ public final class CodeSheet {
         HBox middle = new HBox(COLUMN_GAP, createQuestionList(), panels);
         VBox.setVgrow(middle, Priority.ALWAYS);
 
+        HBox top = createTop();
         VBox body = new VBox(BODY_GAP, top, middle);
         if (issue != null) {
             body.getChildren().add(1, wrapIssue(issue));
@@ -498,7 +494,7 @@ public final class CodeSheet {
         VBox.setVgrow(output, Priority.ALWAYS);
         outputTitle.getStyleClass().add("code-panel-title");
         outputSummary.getStyleClass().add("small-text");
-        rerun.setGraphic(Parts.icon(RUN_ICON, RUN_ICON_SIZE));
+        rerun.setGraphic(Parts.icon(Parts.PLAY, RUN_ICON_SIZE));
         rerun.getStyleClass().add("run-button");
         Parts.tip(rerun, "Compile this question's answer and run its tests "
                 + "again, to see fresh output. Nothing is saved: the marks "
@@ -747,10 +743,11 @@ public final class CodeSheet {
             return "";
         }
         int all = result.getTestCaseResults().size();
-        if (all == 0) {
-            if (Students.didNotCompile(result) || !result.isCompiled()) {
-                return "Did not compile";
-            }
+        boolean notCompiled = Students.didNotCompile(result)
+                || !result.isCompiled();
+        if (all == 0 && notCompiled) {
+            return "Did not compile";
+        } else if (all == 0) {
             return "";
         }
         String text = countPassed(result) + " of "

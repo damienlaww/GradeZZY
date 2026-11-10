@@ -14,12 +14,15 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.model.BackupInfo;
 import gradezzy.util.FileUtils;
 
 /**
@@ -42,6 +45,11 @@ public class BackupManager {
     // sorting the names sorts the backups by age
     private static final String TIMESTAMP_FORMAT =
             "%04d%02d%02d-%02d%02d%02d-%03d";
+
+    // Reads the time back from a backup name, the same pattern as
+    // TIMESTAMP_FORMAT
+    private static final DateTimeFormatter NAME_TIME =
+            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
 
     // Turns the nanoseconds of a time into milliseconds and back
     private static final int NANOSECONDS_PER_MILLISECOND = 1000000;
@@ -70,13 +78,62 @@ public class BackupManager {
      *
      * <p>The copy is named after the time, such as
      * gradezzy-20261022-154250-123.db. The oldest backups beyond
-     * database.backup.keep.count are then deleted.
+     * database.backup.keep.count are then deleted. Copies made before a
+     * restore are not counted and not deleted here.
      *
      * @param databaseFile the database file
      * @return the path of the new backup
      * @throws PersistenceException if the operation fails
      */
     public Path backup(Path databaseFile) throws PersistenceException {
+        Path backupFile = copyToNewFile(databaseFile, BACKUP_EXTENSION);
+        deleteOldBackups();
+        return backupFile;
+    }
+
+    /**
+     * Copies the database into the backup folder just before a restore,
+     * so the restore can be undone.
+     *
+     * <p>The copy is named like gradezzy-20261022-154250-123-before-
+     * restore.db. It does not count towards database.backup.keep.count,
+     * so it never pushes out a backup made with Back up now, and nothing
+     * is deleted here; see deleteOldBeforeRestoreCopies.
+     *
+     * @param databaseFile the database file
+     * @return the path of the new copy
+     * @throws PersistenceException if the operation fails
+     */
+    public Path backupBeforeRestore(Path databaseFile)
+            throws PersistenceException {
+        return copyToNewFile(databaseFile, BackupInfo.BEFORE_RESTORE_ENDING);
+    }
+
+    /**
+     * Deletes the oldest copies made before a restore beyond
+     * database.backup.keep.count. Backups made with Back up now are never
+     * deleted here, nor is the file just restored.
+     *
+     * @param inUse the file just restored, which is kept; may be null
+     */
+    public void deleteOldBeforeRestoreCopies(Path inUse) {
+        int keepCount = getKeepCount();
+        List<Path> copies = new ArrayList<>();
+        for (Path file : listBackups()) {
+            boolean restored = isSameFile(file, inUse);
+            if (BackupInfo.isBeforeRestore(file) && !restored) {
+                copies.add(file);
+            }
+        }
+        for (int index = keepCount; index < copies.size(); index++) {
+            deleteQuietly(copies.get(index));
+        }
+    }
+
+    // Copies the database to a new file in the backup folder, named after
+    // the time and ending in the given ending
+    private Path copyToNewFile(Path databaseFile,
+            String ending) throws PersistenceException {
         boolean noDatabase = databaseFile == null
                 || !Files.isRegularFile(databaseFile);
         if (noDatabase) {
@@ -87,12 +144,12 @@ public class BackupManager {
 
         Path backupFolder = getBackupFolder();
         LocalDateTime time = LocalDateTime.now();
-        Path backupFile = backupFileAt(backupFolder, time);
+        Path backupFile = backupFileAt(backupFolder, time, ending);
         // Two backups in one millisecond would share a name, so the later
         // one is named a millisecond on; the names still sort by age
         while (Files.exists(backupFile)) {
             time = time.plusNanos(NANOSECONDS_PER_MILLISECOND);
-            backupFile = backupFileAt(backupFolder, time);
+            backupFile = backupFileAt(backupFolder, time, ending);
         }
         try {
             Files.createDirectories(backupFolder);
@@ -102,16 +159,16 @@ public class BackupManager {
                     + " could not be written: " + exception.getMessage(),
                     exception);
         }
-
-        deleteOldBackups();
         return backupFile;
     }
 
     /**
      * Replaces the database with a backup.
      *
-     * <p>The backup is first copied next to the database and then moved
-     * over it, so a failure halfway leaves the database as it was.
+     * <p>The backup is first copied next to the database and checked
+     * there: a file that is not a GradeZZY database is refused and the
+     * database is not touched. Only then is the copy moved over the
+     * database, so a failure halfway leaves the database as it was.
      *
      * @param backupFile the backup file
      * @param databaseFile the database file
@@ -139,6 +196,11 @@ public class BackupManager {
             }
             Files.copy(backupFile, temporaryFile,
                     StandardCopyOption.REPLACE_EXISTING);
+            BackupInfo copy = BackupReader.read(temporaryFile);
+            if (!copy.isReadable()) {
+                deleteQuietly(temporaryFile);
+                throw new PersistenceException(notABackup(backupFile));
+            }
             Files.move(temporaryFile, databaseFile,
                     StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException exception) {
@@ -150,7 +212,24 @@ public class BackupManager {
     }
 
     /**
-     * Lists the available backups, newest first.
+     * Says why a file cannot be restored, in plain words.
+     *
+     * @param backupFile the file
+     * @return the reason, which says nothing was changed
+     */
+    public static String notABackup(Path backupFile) {
+        Path name = backupFile;
+        if (backupFile != null && backupFile.getFileName() != null) {
+            name = backupFile.getFileName();
+        }
+        return name + " is not a GradeZZY backup or it is damaged, so "
+                + "nothing was restored and the saved results were not "
+                + "changed. Choose a file made by Back up now.";
+    }
+
+    /**
+     * Lists the available backups, newest first, with the copies made
+     * before a restore among them.
      *
      * @return the backup files; empty when there are none
      */
@@ -180,15 +259,74 @@ public class BackupManager {
         return backups;
     }
 
-    // Deletes the oldest backups beyond the number to keep. At least one
-    // backup, the newest, is always kept.
-    private void deleteOldBackups() {
+    /**
+     * Returns the number of backups kept, from the settings. At least
+     * one, the newest, is always kept.
+     *
+     * @return how many backups are kept
+     */
+    public int getKeepCount() {
         int setting = config.getInt(ConfigKeys.BACKUP_KEEP_COUNT);
-        int keepCount = Math.max(MIN_BACKUPS_KEPT, setting);
-        List<Path> backups = listBackups();
+        return Math.max(MIN_BACKUPS_KEPT, setting);
+    }
+
+    /**
+     * Reads when a backup was made from its name, such as
+     * gradezzy-20261022-154250-123.db or
+     * gradezzy-20261022-154250-123-before-restore.db.
+     *
+     * @param backupFile the backup file
+     * @return the time, or null when the name holds no time
+     */
+    public static LocalDateTime timeOf(Path backupFile) {
+        if (backupFile == null || backupFile.getFileName() == null) {
+            return null;
+        }
+        String fileName = backupFile.getFileName().toString();
+        boolean backupName = fileName.startsWith(BACKUP_PREFIX)
+                && fileName.endsWith(BACKUP_EXTENSION);
+        if (!backupName) {
+            return null;
+        }
+        String ending = BACKUP_EXTENSION;
+        if (BackupInfo.isBeforeRestore(backupFile)) {
+            ending = BackupInfo.BEFORE_RESTORE_ENDING;
+        }
+        if (fileName.length() < BACKUP_PREFIX.length() + ending.length()) {
+            return null;
+        }
+        String stamp = fileName.substring(BACKUP_PREFIX.length(),
+                fileName.length() - ending.length());
+        try {
+            return LocalDateTime.parse(stamp, NAME_TIME);
+        } catch (DateTimeParseException exception) {
+            return null;
+        }
+    }
+
+    // Deletes the oldest backups beyond the number to keep. At least one
+    // backup, the newest, is always kept. Copies made before a restore
+    // are not counted and not deleted.
+    private void deleteOldBackups() {
+        int keepCount = getKeepCount();
+        List<Path> backups = new ArrayList<>();
+        for (Path file : listBackups()) {
+            if (!BackupInfo.isBeforeRestore(file)) {
+                backups.add(file);
+            }
+        }
         for (int index = keepCount; index < backups.size(); index++) {
             deleteQuietly(backups.get(index));
         }
+    }
+
+    // Says whether two paths name the same file, either may be relative
+    private boolean isSameFile(Path file, Path other) {
+        if (file == null || other == null) {
+            return false;
+        }
+        Path fullPath = file.toAbsolutePath().normalize();
+        return fullPath.equals(other.toAbsolutePath().normalize());
     }
 
     // A file that cannot be deleted is tried again after the next backup
@@ -205,10 +343,11 @@ public class BackupManager {
         return Paths.get(config.getString(ConfigKeys.BACKUP_DIR));
     }
 
-    // The backup file in the folder for a time, such as
+    // The backup file in the folder for a time and an ending, such as
     // gradezzy-20261022-154250-123.db
-    private Path backupFileAt(Path backupFolder, LocalDateTime time) {
-        String fileName = BACKUP_PREFIX + timestamp(time) + BACKUP_EXTENSION;
+    private Path backupFileAt(Path backupFolder, LocalDateTime time,
+            String ending) {
+        String fileName = BACKUP_PREFIX + timestamp(time) + ending;
         return backupFolder.resolve(fileName);
     }
 

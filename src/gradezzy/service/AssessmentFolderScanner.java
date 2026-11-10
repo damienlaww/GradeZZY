@@ -98,16 +98,22 @@ public final class AssessmentFolderScanner {
         for (Question question : assessment.getQuestions()) {
             String folderName = question.getFolderName().toLowerCase(
                     Locale.ROOT);
-            if (foldersDone.contains(folderName)) {
-                continue;
+            if (!foldersDone.contains(folderName)) {
+                foldersDone.add(folderName);
+                addExtraFiles(question, starterFolder, answerFiles);
             }
-            foldersDone.add(folderName);
-            Path folder = starterFolder.resolve(question.getFolderName());
-            for (String name : listJavaFiles(folder)) {
-                String lowerName = name.toLowerCase(Locale.ROOT);
-                if (!answerFiles.contains(lowerName)) {
-                    question.getExtraFileNames().add(name);
-                }
+        }
+    }
+
+    // Gives a question every .java file in its starter folder that is
+    // not the answer file of some question.
+    private static void addExtraFiles(Question question, Path starterFolder,
+            List<String> answerFiles) {
+        Path folder = starterFolder.resolve(question.getFolderName());
+        for (String name : listJavaFiles(folder)) {
+            String lowerName = name.toLowerCase(Locale.ROOT);
+            if (!answerFiles.contains(lowerName)) {
+                question.getExtraFileNames().add(name);
             }
         }
     }
@@ -161,14 +167,11 @@ public final class AssessmentFolderScanner {
         for (Path file : files) {
             String name = file.getFileName().toString();
             String lower = name.toLowerCase(Locale.ROOT);
-            boolean skipped = !Files.isRegularFile(file)
-                    || name.startsWith(HIDDEN_PREFIX);
-            if (skipped) {
-                continue;
-            }
-            if (lower.endsWith(JAVA)) {
+            boolean isVisibleFile = Files.isRegularFile(file)
+                    && !name.startsWith(HIDDEN_PREFIX);
+            if (isVisibleFile && lower.endsWith(JAVA)) {
                 allSource += read(file) + LINE_END;
-            } else if (!lower.endsWith(CLASS)) {
+            } else if (isVisibleFile && !lower.endsWith(CLASS)) {
                 others.add(name);
             }
         }
@@ -213,18 +216,21 @@ public final class AssessmentFolderScanner {
             String name = file.getFileName().toString();
             boolean isClassFile = Files.isRegularFile(file)
                     && name.toLowerCase(Locale.ROOT).endsWith(CLASS);
-            if (!isClassFile) {
-                continue;
-            }
-            int baseLength = name.length() - CLASS.length();
-            String base = name.substring(0, baseLength);
-            String sourceName = base + JAVA;
-            Path source = file.resolveSibling(sourceName);
-            if (!Files.exists(source)) {
+            if (isClassFile && !hasSourceBeside(file)) {
                 found.add(name);
             }
         }
         return new ArrayList<>(found);
+    }
+
+    // Says whether a class file has its .java file in the same folder.
+    private static boolean hasSourceBeside(Path classFile) {
+        String name = classFile.getFileName().toString();
+        int baseLength = name.length() - CLASS.length();
+        String base = name.substring(0, baseLength);
+        String sourceName = base + JAVA;
+        Path source = classFile.resolveSibling(sourceName);
+        return Files.exists(source);
     }
 
     /**

@@ -92,30 +92,36 @@ public class RequiredFilesValidator extends AbstractValidator {
 
             // A folder dragged into itself, such as Q1/Q1, is reported once
             // by StructureValidator
-            if (folder == null || insideItself) {
-                continue;
-            }
-            if (isMissing(folder, question.getFileName())) {
-                Path otherEnding = findOtherEnding(folder, question);
-                anomalies.add(createAnomaly(submission,
-                        AnomalyType.MISSING_FILE, Severity.ERROR,
-                        describeMissing(question, otherEnding)));
-            }
-            // A second class the student writes, such as GoldMember.java
-            for (String extraFile : question.getExtraFileNames()) {
-                if (isMissing(folder, extraFile)) {
-                    String message = question.getFolderName()
-                            + FOLDER_SEPARATOR + extraFile + " is missing, "
-                            + "so " + question.getId() + " cannot compile. "
-                            + "The starter has it.";
-                    anomalies.add(createAnomaly(submission,
-                            AnomalyType.MISSING_FILE, Severity.ERROR,
-                            message));
-                }
+            if (folder != null && !insideItself) {
+                checkFolder(submission, question, folder, anomalies);
             }
         }
 
         return anomalies;
+    }
+
+    // Adds a problem for the question's file and for each of the
+    // starter's other files that is missing from its question folder.
+    private void checkFolder(Submission submission, Question question,
+            Path folder, List<Anomaly> anomalies) throws IOException {
+        if (isMissing(folder, question.getFileName())) {
+            Path otherEnding = findOtherEnding(folder, question);
+            anomalies.add(createAnomaly(submission,
+                    AnomalyType.MISSING_FILE, Severity.ERROR,
+                    describeMissing(question, otherEnding)));
+        }
+        // A second class the student writes, such as GoldMember.java
+        for (String extraFile : question.getExtraFileNames()) {
+            if (isMissing(folder, extraFile)) {
+                String message = question.getFolderName()
+                        + FOLDER_SEPARATOR + extraFile + " is missing, "
+                        + "so " + question.getId() + " cannot compile. "
+                        + "The starter has it.";
+                anomalies.add(createAnomaly(submission,
+                        AnomalyType.MISSING_FILE, Severity.ERROR,
+                        message));
+            }
+        }
     }
 
     // Returns a file named like the question's file but with another

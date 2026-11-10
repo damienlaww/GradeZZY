@@ -83,27 +83,32 @@ public class FileNameValidator extends AbstractValidator {
         for (Question question : assessment.getQuestions()) {
             Path folder = findQuestionFolder(contentRoot, question);
 
-            if (folder == null) {
-                continue;
-            }
-
-            List<Path> files = listFiles(folder);
-            List<String> wantedNames = new ArrayList<>();
-            wantedNames.add(question.getFileName());
-            wantedNames.addAll(question.getExtraFileNames());
-
-            for (String wantedName : wantedNames) {
-                Path misnamed = findMisnamed(files, wantedName);
-
-                if (misnamed != null) {
-                    anomalies.add(createAnomaly(submission,
-                            AnomalyType.WRONG_FILE_NAME, Severity.WARNING,
-                            describe(question, misnamed, wantedName)));
-                }
+            if (folder != null) {
+                checkFolderNames(submission, question, folder, anomalies);
             }
         }
 
         return anomalies;
+    }
+
+    // Compares the files in one question folder with the expected names
+    // and adds a problem for each misnamed file.
+    private void checkFolderNames(Submission submission, Question question,
+            Path folder, List<Anomaly> anomalies) throws IOException {
+        List<Path> files = listFiles(folder);
+        List<String> wantedNames = new ArrayList<>();
+        wantedNames.add(question.getFileName());
+        wantedNames.addAll(question.getExtraFileNames());
+
+        for (String wantedName : wantedNames) {
+            Path misnamed = findMisnamed(files, wantedName);
+
+            if (misnamed != null) {
+                anomalies.add(createAnomaly(submission,
+                        AnomalyType.WRONG_FILE_NAME, Severity.WARNING,
+                        describe(question, misnamed, wantedName)));
+            }
+        }
     }
 
     // Returns the file whose name differs from the wanted one only in case,

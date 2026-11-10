@@ -14,11 +14,14 @@ package gradezzy.ui.flow;
 
 import java.io.File;
 import java.net.URL;
+import java.nio.file.Path;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import javafx.animation.PauseTransition;
 import javafx.application.HostServices;
@@ -45,11 +48,14 @@ import javafx.stage.Window;
 import javafx.stage.WindowEvent;
 import javafx.util.Duration;
 
+import gradezzy.config.ConfigKeys;
+import gradezzy.config.ModuleSections;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.SavedAssessment;
 import gradezzy.model.Section;
 import gradezzy.model.Student;
+import gradezzy.service.ChosenSubmissionsStore;
 import gradezzy.ui.AppFonts;
 import gradezzy.ui.AppIcons;
 import gradezzy.ui.ThemeManager;
@@ -65,6 +71,11 @@ public class FlowWindow {
 
     /** The stylesheet of the guided window. */
     public static final String STYLESHEET = "/gradezzy/ui/css/flow.css";
+
+    // Added to the name of a deleted assessment in the activity log, as
+    // the files chosen for it on Set up go with it
+    private static final String DELETED_INPUTS = " and the files chosen "
+            + "for it on Set up";
 
     // How long a notice stays on screen
     private static final Duration NOTICE_TIME = Duration.seconds(3.5);
@@ -99,6 +110,18 @@ public class FlowWindow {
     // something, in lower case
     private static final String[] DESTRUCTIVE_WORDS = {"delete", "remove",
         "discard"};
+
+    // The button of a question that does nothing
+    private static final String CANCEL_TEXT = "Cancel";
+
+    // When the run named above the steps was graded, such as "11 Nov,
+    // 00:32"
+    private static final DateTimeFormatter CONTEXT_WHEN =
+            DateTimeFormatter.ofPattern("d MMM, HH:mm");
+
+    // Comes between the module, section and assessment, and between the
+    // parts of the line under the steps
+    private static final String CONTEXT_DOT = " \u00B7 ";
 
     // The name of the thread that looks up the students with no
     // submission
@@ -145,6 +168,10 @@ public class FlowWindow {
 
     // The row that holds the steps, shown on Grading only
     private final HBox stepRow = new HBox(stepBar);
+
+    // The line under the steps that names the module, section and
+    // assessment on screen, with a link to change the section
+    private final HBox contextRow = new HBox();
 
     // The bottom bar
     private final ActionBar actionBar = new ActionBar();
@@ -202,7 +229,9 @@ public class FlowWindow {
         frame.getStyleClass().add("flow-root");
         stepRow.getStyleClass().add("step-row");
         stepRow.setAlignment(Pos.CENTER);
-        frame.setTop(new VBox(createTopBar(), stepRow));
+        contextRow.getStyleClass().add("grading-context");
+        contextRow.setAlignment(Pos.CENTER);
+        frame.setTop(new VBox(createTopBar(), stepRow, contextRow));
 
         content.getStyleClass().add("flow-content");
         notice.getStyleClass().add("notice");
@@ -242,7 +271,7 @@ public class FlowWindow {
      * @param step the step
      */
     public void show(Step step) {
-        if (step.ordinal() > state.getFurthest().ordinal()) {
+        if (step.ordinal() > getFurthestOpen().ordinal()) {
             return;
         }
         currentStep = step;
@@ -251,13 +280,26 @@ public class FlowWindow {
     }
 
     /**
-     * Shows a tab. Grading shows the step the instructor was on.
+     * Shows a tab. Grading shows the step the instructor was on. Leaving
+     * Settings with changes that are not saved asks first.
      *
      * @param page the tab
      */
     public void showPage(Page page) {
+        boolean leavesSettings = currentPage == Page.SETTINGS
+                && page != Page.SETTINGS;
+        if (leavesSettings && hasUnsavedSettings()) {
+            askLeaveSettings(page);
+            return;
+        }
         if (page == Page.MARKING) {
-            show(currentStep);
+            Step step = currentStep;
+            if (step.ordinal() > getFurthestOpen().ordinal()) {
+                // Another section was chosen meanwhile, which has not
+                // got this far
+                step = getFurthestOpen();
+            }
+            show(step);
             return;
         }
         currentPage = page;
@@ -330,18 +372,16 @@ public class FlowWindow {
     public boolean chooseSection(String moduleCode, String sectionCode) {
         boolean otherSection = !sectionCode.equals(state.getSectionCode())
                 || !moduleCode.equals(state.getModuleCode());
-        if (!otherSection) {
+        if (otherSection) {
+            // FlowState puts this section's zip files away and brings
+            // back the ones chosen earlier for the new section
+            state.setModuleCode(moduleCode);
+            state.setSectionCode(sectionCode);
+        } else if (!state.isGrading()) {
             // Opening a graded section again shows the files it was
             // graded with, if they were put away by Grade another
-            if (!state.isGrading()) {
-                state.restoreSubmissions();
-            }
-            return true;
+            state.restoreSubmissions();
         }
-        // FlowState puts this section's zip files away and brings back
-        // the ones chosen earlier for the new section
-        state.setModuleCode(moduleCode);
-        state.setSectionCode(sectionCode);
         return true;
     }
 
@@ -398,6 +438,90 @@ public class FlowWindow {
     }
 
     /**
+     * Deletes a saved assessment that is not in use, with its own score
+     * sheets and the files chosen for it on Set up in every module and
+     * section, so a new assessment with its name starts with none. The
+     * delete is logged, and the notice and History offer Undo, which puts
+     * all of it back.
+     *
+     * @param name the assessment's name
+     * @param afterUndo what to show once Undo from the notice put it
+     *        back, or null
+     * @return true when it was deleted
+     */
+    public boolean deleteAssessment(String name, Runnable afterUndo) {
+        ActionResult result = backend.deleteAssessment(name);
+        if (!result.isDone()) {
+            notify(result.getMessage());
+            return false;
+        }
+        state.forgetAssessment(name);
+        reloadSetUpClassFiles();
+        Supplier<ActionResult> restore = ActivityUndo.record(backend,
+                ActivityUndo.ASSESSMENT_DELETED, name + DELETED_INPUTS,
+                () -> restoreAssessment(name));
+        notify(result.getMessage(), "Undo",
+                () -> undoAssessmentDeleted(restore, afterUndo));
+        return true;
+    }
+
+    // The Undo of a deleted assessment from its notice.
+    private void undoAssessmentDeleted(Supplier<ActionResult> restore,
+            Runnable afterUndo) {
+        ActionResult result = restore.get();
+        if (!result.isDone()) {
+            notify(result.getMessage());
+        } else if (afterUndo != null) {
+            afterUndo.run();
+        }
+    }
+
+    // Puts back a deleted assessment and the files chosen for it on Set
+    // up, so Set up lists them again.
+    private ActionResult restoreAssessment(String name) {
+        ActionResult result = backend.restoreAssessment(name);
+        if (!result.isDone()) {
+            return result;
+        }
+        if (!backend.isDemo()) {
+            ChosenSubmissionsStore store =
+                    ChosenSubmissionsStore.forSubmissions(backend.getSetting(
+                            ConfigKeys.CHOSEN_SUBMISSIONS_FILE));
+            Map<String, List<Path>> saved = store.load();
+            Map<String, List<Path>> own = new HashMap<>();
+            for (String key : saved.keySet()) {
+                if (ChosenSubmissionsStore.isKeyOf(key, name)) {
+                    own.put(key, saved.get(key));
+                }
+            }
+            state.putBackSavedPaths(own);
+        }
+        reloadSetUpClassFiles();
+        return result;
+    }
+
+    /**
+     * Moves the files chosen on Set up for a renamed assessment to its
+     * new name, after the library moved the saved ones.
+     *
+     * @param oldName the name it had
+     * @param newName its new name
+     */
+    public void assessmentRenamed(String oldName, String newName) {
+        state.moveAssessment(oldName, newName);
+        reloadSetUpClassFiles();
+    }
+
+    // Has Set up read the class files chosen for each section again, as
+    // an assessment's lines in their file changed.
+    private void reloadSetUpClassFiles() {
+        FlowScreen setUp = screens.get(Step.SET_UP);
+        if (setUp instanceof SetUpScreen) {
+            ((SetUpScreen) setUp).reloadClassFiles();
+        }
+    }
+
+    /**
      * Updates the screens after the assessment in use or one of its
      * settings changed. Settings is built again when next shown, unless
      * it holds changes that are not saved.
@@ -427,7 +551,9 @@ public class FlowWindow {
      */
     public void advanceTo(Step step) {
         state.reach(step);
-        show(step);
+        currentStep = step;
+        currentPage = Page.MARKING;
+        display(getScreen(step));
     }
 
     /**
@@ -445,6 +571,7 @@ public class FlowWindow {
         state.restart();
         advanceTo(Step.GRADE);
         grade.start();
+        refreshContext();
     }
 
     /**
@@ -465,6 +592,7 @@ public class FlowWindow {
         state.restart();
         advanceTo(Step.GRADE);
         grade.startAdding(run);
+        refreshContext();
     }
 
     /**
@@ -535,11 +663,19 @@ public class FlowWindow {
 
     /**
      * Shows a section's batch being graded: makes the section the one on
-     * screen and opens the Grade step.
+     * screen and opens the Grade step. A batch that has ended, such as
+     * one stopped early, shows its run there as it ended.
      *
      * @param section the section
      */
     public void watchGrading(Section section) {
+        GradingJob job = state.getJob(section);
+        boolean ended = job != null && job.isEnded() && job.getRun() != null;
+        if (ended) {
+            // Its run is the one Grade shows, as it ended
+            openRunOn(job.getRun(), Step.GRADE);
+            return;
+        }
         chooseSection(section.getModuleCode(), section.getSectionCode());
         state.reach(Step.GRADE);
         show(Step.GRADE);
@@ -615,6 +751,7 @@ public class FlowWindow {
             notify("Grading could not run. See step 2.");
         }
         gradeScreen().ended(job);
+        refreshContext();
     }
 
     /**
@@ -623,6 +760,47 @@ public class FlowWindow {
      * @param run the run
      */
     public void openRun(GradingRun run) {
+        openRunOn(run, Step.REVIEW);
+    }
+
+    /**
+     * Opens a section's run on the step it needs, as Home's cards and the
+     * Continue card on Set up do: Grade while it is being graded or
+     * stopped early, Review while students need a look, else Export.
+     *
+     * @param run the run, which has a section
+     */
+    public void openSectionStep(GradingRun run) {
+        Section section = run.getSection();
+        if (state.isGrading(section)) {
+            watchGrading(section);
+            return;
+        }
+        openRunOn(run, SectionProgress.stepToOpen(state, backend, section,
+                run));
+    }
+
+    /**
+     * Opens a section on the step it needs: Set up when it has no run,
+     * else its run as openSectionStep does. Used by the section picker of
+     * the Grading tab.
+     *
+     * @param section the section
+     * @param run the run shown for it, or null
+     */
+    public void openSection(Section section, GradingRun run) {
+        if (state.isGrading(section)) {
+            watchGrading(section);
+        } else if (run == null) {
+            openSetUp(section.getModuleCode(), section.getSectionCode());
+        } else {
+            openSectionStep(run);
+        }
+    }
+
+    // Opens an earlier run on a step: Review and the steps before it can
+    // be opened, and Export too when it is the step asked for.
+    private void openRunOn(GradingRun run, Step step) {
         if (state.isGrading(run.getSection())) {
             notify("Wait until " + run.getSection().getLabel()
                     + " has finished grading.");
@@ -634,7 +812,91 @@ public class FlowWindow {
         state.setModuleCode(run.getSection().getModuleCode());
         state.setSectionCode(run.getSection().getSectionCode());
         state.reach(Step.REVIEW);
-        show(Step.REVIEW);
+        state.reach(step);
+        show(step);
+    }
+
+    /**
+     * Switches to a module's first assessment when the one in use is not
+     * one of its own, so Home and Set up show a matching one. Does
+     * nothing while any section grades, or when the module has none.
+     *
+     * @param module the module, such as CS102
+     */
+    public void useModuleAssessment(String module) {
+        if (state.isAnyGrading()) {
+            return;
+        }
+        List<SavedAssessment> own = listModuleAssessments(module);
+        String active = "";
+        if (backend.getAssessment() != null) {
+            active = backend.getAssessment().getName();
+        }
+        for (SavedAssessment saved : own) {
+            if (saved.getName().equalsIgnoreCase(active)) {
+                return;
+            }
+        }
+        if (!own.isEmpty()) {
+            useAssessment(own.get(0).getName());
+        }
+    }
+
+    /**
+     * Lists a module's own assessments, and those of every module unless
+     * it has only its own sections, as Home's dropdown lists them.
+     *
+     * @param module the module, such as CS102
+     * @return its assessments
+     */
+    public List<SavedAssessment> listModuleAssessments(String module) {
+        String setting = backend.getSetting(
+                ConfigKeys.OWN_SECTIONS_ONLY_MODULES);
+        boolean ownOnly = ModuleSections.hasOwnOnly(setting, module);
+        return SavedAssessment.listedFor(backend.listAssessments(), module,
+                ownOnly);
+    }
+
+    /**
+     * Returns the furthest step the instructor may open for the section
+     * chosen now. Steps reached for the run on screen count only when
+     * that run is of this section. Else a section being graded, or whose
+     * batch could not run, may open Grade, and any other only Set up, so
+     * another section's results never show under its name. Its own
+     * earlier run opens from the Continue card, Home or History.
+     *
+     * @return the step
+     */
+    public Step getFurthestOpen() {
+        Section section = state.getSection();
+        if (isRunOfSection(state.getRun())) {
+            return state.getFurthest();
+        } else if (state.isGrading(section)) {
+            return Step.GRADE;
+        }
+        GradingJob job = state.getJob(section);
+        if (job != null && job.getFailure() != null) {
+            return Step.GRADE;
+        }
+        return Step.SET_UP;
+    }
+
+    // Says whether a run is of the section chosen now.
+    private boolean isRunOfSection(GradingRun run) {
+        return run != null && run.getSection() != null
+                && run.getSection().getLabel().equalsIgnoreCase(
+                        state.getSection().getLabel());
+    }
+
+    // Returns the step before which every step is done for the run on
+    // screen: the furthest step reached, when the run open is of the
+    // section chosen, else Set up, so a section not graded yet shows no
+    // ticks past the step on screen.
+    private Step findDoneBefore() {
+        if (!isRunOfSection(state.getRun())) {
+            return Step.SET_UP;
+        }
+        return state.getFurthest();
     }
 
     /**
@@ -645,8 +907,111 @@ public class FlowWindow {
         FlowScreen screen = currentScreen();
         actionBar.reset();
         content.getChildren().setAll(screen.getView());
-        stepBar.update(currentStep, state.getFurthest(), false);
+        stepBar.update(currentStep, getFurthestOpen(), findDoneBefore(),
+                false);
         screen.onShow();
+        refreshContext();
+    }
+
+    /**
+     * Names the module, section and assessment on the Grading tab above
+     * the steps, such as "CS102 · G1 · Lab Test 2 · graded 11 Nov, 00:32
+     * · Change section", so a step opened again never hides which
+     * section it is about. Set up calls it when its dropdowns change.
+     */
+    public void refreshContext() {
+        contextRow.getChildren().clear();
+        if (currentPage != Page.MARKING) {
+            return;
+        }
+        Section section = state.getSection();
+        GradingRun run = findContextRun();
+        String names = section.getModuleCode() + CONTEXT_DOT
+                + section.getSectionCode();
+        String assessmentName = findContextAssessment(run);
+        if (!assessmentName.isEmpty()) {
+            names = names + CONTEXT_DOT + assessmentName;
+        }
+        Label namesLabel = Parts.strong(names);
+        namesLabel.getStyleClass().addAll("small-text",
+                "grading-context-names");
+        Label status = Parts.muted(CONTEXT_DOT + describeContext(run,
+                assessmentName) + CONTEXT_DOT);
+        status.getStyleClass().addAll("small-text", "grading-context-status");
+        Hyperlink change = Parts.link("Change section",
+                () -> openSectionPicker());
+        change.getStyleClass().addAll("small-text", "grading-context-link");
+        Parts.tip(change, "Open another section of this module, or of "
+                + "another module, on the step it needs.");
+        contextRow.getChildren().addAll(namesLabel, status, change);
+    }
+
+    /**
+     * Opens the sheet that lists the sections with how far each has got,
+     * to open another one on the step it needs.
+     */
+    public void openSectionPicker() {
+        showSheet(SectionPicker.create(this));
+    }
+
+    // Returns the run the line under the steps is about: the run on
+    // screen when it is of the chosen section, else the section's run
+    // graded with the assessment in use, or null.
+    private GradingRun findContextRun() {
+        Section section = state.getSection();
+        GradingRun open = state.getRun();
+        if (isRunOfSection(open)) {
+            return open;
+        }
+        GradingRun last = backend.getRun(section);
+        boolean lastMatches = last != null && last.getAssessment() != null
+                && backend.getAssessment() != null
+                && SectionProgress.isGradedWith(last,
+                        backend.getAssessment().getName());
+        if (lastMatches) {
+            return last;
+        }
+        return null;
+    }
+
+    // Returns the assessment the line under the steps names: the run's,
+    // else the one in use when it belongs to the chosen module, else "".
+    private String findContextAssessment(GradingRun run) {
+        if (run != null && run.getAssessment() != null) {
+            return run.getAssessment().getName();
+        }
+        Assessment inUse = backend.getAssessment();
+        if (inUse == null) {
+            return "";
+        }
+        for (SavedAssessment saved : listModuleAssessments(
+                state.getModuleCode())) {
+            if (saved.getName().equalsIgnoreCase(inUse.getName())) {
+                return inUse.getName();
+            }
+        }
+        return "";
+    }
+
+    // Says how far the section on screen has got, such as "graded 11
+    // Nov, 00:32", "not graded yet" or "grading now...".
+    private String describeContext(GradingRun run, String assessmentName) {
+        if (state.isGrading(state.getSection())) {
+            return "grading now...";
+        } else if (assessmentName.isEmpty()) {
+            return "no assessment yet";
+        } else if (run == null) {
+            return "not graded yet";
+        }
+        String when = "graded";
+        if (run.getStartedAt() != null) {
+            when = "graded " + run.getStartedAt().format(CONTEXT_WHEN);
+        }
+        int waiting = SectionProgress.countWaiting(run);
+        if (waiting > 0) {
+            return when + ", stopped with " + waiting + " not graded";
+        }
+        return when;
     }
 
     /**
@@ -820,14 +1185,40 @@ public class FlowWindow {
      */
     public void confirm(String title, Node content, String otherText,
             Runnable onOther, String okText, Runnable onOk) {
-        Button cancel = Parts.secondary("Cancel", () -> closeSheet());
-        // The buttons have the same shape; the one that goes ahead is
-        // filled, in red when it deletes something
+        confirm(title, content, CANCEL_TEXT, otherText, onOther, okText,
+                onOk, true);
+    }
+
+    /**
+     * Asks a question in a sheet, naming the button that does nothing,
+     * such as Keep grading, and saying which button is the default: the
+     * filled one, which has the focus.
+     *
+     * @param title the question
+     * @param content what is shown under the question
+     * @param cancelText the text of the button that does nothing
+     * @param otherText the text of the plain button that goes ahead the
+     *        other way, or null for none
+     * @param onOther what to do when that button is pressed
+     * @param okText the text of the button that goes ahead
+     * @param onOk what to do when the instructor goes ahead
+     * @param okIsDefault true when going ahead is the default; false
+     *        makes the button that does nothing the default, as when
+     *        going ahead is not safe
+     */
+    public void confirm(String title, Node content, String cancelText,
+            String otherText, Runnable onOther, String okText,
+            Runnable onOk, boolean okIsDefault) {
+        Button cancel = Parts.secondary(cancelText, () -> closeSheet());
+        // The buttons have the same shape; the default one is filled, in
+        // red when going ahead deletes something
         Button ok = Parts.secondary(okText, () -> confirmed(onOk));
         if (isDestructive(okText)) {
             ok.getStyleClass().add("confirm-danger");
-        } else {
+        } else if (okIsDefault) {
             ok.getStyleClass().add("confirm-ok");
+        } else {
+            cancel.getStyleClass().add("confirm-ok");
         }
         HBox buttons = Parts.row(Parts.GAP,
                 new Node[] {Parts.grow(), cancel, ok});
@@ -842,7 +1233,11 @@ public class FlowWindow {
                 buttons);
         body.getStyleClass().add("confirm");
         showSheet(body);
-        ok.requestFocus();
+        if (okIsDefault) {
+            ok.requestFocus();
+        } else {
+            cancel.requestFocus();
+        }
     }
 
     /**
@@ -866,13 +1261,60 @@ public class FlowWindow {
         }
     }
 
-    // Says whether the Settings page holds changes that are not saved.
+    // Says whether the Settings page holds changes that are not saved,
+    // in a setting or in its assessment form.
     private boolean hasUnsavedSettings() {
         FlowScreen screen = pages.get(Page.SETTINGS);
         if (!(screen instanceof SettingsScreen)) {
             return false;
         }
-        return ((SettingsScreen) screen).hasUnsavedChanges();
+        SettingsScreen settings = (SettingsScreen) screen;
+        return settings.hasUnsavedChanges()
+                || settings.hasUnsavedAssessment();
+    }
+
+    /**
+     * Shows a dot on the Settings tab while Settings holds changes that
+     * are not saved, and hides it otherwise.
+     */
+    public void refreshSettingsMark() {
+        tabBar.setPending(Page.SETTINGS, hasUnsavedSettings());
+    }
+
+    // Asks whether to save the changes in Settings before showing
+    // another tab: Save, Discard or Stay on Settings.
+    private void askLeaveSettings(Page page) {
+        SettingsScreen settings = (SettingsScreen) pages.get(Page.SETTINGS);
+        Label text = Parts.subtitle(settings.describeUnsaved());
+        text.setMaxWidth(Parts.TEXT_WIDTH);
+        Button stay = Parts.secondary("Stay", () -> closeSheet());
+        Button discard = Parts.secondary("Discard",
+                () -> leaveSettings(page, false));
+        Button save = Parts.secondary("Save", () -> leaveSettings(page,
+                true));
+        save.getStyleClass().add("confirm-ok");
+        HBox buttons = Parts.row(Parts.GAP,
+                new Node[] {Parts.grow(), stay, discard, save});
+        VBox body = new VBox(Parts.GAP,
+                Parts.title("Save your Settings changes?"), text, buttons);
+        body.getStyleClass().add("confirm");
+        showSheet(body);
+        save.requestFocus();
+    }
+
+    // Saves or throws away the changes in Settings, then shows the tab.
+    // A change that cannot be saved keeps Settings on screen.
+    private void leaveSettings(Page page, boolean saving) {
+        closeSheet();
+        SettingsScreen settings = (SettingsScreen) pages.get(Page.SETTINGS);
+        if (saving) {
+            settings.saveAll();
+        } else {
+            settings.discardAll();
+        }
+        if (!hasUnsavedSettings()) {
+            showPage(page);
+        }
     }
 
     // Stops grading after the current student, then closes the window.
@@ -1175,6 +1617,7 @@ public class FlowWindow {
         state.setSectionCode(run.getSection().getSectionCode());
         advanceTo(Step.GRADE);
         grade.continueRun(run, retryFailed);
+        refreshContext();
     }
 
     /**
@@ -1258,14 +1701,19 @@ public class FlowWindow {
         boolean marking = currentPage == Page.MARKING;
         stepRow.setVisible(marking);
         stepRow.setManaged(marking);
+        contextRow.setVisible(marking);
+        contextRow.setManaged(marking);
         tabBar.select(currentPage);
-        stepBar.update(currentStep, state.getFurthest(), false);
+        refreshSettingsMark();
+        stepBar.update(currentStep, getFurthestOpen(), findDoneBefore(),
+                false);
         if (screen.usesActionBar()) {
             frame.setBottom(actionBar);
         } else {
             frame.setBottom(null);
         }
         screen.onShow();
+        refreshContext();
     }
 
     // Returns the screen on display.

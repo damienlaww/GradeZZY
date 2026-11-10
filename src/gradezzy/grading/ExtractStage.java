@@ -129,8 +129,10 @@ public class ExtractStage implements GradingStage {
                     "Check the upload filename and the selected roster."));
         }
         try {
+            // Each run keeps its own copies, so another run grading the
+            // same student never replaces this run's files
             Path workingCopy = workingCopyManager.createWorkingCopy(
-                    submission);
+                    submission, context.getRunId());
             submission.setWorkingCopyPath(workingCopy);
             workingCopyManager.removeStudentClassFiles(workingCopy,
                     context.getAssessment(), starterDirectory);

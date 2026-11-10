@@ -281,7 +281,8 @@ public class ExecuteStage implements GradingStage {
             if (skippedCases.contains(testCase.getTestNumber())) {
                 result.addTestCaseResult(new TestCaseResult(
                         testCase.getTestNumber(), false,
-                        SkippedCaseException.SKIPPED_MESSAGE));
+                        SkippedCaseException.SKIPPED_MESSAGE,
+                        testCase.getName()));
             } else {
                 result.addTestCaseResult(testCase);
             }

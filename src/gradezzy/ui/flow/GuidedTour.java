@@ -592,7 +592,7 @@ public class GuidedTour {
             }
             return false;
         }
-        Step furthest = window.getState().getFurthest();
+        Step furthest = window.getFurthestOpen();
         boolean locked = step.ordinal() > furthest.ordinal();
         if (locked) {
             if (window.getCurrentPage() != Page.MARKING) {
@@ -862,13 +862,13 @@ public class GuidedTour {
         double cardTop = bottom;
         boolean coversLeft = light != null
                 && light.intersects(left, bottom, CARD_WIDTH, height);
-        if (coversLeft) {
+        boolean coversBoth = coversLeft
+                && light.intersects(right, bottom, CARD_WIDTH, height);
+        if (coversBoth) {
+            double aboveLight = light.getMinY() - height - MARGIN;
+            cardTop = Math.max(MARGIN, aboveLight);
+        } else if (coversLeft) {
             cardLeft = right;
-            if (light.intersects(right, bottom, CARD_WIDTH, height)) {
-                double aboveLight = light.getMinY() - height - MARGIN;
-                cardLeft = left;
-                cardTop = Math.max(MARGIN, aboveLight);
-            }
         }
         card.resize(CARD_WIDTH, height);
         card.relocate(cardLeft, cardTop);

@@ -28,9 +28,7 @@ import gradezzy.persistence.BackupManager;
 import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
 import gradezzy.persistence.SqliteResultRepository;
-import gradezzy.plagiarism.SimilarityDetector;
-import gradezzy.plagiarism.TokenSimilarityDetector;
-import gradezzy.plagiarism.WinnowingSimilarityDetector;
+import gradezzy.plagiarism.ChosenSimilarityDetector;
 import gradezzy.report.AnomalyReportExporter;
 import gradezzy.report.AnswerGroupSource;
 import gradezzy.report.AuditLogExporter;
@@ -61,10 +59,6 @@ import gradezzy.util.TextUtils;
  * <p>Tier: MUST. Owner: Jing Yuan.
  */
 public class ApplicationContext {
-
-    // The plagiarism.algorithm value that picks the first version, the
-    // token trigrams; any other valid value picks winnowing
-    private static final String TRIGRAM_ALGORITHM = "trigrams";
 
     // Separates the bad settings in the start-up message
     private static final String PROBLEM_SEPARATOR = " ";
@@ -108,9 +102,10 @@ public class ApplicationContext {
         GradingService gradingService = new GradingService(config,
                 pipelineFactory, new AssessmentFactory(config), repository,
                 auditService);
-        // Grading runs the similar code check once a batch is graded
+        // Grading runs the similar code check once a batch is graded,
+        // with the algorithm plagiarism.algorithm names at that time
         PlagiarismService plagiarismService = new PlagiarismService(config,
-                createSimilarityDetector(), repository);
+                new ChosenSimilarityDetector(config), repository);
         gradingService.setPlagiarismService(plagiarismService);
         // Made before the exports, which list the common mistakes
         AnswerGroupService answerGroupService = new AnswerGroupService(
@@ -190,17 +185,6 @@ public class ApplicationContext {
      */
     public void close() {
         repository.close();
-    }
-
-    // Picks the similarity algorithm named by plagiarism.algorithm. To
-    // add one, write a class that implements SimilarityDetector, add its
-    // value to SettingsService and the Settings tab, and pick it here.
-    private SimilarityDetector createSimilarityDetector() {
-        String algorithm = config.getString(ConfigKeys.PLAGIARISM_ALGORITHM);
-        if (algorithm.equals(TRIGRAM_ALGORITHM)) {
-            return new TokenSimilarityDetector(config);
-        }
-        return new WinnowingSimilarityDetector(config);
     }
 
     // To add a fixer, write a class that extends AbstractFixer and add

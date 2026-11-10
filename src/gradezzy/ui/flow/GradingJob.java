@@ -70,6 +70,10 @@ public class GradingJob implements ProgressListener, RunCallback {
     private int total = 0;
     private int finished = 0;
 
+    // Students graded before this batch, as when it resumes a stopped
+    // run, counted in the total and the finished ones shown
+    private int carried = 0;
+
     // When the batch started, in milliseconds
     private final long startedAt = System.currentTimeMillis();
 
@@ -169,12 +173,13 @@ public class GradingJob implements ProgressListener, RunCallback {
     }
 
     /**
-     * Returns how many students the batch grades.
+     * Returns how many students the batch grades, with the ones graded
+     * before it when it resumes a run.
      *
      * @return the number
      */
     public int getTotal() {
-        return total;
+        return total + carried;
     }
 
     /**
@@ -187,12 +192,34 @@ public class GradingJob implements ProgressListener, RunCallback {
     }
 
     /**
-     * Returns how many students are finished.
+     * Returns how many students are finished, with the ones graded
+     * before the batch when it resumes a run.
      *
      * @return the number
      */
     public int getFinished() {
+        return finished + carried;
+    }
+
+    /**
+     * Returns how many students this batch itself has finished, which
+     * tells how long each one takes.
+     *
+     * @return the number
+     */
+    public int getFinishedNow() {
         return finished;
+    }
+
+    /**
+     * Counts students graded before the batch, as when it resumes a
+     * stopped run, so the count goes on from them: "8 of 45", not "0 of
+     * 37".
+     *
+     * @param count how many were graded before
+     */
+    public void setCarried(int count) {
+        carried = count;
     }
 
     /**
@@ -425,8 +452,14 @@ public class GradingJob implements ProgressListener, RunCallback {
     }
 
     // Counts a finished student and keeps the result, on the window's
-    // thread.
+    // thread. After a cancel the students skipped are reported as
+    // finished too, but they were not graded, so they are not counted
+    // and their 0 never reaches the marks so far.
     private void studentFinished(Submission submission) {
+        if (isUnfinished(submission)) {
+            changed(false);
+            return;
+        }
         finished++;
         addResult(submission);
         changed(true);

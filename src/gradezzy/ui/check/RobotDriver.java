@@ -60,6 +60,9 @@ public final class RobotDriver {
     // The width of the band searched for a focus ring
     private static final double RING_BAND = 4.0;
 
+    // The band on both sides of a control, so twice RING_BAND
+    private static final double BOTH_BANDS = RING_BAND + RING_BAND;
+
     // The largest colour distance that counts as the ring colour
     private static final double RING_TOLERANCE = 0.16;
 
@@ -450,12 +453,12 @@ public final class RobotDriver {
         Bounds bounds = node.localToScreen(node.getBoundsInLocal());
         Image picture = robot().getScreenCapture(null,
                 bounds.getMinX() - RING_BAND, bounds.getMinY() - RING_BAND,
-                bounds.getWidth() + RING_BAND * 2,
-                bounds.getHeight() + RING_BAND * 2);
+                bounds.getWidth() + BOTH_BANDS,
+                bounds.getHeight() + BOTH_BANDS);
         PixelReader pixels = picture.getPixelReader();
         int across = (int) picture.getWidth();
         int down = (int) picture.getHeight();
-        int band = (int) Math.ceil(RING_BAND * 2);
+        int band = (int) Math.ceil(BOTH_BANDS);
         int matches = 0;
         for (int column = 0; column < across; column++) {
             for (int row = 0; row < down; row++) {

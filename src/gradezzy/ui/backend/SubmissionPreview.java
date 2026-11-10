@@ -143,8 +143,7 @@ public class SubmissionPreview {
                     ImportState.INVALID, "Grading skips this folder, "
                     + "because its name is on the Ignored file names list "
                     + "in Settings.");
-        }
-        if (candidates.size() == 1 && candidates.get(0).equals(folder)) {
+        } else if (candidates.size() == 1 && candidates.get(0).equals(folder)) {
             return oneStudent(folder, ImportState.ACCEPTED, "A submission "
                     + "unzipped by hand, graded as one student.");
         }

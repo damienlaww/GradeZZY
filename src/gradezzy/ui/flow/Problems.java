@@ -15,6 +15,7 @@ import java.nio.file.Path;
 
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Submission;
+import gradezzy.ui.backend.ReviewRules;
 
 /**
  * Plain words for problem types.
@@ -155,11 +156,6 @@ public final class Problems {
      * @return true for a flag
      */
     public static boolean isFlag(AnomalyType type) {
-        return type == AnomalyType.UNTOUCHED_STARTER
-                || type == AnomalyType.EMPTY_ANSWER
-                || type == AnomalyType.HARD_CODED_ANSWER
-                || type == AnomalyType.COPIED_HEADER
-                || type == AnomalyType.SIMILAR_CODE
-                || type == AnomalyType.DIFFERENT_FROM_MODEL_ANSWER;
+        return ReviewRules.isFlag(type);
     }
 }

@@ -170,19 +170,18 @@ public final class DemoStatistics {
             for (QuestionResult result : submission.getQuestionResults()) {
                 for (TestCaseResult testCase
                         : result.getTestCaseResults()) {
-                    if (testCase.isPassed()) {
-                        continue;
-                    }
-                    String name = result.getQuestion().getId() + " case "
-                            + testCase.getTestNumber();
-                    int count = 1;
-                    if (failures.containsKey(name)) {
-                        count = failures.get(name) + 1;
-                    }
-                    failures.put(name, count);
-                    if (count > worstCount) {
-                        worst = name;
-                        worstCount = count;
+                    if (!testCase.isPassed()) {
+                        String name = result.getQuestion().getId()
+                                + " case " + testCase.getTestNumber();
+                        int count = 1;
+                        if (failures.containsKey(name)) {
+                            count = failures.get(name) + 1;
+                        }
+                        failures.put(name, count);
+                        if (count > worstCount) {
+                            worst = name;
+                            worstCount = count;
+                        }
                     }
                 }
             }
@@ -201,18 +200,17 @@ public final class DemoStatistics {
             List<Submission> graded) {
         for (Submission submission : graded) {
             for (Anomaly anomaly : submission.getAnomalies()) {
-                if (anomaly.getType() != AnomalyType.COMPILE_ERROR) {
-                    continue;
+                if (anomaly.getType() == AnomalyType.COMPILE_ERROR) {
+                    String reason = reasonOf(anomaly.getMessage());
+                    Map<String, Integer> errors =
+                            summary.getCommonCompileErrors();
+                    int count = 0;
+                    if (errors.containsKey(reason)) {
+                        count = errors.get(reason);
+                    }
+                    int newCount = count + 1;
+                    errors.put(reason, newCount);
                 }
-                String reason = reasonOf(anomaly.getMessage());
-                Map<String, Integer> errors =
-                        summary.getCommonCompileErrors();
-                int count = 0;
-                if (errors.containsKey(reason)) {
-                    count = errors.get(reason);
-                }
-                int newCount = count + 1;
-                errors.put(reason, newCount);
             }
         }
     }

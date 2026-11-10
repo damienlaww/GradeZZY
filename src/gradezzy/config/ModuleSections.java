@@ -127,7 +127,9 @@ public final class ModuleSections {
     }
 
     /**
-     * Returns the value with one more section for one module.
+     * Returns the value with one more section for one module. A section
+     * the module already has, in any case (g5 for G5), is not added again,
+     * so the value is returned unchanged apart from tidy spacing.
      *
      * <p>Tier: SHOULD.
      *
@@ -147,7 +149,9 @@ public final class ModuleSections {
             modules.add(moduleCode.trim());
             sections.put(moduleCode.trim(), own);
         }
-        own.add(sectionCode.trim());
+        List<String> added = new ArrayList<>();
+        added.add(sectionCode.trim());
+        addCodes(own, added);
         return write(modules, sections);
     }
 

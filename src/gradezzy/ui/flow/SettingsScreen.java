@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 import javafx.geometry.Insets;
@@ -224,6 +225,11 @@ public class SettingsScreen extends FlowScreen {
     // Every group, top to bottom
     private final List<SettingsGroup> groups = new ArrayList<>();
 
+    // Names the module and the assessment edited, and splits the groups
+    // into the bands of what each changes with
+    private final SettingsScope scope = new SettingsScope(
+            group -> jumpTo(group), () -> isAnimated());
+
     // Every setting, top to bottom
     private final List<SettingField> fields = new ArrayList<>();
 
@@ -258,6 +264,16 @@ public class SettingsScreen extends FlowScreen {
             () -> askDeleteModule(moduleList.getValue()));
     private final FlowPane sectionChips = new FlowPane();
 
+    // True while the module dropdown is filled, so no pick is handled
+    private boolean fillingCourse = false;
+
+    // The module whose sections and assessments are shown, or null
+    private String shownModule = null;
+
+    // The module chosen on Home when Settings was last shown, so Settings
+    // follows a new pick there but keeps its own pick otherwise
+    private String homeModuleSeen = null;
+
     // Whether the course settings can be changed here
     private boolean editableCourse = true;
 
@@ -272,12 +288,29 @@ public class SettingsScreen extends FlowScreen {
     private final ComboBox<String> assessmentPicker = new ComboBox<>();
     private final VBox assessmentHolder = new VBox(Parts.GAP);
 
+    // The assessment form shown, or null when the module has none
+    private AssessmentEditor assessmentForm = null;
+
     // True while the dropdown is being filled, so no pick is handled
     private boolean pickingAssessment = false;
 
     // Scrolls to the first error, shown while an error blocks Save
     private final Button showErrorButton = Parts.secondary("Show error",
             () -> showFirstError());
+
+    // The name of the group of the checks that use the model answers
+    private static final String MODEL_ANSWER_CHECKS = "Model answer checks";
+
+    // The name of the group of each section's export folder
+    private static final String EXPORT_FOLDERS = "Export folders";
+
+    // Names the model answers those checks use: the folder of the
+    // assessment in use
+    private final Label modelAnswersUsed = new Label();
+
+    // Shows the Assessment group, where that folder is set
+    private final Hyperlink modelAnswersLink = Parts.link(
+            "Change in Assessment", () -> scope.showAssessmentGroup());
 
     // The group being built
     private SettingsGroup building = null;
@@ -320,6 +353,15 @@ public class SettingsScreen extends FlowScreen {
         }
         showErrorButton.setVisible(false);
         showErrorButton.setManaged(false);
+        // From now on a change of module or assessment lights up the
+        // groups it changes
+        scope.arm();
+    }
+
+    // Says whether Subtle animations is on in Settings.
+    private boolean isAnimated() {
+        return Boolean.parseBoolean(getBackend().getSetting(
+                ConfigKeys.ANIMATIONS_ENABLED));
     }
 
     // Builds the title and the search field above the cards.
@@ -331,7 +373,8 @@ public class SettingsScreen extends FlowScreen {
         search.textProperty().addListener((observable, before, after)
                 -> applySearch());
         VBox header = Parts.header("Settings",
-                "Everything GradeZZY uses, saved in config.properties.");
+                "Your modules, assessments and how grading works. Grading "
+                + "settings apply from the next run.");
         HBox headerRow = Parts.row(Parts.GAP,
                 new Node[] {header, Parts.grow(), search});
         headerRow.getStyleClass().add("settings-header");
@@ -376,11 +419,16 @@ public class SettingsScreen extends FlowScreen {
                     + "config.properties instead.");
             return;
         }
-        // Course and export folders may have changed on Home or in
-        // History, such as a delete taken back there
-        fillCourse(moduleList.getValue());
-        fillExportFolders();
-        fillScoreSheets();
+        // The module chosen on Home or Set up may have changed, and the
+        // course on Home or in History, such as a delete taken back there.
+        // A module picked here stays until another is chosen on Home.
+        String homeModule = getState().getModuleCode();
+        String module = shownModule;
+        if (module == null || !homeModule.equals(homeModuleSeen)) {
+            module = homeModule;
+        }
+        homeModuleSeen = homeModule;
+        fillCourse(module);
         refreshAssessmentPicker();
         // A setting saved elsewhere, such as from Set up, shows its new value
         for (SettingField field : fields) {
@@ -424,6 +472,65 @@ public class SettingsScreen extends FlowScreen {
     }
 
     /**
+     * Says whether the assessment form has a change that is not saved
+     * yet. Its own Save assessment saves it, not the bar's Save.
+     *
+     * @return true if the assessment form was changed and not saved
+     */
+    public boolean hasUnsavedAssessment() {
+        return assessmentForm != null && assessmentForm.hasUnsavedChanges();
+    }
+
+    /**
+     * Says in a sentence what is not saved yet, for the sheet that asks
+     * before leaving Settings.
+     *
+     * @return the sentence
+     */
+    public String describeUnsaved() {
+        int changed = 0;
+        for (SettingField field : fields) {
+            if (field.isChanged()) {
+                changed++;
+            }
+        }
+        String settingsWords = Parts.plural(changed, "setting");
+        if (changed == 0) {
+            return "The assessment form has changes that are not saved yet.";
+        } else if (hasUnsavedAssessment()) {
+            return settingsWords + " and the assessment form have changes "
+                    + "that are not saved yet. Save keeps both.";
+        }
+        return "Your changes to " + settingsWords + " are not saved yet.";
+    }
+
+    /**
+     * Saves the changed settings and the assessment form. Stops at the
+     * first that cannot be saved, which then says what is wrong.
+     *
+     * @return true if nothing is left unsaved
+     */
+    public boolean saveAll() {
+        if (hasUnsavedChanges() && !save()) {
+            return false;
+        }
+        if (hasUnsavedAssessment()) {
+            return assessmentForm.saveChanges();
+        }
+        return true;
+    }
+
+    /**
+     * Puts back every saved setting and the saved assessment's values.
+     */
+    public void discardAll() {
+        discardChanges();
+        if (hasUnsavedAssessment()) {
+            assessmentForm.revertChanges();
+        }
+    }
+
+    /**
      * Puts every saved value back in its control.
      */
     public void discardChanges() {
@@ -456,16 +563,32 @@ public class SettingsScreen extends FlowScreen {
     // ------------------------------------------------------------ groups
 
     // Adds every group of settings, so each line of config.properties
-    // has a place.
+    // has a place: first those that change with the module chosen,
+    // then those that change with the assessment, then those that are
+    // the same for everyone.
     private void addGroups() {
         startGroup("Course");
+        scope.forModule(building, "Pick the module to edit; the sections "
+                + "below change with it. Home keeps its own module.");
         addCourseRows();
+
+        startGroup(EXPORT_FOLDERS);
+        scope.forModule(building, "Where %s and its sections save their "
+                + "exports; the others use the folder in Files and "
+                + "folders.");
+        scope.nameModuleInTitle(building, EXPORT_FOLDERS);
+        addExportFolderRows();
+
+        startGroup("Assessment");
+        scope.forAssessment(building);
+        addAssessmentEditor();
+
+        startGroup("Score sheets");
+        scope.forScoreSheets(building);
+        addScoreSheetRows();
 
         startGroup("Files and folders");
         addFileRows();
-
-        startGroup("Assessment");
-        addAssessmentEditor();
 
         startGroup("Checks and fixes");
         addCheckRows();
@@ -473,7 +596,7 @@ public class SettingsScreen extends FlowScreen {
         startGroup("Running code");
         addRunningRows();
 
-        startGroup("Model answers");
+        startGroup(MODEL_ANSWER_CHECKS);
         addModelAnswerRows();
 
         startGroup("Similar code");
@@ -492,16 +615,13 @@ public class SettingsScreen extends FlowScreen {
         addAdvancedRows();
     }
 
-    // Adds the score sheets and the folders to the group being built.
+    // Adds the folders every module uses to the group being built.
     private void addFileRows() {
-        addScoreSheetRows();
-
         folder(ConfigKeys.WORKING_DIR, "Working copies",
                 "Fixes and tests run here. Originals never change.");
         folder(ConfigKeys.OUTPUT_DIR, "Exports saved in",
                 "CSV, JSON and reports, for every module and section unless "
-                + "one below has its own folder.");
-        addExportFolderRows();
+                + "one has its own folder under Export folders.");
         folder(ConfigKeys.BACKUP_DIR, "Backups saved in",
                 "Copies made by Back up now in History.");
         folder(ConfigKeys.ASSESSMENTS_DIR, "Assessments saved in",
@@ -546,7 +666,7 @@ public class SettingsScreen extends FlowScreen {
     // Adds the checks that use the model answers to the group being
     // built. The folder itself belongs to each assessment.
     private void addModelAnswerRows() {
-        addModelAnswersFolderNote();
+        addModelAnswersUsedRow();
         toggle(ConfigKeys.TESTER_STRENGTH_ENABLED,
                 "Check testers before grading",
                 "Set up runs each tester on broken copies of the model "
@@ -568,7 +688,9 @@ public class SettingsScreen extends FlowScreen {
     // Adds the similar code check to the group being built.
     private void addSimilarRows() {
         toggle(ConfigKeys.PLAGIARISM_ENABLED, "Look for similar code",
-                "Runs after grading; pairs are flagged.");
+                "Runs after grading; pairs are flagged. Identical copies, "
+                + "with the same Name, Email ID and code, are flagged even "
+                + "when this is off.");
         choice(ConfigKeys.PLAGIARISM_THRESHOLD, "Similarity that counts",
                 "How alike two answers must be to be flagged.",
                 SIMILARITIES).showChoicesAs(similarityNames());
@@ -786,43 +908,94 @@ public class SettingsScreen extends FlowScreen {
         building.addRow(field.getRow(), field);
     }
 
-    // Adds the row that says where the model answers folder is set: each
-    // assessment has its own, as each lab test has its own answers.
-    private void addModelAnswersFolderNote() {
-        VBox names = nameColumn("Model answers folder", "Each assessment "
-                + "has its own. Choose it under Assessment, beside the "
-                + "tester and starter folders.");
-        String folder = getBackend().getSetting(
-                ConfigKeys.MODEL_ANSWERS_DIR).trim();
-        String shown = "None for the assessment in use, so the checks "
-                + "below are off.";
-        if (!folder.isEmpty()) {
-            shown = "In use: " + folder;
-        }
-        Label value = Parts.muted(shown);
-        value.setWrapText(true);
-        value.setMinWidth(0);
+    // Adds the row that names the model answers these checks use: the
+    // folder of the assessment in use, which is set under Assessment.
+    private void addModelAnswersUsedRow() {
+        VBox names = nameColumn("Model answers used", "Each assessment "
+                + "has its own folder. These checks use the one of the "
+                + "assessment in use; the switches below are the same for "
+                + "every assessment.");
+        modelAnswersUsed.getStyleClass().add("model-answers-used");
+        modelAnswersUsed.setWrapText(true);
+        modelAnswersUsed.setMinWidth(0);
+        modelAnswersUsed.setMaxWidth(Double.MAX_VALUE);
+        VBox value = new VBox(LINE_GAP, modelAnswersUsed,
+                modelAnswersLink);
+        value.setAlignment(Pos.TOP_LEFT);
         HBox.setHgrow(value, Priority.ALWAYS);
         HBox row = new HBox(SettingField.COLUMN_GAP, names, value);
         row.setAlignment(Pos.TOP_LEFT);
         row.getStyleClass().add("setting-row");
         building.addRow(row, null);
+        building.setQuestionsText("model answers used model answer "
+                + "checks folder assessment in use tester strength "
+                + "random inputs");
+        fillModelAnswersUsed();
+    }
+
+    // Names the assessment in use and its model answers folder, or says
+    // the checks are skipped when it has none. Called whenever the
+    // module or the assessment shown changes.
+    private void fillModelAnswersUsed() {
+        String name = inUseName();
+        String folder = getBackend().getSetting(
+                ConfigKeys.MODEL_ANSWERS_DIR).trim();
+        if (name.isEmpty()) {
+            modelAnswersUsed.setText("No assessment is in use, so these "
+                    + "checks are skipped.");
+            modelAnswersLink.setText("Choose one in Assessment");
+            Parts.tip(modelAnswersUsed, "Use an assessment under "
+                    + "Assessment to grade with it.");
+        } else if (folder.isEmpty()) {
+            modelAnswersUsed.setText(name + " has no model answers folder, "
+                    + "so these checks are skipped.");
+            modelAnswersLink.setText("Set one in Assessment");
+            Parts.tip(modelAnswersUsed, "Choose " + name + "'s model "
+                    + "answers folder under Assessment to run these "
+                    + "checks.");
+        } else {
+            modelAnswersUsed.setText("Uses " + name + "'s model answers: "
+                    + shortPath(folder));
+            modelAnswersLink.setText("Change in Assessment");
+            Parts.tip(modelAnswersUsed, folder);
+        }
+    }
+
+    // Returns the last two parts of a path, such as LabTest/Answers, for
+    // a short line.
+    private static String shortPath(String path) {
+        int forward = path.lastIndexOf(FORWARD_SLASH);
+        int back = path.lastIndexOf(BACKSLASH);
+        int slash = Math.max(forward, back);
+        if (slash <= 0) {
+            return path;
+        }
+        String parent = path.substring(0, slash);
+        String parentName = fileName(parent);
+        if (parentName.isEmpty()) {
+            return path;
+        }
+        return parentName + FORWARD_SLASH + fileName(path);
     }
 
     // Adds the row that lists each section with its score sheet.
     private void addScoreSheetRows() {
         VBox names = nameColumn("Score sheet of each section",
-                "The class list exported from eLearn. Each section has its "
-                + "own; one chosen on Set up is kept here too.");
+                "The class list exported from eLearn, for each section of "
+                + "the module chosen under Course. Each assessment keeps "
+                + "its own; one chosen on Set up is kept here too.");
         HBox.setHgrow(scoreSheetList, Priority.ALWAYS);
         HBox row = new HBox(SettingField.COLUMN_GAP, names, scoreSheetList);
         row.setAlignment(Pos.TOP_LEFT);
         row.getStyleClass().add("setting-row");
         building.addRow(row, null);
+        building.setQuestionsText("score sheets score sheet class list "
+                + "class lists elearn csv section sections assessment in "
+                + "use");
         fillScoreSheets();
     }
 
-    // Lists every section of every module with its score sheet.
+    // Lists each section of the chosen module with its score sheet.
     private void fillScoreSheets() {
         scoreSheetList.getChildren().clear();
         String sheets = getBackend().getSetting(
@@ -831,15 +1004,19 @@ public class SettingsScreen extends FlowScreen {
                 ConfigKeys.SCORE_SHEET_FILE).trim();
         boolean editable = getBackend().supports(Capability.SETTINGS)
                 && !getBackend().isDemo();
-        for (String module : getBackend().getModuleCodes()) {
-            for (String section : getBackend().getSectionCodes(module)) {
-                HBox line = scoreSheetLine(module, section, sheets,
-                        fallback, editable);
-                scoreSheetList.getChildren().add(line);
-            }
+        String module = moduleList.getValue();
+        List<String> sections = new ArrayList<>();
+        if (module != null) {
+            sections = getBackend().getSectionCodes(module);
+        }
+        for (String section : sections) {
+            HBox line = scoreSheetLine(module, section, sheets, fallback,
+                    editable);
+            scoreSheetList.getChildren().add(line);
         }
         if (scoreSheetList.getChildren().isEmpty()) {
-            Label none = Parts.muted("Add a section under Course first.");
+            Label none = Parts.muted("Add a section to " + moduleName()
+                    + " under Course first.");
             none.getStyleClass().add("small-text");
             scoreSheetList.getChildren().add(none);
         }
@@ -856,21 +1033,27 @@ public class SettingsScreen extends FlowScreen {
         String shown = fileName(own);
         String fullPath = own;
         String chooseWord = "Change";
-        if (own.isEmpty() && fallback.isEmpty()) {
-            shown = "Not chosen yet";
-        } else if (own.isEmpty()) {
-            shown = "Not chosen; uses " + fileName(fallback);
-        }
         if (own.isEmpty()) {
             fullPath = fallback;
             chooseWord = "Choose";
+            if (fallback.isEmpty()) {
+                shown = "Not chosen yet";
+            } else {
+                shown = "Not chosen; uses " + fileName(fallback);
+            }
         }
         Label file = Parts.muted(shown);
         file.getStyleClass().add("small-text");
         file.setMinWidth(0);
         Parts.tip(file, fullPath);
-        HBox line = Parts.row(Parts.GAP, new Node[] {whoLabel, file,
-            Parts.grow()});
+        HBox line = Parts.row(Parts.GAP, new Node[] {whoLabel});
+        // The section chosen on Home and Set up is marked
+        boolean chosenNow = module.equals(getState().getModuleCode())
+                && section.equals(getState().getSectionCode());
+        if (chosenNow) {
+            line.getChildren().add(Parts.pill("Chosen", Tone.NEUTRAL));
+        }
+        line.getChildren().addAll(file, Parts.grow());
         Hyperlink choose = Parts.link(chooseWord,
                 () -> chooseScoreSheet(who));
         choose.setDisable(!editable);
@@ -963,8 +1146,9 @@ public class SettingsScreen extends FlowScreen {
     // export folder, with a button that adds one.
     private void addExportFolderRows() {
         VBox names = nameColumn("Exports for one module or section",
-                "These save their CSV, JSON and reports in their own "
-                + "folder. A section's folder wins over its module's.");
+                "The module chosen under Course, or one of its sections, "
+                + "can save its CSV, JSON and reports in its own folder. A "
+                + "section's folder wins over its module's.");
         Button add = Parts.small("Add a folder", () -> openExportFolder(
                 null, null));
         add.setGraphic(Parts.icon(Parts.PLUS, SEARCH_ICON_SIZE));
@@ -975,17 +1159,20 @@ public class SettingsScreen extends FlowScreen {
         row.setAlignment(Pos.TOP_LEFT);
         row.getStyleClass().add("setting-row");
         building.addRow(row, null);
+        building.setQuestionsText("export folders export folder exports "
+                + "csv json reports module section");
         fillExportFolders();
     }
 
-    // Lists each module or section with its own export folder.
+    // Lists the chosen module and its sections that have their own
+    // export folder.
     private void fillExportFolders() {
         exportFolderList.getChildren().clear();
-        List<String[]> entries = ExportFolders.list(getBackend().getSetting(
-                ConfigKeys.OUTPUT_DIR_BY_SECTION));
+        List<String[]> entries = moduleEntries(ExportFolders.list(
+                getBackend().getSetting(ConfigKeys.OUTPUT_DIR_BY_SECTION)));
         if (entries.isEmpty()) {
-            Label none = Parts.muted("None yet. Every module and section "
-                    + "uses the folder above.");
+            Label none = Parts.muted("None yet. " + moduleName() + " and "
+                    + "its sections use the folder in Files and folders.");
             none.getStyleClass().add("small-text");
             exportFolderList.getChildren().add(none);
             return;
@@ -1012,6 +1199,29 @@ public class SettingsScreen extends FlowScreen {
             line.getStyleClass().add("export-folder-line");
             exportFolderList.getChildren().add(line);
         }
+    }
+
+    // Returns the export folder entries of the chosen module and its
+    // sections.
+    private List<String[]> moduleEntries(List<String[]> entries) {
+        List<String[]> own = new ArrayList<>();
+        String module = moduleList.getValue();
+        for (String[] entry : entries) {
+            String[] parts = entry[WHO_PART].split(KEY_SEPARATOR, KEY_PARTS);
+            if (parts[MODULE_PART].equalsIgnoreCase(module)) {
+                own.add(entry);
+            }
+        }
+        return own;
+    }
+
+    // Returns the chosen module's code, or words for it when there is
+    // none.
+    private String moduleName() {
+        if (moduleList.getValue() == null) {
+            return "The module";
+        }
+        return moduleList.getValue();
     }
 
     // Opens the sheet that gives a module or section its own export
@@ -1076,12 +1286,15 @@ public class SettingsScreen extends FlowScreen {
     }
 
     // Builds the module list of the export folder sheet, with the given
-    // module chosen, or the first one when none is given.
+    // module chosen, else the one chosen under Course, else the first.
     private ComboBox<String> folderModules(String module) {
         ComboBox<String> modules = new ComboBox<>();
         modules.getItems().setAll(getBackend().getModuleCodes());
+        String chosen = moduleList.getValue();
         if (module != null) {
             modules.setValue(module);
+        } else if (chosen != null && modules.getItems().contains(chosen)) {
+            modules.setValue(chosen);
         } else if (!modules.getItems().isEmpty()) {
             modules.setValue(modules.getItems().get(0));
         }
@@ -1172,27 +1385,34 @@ public class SettingsScreen extends FlowScreen {
             message = getBackend().validateSetting(ConfigKeys.OUTPUT_DIR,
                     folder);
         }
-        if (message == null || message.isEmpty()) {
-            String who = ExportFolders.keyOf(module, sectionOrNull(section));
-            String folders = getBackend().getSetting(
-                    ConfigKeys.OUTPUT_DIR_BY_SECTION);
-            if (original != null && !original.equalsIgnoreCase(who)) {
-                folders = ExportFolders.remove(folders, original);
-            }
-            String updated = ExportFolders.put(folders, who, folder);
-            Map<String, String> changes = new HashMap<>();
-            changes.put(ConfigKeys.OUTPUT_DIR_BY_SECTION, updated);
-            ActionResult result = getBackend().saveSettings(changes);
-            if (result.isDone()) {
-                String shownWho = who.replace(KEY_SEPARATOR, SHOWN_SEPARATOR);
-                getWindow().closeSheet();
-                getWindow().notify("Exports of " + shownWho
-                        + " are saved in " + folder + ".");
-                fillExportFolders();
-                return;
-            }
-            message = result.getMessage();
+        if (message != null && !message.isEmpty()) {
+            showFolderProblem(problem, message);
+            return;
         }
+        String who = ExportFolders.keyOf(module, sectionOrNull(section));
+        String folders = getBackend().getSetting(
+                ConfigKeys.OUTPUT_DIR_BY_SECTION);
+        if (original != null && !original.equalsIgnoreCase(who)) {
+            folders = ExportFolders.remove(folders, original);
+        }
+        String updated = ExportFolders.put(folders, who, folder);
+        Map<String, String> changes = new HashMap<>();
+        changes.put(ConfigKeys.OUTPUT_DIR_BY_SECTION, updated);
+        ActionResult result = getBackend().saveSettings(changes);
+        if (!result.isDone()) {
+            showFolderProblem(problem, result.getMessage());
+            return;
+        }
+        String shownWho = who.replace(KEY_SEPARATOR, SHOWN_SEPARATOR);
+        getWindow().closeSheet();
+        getWindow().notify("Exports of " + shownWho + " are saved in "
+                + folder + ".");
+        fillExportFolders();
+    }
+
+    // Shows why an export folder cannot be saved under the sheet's
+    // fields, calling the setting "The folder".
+    private void showFolderProblem(Label problem, String message) {
         String quotedKey = QUOTE + ConfigKeys.OUTPUT_DIR + QUOTE;
         problem.setText(message.replace(quotedKey, "The folder"));
         problem.setVisible(true);
@@ -1244,7 +1464,7 @@ public class SettingsScreen extends FlowScreen {
     private void addCourseRows() {
         moduleList.setPrefWidth(PICKER_WIDTH);
         moduleList.setAccessibleText("Modules");
-        moduleList.setOnAction(event -> fillSections());
+        moduleList.setOnAction(event -> moduleChosen());
         boolean editable = getBackend().supports(Capability.SETTINGS);
         Button addModule = Parts.small("Add module",
                 () -> openAddModule());
@@ -1259,8 +1479,9 @@ public class SettingsScreen extends FlowScreen {
         HBox moduleControls = Parts.row(Parts.GAP_SMALL, new Node[] {
             moduleList, addModule, deleteModule});
         building.addRow(courseRow("Modules", "The courses you teach. The "
-                + "first is the default on Home and Set up.",
-                moduleControls), null);
+                + "one chosen here is the one Home and Set up show; the "
+                + "sections, score sheets, export folders and assessments "
+                + "below are its own.", moduleControls), null);
         sectionChips.setHgap(Parts.GAP_SMALL);
         sectionChips.setVgap(Parts.GAP_SMALL);
         sectionChips.setPrefWrapLength(SECTION_WRAP);
@@ -1271,7 +1492,7 @@ public class SettingsScreen extends FlowScreen {
                 + "added for this module only.", sectionControls), null);
         building.setQuestionsText("course modules module sections section "
                 + "add module add section class groups");
-        fillCourse(null);
+        fillCourse(getState().getModuleCode());
     }
 
     // Builds one Course row: the name and help on the left, then the
@@ -1298,9 +1519,12 @@ public class SettingsScreen extends FlowScreen {
         return names;
     }
 
-    // Fills the module dropdown, choosing a module, then its sections.
+    // Fills the module dropdown, choosing a module, then shows its
+    // sections, score sheets and export folders. Its assessments are
+    // shown again when the module is not the one shown before.
     private void fillCourse(String chosen) {
         List<String> modules = getBackend().getModuleCodes();
+        fillingCourse = true;
         moduleList.getItems().setAll(modules);
         String module = chosen;
         if (module == null || !modules.contains(module)) {
@@ -1310,7 +1534,15 @@ public class SettingsScreen extends FlowScreen {
             }
         }
         moduleList.setValue(module);
+        fillingCourse = false;
         fillScoreSheets();
+        fillExportFolders();
+        boolean otherModule = !Objects.equals(module, shownModule);
+        shownModule = module;
+        // The form is built after the Course rows, so it is empty at first
+        if (otherModule && !assessmentHolder.getChildren().isEmpty()) {
+            showAssessment(null);
+        }
         // The last module cannot be deleted: every setting needs one
         boolean lastModule = modules.size() <= 1;
         deleteModule.setDisable(!editableCourse || lastModule);
@@ -1322,6 +1554,93 @@ public class SettingsScreen extends FlowScreen {
                     + "already graded are kept in History.");
         }
         fillSections();
+        refreshScope();
+    }
+
+    // Follows a pick in the module dropdown: its parts are shown here
+    // only. The module chosen on Home and Set up stays as it was.
+    private void moduleChosen() {
+        String chosen = moduleList.getValue();
+        if (fillingCourse || chosen == null) {
+            return;
+        }
+        fillCourse(chosen);
+    }
+
+    // Grades with an assessment from now on, as Use this one asks, and
+    // says so. The module shown here becomes the one chosen on Home and
+    // Set up too, so the assessment in use is always one of its own.
+    private void useFromSettings(String name) {
+        if (!getWindow().useAssessment(name)) {
+            return;
+        }
+        if (shownModule != null
+                && !shownModule.equals(getState().getModuleCode())) {
+            getWindow().chooseSection(shownModule,
+                    getState().getSectionCode());
+        }
+        notifyWorkingOn();
+    }
+
+    // Says which module and assessment every tab now works on.
+    private void notifyWorkingOn() {
+        getWindow().notify("Now working on " + getState().getModuleCode()
+                + SHOWN_SEPARATOR + inUseName() + " everywhere.");
+    }
+
+    // Makes a module the one chosen on Home and Set up, and grades one of
+    // its assessments when the one in use is not its own, as Home does.
+    // Returns true when the assessment in use was switched.
+    private boolean followModule(String module) {
+        if (module == null || module.equals(getState().getModuleCode())) {
+            return false;
+        }
+        getWindow().chooseSection(module, getState().getSectionCode());
+        // A page built again opens the module's own assessment
+        getState().setSettingsAssessment(null);
+        String switchTo = assessmentSwitchedBy(module);
+        if (switchTo == null) {
+            return false;
+        }
+        return getWindow().useAssessment(switchTo);
+    }
+
+    // Returns the module's first assessment when the one in use is not
+    // one of its own, so choosing the module switches to it, or null
+    // when nothing would switch. Grading reads the assessment from the
+    // settings, so nothing switches while any section grades.
+    private String assessmentSwitchedBy(String module) {
+        List<SavedAssessment> listed = moduleAssessments(module);
+        if (getState().isAnyGrading() || listed.isEmpty()) {
+            return null;
+        }
+        String inUse = inUseName();
+        for (SavedAssessment saved : listed) {
+            if (saved.getName().equalsIgnoreCase(inUse)) {
+                return null;
+            }
+        }
+        return listed.get(0).getName();
+    }
+
+    // Returns the saved assessments listed for a module, as on Home.
+    private List<SavedAssessment> moduleAssessments(String module) {
+        String ownOnlyModules = getBackend().getSetting(
+                ConfigKeys.OWN_SECTIONS_ONLY_MODULES);
+        boolean ownOnly = module != null
+                && ModuleSections.hasOwnOnly(ownOnlyModules, module);
+        return SavedAssessment.listedFor(getBackend().listAssessments(),
+                module, ownOnly);
+    }
+
+    // Returns the name of the assessment in use, or "" when there is
+    // none.
+    private String inUseName() {
+        Assessment inUse = getBackend().getAssessment();
+        if (inUse == null) {
+            return "";
+        }
+        return inUse.getName();
     }
 
     // Shows the chosen module's sections as chips, each with a button
@@ -1448,11 +1767,9 @@ public class SettingsScreen extends FlowScreen {
         boolean wasChosen = module.equalsIgnoreCase(
                 getState().getModuleCode()) && !kept.isEmpty();
         if (wasChosen) {
-            getWindow().chooseSection(kept.get(0),
-                    getState().getSectionCode());
+            followModule(kept.get(0));
         }
-        fillCourse(null);
-        fillExportFolders();
+        fillCourse(getState().getModuleCode());
         offerModuleUndo(module, before, scoreSheetsBefore, ownOnly);
     }
 
@@ -1488,8 +1805,10 @@ public class SettingsScreen extends FlowScreen {
     private void undoModuleDeleted(Supplier<ActionResult> restore,
             String module) {
         notifyIfFailed(restore.get());
-        fillCourse(module);
-        fillExportFolders();
+        if (getBackend().getModuleCodes().contains(module)) {
+            followModule(module);
+        }
+        fillCourse(getState().getModuleCode());
     }
 
     // Opens the sheet that adds a module.
@@ -1497,8 +1816,9 @@ public class SettingsScreen extends FlowScreen {
         CourseSheets.openAddModule(getWindow(), code -> moduleAdded(code));
     }
 
-    // Shows a module just added.
+    // Shows a module just added, which becomes the one chosen.
     private void moduleAdded(String code) {
+        followModule(code);
         fillCourse(code);
         getWindow().notify("Added module " + code + ".");
     }
@@ -1659,43 +1979,108 @@ public class SettingsScreen extends FlowScreen {
         showAssessment(getState().getSettingsAssessment());
     }
 
-    // Shows one saved assessment in the form, or a new one for null.
+    // Shows one of the chosen module's saved assessments in the form, or
+    // a new, blank one for NEW_ASSESSMENT. For null, or a name the module
+    // does not list, the one in use opens when it is the module's, else
+    // the module's first. A module with none shows a note instead.
     private void showAssessment(String name) {
-        String inUse = "";
-        if (getBackend().getAssessment() != null) {
-            inUse = getBackend().getAssessment().getName();
-        }
+        String module = moduleList.getValue();
+        String inUse = inUseName();
+        List<SavedAssessment> listed = moduleAssessments(module);
+        boolean creating = NEW_ASSESSMENT.equals(name);
         SavedAssessment start = null;
-        List<String> names = new ArrayList<>();
-        for (SavedAssessment saved : getBackend().listAssessments()) {
-            names.add(saved.getName());
-            String wanted = name;
-            if (name == null) {
-                wanted = inUse;
-            }
-            if (saved.getName().equalsIgnoreCase(wanted)) {
-                start = saved;
-            }
-        }
-        boolean creating = NEW_ASSESSMENT.equals(name) || start == null;
         String originalName = null;
         String picked = NEW_ASSESSMENT;
-        if (!creating) {
+        if (creating) {
+            // Every field starts empty, for the module chosen here
+            start = getWindow().newAssessment();
+            start.setModuleCode(module);
+        } else {
+            start = findAssessment(listed, name, inUse);
+            if (start == null) {
+                showNoAssessment(module, listed);
+                return;
+            }
             originalName = start.getName();
             picked = originalName;
         }
         getState().setSettingsAssessment(picked);
-        if (creating) {
-            start = getWindow().newAssessment();
-        }
 
-        fillAssessmentPicker(names, picked);
+        fillAssessmentPicker(namesOf(listed), picked);
 
         HBox pickRow = assessmentPickRow(start, originalName, inUse,
                 creating);
-        Node editor = AssessmentEditor.createInline(getWindow(), start,
-                originalName, saved -> showAssessment(saved));
-        assessmentHolder.getChildren().setAll(pickRow, editor);
+        assessmentForm = AssessmentEditor.inline(getWindow(), start,
+                originalName, saved -> showAssessment(saved),
+                saved -> useFromSettings(saved));
+        assessmentHolder.getChildren().setAll(pickRow,
+                assessmentForm.getView());
+    }
+
+    // Returns the module's assessment with a name, else the one in use
+    // when the module lists it, else the module's first, or null when
+    // the module has none.
+    private SavedAssessment findAssessment(List<SavedAssessment> listed,
+            String name, String inUse) {
+        SavedAssessment named = null;
+        SavedAssessment used = null;
+        for (SavedAssessment saved : listed) {
+            if (saved.getName().equalsIgnoreCase(name)) {
+                named = saved;
+            }
+            if (saved.getName().equalsIgnoreCase(inUse)) {
+                used = saved;
+            }
+        }
+        if (named != null) {
+            return named;
+        }
+        if (used != null) {
+            return used;
+        }
+        if (listed.isEmpty()) {
+            return null;
+        }
+        return listed.get(0);
+    }
+
+    // Returns the names of some saved assessments.
+    private List<String> namesOf(List<SavedAssessment> listed) {
+        List<String> names = new ArrayList<>();
+        for (SavedAssessment saved : listed) {
+            names.add(saved.getName());
+        }
+        return names;
+    }
+
+    // Shows, in place of the form, that the chosen module has no
+    // assessment yet, with a button that starts a blank one.
+    private void showNoAssessment(String module,
+            List<SavedAssessment> listed) {
+        getState().setSettingsAssessment(null);
+        fillAssessmentPicker(namesOf(listed), null);
+        assessmentPicker.setPromptText("None yet");
+        String moduleWords = "this module";
+        if (module != null) {
+            moduleWords = module;
+        }
+        Label heading = Parts.strong("No assessment for " + moduleWords
+                + " yet");
+        Label about = Parts.muted("Each lab test or exam has its own "
+                + "tester and starter folders. A new one starts blank, so "
+                + "you choose them for " + moduleWords + ".");
+        about.getStyleClass().add("small-text");
+        about.setWrapText(true);
+        Button create = Parts.primary("New assessment");
+        create.setGraphic(Parts.icon(Parts.PLUS, SEARCH_ICON_SIZE));
+        create.setOnAction(event -> showAssessment(NEW_ASSESSMENT));
+        create.setDisable(!getBackend().supports(Capability.SETTINGS)
+                || module == null);
+        VBox empty = new VBox(Parts.GAP_SMALL, heading, about, create);
+        empty.getStyleClass().add("settings-assessment-empty");
+        HBox pickRow = assessmentPickRow(null, null, "", true);
+        assessmentForm = null;
+        assessmentHolder.getChildren().setAll(pickRow, empty);
     }
 
     // Lists the saved assessments in the dropdown, with the line that
@@ -1709,15 +2094,34 @@ public class SettingsScreen extends FlowScreen {
         }
         assessmentPicker.setValue(value);
         pickingAssessment = false;
+        refreshScope();
+    }
+
+    // Shows the module and the assessment being edited in the bar above
+    // the cards and in the tags of the groups.
+    private void refreshScope() {
+        String picked = assessmentPicker.getValue();
+        boolean creating = NEW_ASSESSMENT.equals(picked);
+        String editing = picked;
+        if (creating) {
+            editing = null;
+        }
+        scope.show(moduleList.getValue(), editing, creating, inUseName());
+        fillModelAnswersUsed();
     }
 
     // Builds the row with the assessment dropdown and, for a saved
     // assessment, its In use pill or Use button and its Delete button.
     private HBox assessmentPickRow(SavedAssessment start,
             String originalName, String inUse, boolean creating) {
-        VBox pickWords = nameColumn("Assessment to edit", "Each lab test "
-                + "or exam has its own files and questions. The one in use "
-                + "is graded on Set up.");
+        String moduleWords = "the module chosen under Course";
+        if (moduleList.getValue() != null) {
+            moduleWords = moduleList.getValue();
+        }
+        VBox pickWords = nameColumn("Assessment to edit", "The lab tests "
+                + "and exams of " + moduleWords + ", each with its own "
+                + "files and questions. The one in use is graded on Set "
+                + "up.");
         HBox pickRow = new HBox(SettingField.COLUMN_GAP, pickWords,
                 assessmentPicker);
         pickRow.setAlignment(Pos.CENTER_LEFT);
@@ -1726,10 +2130,18 @@ public class SettingsScreen extends FlowScreen {
         }
         boolean inUseNow = originalName.equalsIgnoreCase(inUse);
         if (inUseNow) {
-            pickRow.getChildren().add(Parts.pill("In use", Tone.GOOD));
+            Label used = Parts.pill("In use", Tone.GOOD);
+            Parts.tipNode(used, "Set up grades with " + originalName
+                    + ".");
+            pickRow.getChildren().add(used);
         } else {
+            Label unused = Parts.pill("Not in use", Tone.NEUTRAL);
+            Parts.tipNode(unused, "Changes here are saved to "
+                    + originalName + " but do not change what Set up "
+                    + "grades.");
+            pickRow.getChildren().add(unused);
             Button use = Parts.small("Use this one",
-                    () -> getWindow().useAssessment(originalName));
+                    () -> useFromSettings(originalName));
             Parts.tip(use, "Grade with " + originalName + " from now on.");
             pickRow.getChildren().add(use);
         }
@@ -1753,47 +2165,34 @@ public class SettingsScreen extends FlowScreen {
     // offers Undo, which saves it again.
     private void askDeleteAssessment(SavedAssessment saved) {
         String name = saved.getName();
-        getWindow().confirm("Delete " + name + "?", "Its questions and "
-                + "folders are no longer listed. Results already graded "
-                + "with it are kept in History.", "Delete assessment",
+        getWindow().confirm("Delete " + name + "?", "Its questions, "
+                + "folders, score sheets and the files chosen for it on Set "
+                + "up are cleared. Results already graded with it are kept "
+                + "in History.", "Delete assessment",
                 () -> deleteAssessment(saved));
     }
 
-    // Deletes a saved assessment, then offers Undo.
+    // Deletes a saved assessment, with the files chosen for it on Set up,
+    // then offers Undo, which puts it back as it was and shows it again.
     private void deleteAssessment(SavedAssessment saved) {
         String name = saved.getName();
-        SavedAssessment copy = saved.copy();
-        ActionResult result = getBackend().deleteAssessment(name);
-        if (!result.isDone()) {
-            getWindow().notify(result.getMessage());
-            return;
+        boolean deleted = getWindow().deleteAssessment(name,
+                () -> showAssessment(name));
+        if (deleted) {
+            showAssessment(null);
         }
-        showAssessment(null);
-        Supplier<ActionResult> restore = ActivityUndo.record(
-                getBackend(), ActivityUndo.ASSESSMENT_DELETED, name,
-                () -> getBackend().saveAssessment(copy, null));
-        getWindow().notify("Deleted " + name + ".", "Undo",
-                () -> undoAssessmentDeleted(restore, name));
     }
 
-    // The Undo of a deleted assessment: it is saved and shown again.
-    private void undoAssessmentDeleted(Supplier<ActionResult> restore,
-            String name) {
-        notifyIfFailed(restore.get());
-        showAssessment(name);
-    }
-
-    // Lists the saved assessments again, such as after one was added on
-    // Home. The one open stays open with its edits; if it is gone, the
-    // one in use opens.
+    // Lists the chosen module's assessments again, such as after one was
+    // added on Home. The one open stays open with its edits; if it is
+    // gone, or none was open, the module's own one opens.
     private void refreshAssessmentPicker() {
         String open = assessmentPicker.getValue();
-        List<String> names = new ArrayList<>();
-        for (SavedAssessment saved : getBackend().listAssessments()) {
-            names.add(saved.getName());
-        }
-        boolean openGone = open != null && !open.equals(NEW_ASSESSMENT)
-                && !names.contains(open);
+        List<String> names = namesOf(moduleAssessments(
+                moduleList.getValue()));
+        boolean creating = NEW_ASSESSMENT.equals(open);
+        boolean openGone = open == null
+                || (!creating && !names.contains(open));
         if (openGone) {
             showAssessment(null);
             return;
@@ -1888,6 +2287,7 @@ public class SettingsScreen extends FlowScreen {
 
     // Updates the count of changes and the Save and Discard buttons.
     private void refreshBar() {
+        getWindow().refreshSettingsMark();
         if (!isOnScreen() || !getBackend().supports(Capability.SETTINGS)) {
             return;
         }
@@ -1951,7 +2351,8 @@ public class SettingsScreen extends FlowScreen {
     }
 
     // Saves every changed setting together, in the order they are shown.
-    private void save() {
+    // Returns whether they were saved.
+    private boolean save() {
         List<String> keys = new ArrayList<>();
         Map<String, String> changes = new HashMap<>();
         for (SettingField field : fields) {
@@ -1959,7 +2360,7 @@ public class SettingsScreen extends FlowScreen {
                 if (!field.isValid()) {
                     getWindow().notify("Fix the settings marked in red "
                             + "first.");
-                    return;
+                    return false;
                 }
                 if (!changes.containsKey(field.getKey())) {
                     keys.add(field.getKey());
@@ -1968,7 +2369,7 @@ public class SettingsScreen extends FlowScreen {
             }
         }
         if (changes.isEmpty()) {
-            return;
+            return true;
         }
         ActionResult result = getBackend().saveSettings(keys, changes);
         getWindow().notify(result.getMessage());
@@ -1980,5 +2381,6 @@ public class SettingsScreen extends FlowScreen {
             }
         }
         refreshBar();
+        return result.isDone();
     }
 }

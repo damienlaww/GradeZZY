@@ -565,7 +565,10 @@ public class StatisticsScreen extends FlowScreen {
         }
 
         String text = moduleCode + DOT + sectionCode + DOT + shownName;
-        if (run != null && run.getStartedAt() != null) {
+        if (sectionCode == null) {
+            // A module with no section has no section or run to name
+            text = moduleCode + DOT + "no sections yet";
+        } else if (run != null && run.getStartedAt() != null) {
             text += DOT + "graded " + when(run);
         } else if (run == null) {
             text += DOT + "not graded yet";

@@ -59,7 +59,8 @@ final class SubmissionTables {
     // Saves one test case of a question result
     private static final String INSERT_TEST_CASE = "INSERT INTO "
             + "test_case_results (run_id, username, question_id, position, "
-            + "test_number, passed, detail) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            + "test_number, passed, detail, case_name) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
     // Saves one anomaly of a submission
     private static final String INSERT_ANOMALY = "INSERT INTO anomalies "
@@ -98,7 +99,7 @@ final class SubmissionTables {
 
     // Lists the test cases of a run
     private static final String SELECT_TEST_CASES = "SELECT username, "
-            + "question_id, test_number, passed, detail "
+            + "question_id, test_number, passed, detail, case_name "
             + "FROM test_case_results WHERE run_id = ? "
             + "ORDER BY username, question_id, position";
 
@@ -331,6 +332,7 @@ final class SubmissionTables {
             testStatement.setInt(5, testCase.getTestNumber());
             testStatement.setBoolean(6, testCase.isPassed());
             testStatement.setString(7, testCase.getDetail());
+            testStatement.setString(8, testCase.getName());
             testStatement.executeUpdate();
         }
     }
@@ -504,7 +506,8 @@ final class SubmissionTables {
                     result.addTestCaseResult(new TestCaseResult(
                             rows.getInt("test_number"),
                             rows.getBoolean("passed"),
-                            rows.getString("detail")));
+                            rows.getString("detail"),
+                            rows.getString(SqliteSchema.CASE_NAME_COLUMN)));
                 }
             }
         } finally {

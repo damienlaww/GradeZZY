@@ -471,7 +471,8 @@ public class CompareView {
         ColumnConstraints first = new ColumnConstraints();
         first.setPercentWidth(SECTION_PERCENT);
         table.getColumnConstraints().add(first);
-        for (int index = 1; index < HEADINGS.length; index++) {
+        for (int index = FIRST_FIGURE_COLUMN; index < HEADINGS.length;
+                index++) {
             ColumnConstraints column = new ColumnConstraints();
             column.setPercentWidth(FIGURE_PERCENT);
             table.getColumnConstraints().add(column);

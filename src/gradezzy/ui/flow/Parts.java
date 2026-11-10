@@ -31,9 +31,10 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
-import javafx.scene.shape.SVGPath;
 import javafx.stage.Popup;
 import javafx.util.Duration;
+
+import org.kordamp.ikonli.javafx.FontIcon;
 
 /**
  * Factory methods for the shared pieces of the guided window.
@@ -42,62 +43,44 @@ import javafx.util.Duration;
  */
 public final class Parts {
 
-    /** Upload arrow. */
-    public static final String UPLOAD = "M12 15V4M7 9l5-5 5 5"
-            + "M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4";
+    /** An arrow up out of a tray: upload files. */
+    public static final String UPLOAD = "fas-upload";
 
-    /** Tick. */
-    public static final String CHECK = "M5 12.5l4.5 4.5L19 7.5";
+    /** A tick: done or passed. */
+    public static final String CHECK = "fas-check";
 
-    /** Arrow pointing right. */
-    public static final String ARROW = "M5 12h14M13 6l6 6-6 6";
+    /** An arrow pointing right. */
+    public static final String ARROW = "fas-arrow-right";
 
-    /** Clock, for History. */
-    public static final String CLOCK = "M12 3a9 9 0 1 0 0.01 0Z"
-            + "M12 7v5l3 2";
+    /** A clock, for History. */
+    public static final String CLOCK = "far-clock";
 
-    /** Gear, for Settings. */
-    public static final String GEAR = "M19.03 10.43L21.43 10.81"
-            + "L21.43 13.19L19.03 13.57L18.08 15.86L19.51 17.82"
-            + "L17.82 19.51L15.86 18.08L13.57 19.03L13.19 21.43"
-            + "L10.81 21.43L10.43 19.03L8.14 18.08L6.18 19.51"
-            + "L4.49 17.82L5.92 15.86L4.97 13.57L2.57 13.19"
-            + "L2.57 10.81L4.97 10.43L5.92 8.14L4.49 6.18"
-            + "L6.18 4.49L8.14 5.92L10.43 4.97L10.81 2.57"
-            + "L13.19 2.57L13.57 4.97L15.86 5.92L17.82 4.49"
-            + "L19.51 6.18L18.08 8.14Z"
-            + "M12 9a3 3 0 1 0 0.01 0Z";
+    /** A gear, for Settings. */
+    public static final String GEAR = "fas-cog";
 
-    /** Question mark in a circle, for Help. */
-    public static final String HELP = "M12 3a9 9 0 1 0 0.01 0Z"
-            + "M9.5 9.5a2.5 2.5 0 0 1 4.9 0.6c0 1.7-2.4 2.2-2.4 3.4"
-            + "M12 17h0.01";
+    /** A question mark in a circle, for Help. */
+    public static final String HELP = "far-question-circle";
 
-    /** A file. */
-    public static final String FILE = "M14 3H7a1 1 0 0 0-1 1v16"
-            + "a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7zM14 3v4h4";
+    /** A sheet of paper: a file. */
+    public static final String FILE = "far-file";
 
     /** A folder. */
-    public static final String FOLDER = "M3 7a1 1 0 0 1 1-1h5l2 2h9"
-            + "a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z";
+    public static final String FOLDER = "far-folder";
 
-    /** Code brackets. */
-    public static final String CODE = "M8 8l-4 4 4 4M16 8l4 4-4 4";
+    /** Angle brackets: code. */
+    public static final String CODE = "fas-code";
 
-    /** A cross, for closing. */
-    public static final String CLOSE = "M6 6l12 12M18 6L6 18";
+    /** A cross: close. */
+    public static final String CLOSE = "fas-times";
 
-    /** Magnifying glass. */
-    public static final String SEARCH = "M11 4.5a6.5 6.5 0 1 0 0.01 0Z"
-            + "M20 20l-4.2-4.2";
+    /** A magnifying glass: search. */
+    public static final String SEARCH = "fas-search";
 
-    /** A tick in a box, for the Grading tab. */
-    public static final String MARKING = "M9 11l3 3L21 4"
-            + "M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11";
+    /** A ticked box, for Grading. */
+    public static final String MARKING = "far-check-square";
 
-    /** Axes with a curve, for the Statistics tab. */
-    public static final String CHART = "M4 4v16h16"
-            + "M7 16c2-5 3.5-8 5.5-8s3 4 6.5 8";
+    /** A line chart, for Statistics. */
+    public static final String CHART = "fas-chart-line";
 
     /** The usual gap between parts of a row or card. */
     public static final double GAP = 12.0;
@@ -121,24 +104,50 @@ public final class Parts {
     public static final double FIGURE_UNIT_GAP = 4.0;
 
     /** A house: the Home tab. */
-    public static final String HOME = "M4 11l8-7 8 7M6 9.5V20h4.5v-5.5h3V20"
-            + "H18V9.5";
+    public static final String HOME = "fas-home";
 
     /** A chevron pointing right: this row opens. */
-    public static final String CHEVRON = "M9 6l6 6-6 6";
+    public static final String CHEVRON = "fas-chevron-right";
+
+    /** A triangle pointing right: run something. */
+    public static final String PLAY = "fas-play";
 
     /** A plus sign: add something. */
-    public static final String PLUS = "M12 5v14M5 12h14";
+    public static final String PLUS = "fas-plus";
 
-    /** A pencil: rename or edit something. */
-    public static final String PENCIL = "M4 20h4L19 9a2.1 2.1 0 0 0-4-4"
-            + "L4 16zM13.5 6.5l4 4";
+    /** A pen: rename or edit something. */
+    public static final String PENCIL = "fas-pen";
+
+    /** Two people: a group of students. */
+    public static final String PEOPLE = "fas-user-friends";
+
+    /** Two links of a chain: students matched to each other. */
+    public static final String LINK = "fas-link";
+
+    /** A flag: something kept flagged for a closer look. */
+    public static final String FLAG = "far-flag";
+
+    /** An at sign: an Email ID. */
+    public static final String EMAIL = "fas-at";
+
+    /** A triangle with an exclamation mark: a warning. */
+    public static final String WARNING = "fas-exclamation-triangle";
+
+    /** Two sheets, one on the other: an identical copy. */
+    public static final String COPY = "far-copy";
+
+    /** Two arrows that point opposite ways: swap two things. */
+    public static final String SWAP = "fas-exchange-alt";
+
+    /** An archive box: a kept backup file. */
+    public static final String ARCHIVE = "fas-archive";
 
     /** The widest a paragraph in a sheet may be. */
     public static final double TEXT_WIDTH = 420.0;
 
-    // The size of the square the icon paths are drawn in
-    private static final double ICON_BOX = 24.0;
+    // A Font Awesome glyph fills its whole box, so it is drawn at this
+    // share of the size asked for, to match the space around other icons
+    private static final double GLYPH_SCALE = 0.8;
 
     // The radius of the dot inside a status pill
     private static final double DOT_RADIUS = 3.5;
@@ -194,10 +203,12 @@ public final class Parts {
     // The folders of an absolute path, such as "/Users/me/Test Data/". A
     // path only starts at the start of the text or after a space, "=", a
     // quote or "(", so the slashes inside "workspace/output/x.csv" are
-    // not taken as the start of a path.
+    // not taken as the start of a path. A folder never holds a comma,
+    // ";" or "=", so a path stops before the next item of a list such as
+    // "a=/x/T, b=/y/S".
     private static final String ABSOLUTE_FOLDERS = "(?<![^\\s=\"'(])"
             + "(?:[A-Za-z]:)?[\\\\/]"
-            + "(?:(?:(?!\\.[A-Za-z0-9]{1,5}\\s)[^\\\\/])+[\\\\/])+";
+            + "(?:(?:(?!\\.[A-Za-z0-9]{1,5}\\s)[^\\\\/,;=])+[\\\\/])+";
 
     // Not used: every method is static.
     private Parts() {
@@ -415,20 +426,24 @@ public final class Parts {
     }
 
     /**
-     * Returns a line icon drawn from a path in a 24 by 24 box.
+     * Returns a Font Awesome icon, coloured by the style sheet's
+     * -fx-icon-color for .icon.
      *
-     * @param path one of the path constants of this class
-     * @param size the width and height in pixels
+     * @param code one of the icon constants of this class, such as
+     *        fas-check
+     * @param size the height in pixels
      * @return the icon
      */
-    public static Node icon(String path, double size) {
-        SVGPath shape = new SVGPath();
-        shape.setContent(path);
-        shape.getStyleClass().add("icon");
-        double scale = size / ICON_BOX;
-        shape.setScaleX(scale);
-        shape.setScaleY(scale);
-        Group group = new Group(shape);
+    public static Node icon(String code, double size) {
+        FontIcon glyph = new FontIcon(code);
+        // Added to the icon's own style, which holds its font, as the
+        // theme's -fx-icon-size would win over setIconSize
+        long pixels = Math.round(size * GLYPH_SCALE);
+        glyph.setIconSize((int) pixels);
+        glyph.setStyle(glyph.getStyle() + "; -fx-icon-size: " + pixels
+                + "px;");
+        glyph.getStyleClass().add("icon");
+        Group group = new Group(glyph);
         group.getStyleClass().add("icon-box");
         return group;
     }
@@ -624,8 +639,9 @@ public final class Parts {
      * text or after a space, "=", a quote or "(". A folder part runs from
      * a slash to the next slash, so names with spaces are cut too; it
      * stops at a file name such as "x.csv " so two paths on one line stay
-     * apart. Relative paths such as Q3/Q3.java or workspace/output/x.csv
-     * are kept whole.
+     * apart, and at a comma, ";" or "=", so a list of settings keeps
+     * every name. Relative paths such as Q3/Q3.java or
+     * workspace/output/x.csv are kept whole.
      *
      * @param text the line
      * @return the line with shorter paths

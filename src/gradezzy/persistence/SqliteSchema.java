@@ -31,6 +31,7 @@ final class SqliteSchema {
     static final String GRADING_SETTINGS_COLUMN = "grading_settings";
     static final String DECISION_COLUMN = "decision";
     static final String REJECTED_FIXES_COLUMN = "rejected_fixes";
+    static final String CASE_NAME_COLUMN = "case_name";
 
     // There are no foreign keys: PersistStage may save a submission before
     // its run row exists, and the run row arrives with saveRun.
@@ -139,6 +140,8 @@ final class SqliteSchema {
             "PRAGMA table_info(anomalies)";
     private static final String LIST_SUBMISSION_COLUMNS =
             "PRAGMA table_info(submissions)";
+    private static final String LIST_TEST_CASE_COLUMNS =
+            "PRAGMA table_info(test_case_results)";
 
     // Add the columns that a database made before them lacks: the score
     // sheet of a run
@@ -164,6 +167,10 @@ final class SqliteSchema {
     // The fixes a student's grading skips
     private static final String ADD_REJECTED_FIXES_COLUMN = "ALTER TABLE "
             + "submissions ADD COLUMN rejected_fixes TEXT";
+
+    // What the tester's header calls a test case
+    private static final String ADD_CASE_NAME_COLUMN = "ALTER TABLE "
+            + "test_case_results ADD COLUMN case_name TEXT";
 
     // How long a write waits for another GradeZZY to finish its own
     // write before it fails, in milliseconds
@@ -209,6 +216,8 @@ final class SqliteSchema {
                     DECISION_COLUMN, ADD_DECISION_COLUMN);
             addColumnIfMissing(statement, LIST_SUBMISSION_COLUMNS,
                     REJECTED_FIXES_COLUMN, ADD_REJECTED_FIXES_COLUMN);
+            addColumnIfMissing(statement, LIST_TEST_CASE_COLUMNS,
+                    CASE_NAME_COLUMN, ADD_CASE_NAME_COLUMN);
         } finally {
             JdbcSupport.closeStatement(statement);
         }

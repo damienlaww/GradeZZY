@@ -1,9 +1,11 @@
 /*
  * File: AuditLogExporter.java
  *
- * Purpose: Writes the audit log to a file.
+ * Purpose: Writes the audit log of one run to a file.
  *
- * Where it fits: Lets the instructor keep a record of every manual decision.
+ * Where it fits: Lets the instructor keep a record of every manual decision
+ * made on a run, beside the run's score sheet. RunAuditFilter decides
+ * which lines of the shared audit log belong to the run.
  */
 package gradezzy.report;
 
@@ -53,7 +55,8 @@ public class AuditLogExporter implements Exporter {
     private final ResultRepository repository;
 
     /**
-     * Creates a new audit log exporter that writes the given entries.
+     * Creates a new audit log exporter that writes the given entries,
+     * all of them, whatever run is exported.
      *
      * @param entries the entries to write
      */
@@ -64,8 +67,8 @@ public class AuditLogExporter implements Exporter {
 
     /**
      * Creates a new audit log exporter that reads the saved audit log
-     * each time it exports, so the file holds every entry up to that
-     * moment. This is the one ApplicationContext registers.
+     * each time it exports, so the file holds every entry of the run up
+     * to that moment. This is the one ApplicationContext registers.
      *
      * @param repository where the audit log is saved
      */
@@ -95,10 +98,13 @@ public class AuditLogExporter implements Exporter {
     }
 
     /**
-     * Writes the audit log to a file.
+     * Writes the audit log of a run to a file.
      *
-     * <p>One row per entry, in the order given. The audit log covers every
-     * run, so the grading run is not used and may be null.
+     * <p>One row per entry, oldest first. Read from the saved log, only
+     * the entries that belong to the run are written, by the rules of
+     * RunAuditFilter; a line about no run, such as a change to the
+     * settings, is left out. The run may be null only when the entries
+     * were given to the constructor.
      *
      * @param gradingRun the grading run
      * @param outputFile the output file
@@ -113,7 +119,7 @@ public class AuditLogExporter implements Exporter {
         }
 
         // Every row, the header included, ends with LINE_ENDING
-        List<AuditEntry> entriesToWrite = chooseEntries();
+        List<AuditEntry> entriesToWrite = chooseEntries(gradingRun);
         List<String> lines = new ArrayList<>();
         lines.add(TextUtils.joinCsvLine(HEADER));
         if (entriesToWrite != null) {
@@ -132,18 +138,39 @@ public class AuditLogExporter implements Exporter {
         }
     }
 
-    // The entries given to the constructor, or else the audit log as it
-    // is saved now
-    private List<AuditEntry> chooseEntries() throws ExportException {
+    // The entries given to the constructor, or else the lines of the
+    // audit log as it is saved now that belong to the run
+    private List<AuditEntry> chooseEntries(GradingRun gradingRun)
+            throws ExportException {
         if (repository == null) {
             return entries;
         }
+        if (gradingRun == null) {
+            throw new ExportException("Nothing to export: the grading run "
+                    + "is missing.");
+        }
 
+        List<AuditEntry> saved = null;
         try {
-            return repository.listAudit();
+            saved = repository.listAudit();
         } catch (PersistenceException exception) {
             throw new ExportException("The audit log could not be read: "
                     + exception.getMessage(), exception);
+        }
+        RunAuditFilter filter = new RunAuditFilter(gradingRun,
+                listSavedRuns());
+        return filter.keep(saved);
+    }
+
+    // Every saved run without its submissions, so the filter knows when
+    // the next run of the section started. If they cannot be read, the
+    // filter knows only the exported run, so it may keep a line of a
+    // later run of the same section that names a student or the section.
+    private List<GradingRun> listSavedRuns() {
+        try {
+            return repository.listRunHeaders();
+        } catch (PersistenceException exception) {
+            return new ArrayList<>();
         }
     }
 

@@ -25,6 +25,11 @@ public class QuestionStrength {
     // Follows a share printed as a percentage
     private static final String PERCENT_SIGN = "%";
 
+    // Comes between the names in a list, and between the two parts of
+    // the summary of every question
+    private static final String LIST_SEPARATOR = ", ";
+    private static final String SUMMARY_SEPARATOR = "; ";
+
     // The question, such as Q2b
     private final String questionId;
 
@@ -33,6 +38,13 @@ public class QuestionStrength {
 
     // Why the question could not be checked, or "" when it was
     private String problem = "";
+
+    // True when the model answer did not compile with its tester
+    private boolean modelNotCompiling = false;
+
+    // The names javac could not find in the model answer, such as
+    // InvalidOrderException
+    private final List<String> missingNames = new ArrayList<>();
 
     /**
      * Creates the result of one question, with no copies tried yet.
@@ -43,6 +55,129 @@ public class QuestionStrength {
      */
     public QuestionStrength(String questionId) {
         this.questionId = questionId;
+    }
+
+    /**
+     * Returns the question, such as Q2b.
+     *
+     * @return the question's id
+     */
+    public String getQuestionId() {
+        return questionId;
+    }
+
+    /**
+     * Notes that the model answer does not compile with its tester, and
+     * the names javac could not find in it.
+     *
+     * @param missing the names not found, such as InvalidOrderException;
+     *        may be empty
+     */
+    public void markModelNotCompiling(List<String> missing) {
+        modelNotCompiling = true;
+        missingNames.addAll(missing);
+    }
+
+    /**
+     * Says whether the model answer does not compile with its tester.
+     *
+     * @return true when it does not compile
+     */
+    public boolean isModelNotCompiling() {
+        return modelNotCompiling;
+    }
+
+    /**
+     * Returns the names javac could not find in the model answer.
+     *
+     * @return the names, possibly none
+     */
+    public List<String> getMissingNames() {
+        return missingNames;
+    }
+
+    /**
+     * Sums up every question's result for the Set up row, such as "2 of
+     * 6 testers could not be checked: the model answer for Q2b, Q3 does
+     * not compile (missing InvalidOrderException, Member); 1 of 4
+     * testers miss some broken copies of the model answer".
+     *
+     * @param results the result of each question
+     * @return the words, with no full stop
+     */
+    public static String summariseAll(List<QuestionStrength> results) {
+        int weak = 0;
+        int checked = 0;
+        List<String> notCompiling = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        for (QuestionStrength result : results) {
+            if (result.countTried() > 0) {
+                checked++;
+            }
+            if (result.countSurvived() > 0) {
+                weak++;
+            }
+            if (result.isModelNotCompiling()) {
+                notCompiling.add(result.getQuestionId());
+                addNew(missing, result.getMissingNames());
+            }
+        }
+        int unchecked = results.size() - checked;
+        if (checked == 0 && notCompiling.isEmpty()) {
+            return "no tester could be checked";
+        }
+        String text = "";
+        if (unchecked > 0) {
+            text = describeUnchecked(unchecked, results.size(),
+                    notCompiling, missing);
+        }
+        if (checked == 0) {
+            return text;
+        }
+        if (!text.isEmpty()) {
+            text = text + SUMMARY_SEPARATOR;
+        }
+        if (weak == 0) {
+            return text + "every tester checked caught every broken copy";
+        }
+        return text + weak + " of " + countTesters(checked)
+                + " miss some broken copies of the model answer";
+    }
+
+    // Says how many testers could not be checked, and which model
+    // answers do not compile and why.
+    private static String describeUnchecked(int unchecked, int total,
+            List<String> notCompiling, List<String> missing) {
+        String text = unchecked + " of " + countTesters(total)
+                + " could not be checked";
+        if (notCompiling.isEmpty()) {
+            return text;
+        }
+        text = text + ": the model answer for "
+                + String.join(LIST_SEPARATOR, notCompiling)
+                + " does not compile";
+        if (!missing.isEmpty()) {
+            text = text + " (missing " + String.join(LIST_SEPARATOR,
+                    missing) + ")";
+        }
+        return text;
+    }
+
+    // Says a number of testers, such as "1 tester" or "6 testers".
+    private static String countTesters(int count) {
+        if (count == 1) {
+            return "1 tester";
+        }
+        return count + " testers";
+    }
+
+    // Adds the names not in a list yet to it.
+    private static void addNew(List<String> list, List<String> names) {
+        for (String name : names) {
+            if (!list.contains(name)) {
+                list.add(name);
+            }
+        }
     }
 
     /**

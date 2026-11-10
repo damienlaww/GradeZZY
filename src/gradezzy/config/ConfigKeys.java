@@ -51,7 +51,10 @@ public final class ConfigKeys {
     public static final String TESTERS_DIR = "paths.testers.dir";
 
     /**
-     * The provided score sheet CSV used as roster and export template.
+     * The provided score sheet CSV used as roster and export template,
+     * or blank when none is chosen yet. Like SCORE_SHEET_BY_SECTION, it
+     * belongs to the assessment in use and is saved with it, so a new
+     * assessment starts with none.
      */
     public static final String SCORE_SHEET_FILE = "paths.score.sheet.file";
 

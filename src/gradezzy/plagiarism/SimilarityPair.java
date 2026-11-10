@@ -27,6 +27,12 @@ public class SimilarityPair {
     // The similarity, from 0 to 1
     private final double similarity;
 
+    // True when both files have the same header and the same code
+    private final boolean identical;
+
+    // True when both files give the same Email ID in their header
+    private final boolean sameEmail;
+
     /**
      * Creates a new similarity pair.
      *
@@ -37,10 +43,48 @@ public class SimilarityPair {
      */
     public SimilarityPair(String firstUsername, String secondUsername,
             String questionId, double similarity) {
+        this(firstUsername, secondUsername, questionId, similarity, false,
+                false);
+    }
+
+    /**
+     * Creates a new similarity pair that may be an identical copy.
+     *
+     * @param firstUsername the first student's username
+     * @param secondUsername the second student's username
+     * @param questionId the question the similar code is in
+     * @param similarity the similarity, from 0 to 1
+     * @param identical true when both files have the same Name and Email
+     *        ID in their header and the same code
+     */
+    public SimilarityPair(String firstUsername, String secondUsername,
+            String questionId, double similarity, boolean identical) {
+        this(firstUsername, secondUsername, questionId, similarity,
+                identical, identical);
+    }
+
+    /**
+     * Creates a new similarity pair that may share an Email ID or be an
+     * identical copy.
+     *
+     * @param firstUsername the first student's username
+     * @param secondUsername the second student's username
+     * @param questionId the question the similar code is in
+     * @param similarity the similarity, from 0 to 1
+     * @param identical true when both files have the same Name and Email
+     *        ID in their header and the same code
+     * @param sameEmail true when both files give the same Email ID in
+     *        their header; always true for an identical copy
+     */
+    public SimilarityPair(String firstUsername, String secondUsername,
+            String questionId, double similarity, boolean identical,
+            boolean sameEmail) {
         this.firstUsername = firstUsername;
         this.secondUsername = secondUsername;
         this.questionId = questionId;
         this.similarity = similarity;
+        this.identical = identical;
+        this.sameEmail = sameEmail || identical;
     }
 
     /**
@@ -77,5 +121,26 @@ public class SimilarityPair {
      */
     public double getSimilarity() {
         return similarity;
+    }
+
+    /**
+     * Says whether both files have the same Name and Email ID in their
+     * header and the same code, so one was handed in as the other.
+     *
+     * @return true for an identical copy
+     */
+    public boolean isIdentical() {
+        return identical;
+    }
+
+    /**
+     * Says whether both files give the same Email ID in their header, so
+     * one may be handed in as the other's work. An identical copy always
+     * does.
+     *
+     * @return true when the Email IDs are the same
+     */
+    public boolean isSameEmail() {
+        return sameEmail;
     }
 }

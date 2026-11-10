@@ -355,8 +355,7 @@ public class ImportBatch {
         int invalid = getUnusableSubmissions().size();
         if (invalid == 0) {
             return "";
-        }
-        if (invalid == 1) {
+        } else if (invalid == 1) {
             return "1 chosen file cannot be used and is skipped.";
         }
         return invalid + " chosen files cannot be used and are skipped.";

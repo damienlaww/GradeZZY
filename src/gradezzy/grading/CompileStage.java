@@ -71,7 +71,8 @@ public class CompileStage implements GradingStage {
 
     // What the instructor can do about a compile error
     private static final String COMPILE_ERROR_ACTION =
-            "Read the compiler output on the Logs tab.";
+            "Press Open code: it shows the compiler messages for the "
+            + "question.";
 
     // What the instructor can do about a tester that does not compile
     private static final String BROKEN_TESTER_ACTION =
@@ -91,12 +92,30 @@ public class CompileStage implements GradingStage {
     // Joins a class and its member type in a class file name, as Q1a$Node
     private static final String MEMBER_SEPARATOR = "$";
 
+    // Packages whose classes a tester may use without importing them one
+    // by one, so a student's class of the same name could replace one
+    private static final String[] JAVA_PACKAGES = {"java.lang.",
+        "java.util.", "java.io.", "java.nio.file.", "java.util.function.",
+        "java.util.stream."};
+
     // What the instructor can do about a type that hides a tester's type
     private static final String HIDDEN_TYPE_ACTION = "Read the code on Review: "
             + "the tester may have checked the student's class instead.";
 
     // Start of the name of the temporary folder for the tester check
     private static final String CHECK_FOLDER_PREFIX = "gradezzy-tester-check-";
+
+    // Starts the javac line that names what it could not find
+    private static final String SYMBOL_LABEL = "symbol:";
+
+    // Starts that name when it is a class, as in "class Order"
+    private static final String CLASS_SYMBOL = "class ";
+
+    // Separates the class files named in a problem
+    private static final String NAME_SEPARATOR = ", ";
+
+    // Comes before the last class file named in a problem
+    private static final String LAST_NAME_SEPARATOR = " and ";
 
     // Stands for "the tester compiled, or could not be checked"
     private static final String NO_TESTER_ERROR = "";
@@ -229,6 +248,7 @@ public class CompileStage implements GradingStage {
         }
 
         TesterInstaller installer = new TesterInstaller(config);
+        List<String> missingTypes = new ArrayList<>();
         for (Question question : assessment.getQuestions()) {
             TesterFile tester = TesterFile.findFor(testers,
                     question.getId());
@@ -237,10 +257,78 @@ public class CompileStage implements GradingStage {
                         + " has no tester, so it will get no marks.");
             } else {
                 addDataFileProblems(installer, tester, problems);
-                addCompileProblem(config, question, tester, problems);
+                addCompileProblem(config, question, tester, problems,
+                        missingTypes);
             }
         }
+        if (!missingTypes.isEmpty()) {
+            problems.add(describeMissingTypes(missingTypes));
+        }
         return problems;
+    }
+
+    /**
+     * Says which classes the testers and starter code use that neither
+     * folder has, and how to fix it.
+     *
+     * @param missingTypes the names of the classes, such as Order
+     * @return one sentence for the tester row on Set up
+     */
+    private String describeMissingTypes(List<String> missingTypes) {
+        String classFiles = "";
+        int last = missingTypes.size() - 1;
+        for (int i = 0; i < missingTypes.size(); i++) {
+            if (i > 0 && i == last) {
+                classFiles = classFiles + LAST_NAME_SEPARATOR;
+            } else if (i > 0) {
+                classFiles = classFiles + NAME_SEPARATOR;
+            }
+            classFiles = classFiles + missingTypes.get(i) + CLASS_EXTENSION;
+        }
+        // javac stops before it reads every method once a class is
+        // missing, so the list may not be complete
+        return "The starter code and testers use classes that neither the "
+                + "starter nor the tester folder has, such as " + classFiles
+                + ". Students who did not hand them in will get a compile "
+                + "error. In Settings, choose a starter folder that has "
+                + "them and list them under Provided class files.";
+    }
+
+    /**
+     * Adds each class javac could not find, as "symbol: class Order" in
+     * its output, to the list once.
+     *
+     * @param compilerOutput what javac printed
+     * @param missingTypes the list to add the names to
+     */
+    private void addMissingTypes(String compilerOutput,
+            List<String> missingTypes) {
+        for (String line : compilerOutput.split(LINE_BREAK)) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith(SYMBOL_LABEL)) {
+                String symbol = trimmed.substring(SYMBOL_LABEL.length())
+                        .trim();
+                addMissingType(symbol, missingTypes);
+            }
+        }
+    }
+
+    /**
+     * Adds the class a javac symbol names, such as "class Order", once.
+     * A missing method or variable is not a missing class.
+     *
+     * @param symbol the text after "symbol:"
+     * @param missingTypes the list to add the name to
+     */
+    private void addMissingType(String symbol, List<String> missingTypes) {
+        if (symbol.startsWith(CLASS_SYMBOL)) {
+            String name = symbol.substring(CLASS_SYMBOL.length()).trim();
+            boolean newName = !name.isEmpty()
+                    && !missingTypes.contains(name);
+            if (newName) {
+                missingTypes.add(name);
+            }
+        }
     }
 
     // Adds a sentence for each data file the tester reads but its folder
@@ -262,11 +350,13 @@ public class CompileStage implements GradingStage {
         }
     }
 
-    // Adds a sentence when the tester does not compile with the starter.
+    // Adds a sentence when the tester does not compile with the starter,
+    // and the classes javac could not find to missingTypes.
     private void addCompileProblem(AppConfig config, Question question,
-            TesterFile tester, List<String> problems)
-            throws GradingException {
-        String testerError = compileWithStarter(config, question, tester);
+            TesterFile tester, List<String> problems,
+            List<String> missingTypes) throws GradingException {
+        String testerError = compileWithStarter(config, question, tester,
+                missingTypes);
 
         if (!testerError.isEmpty()) {
             problems.add(tester.getClassName() + JAVA_EXTENSION
@@ -291,7 +381,7 @@ public class CompileStage implements GradingStage {
         String className = tester.getClassName();
         if (!testerErrors.containsKey(className)) {
             testerErrors.put(className,
-                    compileWithStarter(config, question, tester));
+                    compileWithStarter(config, question, tester, null));
         }
         return testerErrors.get(className);
     }
@@ -304,12 +394,15 @@ public class CompileStage implements GradingStage {
      * @param config the application settings
      * @param question the question
      * @param tester the tester of the question
+     * @param missingTypes the list the classes javac could not find are
+     *        added to, or null when they are not wanted
      * @return the first error line, or NO_TESTER_ERROR if it compiled or
      *         could not be checked
      * @throws GradingException if javac cannot be run
      */
     private String compileWithStarter(AppConfig config, Question question,
-            TesterFile tester) throws GradingException {
+            TesterFile tester, List<String> missingTypes)
+            throws GradingException {
         Path starterFolder = findStarterFolder(config, question);
         Path starterFile = starterFolder.resolve(question.getFileName());
         if (!Files.isRegularFile(starterFile)) {
@@ -328,7 +421,8 @@ public class CompileStage implements GradingStage {
                 Files.copy(tester.getSourceFile(),
                         copy.resolve(testerSource),
                         StandardCopyOption.REPLACE_EXISTING);
-                return findTesterError(copy, question, testerSource);
+                return findTesterError(copy, question, testerSource,
+                        missingTypes);
             } finally {
                 FileUtils.deleteDirectory(checkFolder);
             }
@@ -340,11 +434,16 @@ public class CompileStage implements GradingStage {
 
     // Compiles the tester with the starter code in the copy and returns
     // its first error line, or NO_TESTER_ERROR when it compiled, javac was
-    // too slow, or the error is in the starter file.
+    // too slow, or the error is in the starter file. Adds the classes
+    // javac could not find to missingTypes, unless it is null.
     private String findTesterError(Path copy, Question question,
-            String testerSource) throws GradingException {
+            String testerSource, List<String> missingTypes)
+            throws GradingException {
         ProcessResult result = runCompiler(copy,
                 sourceFiles(question, testerSource));
+        if (missingTypes != null) {
+            addMissingTypes(result.getStandardError(), missingTypes);
+        }
         boolean compiledOrSlow = result.getExitCode() == SUCCESS_EXIT_CODE
                 || result.isTimedOut();
         if (compiledOrSlow) {
@@ -587,7 +686,78 @@ public class CompileStage implements GradingStage {
                 .contains(classFile);
         boolean inStarter = Files.exists(starterFolder.resolve(classFile))
                 || Files.exists(starterFolder.resolve(sourceFile));
-        return !provided && !inStarter;
+        return !provided && !inStarter
+                && !isUsedByStarter(starterFolder, typeName);
+    }
+
+    /**
+     * Says whether the starter code uses a class that is not part of
+     * Java, such as Order when the assessment forgot to provide
+     * Order.class and the student's copy was kept. Such a class belongs
+     * to the question, so the tester using it is no sign of cheating. A
+     * name Java already has, such as ArrayList, is never counted.
+     *
+     * @param starterFolder the starter folder of the question
+     * @param typeName the name of the class
+     * @return true if a starter file uses the name and Java does not
+     *         have it
+     */
+    private boolean isUsedByStarter(Path starterFolder, String typeName) {
+        if (isJavaType(typeName)) {
+            return false;
+        }
+        boolean used = false;
+        try {
+            List<Path> sources = new ArrayList<>();
+            if (Files.isDirectory(starterFolder)) {
+                sources = FileUtils.listFiles(starterFolder, JAVA_EXTENSION);
+            }
+            for (Path source : sources) {
+                used = used || usesName(TesterMarks.readCode(source),
+                        typeName);
+            }
+        } catch (IOException exception) {
+            // The starter could not be read, so the type is still flagged
+            used = false;
+        }
+        return used;
+    }
+
+    /**
+     * Says whether one of the packages a tester usually uses, such as
+     * java.util, has a class of this name.
+     *
+     * @param typeName the name of the class
+     * @return true for a class Java already has
+     */
+    private boolean isJavaType(String typeName) {
+        boolean found = false;
+        for (String javaPackage : JAVA_PACKAGES) {
+            found = found || hasJavaClass(javaPackage + typeName);
+        }
+        return found;
+    }
+
+    /**
+     * Says whether Java itself has a class of this full name.
+     *
+     * <p>Note on untaught Java: Class.forName looks a class up by name;
+     * the platform class loader sees only Java's own classes, never the
+     * student's.
+     *
+     * @param fullName the full name, such as java.util.ArrayList
+     * @return true if Java has the class
+     */
+    private boolean hasJavaClass(String fullName) {
+        try {
+            Class.forName(fullName, false,
+                    ClassLoader.getPlatformClassLoader());
+            return true;
+        } catch (ClassNotFoundException exception) {
+            return false;
+        } catch (LinkageError error) {
+            return true;
+        }
     }
 
     /**

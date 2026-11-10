@@ -20,6 +20,7 @@ import gradezzy.model.Anomaly;
 import gradezzy.model.AnswerGroup;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
+import gradezzy.model.BackupInfo;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
@@ -640,12 +641,15 @@ public interface DashboardBackend {
         String where = group.getQuestionId() + GROUP_WORD_SEPARATOR
                 + group.getTitle();
         String message = "Named the mistake.";
+        // The run's id lets the run's export keep only its own lines
         if (group.getLabel().isEmpty()) {
-            recordActivity(MISTAKE_NAME_REMOVED, where);
+            recordActivity(MISTAKE_NAME_REMOVED,
+                    AuditEntry.withReference(where, run.getId()));
             message = "Removed the name of the mistake.";
         } else {
             String named = where + GROUP_LABEL_SEPARATOR + group.getLabel();
-            recordActivity(MISTAKE_NAMED, named);
+            recordActivity(MISTAKE_NAMED,
+                    AuditEntry.withReference(named, run.getId()));
         }
         return ActionResult.done(message + unsavedNote(service));
     }
@@ -697,10 +701,12 @@ public interface DashboardBackend {
         String where = group.getQuestionId() + GROUP_WORD_SEPARATOR
                 + group.getTitle();
         String message = "Marked the group as checked.";
+        // The run's id lets the run's export keep only its own lines
+        String detail = AuditEntry.withReference(where, run.getId());
         if (checked) {
-            recordActivity(GROUP_CHECKED, where);
+            recordActivity(GROUP_CHECKED, detail);
         } else {
-            recordActivity(GROUP_CHECK_TAKEN_BACK, where);
+            recordActivity(GROUP_CHECK_TAKEN_BACK, detail);
             message = "The group waits for a look again.";
         }
         return ActionResult.done(message + unsavedNote(service));
@@ -812,6 +818,21 @@ public interface DashboardBackend {
      * @return what happened
      */
     ActionResult backupNow();
+
+    /**
+     * Lists the kept backup files, newest first, with the saved runs each
+     * one holds. A file that cannot be read is listed with the reason.
+     *
+     * @return the backups; empty when there are none
+     */
+    List<BackupInfo> listBackups();
+
+    /**
+     * Returns how many backups are kept before the oldest is deleted.
+     *
+     * @return the number kept, at least one
+     */
+    int getBackupKeepCount();
 
     /**
      * Restores an earlier run, after saving a snapshot of the current one.
@@ -968,13 +989,24 @@ public interface DashboardBackend {
     ActionResult useAssessment(String name);
 
     /**
-     * Deletes a saved assessment that is not in use. Results graded with
-     * it are kept.
+     * Deletes a saved assessment that is not in use, with its own score
+     * sheets, and clears the files chosen for it on Set up in every
+     * module and section. Results graded with it are kept. The caller
+     * records it in the activity log.
      *
      * @param name the assessment's name
      * @return what happened
      */
     ActionResult deleteAssessment(String name);
+
+    /**
+     * Puts back an assessment deleted since GradeZZY opened, as it was,
+     * with the files chosen for it on Set up.
+     *
+     * @param name the assessment's name
+     * @return what happened
+     */
+    ActionResult restoreAssessment(String name);
 
     // ------------------------------------------------------ similarity
 

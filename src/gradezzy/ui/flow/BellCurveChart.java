@@ -200,11 +200,11 @@ public class BellCurveChart extends Region {
         double top = margins[TOP_SIDE];
         double plotWidth = width - left - margins[RIGHT_SIDE];
         double plotHeight = height - top - margins[BOTTOM_SIDE];
-        double bottom = top + plotHeight;
-        double right = left + plotWidth;
         if (plotWidth <= 0 || plotHeight <= 0) {
             return;
         }
+        double bottom = top + plotHeight;
+        double right = left + plotWidth;
 
         double max = stats.getMaxTotal();
         boolean single = !small && max <= MOST_SINGLE_BARS

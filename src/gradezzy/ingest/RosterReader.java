@@ -57,6 +57,14 @@ public class RosterReader {
     // Ends the sentence of an error message
     private static final String SENTENCE_END = ".";
 
+    // The separator some spreadsheet programs use in place of a comma
+    private static final String SEMICOLON = ";";
+
+    // Told when the score sheet uses ; between its values
+    private static final String SEMICOLON_PROBLEM = "No OrgDefinedId "
+            + "column. The file seems to use ; between values. Save it "
+            + "again as CSV with commas.";
+
     /**
      * Returned by readDenominator when the score sheet gives no single
      * denominator.
@@ -87,6 +95,15 @@ public class RosterReader {
      */
     public List<Student> readRoster(
             Path scoreSheetFile) throws IngestException {
+        // A new assessment has no score sheet until one is chosen
+        boolean noSheet = scoreSheetFile == null
+                || scoreSheetFile.toString().trim().isEmpty();
+        if (noSheet) {
+            throw new IngestException("No score sheet is chosen for this "
+                    + "section. Choose the CSV file exported from eLearn on "
+                    + "Set up, or in config.properties ("
+                    + ConfigKeys.SCORE_SHEET_FILE + ") for the console.");
+        }
         try {
             List<String> records = readRecords(scoreSheetFile);
             if (records.isEmpty()) {
@@ -130,6 +147,24 @@ public class RosterReader {
         } catch (IllegalArgumentException exception) {
             throw rosterFailure(scoreSheetFile, exception);
         }
+    }
+
+    /**
+     * Reads the score sheet as grading would, and says in plain words why
+     * it cannot be used, so Set up can stop grading from starting with a
+     * score sheet read wrongly. A sheet that uses ; between its values
+     * gets its own reason.
+     *
+     * @param scoreSheetFile the score sheet file
+     * @return why the score sheet cannot be used, or "" when it can
+     */
+    public String findProblem(Path scoreSheetFile) {
+        try {
+            readRoster(scoreSheetFile);
+        } catch (IngestException exception) {
+            return describeProblem(scoreSheetFile, exception);
+        }
+        return "";
     }
 
     /**
@@ -247,6 +282,42 @@ public class RosterReader {
         return first;
     }
 
+    // The plain reason a score sheet cannot be used: the semicolon
+    // reason, else the reason readRoster found, without the file's path
+    private String describeProblem(Path scoreSheetFile,
+            IngestException exception) {
+        if (usesSemicolons(scoreSheetFile)) {
+            return SEMICOLON_PROBLEM;
+        }
+        Throwable cause = exception.getCause();
+        if (cause instanceof IllegalArgumentException) {
+            String reason = String.valueOf(cause.getMessage()).trim();
+            if (!reason.endsWith(SENTENCE_END)) {
+                reason += SENTENCE_END;
+            }
+            return reason;
+        }
+        return exception.getMessage();
+    }
+
+    // Says whether the header has no comma-separated columns but has ;
+    // between them, as a sheet saved by Excel in some countries has.
+    private boolean usesSemicolons(Path scoreSheetFile) {
+        try {
+            List<String> records = readRecords(scoreSheetFile);
+            if (records.isEmpty()) {
+                return false;
+            }
+            String header = records.get(0);
+            boolean oneColumn = TextUtils.splitCsvLine(header).size() == 1;
+            return oneColumn && header.contains(SEMICOLON);
+        } catch (IOException exception) {
+            return false;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
     // Builds the error shown when the roster cannot be read or is malformed.
     private IngestException rosterFailure(Path scoreSheetFile,
             Exception exception) {
@@ -282,11 +353,12 @@ public class RosterReader {
 
     // Requires a column to appear in the header exactly once.
     private void requireColumn(List<String> header, String name) {
-        boolean missingOrRepeated = header.indexOf(name) < 0
-                || header.indexOf(name) != header.lastIndexOf(name);
-        if (missingOrRepeated) {
-            throw new IllegalArgumentException("Missing or repeated column: "
-                    + name);
+        if (header.indexOf(name) < 0) {
+            throw new IllegalArgumentException("No " + name + " column.");
+        }
+        if (header.indexOf(name) != header.lastIndexOf(name)) {
+            throw new IllegalArgumentException("The " + name
+                    + " column appears more than once.");
         }
     }
 

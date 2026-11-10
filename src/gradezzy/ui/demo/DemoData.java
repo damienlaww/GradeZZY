@@ -11,12 +11,16 @@ package gradezzy.ui.demo;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
+import gradezzy.model.BackupInfo;
+import gradezzy.model.BackupRun;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
@@ -152,6 +156,30 @@ public final class DemoData {
         "Q2", "Q3"};
     private static final double[] MAX_MARKS = {3, 3, 5, 5, 4};
 
+    // What the provided testers' headers call each case of each question,
+    // as in "Test 1: getIsogramWords([alice, ben, cathy])"
+    private static final String[][] CASE_NAMES = {
+        {"getIsogramWords([alice, ben, cathy])",
+            "getIsogramWords([ellen, alan, zoe])",
+            "getIsogramWords([Elle, alan, Daniel, Canny])"},
+        {"getSumOfEvenIntegers([2, 4])",
+            "getSumOfEvenIntegers([2, false, 4.0, two])",
+            "getSumOfEvenIntegers([9, 2, 10, 3, 5, 8])"},
+        {"getAverageAge(is442.txt, LEE)",
+            "getAverageAge(personstester.txt, TAY)",
+            "getAverageAge(personstester.txt, LEE)",
+            "getAverageAge(personstester.txt, Wong)",
+            "getAverageAge(personstester.txt, Ong)"},
+        {"getTopStudent(is442.txt, IS101)",
+            "getTopStudent(studentstester.txt, SMU101)",
+            "getTopStudent(studentstester.txt, CS101)",
+            "getTopStudent(studentstester.txt, CS102)",
+            "getTopStudent(studentstester.txt, CS103)"},
+        {"sortShapes([R1, R2, R3, R4])",
+            "sortShapes([R1, R2, R3, R4] by area)",
+            "sortShapes([C1, C2, R1, R2])",
+            "sortShapes([C1, C2, R2, R1, R3])"}};
+
     // The ending of an answer's source file
     private static final String JAVA_EXTENSION = ".java";
 
@@ -234,6 +262,49 @@ public final class DemoData {
         "Santos", "Haddad", "Kowalski", "Nguyen", "Fischer", "Patel",
         "Moreau", "Sato", "Ibrahim", "Larsen", "Costa"};
 
+    // The sample runs kept in the sample backups, oldest first: run id,
+    // section and assessment
+    private static final String[][] BACKUP_RUNS = {
+        {"021", "G2", ASSESSMENT_NAME},
+        {"022", "G3", ASSESSMENT_NAME},
+        {EARLIER_RUN_ID, SAMPLE_SECTION, ASSESSMENT_NAME},
+        {CURRENT_RUN_ID, SAMPLE_SECTION, ASSESSMENT_NAME},
+        {"025", "G2", "Lab Test 2"}};
+    private static final int BACKUP_RUN_ID = 0;
+    private static final int BACKUP_RUN_SECTION = 1;
+    private static final int BACKUP_RUN_ASSESSMENT = 2;
+
+    // When each of those runs started
+    private static final LocalDateTime[] BACKUP_RUN_STARTS = {
+        LocalDateTime.of(2026, 10, 13, 10, 15),
+        LocalDateTime.of(2026, 10, 14, 11, 0),
+        EARLIER_RUN_STARTED,
+        CURRENT_RUN_STARTED,
+        LocalDateTime.of(2026, 10, 16, 8, 30)};
+
+    // How many students each of those runs has, and how many were graded
+    private static final int[] BACKUP_RUN_STUDENTS = {38, 41, 6, 6, 40};
+    private static final int[] BACKUP_RUN_GRADED = {38, 40, 6, 6, 37};
+
+    // When each sample backup was made, oldest first. A backup holds the
+    // sample runs that started before it.
+    private static final LocalDateTime[] BACKUP_TIMES = {
+        LocalDateTime.of(2026, 10, 13, 12, 30),
+        LocalDateTime.of(2026, 10, 14, 17, 20),
+        LocalDateTime.of(2026, 10, 15, 10, 5),
+        LocalDateTime.of(2026, 10, 15, 16, 40),
+        LocalDateTime.of(2026, 10, 16, 9, 10)};
+
+    // The size of a sample backup: an empty database, then each student
+    private static final long EMPTY_BACKUP_BYTES = 98304L;
+    private static final long BYTES_PER_STUDENT = 86016L;
+
+    // Names a backup file as BackupManager does
+    private static final String BACKUP_PREFIX = "gradezzy-";
+    private static final String BACKUP_EXTENSION = ".db";
+    private static final DateTimeFormatter BACKUP_NAME_TIME =
+            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
+
     // Utility class, never instantiated.
     private DemoData() {
         // nothing to set up
@@ -267,6 +338,62 @@ public final class DemoData {
         }
         sample.getPlaceholderFolderNames().add(PLACEHOLDER_FOLDER);
         return sample;
+    }
+
+    /**
+     * Builds the sample backups the demo lists on History, newest first.
+     * Each holds the sample runs that started before it was made, newest
+     * first. No file is written.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param backupFolder the folder the backups would be in
+     * @return the sample backups
+     */
+    public static List<BackupInfo> sampleBackups(Path backupFolder) {
+        List<BackupInfo> backups = new ArrayList<>();
+        for (int index = BACKUP_TIMES.length - 1; index >= 0; index--) {
+            backups.add(sampleBackup(backupFolder, BACKUP_TIMES[index],
+                    backupRunsBefore(BACKUP_TIMES[index])));
+        }
+        return backups;
+    }
+
+    /**
+     * Builds a sample backup made at a time that holds the given runs.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param backupFolder the folder the backup would be in
+     * @param madeAt when it was made
+     * @param runs the runs it holds, newest first
+     * @return the sample backup
+     */
+    public static BackupInfo sampleBackup(Path backupFolder,
+            LocalDateTime madeAt, List<BackupRun> runs) {
+        String fileName = BACKUP_PREFIX + madeAt.format(BACKUP_NAME_TIME)
+                + BACKUP_EXTENSION;
+        long size = EMPTY_BACKUP_BYTES;
+        for (BackupRun run : runs) {
+            size += run.getStudentCount() * BYTES_PER_STUDENT;
+        }
+        return new BackupInfo(backupFolder.resolve(fileName), madeAt, size,
+                runs);
+    }
+
+    // The sample runs that started before a time, newest first
+    private static List<BackupRun> backupRunsBefore(LocalDateTime time) {
+        List<BackupRun> runs = new ArrayList<>();
+        for (int index = BACKUP_RUNS.length - 1; index >= 0; index--) {
+            if (BACKUP_RUN_STARTS[index].isBefore(time)) {
+                String[] run = BACKUP_RUNS[index];
+                runs.add(new BackupRun(run[BACKUP_RUN_ID], MODULE_CODE,
+                        run[BACKUP_RUN_SECTION], run[BACKUP_RUN_ASSESSMENT],
+                        BACKUP_RUN_STARTS[index], BACKUP_RUN_STUDENTS[index],
+                        BACKUP_RUN_GRADED[index]));
+            }
+        }
+        return runs;
     }
 
     /**
@@ -404,7 +531,6 @@ public final class DemoData {
                     sampleScore(index, position)));
         }
 
-        String username = submission.getUsername();
         if (index == ALPHA) {
             addAlphaOutcome(submission, ids);
         } else if (index == BRAVO) {
@@ -416,6 +542,7 @@ public final class DemoData {
         } else if (index == ECHO) {
             addEchoOutcome(submission, ids);
         }
+        String username = submission.getUsername();
         submission.setWorkingCopyPath(workingCopyPath(username));
         submission.setStatus(SubmissionStatus.GRADED);
     }
@@ -430,7 +557,7 @@ public final class DemoData {
         result.getTestCaseResults().clear();
         for (int number = 1; number <= cases; number++) {
             result.addTestCaseResult(new TestCaseResult(number, true,
-                    PASSED));
+                    PASSED, caseName(result.getQuestion().getId(), number)));
         }
         result.setTimedOut(false);
         result.setScore(result.getQuestion().getMaxScore());
@@ -559,9 +686,9 @@ public final class DemoData {
         String username = submission.getUsername();
         QuestionResult q1a = submission.getQuestionResults().get(Q1A);
         q1a.getTestCaseResults().clear();
-        q1a.addTestCaseResult(new TestCaseResult(FIRST_CASE, true, PASSED));
-        q1a.addTestCaseResult(new TestCaseResult(SECOND_CASE, true, PASSED));
-        q1a.addTestCaseResult(new TestCaseResult(FAILING_CASE, false,
+        q1a.addTestCaseResult(q1aCase(FIRST_CASE, true, PASSED));
+        q1a.addTestCaseResult(q1aCase(SECOND_CASE, true, PASSED));
+        q1a.addTestCaseResult(q1aCase(FAILING_CASE, false,
                 "Not finished: the tester was stopped at the "
                 + timeoutSeconds + " s limit before case 3 printed a "
                 + "result."));
@@ -652,10 +779,10 @@ public final class DemoData {
         String username = submission.getUsername();
         QuestionResult q1a = submission.getQuestionResults().get(Q1A);
         q1a.getTestCaseResults().clear();
-        q1a.addTestCaseResult(new TestCaseResult(FIRST_CASE, true, PASSED));
-        q1a.addTestCaseResult(new TestCaseResult(SECOND_CASE, false,
+        q1a.addTestCaseResult(q1aCase(FIRST_CASE, true, PASSED));
+        q1a.addTestCaseResult(q1aCase(SECOND_CASE, false,
                 "Failed: expected 4 but got 3"));
-        q1a.addTestCaseResult(new TestCaseResult(FAILING_CASE, false,
+        q1a.addTestCaseResult(q1aCase(FAILING_CASE, false,
                 "Failed: IllegalArgumentException at Q1a.java:27"));
         q1a.setOutput(longLog());
 
@@ -800,18 +927,47 @@ public final class DemoData {
         QuestionResult result = new QuestionResult(question);
         int cases = (int) question.getMaxScore();
         for (int number = 1; number <= cases; number++) {
+            String name = caseName(question.getId(), number);
             if (number <= score) {
                 result.addTestCaseResult(new TestCaseResult(number, true,
-                        PASSED));
+                        PASSED, name));
             } else {
                 result.addTestCaseResult(new TestCaseResult(number, false,
-                        failedLine(number)));
+                        failedLine(number), name));
             }
         }
         result.setCompiled(true);
         result.setScore(score);
         result.setOutput(testerOutput(score, cases));
         return result;
+    }
+
+    /**
+     * Returns what the provided tester's header calls a case of a sample
+     * question, such as "getIsogramWords([alice, ben, cathy])" for case 1
+     * of Q1a.
+     *
+     * @param questionId the question, such as "Q1a"
+     * @param number the case, from 1
+     * @return the name, or null for a question or case the sample lacks
+     */
+    public static String caseName(String questionId, int number) {
+        int index = number - 1;
+        for (int question = 0; question < QUESTION_IDS.length; question++) {
+            boolean known = QUESTION_IDS[question].equals(questionId)
+                    && index >= 0 && index < CASE_NAMES[question].length;
+            if (known) {
+                return CASE_NAMES[question][index];
+            }
+        }
+        return null;
+    }
+
+    // Creates a case of the sample Q1a, named as its tester names it.
+    private static TestCaseResult q1aCase(int number, boolean passed,
+            String detail) {
+        String name = caseName(QUESTION_IDS[Q1A], number);
+        return new TestCaseResult(number, passed, detail, name);
     }
 
     // Marks a question as not compiled, with no cases and no marks.

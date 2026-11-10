@@ -2,8 +2,8 @@
  * File: SavedAssessment.java
  *
  * Purpose: One assessment the instructor has saved: its name, questions,
- * tester folder, starter folder, model answers folder and the files that
- * come with them.
+ * tester folder, starter folder, model answers folder, score sheets and
+ * the files that come with them.
  *
  * Where it fits: AssessmentLibrary reads and writes these, one file each.
  * Choosing one copies its settings into config.properties, so the rest of
@@ -11,6 +11,7 @@
  */
 package gradezzy.model;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -49,6 +50,21 @@ public class SavedAssessment {
     // Starter folder names a student may forget to rename
     private final List<String> placeholderFolderNames = new ArrayList<>();
 
+    // Each section's score sheet, written as in
+    // paths.score.sheet.by.section, such as CS102/G1=g1.csv;CS102/G2=g2.csv
+    private String scoreSheetsBySection = "";
+
+    // The score sheet of a section with none of its own, or "" for none
+    private String scoreSheetFile = "";
+
+    // False only for a file saved before assessments kept their score
+    // sheets; such an assessment takes the ones in the settings
+    private boolean scoreSheetsSaved = true;
+
+    // When it was first saved, or null when a file saved before
+    // assessments kept the time does not say
+    private LocalDateTime createdAt = null;
+
     /**
      * Creates an empty assessment, to be filled with the setters.
      *
@@ -78,6 +94,10 @@ public class SavedAssessment {
         copy.getProvidedClassFiles().addAll(providedClassFiles);
         copy.getTesterDataFiles().addAll(testerDataFiles);
         copy.getPlaceholderFolderNames().addAll(placeholderFolderNames);
+        copy.setScoreSheetsBySection(scoreSheetsBySection);
+        copy.setScoreSheetFile(scoreSheetFile);
+        copy.setScoreSheetsSaved(scoreSheetsSaved);
+        copy.setCreatedAt(createdAt);
         return copy;
     }
 
@@ -230,6 +250,31 @@ public class SavedAssessment {
     }
 
     /**
+     * Returns the assessments listed for a module, in the order given,
+     * as belongsTo decides. A null module lists none.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param saved the saved assessments
+     * @param module the module, or null
+     * @param ownOnly true for a module added with only its own sections
+     * @return the module's assessments
+     */
+    public static List<SavedAssessment> listedFor(List<SavedAssessment> saved,
+            String module, boolean ownOnly) {
+        List<SavedAssessment> listed = new ArrayList<>();
+        if (module == null) {
+            return listed;
+        }
+        for (SavedAssessment assessment : saved) {
+            if (assessment.belongsTo(module, ownOnly)) {
+                listed.add(assessment);
+            }
+        }
+        return listed;
+    }
+
+    /**
      * Returns the class files given without source, which the caller may
      * change.
      *
@@ -263,6 +308,109 @@ public class SavedAssessment {
      */
     public List<String> getPlaceholderFolderNames() {
         return placeholderFolderNames;
+    }
+
+    /**
+     * Returns each section's score sheet, written as in
+     * paths.score.sheet.by.section.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @return the sheets, such as CS102/G1=g1.csv;CS102/G2=g2.csv, or ""
+     *         when no section has one
+     */
+    public String getScoreSheetsBySection() {
+        return scoreSheetsBySection;
+    }
+
+    /**
+     * Changes each section's score sheet.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param scoreSheetsBySection the sheets, written as in
+     *        paths.score.sheet.by.section, or "" for none
+     */
+    public void setScoreSheetsBySection(String scoreSheetsBySection) {
+        if (scoreSheetsBySection == null) {
+            this.scoreSheetsBySection = "";
+        } else {
+            this.scoreSheetsBySection = scoreSheetsBySection.trim();
+        }
+    }
+
+    /**
+     * Returns the score sheet of a section with none of its own.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @return the file, or "" for none
+     */
+    public String getScoreSheetFile() {
+        return scoreSheetFile;
+    }
+
+    /**
+     * Changes the score sheet of a section with none of its own.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param scoreSheetFile the file, or "" for none
+     */
+    public void setScoreSheetFile(String scoreSheetFile) {
+        if (scoreSheetFile == null) {
+            this.scoreSheetFile = "";
+        } else {
+            this.scoreSheetFile = scoreSheetFile.trim();
+        }
+    }
+
+    /**
+     * Says whether this assessment keeps its own score sheets. Only one
+     * read from a file saved before assessments kept them does not.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @return true when the score sheets are its own
+     */
+    public boolean isScoreSheetsSaved() {
+        return scoreSheetsSaved;
+    }
+
+    /**
+     * Notes whether this assessment keeps its own score sheets.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param scoreSheetsSaved false for a file saved before assessments
+     *        kept them
+     */
+    public void setScoreSheetsSaved(boolean scoreSheetsSaved) {
+        this.scoreSheetsSaved = scoreSheetsSaved;
+    }
+
+    /**
+     * Returns when the assessment was first saved. A new assessment with
+     * the name of a deleted one is newer than the deleted one's runs, so
+     * Set up does not list their files for it.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @return the time, or null when it is not known
+     */
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    /**
+     * Notes when the assessment was first saved.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param createdAt the time, or null when it is not known
+     */
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 
     /**

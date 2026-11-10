@@ -141,6 +141,10 @@ public class GradingService {
     // ScoreStage does
     private final ScoreCalculator scoreCalculator = new ScoreCalculator();
 
+    // Warns when a question did not compile for nearly every student
+    private final CompileFailureCheck compileFailureCheck =
+            new CompileFailureCheck();
+
     // The gradings running now: batches, retries, resumes, late batches
     // and gradings again, at most one per section, each with its own stop
     // flag, so several sections can be graded at once. Only read and
@@ -545,14 +549,14 @@ public class GradingService {
                 section.getSectionCode());
     }
 
-    // Runs the similar code check on a run whose grading has ended, when
-    // plagiarism.enabled is true. A failed check never fails grading:
+    // Runs the similar code check on a run whose grading has ended. It
+    // always runs, as identical copies are flagged even when
+    // plagiarism.enabled is false; PlagiarismService then leaves out only
+    // the search for similar code. A failed check never fails grading:
     // the marks stand and the audit log says why the flags are missing.
     // Returns true when the check ran, so the caller saves the flags.
     private boolean checkSimilarity(GradingRun gradingRun) {
-        boolean checkOff = plagiarismService == null
-                || !config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED);
-        if (checkOff) {
+        if (plagiarismService == null) {
             return false;
         }
 
@@ -1837,8 +1841,11 @@ public class GradingService {
     // describe the latest save: the old ones are removed first, and a
     // failed save gives each submission one warning, so the console and
     // the window both show it. When logFailure is true, a failure is also
-    // written to the audit log, once per run.
+    // written to the audit log, once per run. Before that, the warning
+    // about a question that did not compile for nearly every student is
+    // brought up to date, with or without the database.
     private void saveRun(GradingRun gradingRun, boolean logFailure) {
+        compileFailureCheck.refresh(gradingRun);
         if (!isDatabaseUsed()) {
             return;
         }

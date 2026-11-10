@@ -713,14 +713,12 @@ public class FolderHierarchyFixer extends AbstractFixer {
             throws FixException {
         List<Anomaly> sameFix = new ArrayList<>();
         for (Anomaly other : submission.getAnomalies()) {
-            if (!isOtherMissingFolder(other, anomaly)) {
-                continue;
-            }
-
-            String otherFolder = findMissingFolderName(submission, other,
-                    contentRoot, folderNames);
-            if (canMakeFolder(otherFolder, contentRoot)) {
-                sameFix.add(other);
+            if (isOtherMissingFolder(other, anomaly)) {
+                String otherFolder = findMissingFolderName(submission, other,
+                        contentRoot, folderNames);
+                if (canMakeFolder(otherFolder, contentRoot)) {
+                    sameFix.add(other);
+                }
             }
         }
         return sameFix;

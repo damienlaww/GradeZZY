@@ -1,9 +1,7 @@
 /*
  * File: MistakesView.java
  *
- * Purpose: The Errors view of the Review step. At the top, the clusters
- * of students whose code the similarity check found alike, where the
- * instructor ticks two students and compares their code. Under it, for
+ * Purpose: The Errors view of the Review step. For
  * each question, one row per error, such as "Failed test 2" or "Did not
  * compile": its name, how many students, whether it was checked and the
  * buttons that act on the whole group. A row opens like a dropdown to
@@ -11,8 +9,8 @@
  *
  * Where it fits: ReviewScreen shows it in place of the student table
  * when "Errors" is chosen. It reads the groups through
- * DashboardBackend.listAnswerGroups and the similar pairs through
- * listSimilarPairs; AnswerGroupActions does what the group buttons ask.
+ * DashboardBackend.listAnswerGroups; AnswerGroupActions does what the
+ * group buttons ask.
  */
 package gradezzy.ui.flow;
 
@@ -23,13 +21,11 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBase;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -38,12 +34,11 @@ import javafx.scene.layout.VBox;
 import gradezzy.model.AnswerGroup;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Submission;
-import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
 
 /**
- * Lists the similar code clusters and the errors of a run, question by
+ * Lists the errors of a run, question by
  * question.
  *
  * <p>Tier: COULD.
@@ -61,18 +56,6 @@ public class MistakesView {
     // How far an open row's chevron turns, so it points down
     private static final double OPEN_ROTATION = 90.0;
 
-    // How many students are compared at a time
-    private static final int COMPARED_STUDENTS = 2;
-
-    // How many students a closed cluster lists; the rest open with a link
-    private static final int SHOWN_CLUSTER_STUDENTS = 8;
-
-    // Starts the key of an open cluster in openKeys
-    private static final String CLUSTER_KEY = "cluster|";
-
-    // Turns a similarity share into a percentage
-    private static final double PERCENT = 100.0;
-
     // The quotes around an error's name
     private static final String OPEN_QUOTE = "“";
     private static final String CLOSE_QUOTE = "”";
@@ -86,7 +69,7 @@ public class MistakesView {
     // What the group buttons do
     private final AnswerGroupActions actions;
 
-    // The clusters, the questions and their errors
+    // The questions and their errors
     private final VBox list = new VBox(Parts.GAP);
 
     // Scrolls the list
@@ -140,7 +123,7 @@ public class MistakesView {
     }
 
     /**
-     * Shows the similar code clusters and the errors of a run, keeping
+     * Shows the errors of a run, keeping
      * the scroll position and which errors are open.
      *
      * <p>Tier: COULD.
@@ -155,7 +138,6 @@ public class MistakesView {
             return;
         }
 
-        addSimilarCode(run);
         List<AnswerGroup> groups = window.getBackend()
                 .listAnswerGroups(run);
         if (groups.isEmpty()) {
@@ -185,178 +167,6 @@ public class MistakesView {
         return Parts.plural(answers.size(), "answer") + " lost marks, in "
                 + Parts.plural(groups.size(), "error") + ". Open an error "
                 + "to see its students; decide each error once.";
-    }
-
-    // ----------------------------------------------------- similar code
-
-    // Adds the clusters of similar code above the questions, when the
-    // check found any.
-    private void addSimilarCode(GradingRun run) {
-        DashboardBackend backend = window.getBackend();
-        if (!backend.supports(Capability.SIMILARITY_DETAIL)) {
-            return;
-        }
-        List<SimilarityCluster> clusters = SimilarityCluster.build(
-                backend.listSimilarPairs(run));
-        if (clusters.isEmpty()) {
-            return;
-        }
-
-        Label title = Parts.title("Similar code");
-        Label pill = Parts.pill(Parts.plural(clusters.size(), "cluster"),
-                Tone.WARN);
-        HBox titleRow = Parts.row(Parts.GAP_SMALL, new Node[] {title,
-            pill});
-        Label help = Parts.muted("Students whose code the similarity check "
-                + "found alike, most alike first. Tick two students in a "
-                + "cluster to compare their code side by side; ticking a "
-                + "third replaces the first. Similar is not proof of "
-                + "copying.");
-        help.setWrapText(true);
-        help.getStyleClass().add("small-text");
-        VBox card = new VBox(Parts.GAP_SMALL, titleRow, help);
-        card.getStyleClass().addAll("errors-card", "similar-clusters");
-        for (SimilarityCluster cluster : clusters) {
-            card.getChildren().add(clusterBlock(run, cluster));
-        }
-        list.getChildren().add(card);
-    }
-
-    // Builds one cluster: its question and how alike, its students as
-    // tick boxes, and Compare, which needs exactly two ticked.
-    private VBox clusterBlock(GradingRun run, SimilarityCluster cluster) {
-        Label question = Parts.strong(cluster.getQuestionId());
-        long percent = Math.round(cluster.getHighestSimilarity() * PERCENT);
-        Label facts = Parts.muted(Parts.plural(
-                cluster.getUsernames().size(), "student") + DOT + "up to "
-                + percent + Parts.PERCENT_SIGN + " alike");
-        facts.getStyleClass().add("small-text");
-        Button compare = new Button("Compare");
-        compare.getStyleClass().addAll("small", "accent");
-        Parts.tip(compare, "Show the two ticked students' code side by "
-                + "side, with the matching lines marked.");
-        Label hint = Parts.muted("");
-        hint.getStyleClass().add("small-text");
-        HBox top = Parts.row(Parts.GAP_SMALL, new Node[] {question, facts,
-            Parts.grow(), hint, compare});
-
-        // A question may have two clusters, so its first student is named
-        String key = CLUSTER_KEY + cluster.getQuestionId() + DOT
-                + cluster.getUsernames().get(0);
-        boolean showAll = openKeys.contains(key);
-        List<String> usernames = cluster.getUsernames();
-        int shownCount = usernames.size();
-        if (!showAll) {
-            shownCount = Math.min(shownCount, SHOWN_CLUSTER_STUDENTS);
-        }
-        // The boxes in the order they were ticked, oldest first
-        List<CheckBox> tickOrder = new ArrayList<>();
-        List<CheckBox> boxes = new ArrayList<>();
-        FlowPane students = new FlowPane(Parts.GAP, Parts.GAP_SMALL);
-        for (int index = 0; index < shownCount; index++) {
-            String username = usernames.get(index);
-            CheckBox box = new CheckBox(describe(run, username));
-            box.setUserData(username);
-            box.getStyleClass().add("cluster-student");
-            boxes.add(box);
-            students.getChildren().add(box);
-        }
-        // The most similar pair is ticked to start with
-        SimilarityPair first = cluster.getPairs().get(0);
-        tick(boxes, tickOrder, first.getFirstUsername());
-        tick(boxes, tickOrder, first.getSecondUsername());
-        for (CheckBox box : boxes) {
-            box.setOnAction(event -> boxTicked(box, tickOrder, compare,
-                    hint));
-        }
-        compare.setOnAction(event -> compareTicked(run, cluster, boxes));
-        updateCompare(tickOrder, compare, hint);
-
-        VBox block = new VBox(Parts.GAP_SMALL, top, students);
-        block.getStyleClass().add("cluster-block");
-        if (usernames.size() > SHOWN_CLUSTER_STUDENTS) {
-            block.getChildren().add(showAllLink(run, key, showAll,
-                    usernames.size()));
-        }
-        return block;
-    }
-
-    // Builds the link that lists all of a cluster's students, or fewer.
-    private Node showAllLink(GradingRun run, String key, boolean showAll,
-            int total) {
-        String text = "Show all " + total + " students";
-        if (showAll) {
-            text = "Show fewer";
-        }
-        return Parts.link(text, () -> toggleKey(run, key));
-    }
-
-    // Follows a tick or untick: a third tick replaces the oldest, so two
-    // students are ticked at most.
-    private void boxTicked(CheckBox box, List<CheckBox> tickOrder,
-            Button compare, Label hint) {
-        tickOrder.remove(box);
-        if (box.isSelected()) {
-            tickOrder.add(box);
-        }
-        while (tickOrder.size() > COMPARED_STUDENTS) {
-            CheckBox oldest = tickOrder.remove(0);
-            oldest.setSelected(false);
-        }
-        updateCompare(tickOrder, compare, hint);
-    }
-
-    // Ticks the box of a student, when it is listed.
-    private void tick(List<CheckBox> boxes, List<CheckBox> tickOrder,
-            String username) {
-        for (CheckBox box : boxes) {
-            if (username.equals(box.getUserData())) {
-                box.setSelected(true);
-                tickOrder.add(box);
-            }
-        }
-    }
-
-    // Allows Compare only with two students ticked, saying what is
-    // needed.
-    private void updateCompare(List<CheckBox> tickOrder, Button compare,
-            Label hint) {
-        compare.setDisable(tickOrder.size() != COMPARED_STUDENTS);
-        int missing = COMPARED_STUDENTS - tickOrder.size();
-        String text = "";
-        if (missing > 0) {
-            text = "Tick " + missing + " more";
-        }
-        hint.setText(text);
-    }
-
-    // Returns the students ticked, in the order of the boxes.
-    private List<String> tickedUsernames(List<CheckBox> boxes) {
-        List<String> ticked = new ArrayList<>();
-        for (CheckBox box : boxes) {
-            if (box.isSelected()) {
-                ticked.add((String) box.getUserData());
-            }
-        }
-        return ticked;
-    }
-
-    // Opens the two ticked students' code side by side. Two students the
-    // check did not flag as a pair are compared too, with no percentage.
-    private void compareTicked(GradingRun run, SimilarityCluster cluster,
-            List<CheckBox> boxes) {
-        List<String> ticked = tickedUsernames(boxes);
-        if (ticked.size() != COMPARED_STUDENTS) {
-            return;
-        }
-        String first = ticked.get(0);
-        String second = ticked.get(1);
-        SimilarityPair pair = cluster.findPair(first, second);
-        if (pair == null) {
-            pair = new SimilarityPair(first, second,
-                    cluster.getQuestionId(), Double.NaN);
-        }
-        window.showSheet(SimilaritySheet.create(window, run, pair));
     }
 
     // ---------------------------------------------------------- errors
@@ -481,7 +291,7 @@ public class MistakesView {
         toggleKey(run, group.getKey());
     }
 
-    // Opens or closes the error or cluster of a key, and draws the view
+    // Opens or closes the error of a key, and draws the view
     // again.
     private void toggleKey(GradingRun run, String key) {
         if (openKeys.contains(key)) {

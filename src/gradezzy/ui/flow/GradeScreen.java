@@ -4,7 +4,7 @@
  * Purpose: Step 2. Shows grading as it happens for the section on
  * screen: how many students are done, about how long is left, what is
  * happening now, a small bell curve of the marks so far and a count of
- * each result. Offers Cancel, Resume after a cancel, and the way back to
+ * each result. Offers Stop, Resume after a stop, and the way back to
  * Set up when grading could not run. Other sections can be graded at the
  * same time; each has its own batch, shown here when its section is
  * chosen.
@@ -28,6 +28,7 @@ import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.ColumnConstraints;
@@ -88,6 +89,9 @@ public class GradeScreen extends FlowScreen {
 
     // The gap between the share done and the time left
     private static final double TIME_GAP = 2.0;
+
+    // The button that stops a batch, and the one that says so in its sheet
+    private static final String STOP_GRADING = "Stop grading";
 
     // The separator between parts of a line
     private static final String DOT = " · ";
@@ -207,7 +211,7 @@ public class GradeScreen extends FlowScreen {
     /**
      * Shows the batch of the section on screen: the one being graded or
      * the one that just failed; else the run on screen as it ended; else
-     * how to start. Then shows the buttons that fit: Cancel while it
+     * how to start. Then shows the buttons that fit: Stop while it
      * grades, Resume when it stopped early, Review results when it is
      * done.
      */
@@ -217,9 +221,13 @@ public class GradeScreen extends FlowScreen {
         boolean liveJob = job != null
                 && (!job.isEnded() || job.getFailure() != null);
         GradingRun run = getState().getRun();
+        // Never the run of another section under this one's name
+        boolean runOfSection = run != null && run.getSection() != null
+                && run.getSection().getLabel().equalsIgnoreCase(
+                        getState().getSection().getLabel());
         if (liveJob) {
             render(job, false);
-        } else if (run != null && run.getSection() != null) {
+        } else if (runOfSection) {
             render(GradingJob.ofEndedRun(run, describeAbout(run)), false);
         } else {
             shown = null;
@@ -296,6 +304,7 @@ public class GradeScreen extends FlowScreen {
     public void continueRun(GradingRun run, boolean retryFailed) {
         GradingJob job = newJob(run.getSection());
         int total = 0;
+        int gradedBefore = 0;
         for (Submission submission : run.getSubmissions()) {
             boolean again = retryFailed
                     && submission.getStatus() == SubmissionStatus.FAILED;
@@ -306,9 +315,12 @@ public class GradeScreen extends FlowScreen {
                 job.addUsernames(one);
             } else {
                 job.addResult(submission);
+                gradedBefore++;
             }
         }
         job.setTotal(total);
+        // The count goes on from the students graded before the stop
+        job.setCarried(gradedBefore);
         getState().startJob(job);
         render(job, false);
         if (retryFailed) {
@@ -394,7 +406,11 @@ public class GradeScreen extends FlowScreen {
         }
         long shownPercent = Math.round(share * PERCENT);
         percent.setText(shownPercent + Parts.PERCENT_SIGN);
-        if (another || !animate) {
+        // An ended batch shows its final share at once, so a stopped one
+        // never keeps gliding past what was graded
+        boolean jump = another || !animate || job.isEnded();
+        if (jump) {
+            stopGlide();
             shownProgress.set(share);
         } else {
             glideTo(share);
@@ -651,10 +667,7 @@ public class GradeScreen extends FlowScreen {
     // one student takes, so it is still moving when the next one ends.
     // Going back, as when a new run starts, it jumps.
     private void glideTo(double target) {
-        if (progressGlide != null) {
-            progressGlide.stop();
-            progressGlide = null;
-        }
+        stopGlide();
         if (!isAnimated() || target <= shownProgress.get()) {
             shownProgress.set(target);
             return;
@@ -667,14 +680,22 @@ public class GradeScreen extends FlowScreen {
         progressGlide.play();
     }
 
+    // Stops the bar's glide, if it is moving.
+    private void stopGlide() {
+        if (progressGlide != null) {
+            progressGlide.stop();
+            progressGlide = null;
+        }
+    }
+
     // Returns how long the bar glides: the time one student has taken so
     // far, kept between MIN_GLIDE_MILLIS and MAX_GLIDE_MILLIS.
     private double findGlideMillis() {
-        if (shown == null || shown.getFinished() <= 0) {
+        if (shown == null || shown.getFinishedNow() <= 0) {
             return MIN_GLIDE_MILLIS;
         }
         double each = (System.currentTimeMillis() - shown.getStartedAt())
-                / (double) shown.getFinished();
+                / (double) shown.getFinishedNow();
         return Math.max(MIN_GLIDE_MILLIS, Math.min(MAX_GLIDE_MILLIS, each));
     }
 
@@ -696,14 +717,16 @@ public class GradeScreen extends FlowScreen {
             timeLeft.setText("Stopped");
             return;
         }
-        if (finished == 0) {
+        // Only the students of this batch tell how long each one takes
+        int finishedNow = job.getFinishedNow();
+        if (finishedNow == 0) {
             timeLeft.setText("Working out the time left");
             return;
         }
         double elapsed = (System.currentTimeMillis() - job.getStartedAt())
                 / MILLIS_PER_SECOND;
         int remaining = total - finished;
-        double secondsLeft = elapsed / finished * remaining;
+        double secondsLeft = elapsed / finishedNow * remaining;
         long seconds = Math.round(secondsLeft);
         timeLeft.setText("About " + describe(seconds) + " left");
     }
@@ -784,12 +807,13 @@ public class GradeScreen extends FlowScreen {
         }
         ActionBar actions = getActions();
         actions.reset();
-        GradingRun run = getState().getRun();
         if (shown != null && !shown.isEnded()) {
-            // Cancel sits beside the main button, where the eye already is
+            // Stop sits beside the main button, where the eye already is
             GradingJob job = shown;
-            actions.addSecondary(Parts.secondary("Cancel",
-                    () -> askCancel(job)));
+            Button stop = Parts.secondary(STOP_GRADING, () -> askCancel(job));
+            // Pressed once is enough: it stays off while grading stops
+            stop.setDisable(job.isCancelling());
+            actions.addSecondary(stop);
             if (job.isCancelling()) {
                 actions.setStatus("Stopping after the current student.");
             } else {
@@ -806,6 +830,7 @@ public class GradeScreen extends FlowScreen {
             return;
         }
         actions.setBack(() -> getWindow().show(Step.SET_UP));
+        GradingRun run = getState().getRun();
         boolean stopped = run != null && shown != null
                 && shown.hasUnfinished();
         if (stopped) {
@@ -819,12 +844,16 @@ public class GradeScreen extends FlowScreen {
         }
     }
 
-    // Asks before cancelling a batch.
+    // Asks before stopping a batch.
     private void askCancel(GradingJob job) {
-        getWindow().confirm("Cancel grading " + job.getSection().getLabel()
-                + "?", "Students already graded keep their marks. You can "
-                + "resume the rest later. Other sections keep grading.",
-                "Cancel grading", () -> cancelGrading(job));
+        Label text = Parts.subtitle("Students already graded keep their "
+                + "marks. You can resume the rest later. Other sections "
+                + "keep grading.");
+        text.setMaxWidth(Parts.TEXT_WIDTH);
+        text.setWrapText(true);
+        getWindow().confirm("Stop grading " + job.getSection().getLabel()
+                + "?", text, "Keep grading", null, null, STOP_GRADING,
+                () -> cancelGrading(job), true);
     }
 
     // Asks the backend to stop a batch after the current student, once
@@ -832,7 +861,7 @@ public class GradeScreen extends FlowScreen {
     private void cancelGrading(GradingJob job) {
         job.markCancelling();
         getBackend().cancelGrading(job.getSection());
-        getActions().setStatus("Stopping after the current student.");
+        refreshActions();
     }
 
     /**

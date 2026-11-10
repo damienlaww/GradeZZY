@@ -29,6 +29,9 @@ public class ClassFileMatch {
     // folder, lists 40 of the 42 uploads."
     private final String suggestionDetail;
 
+    // True when none of the students are on the chosen score sheet
+    private boolean noneOnSheet = false;
+
     /**
      * Creates a result.
      *
@@ -127,5 +130,25 @@ public class ClassFileMatch {
      */
     public String getSuggestionDetail() {
         return suggestionDetail;
+    }
+
+    /**
+     * Says whether none of the students are on the chosen score sheet,
+     * so grading against it is surely a mistake.
+     *
+     * @return true when no student is on the sheet
+     */
+    public boolean isNoneOnSheet() {
+        return noneOnSheet;
+    }
+
+    /**
+     * Notes that none of the students are on the chosen score sheet.
+     *
+     * @return this result
+     */
+    public ClassFileMatch markNoneOnSheet() {
+        noneOnSheet = true;
+        return this;
     }
 }

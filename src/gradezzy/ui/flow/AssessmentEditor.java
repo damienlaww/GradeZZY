@@ -82,11 +82,18 @@ public final class AssessmentEditor {
     // The separator between the names in the note of filled fields
     private static final String NOTE_NAME_SEPARATOR = ", ";
 
+    // The link of the notice after a new assessment is saved, which
+    // switches to it
+    private static final String USE_IT = "Use this one";
+
     // The separator between the added and removed parts of that note
     private static final String NOTE_PART_SEPARATOR = "; ";
 
     // The ending of a tester's source file
     private static final String JAVA_EXTENSION = ".java";
+
+    // Goes between the fields when the form is read as one line
+    private static final String FORM_TEXT_SEPARATOR = "\n";
 
     // The window that shows the sheet
     private final FlowWindow window;
@@ -146,6 +153,17 @@ public final class AssessmentEditor {
     // Called with the saved name after an inline save, or null
     private Consumer<String> onSaved = null;
 
+    // Called with a new assessment's name when its notice's link asks to
+    // use it, or null to switch as Home does
+    private Consumer<String> onUse = null;
+
+    // The inline form, once built
+    private Node view = null;
+
+    // What the inline form held when it was filled in, to tell whether
+    // it changed
+    private String savedForm = "";
+
     // Not used: create builds the sheet.
     private AssessmentEditor(FlowWindow window, SavedAssessment start,
             String originalName) {
@@ -189,10 +207,98 @@ public final class AssessmentEditor {
         return editor.build();
     }
 
+    /**
+     * Builds the inline form as createInline does, with what the link of
+     * the notice after a new assessment is saved does, such as Settings'
+     * own Use this one. Returns the editor, so the page can ask whether
+     * the form holds changes that are not saved; getView gives the form.
+     *
+     * @param window the window that shows it
+     * @param start the assessment to fill the form from
+     * @param originalName the name of the assessment being edited, or
+     *        null when the form creates a new one
+     * @param onSaved called with the saved name after a save
+     * @param onUse called with the saved name when the notice's link
+     *        asks to use it
+     * @return the editor
+     */
+    public static AssessmentEditor inline(FlowWindow window,
+            SavedAssessment start, String originalName,
+            Consumer<String> onSaved, Consumer<String> onUse) {
+        AssessmentEditor editor = new AssessmentEditor(window, start,
+                originalName);
+        editor.inline = true;
+        editor.onSaved = onSaved;
+        editor.onUse = onUse;
+        editor.view = editor.build();
+        editor.savedForm = editor.formText();
+        return editor;
+    }
+
+    /**
+     * Returns the inline form built by inline.
+     *
+     * @return the form
+     */
+    public Node getView() {
+        return view;
+    }
+
+    /**
+     * Says whether the inline form was changed since it was filled in.
+     *
+     * @return true if a field holds a change that is not saved
+     */
+    public boolean hasUnsavedChanges() {
+        return !formText().equals(savedForm);
+    }
+
+    /**
+     * Saves the inline form as its Save assessment button does.
+     *
+     * @return true if it was saved; false shows what is wrong under it
+     */
+    public boolean saveChanges() {
+        return save();
+    }
+
+    /**
+     * Puts back the values saved for this assessment, as Revert does.
+     */
+    public void revertChanges() {
+        revert();
+    }
+
+    // Returns everything the form holds as one line, to tell whether
+    // it changed.
+    private String formText() {
+        SavedAssessment draft = readDraft();
+        StringBuilder text = new StringBuilder(draft.getName());
+        for (Question question : draft.getQuestions()) {
+            text.append(FORM_TEXT_SEPARATOR).append(question.getId())
+                    .append(FORM_TEXT_SEPARATOR)
+                    .append(question.getFolderName())
+                    .append(FORM_TEXT_SEPARATOR)
+                    .append(question.getFileName())
+                    .append(FORM_TEXT_SEPARATOR)
+                    .append(question.getMaxScore());
+        }
+        text.append(FORM_TEXT_SEPARATOR).append(draft.getTestersDirectory())
+                .append(FORM_TEXT_SEPARATOR)
+                .append(draft.getStarterDirectory())
+                .append(FORM_TEXT_SEPARATOR)
+                .append(draft.getModelAnswersDirectory())
+                .append(FORM_TEXT_SEPARATOR)
+                .append(draft.getProvidedClassFiles())
+                .append(FORM_TEXT_SEPARATOR)
+                .append(draft.getTesterDataFiles())
+                .append(FORM_TEXT_SEPARATOR)
+                .append(draft.getPlaceholderFolderNames());
+        return text.toString();
+    }
+
     // Builds the form and its buttons.
     private Node build() {
-        HBox top = topBar();
-
         filledNote.getStyleClass().addAll("small-text", "filled-note");
         filledNote.setWrapText(true);
         show(filledNote, false);
@@ -211,6 +317,7 @@ public final class AssessmentEditor {
         if (inline) {
             return inlineBody(form);
         }
+        HBox top = topBar();
         return sheetBody(top, scroll);
     }
 
@@ -260,7 +367,9 @@ public final class AssessmentEditor {
                 + "folder laid out like the starter folder, with a correct "
                 + "answer to each question. With it, GradeZZY checks how "
                 + "strong each tester is and tries random inputs on the "
-                + "students' answers. Leave it empty to skip both checks.",
+                + "students' answers. Leave it empty to skip both checks. "
+                + "Their switches are under Model answer checks in "
+                + "Settings, the same for every assessment.",
                 modelAnswersField());
         return section("1", "Files", "Choose these first. The questions, "
                 + "their marks and the lists below fill in from them.",
@@ -988,33 +1097,37 @@ public final class AssessmentEditor {
         return added;
     }
 
-    // Reads the form, checks it, saves it and closes the sheet.
-    private void save() {
+    // Reads the form, checks it, saves it and closes the sheet. Returns
+    // whether it was saved.
+    private boolean save() {
         SavedAssessment draft = readDraft();
         if (window.getState().isAnyGrading() && isInUse()) {
             showProblem("A batch is being graded with this assessment. Save "
                     + "after it finishes.");
-            return;
+            return false;
         }
         String check = window.getBackend().validateAssessment(draft,
                 originalName);
         if (!check.isEmpty()) {
             showProblem(check);
-            return;
+            return false;
         }
         ActionResult result = window.getBackend().saveAssessment(draft,
                 originalName);
         if (!result.isDone()) {
             showProblem(result.getMessage());
-            return;
+            return false;
         }
         if (!inline) {
             window.closeSheet();
         }
-        announceSaved(draft, result);
+        // The page shows the saved assessment first, so a page built
+        // again after the save shows it too
         if (inline && onSaved != null) {
-            onSaved.accept(draft.getName());
+            onSaved.accept(draft.getName().trim());
         }
+        announceSaved(draft, result);
+        return true;
     }
 
     // Reads the form into a new assessment, not saved yet.
@@ -1039,26 +1152,41 @@ public final class AssessmentEditor {
         return draft;
     }
 
-    // Says the assessment was saved. A new assessment is the one graded
-    // from now on; it can be switched back on Home or Set up.
+    // Says the assessment was saved. A new assessment is not switched
+    // to: the notice offers to use it, as Home and Set up can later.
     private void announceSaved(SavedAssessment draft, ActionResult result) {
-        if (originalName == null && window.useAssessment(draft.getName())) {
-            window.notify("Saved " + draft.getName() + ". It is now the "
-                    + "assessment in use.");
-        } else if (originalName == null) {
-            // useAssessment already said why it was not switched
-            window.notify("Saved " + draft.getName() + ". The assessment "
-                    + "in use did not change.");
+        if (originalName == null) {
+            String savedName = draft.getName().trim();
+            window.notify("Saved " + savedName + ". The assessment in use "
+                    + "did not change.", USE_IT, () -> use(savedName));
+            // Home and Set up list it from now on
+            window.assessmentChanged();
         } else {
             window.notify(result.getMessage());
-            // A renamed assessment in use keeps the zip files listed
-            boolean renamedInUse = originalName.equalsIgnoreCase(
-                    window.getState().getAssessmentName())
-                    && !originalName.equals(draft.getName());
+            // The files chosen on Set up for each section move to the new
+            // name, and a renamed assessment in use keeps the zip files
+            // listed
+            String newName = draft.getName().trim();
+            boolean renamed = !originalName.equals(newName);
+            if (renamed) {
+                window.assessmentRenamed(originalName, newName);
+            }
+            boolean renamedInUse = renamed && originalName.equalsIgnoreCase(
+                    window.getState().getAssessmentName());
             if (renamedInUse) {
-                window.getState().renameAssessment(draft.getName());
+                window.getState().renameAssessment(newName);
             }
             window.assessmentChanged();
+        }
+    }
+
+    // Grades with a saved assessment from now on, as the notice's link
+    // asks.
+    private void use(String savedName) {
+        if (onUse == null) {
+            window.useAssessment(savedName);
+        } else {
+            onUse.accept(savedName);
         }
     }
 
@@ -1068,10 +1196,7 @@ public final class AssessmentEditor {
             return false;
         }
         Assessment inUse = window.getBackend().getAssessment();
-        if (inUse == null) {
-            return false;
-        }
-        return originalName.equalsIgnoreCase(inUse.getName());
+        return inUse != null && originalName.equalsIgnoreCase(inUse.getName());
     }
 
     // Shows what is wrong under the form.

@@ -760,11 +760,10 @@ public class SectionView {
             String reason = reasons.get(index);
             list.getChildren().add(errorRow(reason, errors.get(reason)));
         }
-        if (shown > 0) {
-            int last = shown - 1;
-            list.getChildren().get(0).getStyleClass().add("first");
-            list.getChildren().get(last).getStyleClass().add("last");
-        }
+        // errors is not empty, so at least one row was added
+        int last = shown - 1;
+        list.getChildren().get(0).getStyleClass().add("first");
+        list.getChildren().get(last).getStyleClass().add("last");
         return card(Parts.title("Common compile errors"), list);
     }
 

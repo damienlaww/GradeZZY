@@ -6,7 +6,8 @@
  * tests 1 and 3 is in the groups of test 1 and of test 3, or the same
  * "did not compile", "no answer", "ran too long" or "crashed". Inside a
  * group it notes which students wrote code of the same shape (the same
- * code but for names).
+ * code but for names). A group of one test is titled with the name the
+ * tester printed for it, such as "Failed test 3: getIsogramWords([])".
  *
  * Where it fits: AnswerGroupService lists these groups with the
  * marker's names and checks. The groups are worked out from the results
@@ -77,6 +78,19 @@ public final class AnswerGrouper {
 
     // Tests are numbered from 1, one more than their index
     private static final int FIRST_TEST_NUMBER = 1;
+
+    // Comes between a question's folder and file in a flag's message
+    private static final String FOLDER_SEPARATOR = "/";
+
+    // Comes between a test's number and its name in a title
+    private static final String NAME_SEPARATOR = ": ";
+
+    // Names the test a timeout or crash stopped at, such as " at test 3"
+    private static final String AT_TEST = " at test ";
+
+    // The longest test name shown in a title, and what ends a cut name
+    private static final int MAX_NAME_LENGTH = 60;
+    private static final String CUT_MARK = "...";
 
     // Only static methods; never created
     private AnswerGrouper() {
@@ -177,9 +191,26 @@ public final class AnswerGrouper {
      *         before test 1"
      */
     public static String titleOf(String pattern) {
+        return titleOf(pattern, new HashMap<Integer, String>());
+    }
+
+    /**
+     * Returns the words shown for a pattern, with the name the tester
+     * printed for the test when it is known. A test with no name keeps
+     * the words of titleOf(pattern).
+     *
+     * <p>Tier: COULD.
+     *
+     * @param pattern a pattern from patternOf
+     * @param caseNames the name of each test by its number, from 1
+     * @return such as "Failed test 3: getIsogramWords([alice, ben])" or
+     *         "Ran too long at test 3: getAverageAge(people.txt, LEE)"
+     */
+    public static String titleOf(String pattern,
+            Map<Integer, String> caseNames) {
         if (pattern.startsWith(FAILED_TEST_PREFIX)) {
-            return FAILED_ONE
-                    + pattern.substring(FAILED_TEST_PREFIX.length());
+            String number = pattern.substring(FAILED_TEST_PREFIX.length());
+            return FAILED_ONE + number + nameAfter(number, caseNames);
         }
         if (MISSING.equals(pattern)) {
             return "No answer handed in";
@@ -189,13 +220,34 @@ public final class AnswerGrouper {
         }
         if (pattern.startsWith(TIMEOUT_PREFIX)) {
             String tests = pattern.substring(TIMEOUT_PREFIX.length());
-            return RAN_TOO_LONG + whereStopped(tests);
+            return RAN_TOO_LONG + whereStopped(tests, caseNames);
         }
         if (pattern.startsWith(CRASH_PREFIX)) {
             String tests = pattern.substring(CRASH_PREFIX.length());
-            return CRASHED + whereStopped(tests);
+            return CRASHED + whereStopped(tests, caseNames);
         }
         return failedTitle(pattern);
+    }
+
+    // Returns ": " and the shown name of the test with a number, or
+    // nothing when its name is not known.
+    private static String nameAfter(String number,
+            Map<Integer, String> caseNames) {
+        String name = caseNames.get(Integer.valueOf(number));
+        if (name == null) {
+            return "";
+        }
+        return NAME_SEPARATOR + shorten(name);
+    }
+
+    // Cuts a long test name to MAX_NAME_LENGTH characters, ending it with
+    // "...", so a title fits on its row.
+    private static String shorten(String name) {
+        if (name.length() <= MAX_NAME_LENGTH) {
+            return name;
+        }
+        int keep = MAX_NAME_LENGTH - CUT_MARK.length();
+        return name.substring(0, keep).trim() + CUT_MARK;
     }
 
     /**
@@ -231,13 +283,13 @@ public final class AnswerGrouper {
         return FlagQuestionMatcher.isAbout(anomaly, submission, question);
     }
 
-    // Says whether a student's question is missing: a missing file or
-    // folder flag whose fix was not applied or kept. A file or folder
-    // that was fixed is no longer missing.
+    // Says whether a student's question is missing: a missing answer
+    // file or folder flag whose fix was not applied or kept. A file or
+    // folder that was fixed is no longer missing. A missing second file,
+    // such as Q3/GoldMember.java beside Q3.java, is a compile error.
     private static boolean isMissing(Submission submission,
             Question question) {
-        boolean noFile = hasUnfixedFlag(submission, question,
-                AnomalyType.MISSING_FILE);
+        boolean noFile = hasMissingAnswerFile(submission, question);
         boolean noFolder = hasUnfixedFlag(submission, question,
                 AnomalyType.MISSING_QUESTION_FOLDER);
         return noFile || noFolder;
@@ -249,6 +301,7 @@ public final class AnswerGrouper {
     // out in the order they were first seen.
     private static List<AnswerGroup> groupQuestion(GradingRun run,
             Question question) {
+        Map<Integer, String> caseNames = readCaseNames(run, question);
         List<String> patterns = new ArrayList<>();
         Map<String, AnswerGroup> byPattern = new HashMap<>();
         for (Submission submission : run.getSubmissions()) {
@@ -257,7 +310,7 @@ public final class AnswerGrouper {
                 AnswerGroup group = byPattern.get(groupPattern);
                 if (group == null) {
                     group = new AnswerGroup(question.getId(), groupPattern,
-                            titleOf(groupPattern));
+                            titleOf(groupPattern, caseNames));
                     patterns.add(groupPattern);
                     byPattern.put(groupPattern, group);
                 }
@@ -270,6 +323,34 @@ public final class AnswerGrouper {
             groups.add(byPattern.get(pattern));
         }
         return groups;
+    }
+
+    // Returns the name of each test of a question by its number: the first
+    // name any student's result has for it. Every student runs the same
+    // tester, so the names agree. A run saved before names were kept has
+    // none.
+    private static Map<Integer, String> readCaseNames(GradingRun run,
+            Question question) {
+        Map<Integer, String> caseNames = new HashMap<>();
+        for (Submission submission : run.getSubmissions()) {
+            QuestionResult result = findResult(submission, question);
+            if (result != null) {
+                addCaseNames(result, caseNames);
+            }
+        }
+        return caseNames;
+    }
+
+    // Adds the names of a result's tests that are not known yet.
+    private static void addCaseNames(QuestionResult result,
+            Map<Integer, String> caseNames) {
+        for (TestCaseResult testCase : result.getTestCaseResults()) {
+            String name = testCase.getName();
+            Integer number = Integer.valueOf(testCase.getTestNumber());
+            if (name != null && !caseNames.containsKey(number)) {
+                caseNames.put(number, name);
+            }
+        }
     }
 
     // Returns the groups an answer's pattern puts it in: one F:<test> for
@@ -364,16 +445,15 @@ public final class AnswerGrouper {
             Submission submission = findSubmission(run, username);
             String shape = CodeShapeReader.readShape(run, submission,
                     question);
-            if (shape == null) {
-                continue;
+            if (shape != null) {
+                List<String> same = byShape.get(shape);
+                if (same == null) {
+                    same = new ArrayList<>();
+                    shapes.add(shape);
+                    byShape.put(shape, same);
+                }
+                same.add(username);
             }
-            List<String> same = byShape.get(shape);
-            if (same == null) {
-                same = new ArrayList<>();
-                shapes.add(shape);
-                byShape.put(shape, same);
-            }
-            same.add(username);
         }
 
         // The shapes in the order they were first seen
@@ -398,12 +478,19 @@ public final class AnswerGrouper {
         return tests;
     }
 
-    // Names where a tester stopped: after the last test before the first
-    // failed one, or before test 1.
-    private static String whereStopped(String tests) {
+    // Names where a tester stopped: at the first failed test when its
+    // name is known, else after the last test before it, or before test 1.
+    private static String whereStopped(String tests,
+            Map<Integer, String> caseNames) {
         int finished = tests.indexOf(FAILED);
         if (finished < 0) {
             finished = tests.length();
+        }
+        int stoppedNumber = finished + FIRST_TEST_NUMBER;
+        String name = caseNames.get(Integer.valueOf(stoppedNumber));
+        boolean stoppedInTest = finished < tests.length();
+        if (stoppedInTest && name != null) {
+            return AT_TEST + stoppedNumber + NAME_SEPARATOR + shorten(name);
         }
         if (finished == 0) {
             return BEFORE_FIRST;
@@ -455,10 +542,8 @@ public final class AnswerGrouper {
     private static boolean hasFlag(Submission submission, Question question,
             AnomalyType type) {
         for (Anomaly anomaly : submission.getAnomalies()) {
-            if (anomaly.getType() != type) {
-                continue;
-            }
-            if (isAbout(anomaly, submission, question)) {
+            boolean sameType = anomaly.getType() == type;
+            if (sameType && isAbout(anomaly, submission, question)) {
                 return true;
             }
         }
@@ -470,13 +555,28 @@ public final class AnswerGrouper {
     private static boolean hasUnfixedFlag(Submission submission,
             Question question, AnomalyType type) {
         for (Anomaly anomaly : submission.getAnomalies()) {
-            if (anomaly.getType() != type) {
-                continue;
+            boolean unfixed = anomaly.getType() == type
+                    && !isFixed(anomaly);
+            if (unfixed && isAbout(anomaly, submission, question)) {
+                return true;
             }
-            if (isFixed(anomaly)) {
-                continue;
-            }
-            if (isAbout(anomaly, submission, question)) {
+        }
+        return false;
+    }
+
+    // Says whether a student has an unfixed missing file flag about a
+    // question that names the question's own file, such as Q3/Q3.java.
+    private static boolean hasMissingAnswerFile(Submission submission,
+            Question question) {
+        String answerFile = question.getFolderName() + FOLDER_SEPARATOR
+                + question.getFileName();
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            boolean unfixed = anomaly.getType() == AnomalyType.MISSING_FILE
+                    && !isFixed(anomaly);
+            boolean namesAnswer = anomaly.getMessage() != null
+                    && anomaly.getMessage().contains(answerFile);
+            if (unfixed && namesAnswer
+                    && isAbout(anomaly, submission, question)) {
                 return true;
             }
         }

@@ -27,6 +27,7 @@ import gradezzy.model.QuestionResult;
 import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.ActionResult;
+import gradezzy.util.InputValidator;
 
 /**
  * Builds the sheet that changes one mark.
@@ -146,11 +147,19 @@ public final class AdjustMarkSheet {
         if (missing) {
             return false;
         }
-        try {
-            return Double.parseDouble(markText.trim()) != current;
-        } catch (NumberFormatException exception) {
-            return true;
-        }
+        double typed = parseMark(markText);
+        return Double.isNaN(typed) || typed != current;
+    }
+
+    /**
+     * Reads a typed mark strictly, as InputValidator.parseMark does: 2,
+     * 2.5 or 2,5 are marks, 2f and 1e0 are not.
+     *
+     * @param markText the mark as typed
+     * @return the mark, or NaN when the text is not a mark
+     */
+    public static double parseMark(String markText) {
+        return InputValidator.parseMark(markText);
     }
 
     /**
@@ -168,13 +177,8 @@ public final class AdjustMarkSheet {
         if (markText == null || markText.trim().isEmpty()) {
             return notNumber;
         }
-        double score = 0.0;
-        try {
-            score = Double.parseDouble(markText.trim());
-        } catch (NumberFormatException exception) {
-            return notNumber;
-        }
-        if (Double.isNaN(score) || Double.isInfinite(score)) {
+        double score = parseMark(markText);
+        if (Double.isNaN(score)) {
             return notNumber;
         }
         if (score < 0.0 || score > max) {
@@ -200,7 +204,7 @@ public final class AdjustMarkSheet {
             return;
         }
         GradingRun run = window.getState().getRun();
-        double newMark = Double.parseDouble(markText.trim());
+        double newMark = parseMark(markText);
         ActionResult saved = window.getBackend().adjustScore(run, submission,
                 result.getQuestion().getId(), newMark, reasonText.trim());
         if (!saved.isDone()) {

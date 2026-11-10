@@ -311,10 +311,14 @@ public class ReviewScreen extends FlowScreen {
     // The details of the clicked student
     private final StudentPanel panel;
 
-    // The Students | Mistakes switch: the table, or the answer groups
+    // The Students | Errors | Similarity switch: the table, the answer
+    // groups, or the similarity groups
     private final ToggleButton studentsButton = new ToggleButton("Students");
     private final ToggleButton mistakesButton = new ToggleButton("Errors");
-    private final HBox modeBar = new HBox(studentsButton, mistakesButton);
+    private final ToggleButton similarityButton =
+            new ToggleButton("Similarity");
+    private final HBox modeBar = new HBox(studentsButton, mistakesButton,
+            similarityButton);
 
     // The filters, search and the switch above the table. The row wraps,
     // so beside the student panel the search goes under the filters
@@ -330,6 +334,9 @@ public class ReviewScreen extends FlowScreen {
 
     // The answer groups, shown in place of the table in Mistakes
     private final MistakesView mistakes;
+
+    // The similarity groups, shown in place of the table in Similarity
+    private final SimilarityGroupsView similarity;
 
     // Shown instead of the table when there is no run
     private final VBox empty = new VBox(Parts.GAP);
@@ -356,6 +363,8 @@ public class ReviewScreen extends FlowScreen {
         AnswerGroupActions groupActions = new AnswerGroupActions(window,
                 () -> groupsChanged());
         mistakes = new MistakesView(window, groupActions);
+        similarity = new SimilarityGroupsView(window,
+                () -> similarityDecided());
         createFilters();
         createModeBar();
         createSearch();
@@ -421,9 +430,18 @@ public class ReviewScreen extends FlowScreen {
             closePanel();
         }
         boolean grouping = getBackend().supports(Capability.ANSWER_GROUPS);
-        modeBar.setVisible(grouping);
-        modeBar.setManaged(grouping);
-        if (!grouping) {
+        boolean comparing = getBackend().supports(
+                Capability.SIMILARITY_DETAIL);
+        mistakesButton.setVisible(grouping);
+        mistakesButton.setManaged(grouping);
+        similarityButton.setVisible(comparing);
+        similarityButton.setManaged(comparing);
+        boolean switching = grouping || comparing;
+        modeBar.setVisible(switching);
+        modeBar.setManaged(switching);
+        boolean hiddenChosen = (mistakesButton.isSelected() && !grouping)
+                || (similarityButton.isSelected() && !comparing);
+        if (hiddenChosen) {
             studentsButton.setSelected(true);
         }
         refreshStatuses();
@@ -438,6 +456,16 @@ public class ReviewScreen extends FlowScreen {
      */
     public void showMistakes() {
         mistakesButton.setSelected(true);
+    }
+
+    /**
+     * Shows the similarity groups in place of the table. Used by the
+     * developer checks.
+     *
+     * <p>Tier: COULD.
+     */
+    public void showSimilarity() {
+        similarityButton.setSelected(true);
     }
 
     /**
@@ -613,9 +641,7 @@ public class ReviewScreen extends FlowScreen {
             String shown = row.getUsername();
             boolean fileOfStudent = isNameless(row)
                     && ExportScreen.isNameOf(shown, username, prefixPattern);
-            if (shown.equalsIgnoreCase(username)) {
-                return row;
-            } else if (fileOfStudent) {
+            if (shown.equalsIgnoreCase(username) || fileOfStudent) {
                 return row;
             }
         }
@@ -685,21 +711,24 @@ public class ReviewScreen extends FlowScreen {
         ToggleGroup group = new ToggleGroup();
         studentsButton.setToggleGroup(group);
         mistakesButton.setToggleGroup(group);
+        similarityButton.setToggleGroup(group);
         studentsButton.setSelected(true);
         studentsButton.getStyleClass().add("left-pill");
-        mistakesButton.getStyleClass().add("right-pill");
+        mistakesButton.getStyleClass().add("center-pill");
+        similarityButton.getStyleClass().add("right-pill");
         Parts.tip(studentsButton, "Every student, one row each.");
         Parts.tip(mistakesButton, "Each error on each question with the "
-                + "students who made it, and the clusters of similar code, "
-                + "so you decide each error once.");
+                + "students who made it, so you decide each error once.");
+        Parts.tip(similarityButton, "The groups of students whose code the "
+                + "similarity check found alike, question by question.");
         modeBar.getStyleClass().add("segmented");
         modeBar.setMinWidth(HBox.USE_PREF_SIZE);
         group.selectedToggleProperty().addListener((observable, before,
                 after) -> modeClicked(before, after));
     }
 
-    // Follows a click on Students or Errors; clicking the one that is
-    // on keeps it on.
+    // Follows a click on Students, Errors or Similarity; clicking the one
+    // that is on keeps it on.
     private void modeClicked(Toggle before, Toggle after) {
         if (after == null) {
             before.setSelected(true);
@@ -708,31 +737,36 @@ public class ReviewScreen extends FlowScreen {
         applyMode();
     }
 
-    // Swaps the table and the answer groups, and the filters and the
-    // summary above them.
+    // Swaps the table, the answer groups and the similarity groups, and
+    // the filters and the summary above them.
     private void applyMode() {
         int place = main.getChildren().indexOf(tableFrame);
         if (place < 0) {
             place = main.getChildren().indexOf(mistakes.getView());
         }
-        // The hint about clicking and ticking students is for the table
-        boolean showGroups = mistakesButton.isSelected();
-        guide.setVisible(!showGroups);
-        guide.setManaged(!showGroups);
-        if (showGroups) {
-            showGroupsAt(place);
-            return;
+        if (place < 0) {
+            place = main.getChildren().indexOf(similarity.getView());
         }
-        showTableAt(place);
+        // The hint about clicking and ticking students is for the table
+        boolean showTable = studentsButton.isSelected();
+        guide.setVisible(showTable);
+        guide.setManaged(showTable);
+        if (mistakesButton.isSelected()) {
+            showGroupsAt(place, mistakes.getView());
+        } else if (similarityButton.isSelected()) {
+            showGroupsAt(place, similarity.getView());
+        } else {
+            showTableAt(place);
+        }
     }
 
-    // Puts the answer groups and their summary in place of the table and
-    // the filters, at a place of the page.
-    private void showGroupsAt(int place) {
+    // Puts the answer or similarity groups and their summary in place of
+    // the table and the filters, at a place of the page.
+    private void showGroupsAt(int place, Node view) {
         closePanel();
         tools.getChildren().setAll(modeBar, mistakesSummary);
-        main.getChildren().set(place, mistakes.getView());
-        VBox.setVgrow(mistakes.getView(), Priority.ALWAYS);
+        main.getChildren().set(place, view);
+        VBox.setVgrow(view, Priority.ALWAYS);
         refreshMistakes();
     }
 
@@ -742,13 +776,23 @@ public class ReviewScreen extends FlowScreen {
         main.getChildren().set(place, tableFrame);
     }
 
-    // Shows the run's answer groups again when they are on screen.
+    // Shows the run's answer or similarity groups again when they are on
+    // screen.
     private void refreshMistakes() {
-        if (!mistakesButton.isSelected()) {
-            return;
+        if (mistakesButton.isSelected()) {
+            mistakes.show(getState().getRun());
+            mistakesSummary.setText(mistakes.getSummary());
+        } else if (similarityButton.isSelected()) {
+            similarity.show(getState().getRun());
+            mistakesSummary.setText(similarity.getSummary());
         }
-        mistakes.show(getState().getRun());
-        mistakesSummary.setText(mistakes.getSummary());
+    }
+
+    // Counts again after a group of similar code was decided, as its
+    // students may no longer need a look.
+    private void similarityDecided() {
+        refreshStatuses();
+        mistakesSummary.setText(similarity.getSummary());
     }
 
     // Redraws the marks, statuses and groups after a group action.
@@ -1412,15 +1456,12 @@ public class ReviewScreen extends FlowScreen {
     private void tickAll(boolean ticked) {
         List<Submission> selected = getState().getSelected();
         selected.clear();
-        if (!ticked) {
-            table.refresh();
-            refreshActions();
-            return;
-        }
         // A row made on Review has no marks to export
-        for (Submission submission : filtered) {
-            if (!ResultState.isMadeOnReview(submission)) {
-                selected.add(submission);
+        if (ticked) {
+            for (Submission submission : filtered) {
+                if (!ResultState.isMadeOnReview(submission)) {
+                    selected.add(submission);
+                }
             }
         }
         table.refresh();
@@ -1630,19 +1671,49 @@ public class ReviewScreen extends FlowScreen {
         }
         List<Submission> scope = getState().getSelected();
         for (Submission submission : rows) {
-            if (!scope.isEmpty() && !scope.contains(submission)) {
-                continue;
-            }
-            for (Anomaly anomaly : submission.getAnomalies()) {
-                boolean checkable = anomaly.getFixStatus() != FixStatus.APPLIED
-                        && ReviewRules.canCheckAll(anomaly.getType())
-                        && getBackend().needsReview(anomaly);
-                if (checkable) {
-                    open.add(anomaly);
-                }
+            if (scope.isEmpty() || scope.contains(submission)) {
+                addCheckableFlags(submission, open);
             }
         }
         return open;
+    }
+
+    // Says whether a ticked student, or any when none is ticked, has a
+    // Similar code flag still open, which Mark all as checked leaves.
+    private boolean hasOpenSimilarCode() {
+        List<Submission> scope = getState().getSelected();
+        for (Submission submission : rows) {
+            boolean inScope = scope.isEmpty() || scope.contains(submission);
+            if (inScope && hasOpenSimilarCode(submission)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Says whether a student has a Similar code flag still open.
+    private boolean hasOpenSimilarCode(Submission submission) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            boolean open = anomaly.getType() == AnomalyType.SIMILAR_CODE
+                    && getBackend().needsReview(anomaly);
+            if (open) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Adds a student's open flags that may be checked together.
+    private void addCheckableFlags(Submission submission,
+            List<Anomaly> open) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            boolean checkable = anomaly.getFixStatus() != FixStatus.APPLIED
+                    && ReviewRules.canCheckAll(anomaly.getType())
+                    && getBackend().needsReview(anomaly);
+            if (checkable) {
+                open.add(anomaly);
+            }
+        }
     }
 
     // Asks before marking every open flag and problem as checked,
@@ -1653,11 +1724,16 @@ public class ReviewScreen extends FlowScreen {
             whose = "the ticked students";
         }
         VBox content = new VBox(Parts.GAP_SMALL);
+        String similarNote = "";
+        if (hasOpenSimilarCode()) {
+            similarNote = " Similar code flags are left as they are: "
+                    + "decide them under Similarity.";
+        }
         Label about = Parts.muted("These flags of " + whose
                 + " are marked as checked. No mark changes, and you can "
-                + "undo it. Compile errors, timeouts and students not on "
-                + "the score sheet are left for you to check one at a "
-                + "time:");
+                + "undo it." + similarNote + " Compile errors, timeouts "
+                + "and students not on the score sheet are left for you to "
+                + "check one at a time:");
         about.setWrapText(true);
         content.getChildren().add(about);
         List<String> entries = new ArrayList<>();

@@ -16,6 +16,8 @@ import java.util.function.Consumer;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
+import javafx.scene.shape.Circle;
 
 /**
  * The tabs Home, Grading, Statistics, Runs and Settings.
@@ -30,8 +32,14 @@ public class TabBar extends HBox {
     // The gap between tabs
     private static final double TAB_GAP = 4.0;
 
+    // The size of the dot on a tab with changes that are not saved
+    private static final double DOT_RADIUS = 3.0;
+
     // One button per page
     private final Map<Page, Button> tabs = new HashMap<>();
+
+    // One dot per page, shown while the page has changes not saved
+    private final Map<Page, Circle> dots = new HashMap<>();
 
     /**
      * Creates the tabs.
@@ -45,7 +53,14 @@ public class TabBar extends HBox {
         for (Page page : Page.values()) {
             Button tab = new Button(page.getLabel());
             tab.getStyleClass().setAll("button", "page-tab");
-            tab.setGraphic(Parts.icon(page.getIconPath(), ICON_SIZE));
+            Circle dot = new Circle(DOT_RADIUS);
+            dot.getStyleClass().add("setting-dot");
+            dot.setVisible(false);
+            StackPane graphic = new StackPane(Parts.icon(page.getIconPath(),
+                    ICON_SIZE), dot);
+            StackPane.setAlignment(dot, Pos.TOP_RIGHT);
+            tab.setGraphic(graphic);
+            dots.put(page, dot);
             tab.setFocusTraversable(false);
             tab.setOnAction(event -> onPick.accept(page));
             tabs.put(page, tab);
@@ -66,6 +81,28 @@ public class TabBar extends HBox {
                 tab.getStyleClass().add("selected");
             }
         }
+    }
+
+    /**
+     * Shows or hides the dot on a tab that says the page has changes
+     * that are not saved, such as Settings.
+     *
+     * @param page the page
+     * @param pending true to show the dot
+     */
+    public void setPending(Page page, boolean pending) {
+        dots.get(page).setVisible(pending);
+    }
+
+    /**
+     * Says whether a tab shows the dot of changes not saved, for the
+     * developer checks.
+     *
+     * @param page the page
+     * @return true if the dot is shown
+     */
+    public boolean isPending(Page page) {
+        return dots.get(page).isVisible();
     }
 
     /**

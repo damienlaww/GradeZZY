@@ -103,7 +103,8 @@ public final class SimilaritySheet {
 
     /**
      * Returns the pill that shows how similar a pair is, such as
-     * "84% similar": red above 75%, amber at 75% or below.
+     * "84% similar": red above 75%, amber at 75% or below, and
+     * "Identical copy" for the same header and code.
      *
      * @param pair the pair
      * @return the pill
@@ -114,6 +115,20 @@ public final class SimilaritySheet {
             Label pill = Parts.pill("Not flagged as a pair", Tone.NEUTRAL);
             Parts.tip(pill, "The check linked these two through other "
                     + "students in the cluster, not to each other.");
+            return pill;
+        }
+        if (pair.isIdentical()) {
+            Label pill = Parts.pill("Identical copy", Tone.BAD);
+            Parts.tip(pill, "Both files have the same Name and Email ID "
+                    + "in their header and the same code.");
+            return pill;
+        }
+        if (pair.isSameEmail()) {
+            long shown = Math.round(pair.getSimilarity() * PERCENT);
+            Label pill = Parts.pill("Same Email ID, " + shown
+                    + Parts.PERCENT_SIGN + " similar", Tone.BAD);
+            Parts.tip(pill, "Both files give the same Email ID in their "
+                    + "header.");
             return pill;
         }
         long percent = Math.round(pair.getSimilarity() * PERCENT);
