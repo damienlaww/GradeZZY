@@ -243,8 +243,8 @@ public class TesterStrengthChecker {
         List<Mutant> mutants = new ArrayList<>();
 
         for (String fileName : listAnswerFiles(question, answerFolder)) {
-            String source = FileUtils.readText(answerFolder.resolve(
-                    fileName));
+            Path answerFile = answerFolder.resolve(fileName);
+            String source = FileUtils.readText(answerFile);
             String starterSource = ModelAnswerCopy.readStarter(
                     starterDirectory, question, fileName);
             mutants.addAll(mutantMaker.make(fileName, source,

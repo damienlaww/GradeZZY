@@ -3,8 +3,8 @@
  *
  * Purpose: Writes a JavaFX image to a PNG file.
  *
- * Where it fits: Used by SnapshotWriter for off-screen pictures and by
- * WindowTest for pictures of the real screen.
+ * Where it fits: Used by FlowCheck for off-screen pictures and by
+ * RobotDriver, for FlowWindowTest, for pictures of the real screen.
  *
  * Note on untaught Java: javax.imageio and BufferedImage write the PNG,
  * since the JavaFX helper for this (javafx-swing) is not in lib/.

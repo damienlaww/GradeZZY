@@ -476,8 +476,9 @@ public class GradingService {
     private void addTesters(GradingContext context,
             TestCaseSource testCaseSource) throws GradingException {
         try {
-            context.getTesters().addAll(
-                    testCaseSource.prepareTesters(context.getAssessment()));
+            List<TesterFile> testers = testCaseSource.prepareTesters(
+                    context.getAssessment());
+            context.getTesters().addAll(testers);
         } catch (TestCaseException exception) {
             throw new GradingException("The testers could not be "
                     + "prepared: " + exception.getMessage(), exception);
@@ -786,8 +787,9 @@ public class GradingService {
             if (needsResume(submission)) {
                 resetForRetry(submission);
                 if (testerWarning != null) {
-                    submission.addAnomaly(new Anomaly(
-                            RESUME_WARNING_ID_PREFIX + UUID.randomUUID(),
+                    String anomalyId = RESUME_WARNING_ID_PREFIX
+                            + UUID.randomUUID();
+                    submission.addAnomaly(new Anomaly(anomalyId,
                             AnomalyType.INTERNAL_ERROR, Severity.WARNING,
                             submission.getUsername(), testerWarning,
                             RESUME_WARNING_ACTION));
@@ -1460,8 +1462,9 @@ public class GradingService {
             return first.toRealPath().equals(second.toRealPath());
         } catch (IOException exception) {
             // One of them is missing, so compare the names as written
-            return first.toAbsolutePath().normalize().equals(
-                    second.toAbsolutePath().normalize());
+            Path firstWritten = first.toAbsolutePath().normalize();
+            Path secondWritten = second.toAbsolutePath().normalize();
+            return firstWritten.equals(secondWritten);
         }
     }
 
@@ -1625,8 +1628,9 @@ public class GradingService {
         try {
             TestCaseSource testCaseSource = new UploadedTesterSource(
                     testersDirectory, config);
-            context.getTesters().addAll(
-                    testCaseSource.prepareTesters(assessment));
+            List<TesterFile> testers =
+                    testCaseSource.prepareTesters(assessment);
+            context.getTesters().addAll(testers);
         } catch (TestCaseException exception) {
             throw new GradingException("The testers could not be "
                     + "prepared: " + exception.getMessage(), exception);

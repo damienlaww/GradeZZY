@@ -394,7 +394,8 @@ public class ConsoleMain {
 
         System.out.println("Similar code (a review aid, not a finding):");
         for (SimilarityPair pair : pairs) {
-            long percent = Math.round(pair.getSimilarity() * PERCENT);
+            double exactPercent = pair.getSimilarity() * PERCENT;
+            long percent = Math.round(exactPercent);
             System.out.println(LINE_INDENT + pair.getQuestionId() + ": "
                     + pair.getFirstUsername() + " and "
                     + pair.getSecondUsername() + ", " + percent

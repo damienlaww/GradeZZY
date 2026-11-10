@@ -459,7 +459,7 @@ public class FolderHierarchyFixer extends AbstractFixer {
         for (Anomaly other : submission.getAnomalies()) {
             boolean movedToo = isOtherMissingFolder(other, anomaly)
                     && isMovedToo(submission, other, contentRoot,
-                    chainEnd, folderNames);
+                            chainEnd, folderNames);
             if (movedToo) {
                 sameMove.add(other);
             }

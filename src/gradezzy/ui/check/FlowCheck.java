@@ -5,8 +5,8 @@
  * with the live and the demo backend, in both themes, and can save a
  * picture of each.
  *
- * Where it fits: ScreenCheck calls it for "sh run.sh --check"; MainApp
- * calls it with a folder for "sh run.sh --flowshots".
+ * Where it fits: MainApp calls it for "sh run.sh --check", and with a
+ * folder for "sh run.sh --snapshot".
  */
 package gradezzy.ui.check;
 
@@ -60,6 +60,13 @@ public class FlowCheck {
 
     // The index of the tour's stop about the Review step
     private static final int REVIEW_STOP = 9;
+
+    // Comes between the parts of a picture's file name, as in
+    // demo-dark-1200-0-home.png
+    private static final String NAME_SEPARATOR = "-";
+
+    // The ending of a picture's file name
+    private static final String PNG_EXTENSION = ".png";
 
     // Every service
     private final ServiceRegistry services;
@@ -127,7 +134,8 @@ public class FlowCheck {
         if (dark) {
             theme = "dark";
         }
-        String tag = mode + "-" + theme + "-" + (int) size[0];
+        String tag = mode + NAME_SEPARATOR + theme + NAME_SEPARATOR
+                + (int) size[0];
         try {
             FlowWindow window = new FlowWindow(backend, dark);
             Scene scene = window.build(size[0], size[1]);
@@ -558,7 +566,8 @@ public class FlowCheck {
         stopCaching(scene.getRoot());
         Files.createDirectories(folder);
         WritableImage image = scene.getRoot().snapshot(null, null);
-        PngWriter.write(image, folder.resolve(tag + "-" + name + ".png"));
+        String fileName = tag + NAME_SEPARATOR + name + PNG_EXTENSION;
+        PngWriter.write(image, folder.resolve(fileName));
     }
 
     // Turns off the picture a scroll pane keeps of its content. Off screen

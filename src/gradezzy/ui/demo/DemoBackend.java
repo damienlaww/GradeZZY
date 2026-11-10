@@ -108,6 +108,13 @@ public final class DemoBackend implements DashboardBackend {
     // The letter of a snapshot taken with Back up now
     private static final String NEW_SNAPSHOT_LETTER = "B";
 
+    // Comes between a run id and its snapshot letter, as in 024-A
+    private static final String SNAPSHOT_SEPARATOR = "-";
+
+    // Comes after a folder name in a sample repair value, as in
+    // learner.bravo/
+    private static final String FOLDER_SEPARATOR = "/";
+
     // The export formats the demo can preview
     private static final String JSON_FORMAT = "json";
     private static final String CSV_FORMAT = "csv";
@@ -1020,8 +1027,9 @@ public final class DemoBackend implements DashboardBackend {
             return ActionResult.failed("There is no run to back up yet.");
         }
         String runId = entry.getRun().getId();
-        entry.recordSnapshot("Snapshot " + runId + "-" + NEW_SNAPSHOT_LETTER
-                + ", " + LocalDateTime.now().format(TIME_FORMAT));
+        entry.recordSnapshot("Snapshot " + runId + SNAPSHOT_SEPARATOR
+                + NEW_SNAPSHOT_LETTER + ", "
+                + LocalDateTime.now().format(TIME_FORMAT));
         return ActionResult.done("Backed up run " + runId
                 + ". Demo mode keeps the snapshot in memory only.");
     }
@@ -1526,10 +1534,11 @@ public final class DemoBackend implements DashboardBackend {
 
         if (type == AnomalyType.MISSING_WRAPPER_FOLDER) {
             return new RepairItem(anomaly, "Q1/, Q2/ and Q3/ at the top of "
-                    + "the ZIP", username + "/Q1, Q2 and Q3");
+                    + "the ZIP", username + FOLDER_SEPARATOR
+                    + "Q1, Q2 and Q3");
         } else if (type == AnomalyType.WRONG_FOLDER_NAME) {
             return new RepairItem(anomaly, "RenameToYourUsername/",
-                    username + "/");
+                    username + FOLDER_SEPARATOR);
         } else if (type == AnomalyType.MISSING_HEADER_NAME) {
             Student student = DemoData.studentFor(username);
             return new RepairItem(anomaly, "Name: (blank) in Q1a.java",
@@ -1572,7 +1581,7 @@ public final class DemoBackend implements DashboardBackend {
     private String snapshotText(GradingRun run, String letter) {
         LocalDateTime savedAt = run.getStartedAt().plusMinutes(
                 SNAPSHOT_DELAY_MINUTES);
-        return "Snapshot " + run.getId() + "-" + letter + ", "
+        return "Snapshot " + run.getId() + SNAPSHOT_SEPARATOR + letter + ", "
                 + savedAt.format(TIME_FORMAT);
     }
 

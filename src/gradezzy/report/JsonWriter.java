@@ -46,6 +46,23 @@ public class JsonWriter {
     // The quotes around a JSON string, one at each end
     private static final int QUOTE_COUNT = 2;
 
+    // The other characters JSON writes with a backslash in front
+    private static final char BACKSLASH = '\\';
+    private static final char NEW_LINE = '\n';
+    private static final char CARRIAGE_RETURN = '\r';
+    private static final char TAB = '\t';
+    private static final char BACKSPACE = '\b';
+    private static final char FORM_FEED = '\f';
+
+    // How each of those characters, and the quote, is written in JSON
+    private static final String ESCAPED_QUOTE = "\\\"";
+    private static final String ESCAPED_BACKSLASH = "\\\\";
+    private static final String ESCAPED_NEW_LINE = "\\n";
+    private static final String ESCAPED_CARRIAGE_RETURN = "\\r";
+    private static final String ESCAPED_TAB = "\\t";
+    private static final String ESCAPED_BACKSPACE = "\\b";
+    private static final String ESCAPED_FORM_FEED = "\\f";
+
     // The brackets around a JSON object
     private static final String OBJECT_START = "{";
     private static final String OBJECT_END = "}";
@@ -128,19 +145,19 @@ public class JsonWriter {
     // Returns the escaped form of one character of a JSON string
     private String escape(char character) {
         if (character == QUOTE) {
-            return "\\\"";
-        } else if (character == '\\') {
-            return "\\\\";
-        } else if (character == '\n') {
-            return "\\n";
-        } else if (character == '\r') {
-            return "\\r";
-        } else if (character == '\t') {
-            return "\\t";
-        } else if (character == '\b') {
-            return "\\b";
-        } else if (character == '\f') {
-            return "\\f";
+            return ESCAPED_QUOTE;
+        } else if (character == BACKSLASH) {
+            return ESCAPED_BACKSLASH;
+        } else if (character == NEW_LINE) {
+            return ESCAPED_NEW_LINE;
+        } else if (character == CARRIAGE_RETURN) {
+            return ESCAPED_CARRIAGE_RETURN;
+        } else if (character == TAB) {
+            return ESCAPED_TAB;
+        } else if (character == BACKSPACE) {
+            return ESCAPED_BACKSPACE;
+        } else if (character == FORM_FEED) {
+            return ESCAPED_FORM_FEED;
         } else if (character < FIRST_PRINTABLE) {
             return String.format(UNICODE_ESCAPE, (int) character);
         }

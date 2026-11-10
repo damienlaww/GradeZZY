@@ -244,12 +244,14 @@ public class WorkingCopyManager {
     // Removes the half-built staging folder, if any. A failure to remove
     // it is attached to the original error instead of hiding it.
     private void removeStaging(Path staging, Exception exception) {
-        if (staging != null) {
-            try {
-                FileUtils.deleteDirectory(staging);
-            } catch (IOException cleanup) {
-                exception.addSuppressed(cleanup);
-            }
+        if (staging == null) {
+            return;
+        }
+
+        try {
+            FileUtils.deleteDirectory(staging);
+        } catch (IOException cleanup) {
+            exception.addSuppressed(cleanup);
         }
     }
 

@@ -690,13 +690,24 @@ public class SubmissionLoader {
         for (int index = 1; index < submissions.size(); index++) {
             Submission next = submissions.get(index);
             int position = index;
-            while (position > 0
-                    && sortsAfter(submissions.get(position - 1), next)) {
-                submissions.set(position, submissions.get(position - 1));
+            while (sortsBeforePrevious(next, submissions, position)) {
+                int previous = position - 1;
+                submissions.set(position, submissions.get(previous));
                 position--;
             }
             submissions.set(position, next);
         }
+    }
+
+    // Says whether a submission sorts before the one just in front of a
+    // position in the list; false at the start of the list.
+    private boolean sortsBeforePrevious(Submission next,
+            List<Submission> submissions, int position) {
+        if (position <= 0) {
+            return false;
+        }
+        int previous = position - 1;
+        return sortsAfter(submissions.get(previous), next);
     }
 
     // Says whether the first submission's file name sorts after the

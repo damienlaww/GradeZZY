@@ -15,6 +15,9 @@ package gradezzy.model;
  */
 public class Section {
 
+    // Goes between the module and the section in the label
+    private static final String LABEL_SEPARATOR = " ";
+
     // The course code, for example CS102
     private final String moduleCode;
 
@@ -64,6 +67,6 @@ public class Section {
      * @return the label, for example CS102 G1
      */
     public String getLabel() {
-        return moduleCode + " " + sectionCode;
+        return moduleCode + LABEL_SEPARATOR + sectionCode;
     }
 }

@@ -606,10 +606,11 @@ public class ReviewScreen extends FlowScreen {
                 ConfigKeys.ZIP_NAME_PREFIX_PATTERN);
         for (Submission row : skippedRows) {
             String shown = row.getUsername();
+            boolean fileOfStudent = isNameless(row)
+                    && ExportScreen.isNameOf(shown, username, prefixPattern);
             if (shown.equalsIgnoreCase(username)) {
                 return row;
-            } else if (isNameless(row) && ExportScreen.isNameOf(shown,
-                    username, prefixPattern)) {
+            } else if (fileOfStudent) {
                 return row;
             }
         }

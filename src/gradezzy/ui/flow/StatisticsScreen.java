@@ -389,8 +389,9 @@ public class StatisticsScreen extends FlowScreen {
             sectionCode = null;
             runIndex = 0;
             String stateSection = getState().getSectionCode();
-            if (sections.contains(stateSection)
-                    && isGraded(runOf(stateSection))) {
+            boolean stateGraded = sections.contains(stateSection)
+                    && isGraded(runOf(stateSection));
+            if (stateGraded) {
                 sectionCode = stateSection;
             }
             for (String code : sections) {

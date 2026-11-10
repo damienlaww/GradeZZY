@@ -281,9 +281,12 @@ public class StructureValidator extends AbstractValidator {
     // folder.
     private boolean isInside(Path chainEnd, String folderName)
             throws IOException {
-        return chainEnd != null
-                && findIgnoringCase(listFolders(chainEnd),
-                folderName) != null;
+        if (chainEnd == null) {
+            return false;
+        }
+
+        Path found = findIgnoringCase(listFolders(chainEnd), folderName);
+        return found != null;
     }
 
     // Explains where the question folders sit too deep, or returns empty

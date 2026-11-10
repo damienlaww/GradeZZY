@@ -119,8 +119,8 @@ public class MutantMaker {
      */
     public List<Mutant> make(String fileName, String source,
             String starterSource) {
-        List<JavaToken> tokens = joinOperators(JavaTokenizer.tokenize(
-                source));
+        List<JavaToken> singleTokens = JavaTokenizer.tokenize(source);
+        List<JavaToken> tokens = joinOperators(singleTokens);
         List<String> texts = textsOf(tokens);
         String[] lines = source.split(NEW_LINE, KEEP_EMPTY_LINES);
         boolean[] changeable = findChangeable(tokens, texts, lines,
