@@ -330,7 +330,8 @@ public class PlagiarismService {
         long percent = Math.round(exactPercent);
         // listPairs reads the question and percentage back from the start
         String message = pair.getQuestionId() + MESSAGE_MIDDLE + percent
-                + PERCENT_SIGN + " similar to " + otherUsername + ". This is "
+                + PERCENT_SIGN + " similar to "
+                + describeStudent(submissions, otherUsername) + ". This is "
                 + "a review aid, not a finding.";
         Anomaly anomaly = new Anomaly(id, AnomalyType.SIMILAR_CODE,
                 Severity.INFO, username, message, SUGGESTED_ACTION);
@@ -340,6 +341,21 @@ public class PlagiarismService {
             anomaly.setFixStatus(earlier.getFixStatus());
         }
         submission.addAnomaly(anomaly);
+    }
+
+    // Names a student by name and email ID, such as AIDEN TOH
+    // (aiden.toh.2025), or by email ID alone when not on the score sheet.
+    private String describeStudent(List<Submission> submissions,
+            String username) {
+        Submission submission = findByUsername(submissions, username);
+        boolean named = submission != null
+                && submission.getStudent() != null
+                && !submission.getStudent().getFullName().isEmpty();
+        if (!named) {
+            return username;
+        }
+        return submission.getStudent().getFullName() + " (" + username
+                + ")";
     }
 
     // Returns the submission of a username, or null if there is none.

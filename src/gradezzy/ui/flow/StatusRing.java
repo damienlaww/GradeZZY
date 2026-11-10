@@ -13,8 +13,10 @@ package gradezzy.ui.flow;
 import java.util.ArrayList;
 import java.util.List;
 
+import javafx.geometry.Pos;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
 import javafx.scene.shape.Arc;
 import javafx.scene.shape.ArcType;
 import javafx.scene.text.Text;
@@ -109,6 +111,9 @@ public class StatusRing extends Region {
     }
 
     // Draws the number of students and the word under it in the middle.
+    // A box the size of the ring centres them when it is laid out, once
+    // the fonts of the stylesheet are known, so the number sits in the
+    // middle whatever its width.
     private void drawTotal(int total, double centre) {
         Text number = new Text(String.valueOf(total));
         number.getStyleClass().add("ring-total");
@@ -118,22 +123,14 @@ public class StatusRing extends Region {
         }
         Text word = new Text(unit);
         word.getStyleClass().add("chart-note");
-        getChildren().addAll(number, word);
-        number.applyCss();
-        word.applyCss();
-        double numberHeight = number.getLayoutBounds().getHeight();
-        double wordHeight = word.getLayoutBounds().getHeight();
-        double textHeight = numberHeight + TEXT_GAP + wordHeight;
-        double top = centre - textHeight / HALF;
-        double numberX = centre - number.getLayoutBounds().getWidth() / HALF;
-        double numberY = top - number.getLayoutBounds().getMinY();
-        double wordX = centre - word.getLayoutBounds().getWidth() / HALF;
-        double wordY = top + numberHeight + TEXT_GAP
-                - word.getLayoutBounds().getMinY();
-        number.setLayoutX(numberX);
-        number.setLayoutY(numberY);
-        word.setLayoutX(wordX);
-        word.setLayoutY(wordY);
+        VBox middle = new VBox(TEXT_GAP, number, word);
+        middle.setAlignment(Pos.CENTER);
+        double size = centre * HALF;
+        middle.setMinSize(size, size);
+        middle.setPrefSize(size, size);
+        middle.setMaxSize(size, size);
+        middle.setMouseTransparent(true);
+        getChildren().add(middle);
     }
 
     // Draws one arc per part with a small gap between parts.

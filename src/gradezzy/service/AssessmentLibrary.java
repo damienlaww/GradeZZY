@@ -7,9 +7,9 @@
  * Where it fits: The window lists, creates, edits and chooses assessments
  * through it. Choosing one copies its settings into config.properties
  * with SettingsService, because every part of grading reads the questions,
- * tester folder and starter folder from there. A question's maximum mark
- * is not saved: as in AssessmentFactory, it is the sum of the
- * "score += <number>" lines of its tester.
+ * tester folder, starter folder and model answers folder from there. A
+ * question's maximum mark is not saved: as in AssessmentFactory, it is
+ * the sum of the "score += <number>" lines of its tester.
  */
 package gradezzy.service;
 
@@ -158,6 +158,8 @@ public class AssessmentLibrary {
         }
         current.setStarterDirectory(config.getString(
                 ConfigKeys.STARTER_DIR));
+        current.setModelAnswersDirectory(config.getString(
+                ConfigKeys.MODEL_ANSWERS_DIR));
 
         current.getProvidedClassFiles().addAll(config.getList(
                 ConfigKeys.PROVIDED_CLASS_FILES));
@@ -246,6 +248,14 @@ public class AssessmentLibrary {
         if (!Files.isDirectory(Paths.get(draft.getStarterDirectory()))) {
             return "The starter folder " + draft.getStarterDirectory()
                     + " does not exist.";
+        }
+        String modelAnswers = draft.getModelAnswersDirectory().trim();
+        boolean missingAnswers = !modelAnswers.isEmpty()
+                && !Files.isDirectory(Paths.get(modelAnswers));
+        if (missingAnswers) {
+            return "The model answers folder " + modelAnswers
+                    + " does not exist. Choose it again, or leave it "
+                    + "empty.";
         }
         for (Question question : draft.getQuestions()) {
             String id = question.getId().trim();
@@ -368,7 +378,8 @@ public class AssessmentLibrary {
 
     /**
      * Switches GradeZZY to a saved assessment: its questions, tester
-     * folder and starter folder are written to config.properties.
+     * folder, starter folder and model answers folder are written to
+     * config.properties.
      *
      * <p>Tier: SHOULD.
      *
@@ -509,6 +520,8 @@ public class AssessmentLibrary {
                 assessment.getTestersDirectory().trim());
         putSetting(keys, values, ConfigKeys.STARTER_DIR,
                 assessment.getStarterDirectory().trim());
+        putSetting(keys, values, ConfigKeys.MODEL_ANSWERS_DIR,
+                assessment.getModelAnswersDirectory().trim());
 
         putSetting(keys, values, ConfigKeys.PROVIDED_CLASS_FILES,
                 joinList(assessment.getProvidedClassFiles()));
@@ -590,6 +603,8 @@ public class AssessmentLibrary {
         }
         assessment.setStarterDirectory(values.getProperty(
                 ConfigKeys.STARTER_DIR, ""));
+        assessment.setModelAnswersDirectory(readModelAnswers(values,
+                assessment.getName()));
 
         assessment.setModuleCode(values.getProperty(MODULE_PROPERTY, ""));
         assessment.getProvidedClassFiles().addAll(AppConfig.splitList(
@@ -600,6 +615,20 @@ public class AssessmentLibrary {
                 values.getProperty(ConfigKeys.PLACEHOLDER_FOLDER_NAMES,
                         "")));
         return assessment;
+    }
+
+    // Reads the model answers folder of a saved file. A file saved before
+    // assessments had one keeps the folder in config.properties when it
+    // is the assessment in use, so it is not lost on the next save.
+    private String readModelAnswers(Properties values, String name) {
+        String saved = values.getProperty(ConfigKeys.MODEL_ANSWERS_DIR);
+        if (saved != null) {
+            return saved.trim();
+        }
+        if (name.equalsIgnoreCase(getActiveName())) {
+            return config.getString(ConfigKeys.MODEL_ANSWERS_DIR);
+        }
+        return "";
     }
 
     // Writes one saved assessment file, creating the folder if needed.

@@ -64,6 +64,7 @@ import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.RunRecord;
 import gradezzy.ui.backend.StatusCounts;
+import gradezzy.util.TextUtils;
 
 /**
  * The Home tab.
@@ -305,10 +306,9 @@ public class HomeScreen extends FlowScreen {
         String module = fillModules();
         fillSections(module);
         List<String> names = fillAssessments(module);
-        // The batch being graded keeps its module and section
-        moduleBox.setDisable(getState().isGrading());
-        sectionBox.setDisable(getState().isGrading());
-        assessmentBox.setDisable(getState().isGrading());
+        // Grading reads the assessment from the settings, so it stays
+        // while any section grades; sections can be graded at once
+        assessmentBox.setDisable(getState().isAnyGrading());
         showContextDetail(module, names);
         filling = false;
     }
@@ -413,7 +413,7 @@ public class HomeScreen extends FlowScreen {
     // Switches to the module's first assessment when the one in use is
     // not one of its own, so Home and Set up show a matching one.
     private void useModuleAssessment(String module) {
-        if (getState().isGrading()) {
+        if (getState().isAnyGrading()) {
             return;
         }
         boolean ownOnly = isOwnOnly(module);
@@ -497,12 +497,12 @@ public class HomeScreen extends FlowScreen {
         nextUp.getChildren().clear();
         nextUpSection = null;
         Node content = null;
-        if (getState().isGrading()) {
-            nextUpSection = getState().getSection().getSectionCode();
-            content = nextUpRow(getState().getSection().getLabel()
-                    + " is being graded now. You can leave this page; "
-                    + "grading carries on.", "See progress",
-                    () -> getWindow().show(Step.GRADE));
+        List<GradingJob> running = getState().getRunningJobs();
+        if (!running.isEmpty()) {
+            GradingJob first = running.get(0);
+            nextUpSection = first.getSection().getSectionCode();
+            content = nextUpRow(describeGrading(running), "See progress",
+                    () -> getWindow().watchGrading(first.getSection()));
         } else {
             GradingRun stopped = findStoppedRun(records);
             if (stopped != null) {
@@ -750,17 +750,16 @@ public class HomeScreen extends FlowScreen {
     // the batch, or set up grading.
     private void setCardAction(VBox card, String section, GradingRun run) {
         if (isGradingNow(section)) {
-            makeClickable(card, () -> getWindow().show(Step.GRADE),
-                    "Watch " + section + " being graded");
+            makeClickable(card, () -> getWindow().watchGrading(
+                    sectionOf(section)), "Watch " + section
+                    + " being graded");
         } else if (run != null) {
             makeClickable(card, () -> getWindow().openRun(run),
                     "Open " + section + "'s results");
         } else {
             makeClickable(card, () -> openSetUp(section),
                     "Set up grading for " + section);
-            if (!getState().isGrading()) {
-                acceptDrops(card, section);
-            }
+            acceptDrops(card, section);
         }
     }
 
@@ -831,9 +830,9 @@ public class HomeScreen extends FlowScreen {
         Label pill = null;
         String tip = "";
         if (isGradingNow(section)) {
-            pill = Parts.pill("Grading now", Tone.GOOD);
-            tip = "This section is being graded. You can leave this page; "
-                    + "grading carries on.";
+            pill = Parts.pill(gradingWords(section), Tone.GOOD);
+            tip = "This section is being graded. You can leave this page "
+                    + "or grade another section; grading carries on.";
         } else if (run == null) {
             pill = Parts.pill("Not graded", Tone.NEUTRAL);
             tip = "No batch of " + activeName() + " has been graded for "
@@ -1307,11 +1306,48 @@ public class HomeScreen extends FlowScreen {
 
     // Says whether a section of the chosen module is being graded now.
     private boolean isGradingNow(String section) {
-        Section graded = getState().getSection();
-        return getState().isGrading()
-                && section.equalsIgnoreCase(graded.getSectionCode())
-                && getState().getModuleCode().equalsIgnoreCase(
-                        graded.getModuleCode());
+        return getState().isGrading(sectionOf(section));
+    }
+
+    // Says how far a section's batch has got, such as "Grading 12 of
+    // 65", or "Grading now" before it knows how many it grades.
+    private String gradingWords(String section) {
+        GradingJob job = getState().getJob(sectionOf(section));
+        if (job == null || job.getTotal() <= 0) {
+            return "Grading now";
+        }
+        return "Grading " + job.getFinished() + " of " + job.getTotal();
+    }
+
+    // Returns a section of the chosen module.
+    private Section sectionOf(String section) {
+        return new Section(getState().getModuleCode(), section);
+    }
+
+    // Says which sections are being graded, such as "G1 is being graded
+    // now" or "G1 and G5 are being graded now", and that it carries on.
+    private String describeGrading(List<GradingJob> running) {
+        List<String> labels = new ArrayList<>();
+        for (GradingJob job : running) {
+            labels.add(job.getSection().getLabel());
+        }
+        String verb = " is";
+        if (labels.size() > 1) {
+            verb = " are";
+        }
+        return joinWithAnd(labels) + verb + " being graded now. You can "
+                + "leave this page or grade another section; grading "
+                + "carries on.";
+    }
+
+    // Joins names as "A", "A and B" or "A, B and C".
+    private static String joinWithAnd(List<String> names) {
+        int lastIndex = names.size() - 1;
+        if (lastIndex <= 0) {
+            return TextUtils.join("", names);
+        }
+        return TextUtils.join(", ", names.subList(0, lastIndex)) + " and "
+                + names.get(lastIndex);
     }
 
     // Counts the students not graded yet.

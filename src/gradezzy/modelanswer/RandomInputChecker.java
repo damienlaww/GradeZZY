@@ -67,8 +67,8 @@ public class RandomInputChecker {
     private static final double RELATIVE_MARGIN = 0.000001;
     private static final double SMALLEST_SCALE = 1.0;
 
-    // Separates the sentences of a flag
-    private static final String SENTENCE_SEPARATOR = " ";
+    // Separates the parts of a flag, so each starts on a line of its own
+    private static final String SENTENCE_SEPARATOR = "\n";
 
     // The boxed type of a decimal result, besides JavaTypes.DOUBLE_TYPE
     private static final String BOXED_DOUBLE_TYPE = "Double";

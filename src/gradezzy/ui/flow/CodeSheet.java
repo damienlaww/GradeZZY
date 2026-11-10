@@ -22,9 +22,11 @@ import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.Toggle;
@@ -32,6 +34,7 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
@@ -50,23 +53,37 @@ import gradezzy.ui.backend.Capability;
  */
 public final class CodeSheet {
 
-    // The largest size of the sheet's content
+    // The largest size of the sheet's content. It is tall, so a whole
+    // answer file fits in a large window; a smaller window keeps MARGIN
+    // around it instead.
     private static final double WIDTH = 1040.0;
-    private static final double HEIGHT = 680.0;
+    private static final double HEIGHT = 1000.0;
 
-    // The space kept around the sheet in a small window, including the
+    // The space kept beside the sheet in a small window, including the
     // sheet's own padding
     private static final double MARGIN = 120.0;
+
+    // The height taken from the area the sheet sits in, between the step
+    // bar and the action bar: the sheet's own padding (22 px above and
+    // below) and a gap of 24 px above and below, so the sheet never
+    // touches either bar
+    private static final double HEIGHT_MARGIN = 92.0;
 
     // The width of the question list
     private static final double LIST_WIDTH = 150.0;
 
-    // The share of the height the code takes at first; the instructor
-    // can drag the line between the code and the output
-    private static final double CODE_SHARE = 0.56;
+    // The share of the height the code takes at first, so most of the
+    // sheet shows the answer file; the instructor can drag the line
+    // between the code and the output
+    private static final double CODE_SHARE = 0.7;
 
     // The smallest height of the code or the output box
     private static final double MIN_BOX_HEIGHT = 90.0;
+
+    // The least and most height the issue above the code takes; a longer
+    // issue scrolls
+    private static final double ISSUE_MIN_HEIGHT = 110.0;
+    private static final double ISSUE_MAX_HEIGHT = 240.0;
 
     // The size of the close icon
     private static final double CLOSE_SIZE = 16.0;
@@ -271,7 +288,7 @@ public final class CodeSheet {
 
         VBox body = new VBox(BODY_GAP, top, middle);
         if (issue != null) {
-            body.getChildren().add(1, issue);
+            body.getChildren().add(1, wrapIssue(issue));
         }
         body.getStyleClass().add("code-sheet");
         body.setPrefSize(WIDTH, HEIGHT);
@@ -279,6 +296,19 @@ public final class CodeSheet {
                 -> fitToScene(body, after));
         selectFirst(questionId);
         return body;
+    }
+
+    // Puts the issue in a box that shows all its lines when there is
+    // room, and scrolls when the window is short, so a long issue never
+    // pushes the sheet past the window or squeezes its text.
+    private static ScrollPane wrapIssue(Node issue) {
+        ScrollPane box = new ScrollPane(issue);
+        box.setFitToWidth(true);
+        box.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        box.setMinHeight(ISSUE_MIN_HEIGHT);
+        box.setMaxHeight(ISSUE_MAX_HEIGHT);
+        box.getStyleClass().addAll("page-scroll", "issue-scroll");
+        return box;
     }
 
     // Builds the title row: the titles, the stepper of an answer group
@@ -505,15 +535,32 @@ public final class CodeSheet {
         }
     }
 
-    // Keeps the sheet inside a small window.
+    // Keeps the sheet inside a small window, with a gap above and below
+    // it in the area it is shown in.
     private static void fitToScene(VBox body, Scene scene) {
         if (scene == null) {
             return;
         }
         body.prefWidthProperty().bind(Bindings.min(WIDTH,
                 scene.widthProperty().subtract(MARGIN)));
+        Region area = findSheetArea(body);
+        if (area == null) {
+            body.prefHeightProperty().bind(Bindings.min(HEIGHT,
+                    scene.heightProperty().subtract(MARGIN)));
+            return;
+        }
         body.prefHeightProperty().bind(Bindings.min(HEIGHT,
-                scene.heightProperty().subtract(MARGIN)));
+                area.heightProperty().subtract(HEIGHT_MARGIN)));
+    }
+
+    // Returns the dimmed area the sheet is shown in, which FlowWindow puts
+    // around the sheet's box, or null when it is not there yet.
+    private static Region findSheetArea(VBox body) {
+        Parent box = body.getParent();
+        if (box == null || !(box.getParent() instanceof Region)) {
+            return null;
+        }
+        return (Region) box.getParent();
     }
 
     // Returns the small grey caption above a box.
@@ -607,8 +654,9 @@ public final class CodeSheet {
         if (shown == null || running != null) {
             return;
         }
-        if (window.getState().isGrading()) {
-            window.notify("Wait for the current batch to finish first.");
+        if (window.getState().isGrading(submission.getSection())) {
+            window.notify("Wait until " + submission.getSection().getLabel()
+                    + " has finished grading.");
             return;
         }
         QuestionRerun task = new QuestionRerun(window.getBackend(),

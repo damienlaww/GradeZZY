@@ -35,6 +35,7 @@ import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.model.TestCaseResult;
+import gradezzy.modelanswer.QuestionStrength;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.service.AnswerGroupService;
 import gradezzy.service.AssessmentFactory;
@@ -182,8 +183,13 @@ public final class DemoBackend implements DashboardBackend {
     // Whether the sample section shows the large cohort
     private boolean useLarge = false;
 
-    // The simulated run in progress, or null
+    // The simulated run started last, or null; the self-test steps it
     private DemoGrader grader = null;
+
+    // The simulated runs grading now, and the section of each at the same
+    // place, so several sections can be graded at once, as in live mode
+    private final List<DemoGrader> runningGraders = new ArrayList<>();
+    private final List<String> runningSections = new ArrayList<>();
 
     // Whether the self-test steps the simulated run itself
     private boolean manualStepping = false;
@@ -252,11 +258,13 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Runs the simulated run to its end. Used by the self-test.
+     * Runs every simulated run to its end. Used by the self-test.
      */
     public void finishGrading() {
-        if (grader != null) {
-            grader.runToEnd();
+        // Ending a run takes it off the list, so a copy is walked
+        List<DemoGrader> running = new ArrayList<>(runningGraders);
+        for (DemoGrader each : running) {
+            each.runToEnd();
         }
     }
 
@@ -563,12 +571,14 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
-     * Stops the simulated run after the current submission.
+     * Stops the section's simulated run after the current submission;
+     * other sections keep grading.
      */
     @Override
-    public void cancelGrading() {
-        if (grader != null) {
-            grader.cancel();
+    public void cancelGrading(Section section) {
+        int index = runningSections.indexOf(section.getLabel());
+        if (index >= 0) {
+            runningGraders.get(index).cancel();
         }
     }
 
@@ -629,6 +639,33 @@ public final class DemoBackend implements DashboardBackend {
     }
 
     /**
+     * Returns false: the demo has no model answers, so it offers no
+     * tester strength check.
+     */
+    @Override
+    public boolean hasModelAnswers() {
+        return false;
+    }
+
+    /**
+     * Returns no results, as the demo has no model answers.
+     */
+    @Override
+    public List<QuestionStrength> checkTesterStrength(Section section,
+            Path testersDirectory, Path starterDirectory) {
+        return new ArrayList<>();
+    }
+
+    /**
+     * Saves nothing: the demo writes no files.
+     */
+    @Override
+    public String saveTesterStrengthReport(Section section,
+            List<QuestionStrength> results) {
+        return "The demo saves no files.";
+    }
+
+    /**
      * Says that every class file fits, because the demo's synthetic
      * files all belong to the same lab test.
      */
@@ -654,6 +691,16 @@ public final class DemoBackend implements DashboardBackend {
             Path scoreSheet) {
         return ActionResult.failed("The demo has no score sheet to "
                 + "change.");
+    }
+
+    /**
+     * Matches the student in memory, as the demo saves nothing.
+     */
+    @Override
+    public ActionResult matchStudent(GradingRun gradingRun,
+            Submission submission, Student student) {
+        submission.setStudent(student);
+        return ActionResult.done("Matched in the demo; nothing is saved.");
     }
 
     /**
@@ -1464,9 +1511,17 @@ public final class DemoBackend implements DashboardBackend {
     private void startGrader(GradingRun run, List<Submission> queue,
             ProgressListener listener, RunCallback callback,
             boolean newRun) {
+        String label = run.getSection().getLabel();
+        if (runningSections.contains(label)) {
+            callback.onFailed(label + " is still being graded. Try again "
+                    + "when it has finished.");
+            return;
+        }
         grader = new DemoGrader(run, queue, listener,
                 submission -> gradeOne(submission),
                 () -> finishRun(run, callback, newRun));
+        runningGraders.add(grader);
+        runningSections.add(label);
         grader.start(!manualStepping);
     }
 
@@ -1480,6 +1535,11 @@ public final class DemoBackend implements DashboardBackend {
     // Shows a finished run and adds it to the history.
     private void finishRun(GradingRun run, RunCallback callback,
             boolean newRun) {
+        int index = runningSections.indexOf(run.getSection().getLabel());
+        if (index >= 0) {
+            runningGraders.remove(index);
+            runningSections.remove(index);
+        }
         runsBySection.put(run.getSection().getLabel(), run);
         if (newRun) {
             history.add(0, new DemoHistoryItem(run, "No snapshot yet",

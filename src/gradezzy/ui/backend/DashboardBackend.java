@@ -29,6 +29,7 @@ import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
+import gradezzy.modelanswer.QuestionStrength;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.service.AnswerGroupService;
 import gradezzy.service.ClassFileMatch;
@@ -200,6 +201,42 @@ public interface DashboardBackend {
     List<String> checkTesters(Path testersDirectory, Path starterDirectory);
 
     /**
+     * Says whether the assessment in use has a model answers folder, so
+     * the tester strength check can run.
+     *
+     * @return true when paths.model.answers.dir names a folder
+     */
+    boolean hasModelAnswers();
+
+    /**
+     * Checks how strong each tester is: the model answer is broken in
+     * small ways and the tester is run on every broken copy. A copy that
+     * still gets full marks shows something the tester never checks. It
+     * compiles and runs the tester once per copy, so it takes a minute
+     * or two.
+     *
+     * @param section the section, whose module gives the questions
+     * @param testersDirectory the tester folder
+     * @param starterDirectory the starter folder chosen on Set up, or null
+     *        for the one in Settings
+     * @return one result per question, or an empty list when there are
+     *         no model answers
+     */
+    List<QuestionStrength> checkTesterStrength(Section section,
+            Path testersDirectory, Path starterDirectory);
+
+    /**
+     * Saves the tester strength results as tester-strength.txt in the
+     * section's export folder, replacing an earlier one.
+     *
+     * @param section the section
+     * @param results the results of checkTesterStrength
+     * @return one sentence that says where it was saved, or why not
+     */
+    String saveTesterStrengthReport(Section section,
+            List<QuestionStrength> results);
+
+    /**
      * Checks whether a score sheet, tester folder or starter folder
      * belongs with the chosen uploads, and looks nearby for one that fits
      * them better. It only reads files, so it takes well under a second,
@@ -273,9 +310,12 @@ public interface DashboardBackend {
             ProgressListener listener, RunCallback callback);
 
     /**
-     * Stops the batch after the current submission. Results are kept.
+     * Stops the batch of a section after the current submission. Results
+     * are kept, and other sections keep grading.
+     *
+     * @param section the section whose grading stops
      */
-    void cancelGrading();
+    void cancelGrading(Section section);
 
     /**
      * Grades a run's submissions that were cancelled before they started.
@@ -314,6 +354,20 @@ public interface DashboardBackend {
      *         sheet cannot be read
      */
     List<Student> listMissingStudents(GradingRun gradingRun);
+
+    /**
+     * Matches a student who is not on the score sheet to one of its rows
+     * by hand, such as an upload with a typo in its name, or takes the
+     * match back. The run is saved.
+     *
+     * @param gradingRun the run
+     * @param submission the student, by the upload's name
+     * @param student the score sheet's student, or null to take the match
+     *        back
+     * @return done, or failed with the reason
+     */
+    ActionResult matchStudent(GradingRun gradingRun, Submission submission,
+            Student student);
 
     /**
      * Runs one question's tester again and replaces only that result and

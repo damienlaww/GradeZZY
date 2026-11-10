@@ -13,12 +13,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javafx.scene.control.Label;
+import javafx.scene.control.Tooltip;
 
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.DashboardBackend;
+import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.StatusCounts;
 import gradezzy.util.TextUtils;
@@ -42,8 +45,64 @@ public final class Students {
     // Separates the questions named in a pill
     private static final String LIST_SEPARATOR = ", ";
 
+    // The words of the warning beside the name of a student whose code
+    // is like another's, and the line above its tooltip's flags
+    private static final String SIMILAR_WORDS = "Similar code";
+    private static final String SIMILAR_TIP_START = "Similar code detected. "
+            + "Read both answers before deciding:";
+
+    // Ends a line of a tooltip
+    private static final String LINE_END = "\n";
+
     // Not used: every method is static.
     private Students() {
+    }
+
+    /**
+     * Lists a student's Similar code flags that were not dismissed with
+     * Looks fine.
+     *
+     * @param submission the student
+     * @param backend the backend that knows the review decisions
+     * @return the flags, empty when there are none
+     */
+    public static List<Anomaly> openSimilarFlags(Submission submission,
+            DashboardBackend backend) {
+        List<Anomaly> flags = new ArrayList<>();
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            boolean similar = anomaly.getType() == AnomalyType.SIMILAR_CODE
+                    && backend.getDecision(anomaly)
+                    != ReviewDecision.REJECTED;
+            if (similar) {
+                flags.add(anomaly);
+            }
+        }
+        return flags;
+    }
+
+    /**
+     * Builds the warning shown beside a student's name when similar code
+     * was detected, with each flag's words in its tooltip.
+     *
+     * @param submission the student
+     * @param backend the backend that knows the review decisions
+     * @return the warning, or null when there is nothing to warn about
+     */
+    public static Label similarWarning(Submission submission,
+            DashboardBackend backend) {
+        List<Anomaly> flags = openSimilarFlags(submission, backend);
+        if (flags.isEmpty()) {
+            return null;
+        }
+        String tip = SIMILAR_TIP_START;
+        for (Anomaly flag : flags) {
+            tip += LINE_END + flag.getMessage();
+        }
+        Label warning = Parts.pill(SIMILAR_WORDS, Tone.WARN);
+        warning.getStyleClass().addAll("small-text", "similar-warning");
+        warning.setTooltip(new Tooltip(tip));
+        warning.setAccessibleText(SIMILAR_TIP_START);
+        return warning;
     }
 
     /**
@@ -78,7 +137,8 @@ public final class Students {
     }
 
     /**
-     * Counts the open fixes and flags of a student.
+     * Counts the open fixes and flags of a student, the Similar code
+     * flags as one, as the student panel shows them on one card.
      *
      * @param submission the submission
      * @param backend the backend that knows the review decisions
@@ -87,10 +147,18 @@ public final class Students {
     public static int openCount(Submission submission,
             DashboardBackend backend) {
         int count = 0;
+        boolean similarOpen = false;
         for (Anomaly anomaly : submission.getAnomalies()) {
-            if (backend.needsReview(anomaly)) {
+            boolean similar = anomaly.getType() == AnomalyType.SIMILAR_CODE;
+            if (backend.needsReview(anomaly) && similar) {
+                similarOpen = true;
+            } else if (backend.needsReview(anomaly)) {
                 count++;
             }
+        }
+        // The Similar code flags are decided together, so count as one
+        if (similarOpen) {
+            count++;
         }
         return count;
     }

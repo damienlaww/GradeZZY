@@ -26,8 +26,10 @@ import java.util.function.Supplier;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Toggle;
@@ -153,6 +155,9 @@ public class RunsScreen extends FlowScreen {
     // Separates a module from its section, such as "CS102 · G1"
     private static final String SECTION_DOT = " · ";
 
+    // Comes between the section and the assessment in a run's key
+    private static final String KEY_SEPARATOR = "|";
+
     // Separates a mark from the maximum, such as "12.4 / 20"
     private static final String OUT_OF = " / ";
 
@@ -176,6 +181,12 @@ public class RunsScreen extends FlowScreen {
 
     // How many runs are listed
     private final Label runsCount = Parts.muted("");
+
+    // Shows every run, or only the latest run of each module, section
+    // and assessment
+    private final ToggleButton allRunsButton = new ToggleButton("All runs");
+    private final ToggleButton latestRunsButton =
+            new ToggleButton("Latest runs");
 
     // The Activity view's kind filter
     private final ToggleGroup kindGroup = new ToggleGroup();
@@ -319,11 +330,40 @@ public class RunsScreen extends FlowScreen {
                 after) -> refresh());
         runsCount.getStyleClass().add("small-text");
         HBox tools = Parts.row(Parts.GAP, new Node[] {runsSearch,
-            Parts.grow(), runsCount});
+            createRunsFilter(), Parts.grow(), runsCount});
         runsView.getChildren().addAll(tools, runsTable, restoreNote(
                 "Current marks the run each section shows on Home, Review "
                 + "and Statistics. Restore makes an earlier run current; "
                 + "the other is kept here, so you can switch back."));
+    }
+
+    // Builds the All runs | Latest runs switch. All runs is on at first.
+    private HBox createRunsFilter() {
+        ToggleGroup group = new ToggleGroup();
+        allRunsButton.setToggleGroup(group);
+        latestRunsButton.setToggleGroup(group);
+        allRunsButton.setSelected(true);
+        allRunsButton.getStyleClass().add("left-pill");
+        latestRunsButton.getStyleClass().add("right-pill");
+        Parts.tip(allRunsButton, "Every grading run, newest first.");
+        Parts.tip(latestRunsButton, "Only the latest run of each module, "
+                + "section and assessment.");
+        group.selectedToggleProperty().addListener((observable, before,
+                after) -> runsFilterClicked(before, after));
+        HBox bar = new HBox(allRunsButton, latestRunsButton);
+        bar.getStyleClass().add("segmented");
+        bar.setMinWidth(HBox.USE_PREF_SIZE);
+        return bar;
+    }
+
+    // Follows a click on All runs or Latest runs; clicking the one that
+    // is on keeps it on.
+    private void runsFilterClicked(Toggle before, Toggle after) {
+        if (after == null) {
+            before.setSelected(true);
+            return;
+        }
+        refreshRuns();
     }
 
     // Builds the search field and the columns of the activity table.
@@ -383,7 +423,8 @@ public class RunsScreen extends FlowScreen {
 
     // ------------------------------------------------------------- runs
 
-    // Lists every run, newest first.
+    // Lists the runs, newest first: every run, or only the latest run of
+    // each module, section and assessment.
     private void refreshRuns() {
         runsTable.clearRows();
         if (!getBackend().supports(Capability.HISTORY)) {
@@ -404,10 +445,12 @@ public class RunsScreen extends FlowScreen {
         String text = runsSearch.getText().trim().toLowerCase();
         int listed = 0;
         for (RunRecord record : records) {
-            String label = labelOf(record.getRun());
-            boolean hasNewer = newerSeen.contains(label);
-            newerSeen.add(label);
-            if (runMatches(record.getRun(), text)) {
+            // Runs are newest first, so a key seen before has a newer run
+            String key = keyOf(record.getRun());
+            boolean hasNewer = newerSeen.contains(key);
+            newerSeen.add(key);
+            boolean hidden = hasNewer && latestRunsButton.isSelected();
+            if (!hidden && runMatches(record.getRun(), text)) {
                 addRunRow(record, isShown(record, shown), hasNewer);
                 listed++;
             }
@@ -481,11 +524,22 @@ public class RunsScreen extends FlowScreen {
         }
         Label when = Parts.muted("Graded " + when(run));
         when.getStyleClass().add("small-text");
-        VBox runCell = new VBox(RUN_CELL_GAP, title, when);
+        Hyperlink settings = Parts.link("View settings",
+                () -> showSettings(run));
+        settings.getStyleClass().add("small-text");
+        HBox whenLine = Parts.row(Parts.GAP_SMALL, new Node[] {when,
+            settings});
+        VBox runCell = new VBox(RUN_CELL_GAP, title, whenLine);
         runCell.setAlignment(Pos.CENTER_LEFT);
         runCell.setMinWidth(0);
+        // The whole cell opens the settings, so it shows a hand and a tip
+        runCell.getStyleClass().add("run-cell");
+        runCell.setCursor(Cursor.HAND);
+        runCell.setOnMouseClicked(event -> showSettings(run));
+        Tooltip.install(runCell, new Tooltip("Click to see the files and "
+                + "settings this run was graded with."));
         runsTable.addRow(new Node[] {runCell, students, average(run),
-            status(run, shown, hasNewer), actions(record, shown)});
+            status(run, hasNewer), actions(record, shown)});
     }
 
     // Says when a run was graded. A run read back from a database row
@@ -518,19 +572,18 @@ public class RunsScreen extends FlowScreen {
         return Parts.row(Parts.GAP_SMALL, new Node[] {bar, value});
     }
 
-    // Returns the pill that says how far a run got.
-    private Node status(GradingRun run, boolean shown, boolean hasNewer) {
-        Label pill = Parts.pill("Finished", Tone.GOOD);
-        String tip = "Every student in this run was graded.";
+    // Returns the pill that says how far a run got. The newest finished
+    // run of each module, section and assessment says so in green; an
+    // older one of the same is an earlier run.
+    private Node status(GradingRun run, boolean hasNewer) {
+        Label pill = Parts.pill("Latest run", Tone.GOOD);
+        String tip = "The newest run of this module, section and "
+                + "assessment. Every student was graded.";
         int waiting = countWaiting(run);
-        if (!shown && hasNewer) {
+        if (hasNewer) {
             pill = Parts.pill("Earlier run", Tone.NEUTRAL);
-            tip = "A newer run of this section is the one shown on Home "
-                    + "and Review. Restore shows this one again instead.";
-        } else if (!shown) {
-            pill = Parts.pill("Not shown", Tone.NEUTRAL);
-            tip = "An older run of this section was restored and is shown "
-                    + "instead.";
+            tip = "A newer run of this module, section and assessment was "
+                    + "graded after this one.";
         } else if (waiting > 0) {
             int total = run.getSubmissions().size();
             int graded = total - waiting;
@@ -544,34 +597,35 @@ public class RunsScreen extends FlowScreen {
         return pill;
     }
 
-    // Returns the buttons that fit a run.
+    // Returns the buttons that fit a run. Every run can be opened and have
+    // its statistics shown; an earlier run can also be restored, and a
+    // stopped one resumed.
     private HBox actions(RunRecord record, boolean shown) {
         GradingRun run = record.getRun();
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         buttons.setAlignment(Pos.CENTER_RIGHT);
-        if (!shown) {
-            boolean canRestore = record.isRestorable()
-                    && getBackend().supports(Capability.RESTORE_PREVIEW);
-            if (canRestore) {
-                buttons.getChildren().add(restoreButton(record));
-            }
-            return buttons;
+        boolean canRestore = !shown && record.isRestorable()
+                && getBackend().supports(Capability.RESTORE_PREVIEW);
+        if (canRestore) {
+            buttons.getChildren().add(restoreButton(record));
         }
 
-        boolean canResume = countWaiting(run) > 0
+        boolean canResume = shown && countWaiting(run) > 0
                 && getBackend().supports(Capability.RESUME_RUN);
         boolean hasStatistics = getBackend().supports(Capability.STATISTICS)
-                && run.getSection() != null;
+                && run.getSection() != null && run.getAssessment() != null
+                && StatisticsScreen.isGraded(run);
         if (canResume) {
             Button resume = Parts.small("Resume",
                     () -> getWindow().resumeRun(run));
             Parts.tip(resume, "Grade the students not graded yet. Marks "
                     + "already given are kept.");
             buttons.getChildren().add(resume);
-        } else if (hasStatistics) {
+        }
+        if (hasStatistics) {
             Button statistics = Parts.small("Statistics",
-                    () -> openStatistics(run));
-            Parts.tip(statistics, "Charts and figures for this section.");
+                    () -> getWindow().openStatistics(run));
+            Parts.tip(statistics, "Charts and figures for this run.");
             buttons.getChildren().add(statistics);
         }
         Button open = Parts.small("Open", () -> getWindow().openRun(run));
@@ -581,10 +635,9 @@ public class RunsScreen extends FlowScreen {
         return buttons;
     }
 
-    // Opens the Statistics tab on the section of a run, which has one.
-    private void openStatistics(GradingRun run) {
-        getWindow().openStatistics(run.getSection().getModuleCode(),
-                run.getSection().getSectionCode());
+    // Shows the files and grading settings a run was graded with.
+    private void showSettings(GradingRun run) {
+        getWindow().showSheet(RunSettingsSheet.create(getWindow(), run));
     }
 
     // Says whether a run is the one shown for its section now. The shown
@@ -611,7 +664,7 @@ public class RunsScreen extends FlowScreen {
     // being graded.
     private Button restoreButton(RunRecord record) {
         Button button = Parts.small("Restore", () -> restore(record));
-        button.setDisable(getState().isGrading());
+        button.setDisable(getState().isAnyGrading());
         Parts.tip(button, "Show this run for its section again, in place of "
                 + "the one shown now. A copy of the run shown now is "
                 + "kept.");
@@ -685,10 +738,11 @@ public class RunsScreen extends FlowScreen {
     // Says so and returns true while a batch is being graded. Backing up
     // or restoring then would mix the batch into other saved results.
     private boolean blockedByGrading() {
-        if (!getState().isGrading()) {
+        if (!getState().isAnyGrading()) {
             return false;
         }
-        getWindow().notify("Wait for the current batch to finish first.");
+        getWindow().notify("Wait until every section has finished "
+                + "grading.");
         return true;
     }
 
@@ -712,6 +766,17 @@ public class RunsScreen extends FlowScreen {
             return "an unknown section";
         }
         return run.getSection().getLabel();
+    }
+
+    // Names the module, section and assessment of a run together, so
+    // only runs of the same lab test of a section are older or newer
+    // than each other.
+    private String keyOf(GradingRun run) {
+        String assessmentName = NO_VALUE;
+        if (run.getAssessment() != null) {
+            assessmentName = run.getAssessment().getName();
+        }
+        return labelOf(run) + KEY_SEPARATOR + assessmentName;
     }
 
     // ---------------------------------------------------------- backups
@@ -768,7 +833,7 @@ public class RunsScreen extends FlowScreen {
         Node grow = Parts.grow();
         Button backUpButton = Parts.secondary("Back up now",
                 () -> backUp());
-        backUpButton.setDisable(getState().isGrading());
+        backUpButton.setDisable(getState().isAnyGrading());
         HBox row = Parts.row(Parts.GAP,
                 new Node[] {words, grow, backUpButton});
         return Parts.card(null, new Node[] {row});
@@ -785,7 +850,7 @@ public class RunsScreen extends FlowScreen {
         Node grow = Parts.grow();
         Button chooseButton = Parts.secondary("Choose a backup",
                 () -> chooseBackup());
-        chooseButton.setDisable(getState().isGrading());
+        chooseButton.setDisable(getState().isAnyGrading());
         HBox row = Parts.row(Parts.GAP,
                 new Node[] {words, grow, chooseButton});
         return Parts.card(null, new Node[] {row});
@@ -801,8 +866,8 @@ public class RunsScreen extends FlowScreen {
 
     // Returns a sentence saying why the buttons wait, while grading.
     private String gradingNote() {
-        if (getState().isGrading()) {
-            return " Available when the batch being graded finishes.";
+        if (getState().isAnyGrading()) {
+            return " Available when every section has finished grading.";
         }
         return "";
     }
@@ -1015,7 +1080,7 @@ public class RunsScreen extends FlowScreen {
     private Runnable findUndo(AuditEntry entry, String student,
             String message) {
         String reference = entry.getReference();
-        if (getState().isGrading()) {
+        if (getState().isAnyGrading()) {
             return null;
         }
         // A delete made since GradeZZY opened can be put back

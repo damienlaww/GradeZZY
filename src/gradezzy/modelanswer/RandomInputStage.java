@@ -48,8 +48,8 @@ public class RandomInputStage implements GradingStage {
 
     // Added to the flag when the tester gave the question full marks,
     // which is when the flag matters most
-    private static final String FULL_MARKS_NOTE = " The tester gave this "
-            + "question full marks.";
+    private static final String FULL_MARKS_NOTE = "\nThe tester gave "
+            + "this question full marks, so it did not catch this.";
 
     // What the instructor can do about the flag
     private static final String SUGGESTED_ACTION = "Read the answer with "

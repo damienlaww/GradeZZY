@@ -694,27 +694,67 @@ For example, on the six provided samples the console reports:
 | Grade one student again | `GradingService.regradeSubmission` | Runs the pipeline for that student and replaces the result. From Review ("Grade this student again"), marks set by hand are put back (`ScoreAdjustmentService.keepAfterRegrade`) and the activity log keeps the old and new totals. Fixes are made again and wait for Keep. |
 | Grade one question again | `GradingService.regradeQuestion` | Adds, compiles and runs only that question's tester in the student's working copy (`PipelineFactory.createQuestionPipeline`), then replaces only that question's result and its compile or tester problems. Other marks, fixes, flags and decisions stay; a mark set by hand is kept. A step that fails adds an error to the student and keeps the old mark. |
 | Grade ticked students again | `ui.flow.RegradeJob`, `GradingService.regradeSubmission` | Review's "Grade N ticked students again": one confirm, one background job with a progress bar, then a summary of whose totals changed. A refused upload stays refused and a mark set by hand is kept; the summary names both. Each student gets a line in the activity log. |
-| Cancel | `GradingService.cancel` | Each student stops at its next stage; finished students are saved. |
-| Retry failed | `GradingService.retryFailed` | Grades only the students that failed or were not finished. |
+| Cancel | `GradingService.cancel(Section)` | Each student of that section's batch stops at its next stage; finished students are saved, and other sections keep grading. |
+| Retry failed | `GradingService.retryFailed` | Grades only the students that failed or were not finished, for any run started, resumed or added to in this session (`canRetry`). |
 | Resume | `GradingService.resume` | Loads a saved run, with its own score sheet, tester and starter folders, and grades what is left. |
 | Late batch | `GradingService.findNewestRun`, `addToRun` | Adds students to the section's earlier run. A student graded before is graded again and the old total is kept in the audit log. Refused when the tester folder or score sheet is not the run's. |
 | Change score sheet | `GradingService.changeScoreSheet` | Matches the students to another sheet and saves the run, without grading again. |
+| Match a student to the score sheet | `GradingService.matchStudent`, `StudentMatcher` | For an upload not on the score sheet, such as `tina.goh.2052` for `tina.goh.2025`: the student panel suggests the closest student with no submission when the names differ by a typo (at most two letters changed, added, removed or swapped) and lists the rest closest first. The match is saved with the run, kept when the student is graded again or the score sheet changes, fills that student's row in the CSV export, and can be undone. |
+
+### Grading several sections at once
+
+Several sections can be graded at the same time, each with its own
+batch. `GradingService` keeps an `ActiveGrading` for each grading that
+runs (batch, retry, resume, late batch or grading again): its section,
+its own `CancellationToken` and the students it grades. Each run keeps
+its loaded testers and roster by id, so Retry, Resume and late batches
+work for any run of the session, and run ids stay unique when two start
+in the same millisecond. It refuses:
+
+- a second grading of a section that is being graded, as both would
+  change the same run; and
+- a batch that holds a student another running batch holds, as both
+  would write the same working copy (`paths.working.dir/<username>`).
+
+In the window, each batch is a `GradingJob` that keeps its own progress.
+Set up stays usable while grading, so another section can be chosen and
+started; Grade shows the batch of the section on screen, with its own
+Cancel; Home's cards show "Grading 12 of 65" for every section being
+graded; and a batch of another section that ends says so in a notice
+with a link to it, without taking the screen away. Switching the
+assessment waits until every section has finished, because grading
+reads the assessment's folders from the settings, and so do backups and
+restores, which would mix a batch into other results.
+
+Measured on Lab Test 2's 65 students: graded as one batch in 82 s, and
+as two sections of 30 and 35 at once in 65 s, with the same total and
+status for every student.
 
 ## Checks with the model answer
 
 Two checks use the model answers in `paths.model.answers.dir`, a folder
 laid out like the starter folder (`Q1/Q1.java`, `Q3/GoldMember.java` and
-so on). With the setting empty, neither runs. Both compile and run with
+so on). Each lab test has its own answers, so the folder is part of each
+saved assessment: it is chosen in the assessment editor ("Model
+answers", beside the tester and starter folders), and choosing an
+assessment copies it into the setting. With the setting empty, neither
+check runs. Both compile and run with
 the same `javac`, sandbox and limits as grading, in folders of their own
 under `paths.working.dir` that are deleted afterwards, and neither
 changes a mark.
 
 ### Tester strength: breaking the model answer on purpose
 
-A weak tester gives wrong marks to a whole class. Before grading, the
-console (`tester.strength.enabled`, or `run.sh console --testers` on
-its own) makes broken copies of each question's model answer and runs
-the tester on each:
+A weak tester gives wrong marks to a whole class. Before grading,
+GradeZZY makes broken copies of each question's model answer and runs
+the tester on each. In the window, Set up runs it on a background
+thread once the tester folder check finds nothing wrong
+(`tester.strength.enabled`), or when "Check how strong each tester is"
+is clicked on the tester row with the setting off; the row then sums up
+the result and "See details" lists each question and the broken copies
+its tester missed (`TesterStrengthCheck`, `TesterStrengthSheet`). The
+console runs it before grading (`tester.strength.enabled`), or on its
+own with `run.sh console --testers`:
 
 1. `MutantMaker` splits the model answer into tokens with
    `JavaTokenizer.tokenize` and applies standard mutation rules: `<` and
@@ -795,11 +835,19 @@ new every run:
    match exactly. A student run stopped at the time
    limit is compared on the calls it finished, since the limit is for
    the whole run and cannot be blamed on one input.
-5. Any difference becomes a `DIFFERENT_FROM_MODEL_ANSWER` flag naming
-   how many inputs differ and the first two, such as
-   `countDigit(-4809L, 4) returned 0 where the model answer returns 1`.
-   When the tester gave that question full marks, the flag is a warning
-   and says so; otherwise it is information.
+5. Any difference becomes a `DIFFERENT_FROM_MODEL_ANSWER` flag that
+   says how many inputs differ and lists the first three, one a line
+   (`DifferenceMessage`), such as:
+
+   ```text
+   Q5: 37 of 200 random inputs gave a different answer from the model answer.
+   For example:
+   • countDigit(-4809, 4) returned 0, but the model answer returns 1
+   The tester gave this question full marks, so it did not catch this.
+   ```
+
+   The last line, and a warning instead of information, are added only
+   when the tester gave that question full marks.
 6. Every Java class the program uses is written in full, such as
    `java.lang.System`, so a student class called `System` or `Arrays`
    cannot take its place. If the program compiles with the model answer
@@ -828,13 +876,15 @@ the expected output, so no expected value is typed by hand.
 ## Answer groups: common mistakes
 
 `AnswerGrouper` puts together the students of a run who lost marks the
-same way on a question, so the marker decides each mistake once. Groups
+same way on a question, so the marker decides each error once. A failed
+test is an error of its own: a student who failed tests 3 and 5 is in
+the "Failed test 3" group and in the "Failed test 5" group. Groups
 are worked out from the results every time and are never stored, so a
 student graded again moves to the group of the new result.
 
 | Outcome | Pattern | Title |
 |---|---|---|
-| Some tests failed | `P` or `F` per test, such as `PPFPF` | "Failed tests 3 and 5" |
+| A test failed | `F:` and the test, such as `F:3`, one group per failed test | "Failed test 3" |
 | Did not compile | `COMPILE` | "Did not compile" |
 | No file or folder, fix not kept | `MISSING` | "No answer handed in" |
 | Stopped at the time limit | `T:` and the tests so far | "Ran too long after test 2" |
@@ -855,14 +905,31 @@ name of the mistake, and the students who were in the group when it was
 checked. A group shows as checked only while no student has joined it
 since. With the database off, decisions last until GradeZZY closes.
 
-On Review, a Students | Mistakes switch lists the groups question by
-question. Each group can be named, have one new mark and reason given
-to every student (`ScoreAdjustmentService.adjust` per student, with one
-Undo for all), be marked as checked (which also checks the students'
-open items about that question, compile errors and timeouts included),
-and have its code compared, stepping through the students. Each action
+On Review, a Students | Errors switch shows the Errors view
+(`MistakesView`). At the top, "Similar code" lists the clusters of
+students the similarity check linked on a question (`SimilarityCluster`:
+two students are in one cluster when a flagged pair, or a chain of
+them, links them). The most similar pair starts ticked; ticking two
+students and pressing Compare opens their code side by side, and two
+students the check did not pair directly are compared too, marked "Not
+flagged as a pair".
+
+Under it, each question lists its errors. An error's row opens like a
+dropdown, with the mouse or Enter, to list its students by name and
+email ID, each with Open code and a Similar code warning when the check
+flagged them. Each error can be named, have one new mark and reason
+given to every student (`ScoreAdjustmentService.adjust` per student,
+with one Undo for all), be marked as checked (which also checks the
+students' open items about that question, compile errors and timeouts
+included), and Open code steps through its students' code. Each action
 applies only to the students the sheet listed who are still in the
 group. Statistics shows the largest groups under "Common mistakes".
+
+A student the similarity check flagged has a "Similar code" warning
+beside their name on Review's table and student panel, until each such
+flag is dismissed with Looks fine; its tooltip quotes the flags, which
+name the other student and their email ID, such as "Q1a is 100% similar
+to AIDEN TOH (aiden.toh.2025)".
 
 ## Similar code check
 
@@ -871,7 +938,7 @@ reading the question's answer file and its other source files (such as
 `GoldMember.java` next to `Q3.java`). `plagiarism.algorithm` picks one
 of two `SimilarityDetector` classes, both kept so they can be compared.
 
-**Rename-proof winnowing (`winnowing`):
+**Rename-proof winnowing (`winnowing`, the default):
 `WinnowingSimilarityDetector`.** It uses the winnowing fingerprint
 algorithm of Schleimer, Wilkerson and Aiken (2003), the one MOSS uses.
 
@@ -900,7 +967,7 @@ A pair is compared only when both answers have at least 25 fingerprints
 of their own (`MIN_OWN_FINGERPRINTS`), because short correct answers
 look alike even when written separately.
 
-**Token trigrams (`trigrams`, the first version and the default):
+**Token trigrams (`trigrams`, the first version):
 `TokenSimilarityDetector`.** It collects every run of three tokens as
 written, names and all, removes the starter file's runs and compares
 with the Jaccard measure. A pair is compared only when both answers
@@ -915,6 +982,13 @@ have at least 50 trigrams of their own.
 | Honest answers written the same way | Kept apart when the students chose different names. | Look alike: two answers with the same plan but different names score up to 1.00. The 25-fingerprint minimum and the starter removal leave out the short answers where this is most common, but long answers with the same structure are still flagged. |
 | What a high score means | The same code, names and all. | The same structure. The instructor must read the pair to tell a copy from a common way of writing the answer. |
 | Cost | One set of trigrams per answer. | Fewer values kept per answer (about one fingerprint for every 2 to 3 tokens), plus the hashing. Both are fast at class size. |
+
+Both detectors also leave out an answer with fewer than
+`plagiarism.min.lines` lines of new code (40 by default), counted by
+`CodeLineCounter`: blank lines, comments, lines of only braces and lines
+also in the starter file do not count. Easy questions have short answers
+that honest students write the same way, which winnowing in particular
+scores as alike, so they are not compared.
 
 Both are review aids that point the instructor at pairs to read, not
 proof. The check runs after grading when `plagiarism.enabled` is true,
@@ -939,10 +1013,13 @@ Measured on the team's test sets, with the default threshold 0.80:
 So winnowing finds renamed copies the first version misses, but it
 cannot tell a renamed copy from honest answers that share one
 structure: on a test set built by renaming a few model answers, it
-flags every such pair. That is why trigrams stay the default. Choose
-winnowing ("How code is compared" in Settings, or
-`plagiarism.algorithm=winnowing`) to look for renamed copies, and expect
-to dismiss more pairs.
+flags every such pair. Winnowing is the default, because renaming
+variables is the most common way a copy is hidden and real students'
+honest answers vary more than the test sets' do; expect to dismiss more
+pairs than with trigrams. Choose trigrams ("How code is compared" in
+Settings, shown as "Trigrams: only copies that keep the names", or
+`plagiarism.algorithm=trigrams`) for a shorter list that misses renamed
+copies.
 
 The window lists each pair with a pill such as "84% similar": red above
 75%, amber at 75% or below (the percent as shown, rounded).
@@ -1022,6 +1099,7 @@ erDiagram
         text score_sheet_file
         text testers_dir
         text starter_dir
+        text grading_settings
     }
     run_questions {
         text question_id
@@ -1073,6 +1151,15 @@ erDiagram
 
 - **History.** `HistoryService.listRuns` reads every saved run back, so
   earlier runs can be reviewed, exported and resumed after a restart.
+  Each run also keeps the grading settings it started with
+  (`RunSettings`: time limits, the checks that were on, model answers,
+  random inputs and how similar code was compared) in
+  `runs.grading_settings`, added to an older database when it is opened.
+  Clicking a run on History (or its View settings link) shows them with
+  the run's score sheet, tester and starter folders; a run graded before
+  they were kept says so. History marks the newest finished run of each
+  module, section and assessment as the latest run, and its All runs |
+  Latest runs switch can hide the earlier ones.
 - **Backup and restore.** `BackupManager` copies the database file to
   `paths.backup.dir`, keeping the newest `database.backup.keep.count`,
   and restores one after closing the database.
@@ -1147,13 +1234,13 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `paths.score.sheet.file` | `samples/IS442-ScoreSheet.csv` | The roster and the template for the CSV export. |
 | `paths.score.sheet.by.section` | (empty) | Each section's own score sheet, such as `CS102/G1=Test Data/G1.csv`, set in Settings. A section with none uses `paths.score.sheet.file`. A run started with no score sheet chosen (the console) and a run saved without one (Export's warning and the CSV export) all use this rule (`config.ExportFolders.findScoreSheet`). |
 | `paths.starter.dir` | `samples/RenameToYourUsername` | Starter files, used to spot untouched answers when no starter folder is chosen on the Set up step, and by the similarity check. Set up warns when a chosen starter folder lacks some question files. |
-| `paths.model.answers.dir` | empty | Model answers, laid out like the starter folder. Empty switches off the tester strength and random inputs checks. Checked when used, not at start-up. |
+| `paths.model.answers.dir` | empty | Model answers, laid out like the starter folder. Empty switches off the tester strength and random inputs checks. Saved with each assessment and copied here when one is chosen. Checked when used, not at start-up. |
 | `paths.working.dir` | `workspace/working` | Where working copies are created. |
 | `paths.output.dir` | `workspace/output` | Where exports are written. |
 | `paths.output.dir.by.section` | empty | Export folders of single modules or sections, such as `CS102/G1=workspace/g1-exports;IS442=workspace/is442`. A section's own folder wins over its module's, then `paths.output.dir`. Deleting a module or section removes its entries here and in `paths.score.sheet.by.section`. |
 | `paths.backup.dir` | `workspace/backup` | Where database backups are kept. |
-| `paths.assessments.dir` | `workspace/assessments` | Where saved assessments are kept, one `.properties` file each. Choosing one on Home or Set up copies its `assessment.*`, `paths.testers.dir` and `paths.starter.dir` settings into `config.properties`. |
-| `paths.chosen.submissions.file` | `workspace/chosen-submissions.properties` | Where the submission files chosen for each section are kept, so Set up lists them again after GradeZZY is reopened. Only paths are kept; the files are checked again when listed, and missing ones are left out. |
+| `paths.assessments.dir` | `workspace/assessments` | Where saved assessments are kept, one `.properties` file each. Choosing one on Home or Set up copies its `assessment.*`, `paths.testers.dir`, `paths.starter.dir` and `paths.model.answers.dir` settings into `config.properties`. |
+| `paths.chosen.submissions.file` | `workspace/chosen-submissions.properties` | Where the submission files chosen for each section and assessment are kept, so Set up lists them again after GradeZZY is reopened and switching to another assessment shows that lab test's files, not the last ones chosen. Only paths are kept; the files are checked again when listed, and missing ones are left out. |
 | `ingest.zip.name.prefix.pattern` | `^[0-9]{4}-[0-9]{4}-` | Text in front of the username in a zip file name. |
 | `ingest.ignored.file.names` | `.DS_Store,__MACOSX,Thumbs.db` | Names skipped inside a submission. |
 | `ingest.max.zip.size.mb` | `50` | Largest unzipped size accepted. |
@@ -1184,14 +1271,15 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `detection.untouched.enabled` | `true` | Flag untouched starter files. |
 | `detection.empty.enabled` | `true` | Flag empty answers. |
 | `detection.hardcoded.enabled` | `true` | Flag hard-coded answers. |
-| `tester.strength.enabled` | `true` | The console checks each tester with broken copies of the model answer before grading. |
+| `tester.strength.enabled` | `true` | Each tester is checked with broken copies of the model answer before grading: on Set up in the window, and before grading in the console. Off, Set up offers the check as a link. |
 | `tester.strength.max.copies` | `40` | The most broken copies per question. |
 | `tester.strength.timeout.seconds` | `5` | Time limit for the tester on one broken copy; a copy that runs longer counts as caught. |
 | `random.inputs.enabled` | `true` | Call students' methods with random inputs after the tests and flag answers that differ from the model answer. |
 | `random.inputs.count` | `200` | Inputs per method. |
 | `plagiarism.enabled` | `true` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
-| `plagiarism.algorithm` | `trigrams` | How answers are compared: `winnowing` (rename-proof fingerprints, `WinnowingSimilarityDetector`) or `trigrams` (the first version, `TokenSimilarityDetector`). See "Similar code check". |
+| `plagiarism.algorithm` | `winnowing` | How answers are compared: `winnowing` (rename-proof fingerprints, `WinnowingSimilarityDetector`) or `trigrams` (the first version, `TokenSimilarityDetector`). See "Similar code check". |
+| `plagiarism.min.lines` | `40` | The fewest lines of new code each answer needs before it is compared (`CodeLineCounter`): blank lines, comments, lines of only braces and lines also in the starter file are not counted. Short answers to easy questions are often written the same way by honest students. Settings offers 10 to 60, with 40 recommended. Lab test answers are short (about 7 to 32 new lines each on Lab Test 2), so at 40 most of them are not compared; choose a lower minimum to compare more of them. |
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
 | `export.csv.id.prefix` | `#` | Character in front of the id and username. |
 | `export.csv.end.of.line.marker` | `#` | Value of the last column. |

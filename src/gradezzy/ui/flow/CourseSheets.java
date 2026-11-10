@@ -30,6 +30,7 @@ import gradezzy.config.ExportFolders;
 import gradezzy.config.ModuleSections;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.util.TextUtils;
+import gradezzy.model.Section;
 
 /**
  * Adds a module or a section, after checking it.
@@ -299,8 +300,7 @@ public final class CourseSheets {
     public static String whyNotDelete(FlowWindow window, String module,
             String code) {
         FlowState state = window.getState();
-        boolean beingGraded = state.isGrading()
-                && code.equalsIgnoreCase(state.getSectionCode());
+        boolean beingGraded = state.isGrading(new Section(module, code));
         if (beingGraded) {
             return "Wait until " + code + " has finished grading.";
         }

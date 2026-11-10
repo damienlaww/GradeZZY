@@ -310,6 +310,13 @@ public final class ConfigKeys {
     public static final String PLAGIARISM_ALGORITHM = "plagiarism.algorithm";
 
     /**
+     * The fewest lines of new code each answer needs before it is
+     * compared: blank lines, comments, lines of only braces and lines
+     * also in the starter file are not counted.
+     */
+    public static final String PLAGIARISM_MIN_LINES = "plagiarism.min.lines";
+
+    /**
      * Line ending of the score sheet: CRLF or LF.
      */
     public static final String CSV_LINE_ENDING = "export.csv.line.ending";

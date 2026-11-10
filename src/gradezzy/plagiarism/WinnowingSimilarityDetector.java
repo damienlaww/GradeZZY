@@ -137,8 +137,10 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
     private List<SimilarityPair> compareQuestion(List<Submission> submissions,
             Assessment assessment, Question question, Path starter,
             double threshold) {
+        List<Integer> lineCounts = new ArrayList<>();
         List<Set<Integer>> answers = readNewCode(submissions, assessment,
-                question, starter);
+                question, starter, lineCounts);
+        int minLines = config.getInt(ConfigKeys.PLAGIARISM_MIN_LINES);
         List<SimilarityPair> pairs = new ArrayList<>();
 
         for (int i = 0; i < submissions.size(); i++) {
@@ -148,7 +150,9 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
                 double score = jaccard(firstAnswer, secondAnswer);
                 boolean bothLongEnough =
                         firstAnswer.size() >= MIN_OWN_FINGERPRINTS
-                        && secondAnswer.size() >= MIN_OWN_FINGERPRINTS;
+                        && secondAnswer.size() >= MIN_OWN_FINGERPRINTS
+                        && lineCounts.get(i) >= minLines
+                        && lineCounts.get(j) >= minLines;
 
                 if (bothLongEnough && score >= threshold) {
                     pairs.add(new SimilarityPair(
@@ -163,12 +167,16 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
     }
 
     // Reads each student's fingerprints for a question, minus those that
-    // are k-grams of the starter. The question's other source files,
-    // such as GoldMember.java, count as part of its answer.
+    // are k-grams of the starter, and puts each one's number of new lines
+    // of code in lineCounts. The question's other source files, such as
+    // GoldMember.java, count as part of its answer.
     private List<Set<Integer>> readNewCode(List<Submission> submissions,
-            Assessment assessment, Question question, Path starter) {
+            Assessment assessment, Question question, Path starter,
+            List<Integer> lineCounts) {
         Path starterFolder = starter.resolve(question.getFolderName());
         Set<Integer> starterKGrams = readKGrams(starterFolder, question);
+        Set<String> starterLines = CodeLineCounter.readLines(starterFolder,
+                question);
         List<Set<Integer>> answers = new ArrayList<>();
 
         for (Submission submission : submissions) {
@@ -178,6 +186,8 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
 
             answer.removeAll(starterKGrams);
             answers.add(answer);
+            lineCounts.add(CodeLineCounter.countNewLines(studentFolder,
+                    question, starterLines));
         }
 
         return answers;

@@ -405,10 +405,14 @@ public class ImportBatch {
         return name.equals(name.toLowerCase(Locale.ROOT));
     }
 
-    // Lists the students of every usable submission, in the order
-    // grading meets them; duplicates are still sent to grading. A file
-    // chosen again is left out, as grading grades it once.
-    private List<String> listStudents() {
+    /**
+     * Lists the students of every usable submission, in the order
+     * grading meets them; duplicates are still sent to grading. A file
+     * chosen again is left out, as grading grades it once.
+     *
+     * @return the usernames
+     */
+    public List<String> listStudents() {
         List<String> students = new ArrayList<>();
         for (ImportItem item : getItems(InputKind.SUBMISSION)) {
             if (item.getState().isUsable() && !isChosenAgain(item)) {

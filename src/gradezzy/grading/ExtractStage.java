@@ -16,10 +16,11 @@ import gradezzy.ingest.IngestException;
 import gradezzy.ingest.InvalidArchiveException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.ingest.WorkingCopyManager;
-import gradezzy.model.Submission;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Severity;
+import gradezzy.model.Student;
+import gradezzy.model.Submission;
 
 /**
  * Creates the working copy of a submission and matches it to a student on the
@@ -109,8 +110,16 @@ public class ExtractStage implements GradingStage {
         if (submission.getIngestFailure() != null) {
             throw new GradingException(submission.getIngestFailure());
         }
-        submission.setStudent(rosterReader.findByUsername(
-                context.getRoster(), submission.getUsername()));
+        Student matched = rosterReader.findByUsername(context.getRoster(),
+                submission.getUsername());
+        // A student matched to the score sheet by hand, such as an upload
+        // with a typo in its name, keeps that match when graded again
+        // while that student is still on the score sheet
+        if (matched == null && submission.getStudent() != null) {
+            matched = rosterReader.findByUsername(context.getRoster(),
+                    submission.getStudent().getUsername());
+        }
+        submission.setStudent(matched);
         if (submission.getStudent() == null) {
             submission.addAnomaly(new Anomaly(
                     UNKNOWN_ID_PREFIX + UUID.randomUUID(),

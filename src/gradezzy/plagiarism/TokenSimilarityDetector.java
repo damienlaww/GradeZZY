@@ -124,8 +124,10 @@ public class TokenSimilarityDetector implements SimilarityDetector {
     private List<SimilarityPair> compareQuestion(List<Submission> submissions,
             Assessment assessment, Question question, Path starter,
             double threshold) {
+        List<Integer> lineCounts = new ArrayList<>();
         List<Set<String>> answers = readNewCode(submissions, assessment,
-                question, starter);
+                question, starter, lineCounts);
+        int minLines = config.getInt(ConfigKeys.PLAGIARISM_MIN_LINES);
         List<SimilarityPair> pairs = new ArrayList<>();
 
         for (int i = 0; i < submissions.size(); i++) {
@@ -134,7 +136,9 @@ public class TokenSimilarityDetector implements SimilarityDetector {
                 Set<String> secondAnswer = answers.get(j);
                 double score = jaccard(firstAnswer, secondAnswer);
                 boolean enoughCode = firstAnswer.size() >= MIN_OWN_TRIGRAMS
-                        && secondAnswer.size() >= MIN_OWN_TRIGRAMS;
+                        && secondAnswer.size() >= MIN_OWN_TRIGRAMS
+                        && lineCounts.get(i) >= minLines
+                        && lineCounts.get(j) >= minLines;
 
                 if (enoughCode && score >= threshold) {
                     String firstUsername = submissions.get(i).getUsername();
@@ -148,13 +152,17 @@ public class TokenSimilarityDetector implements SimilarityDetector {
         return pairs;
     }
 
-    // Reads each student's trigrams for a question, minus the starter's.
-    // The question's other source files, such as GoldMember.java, count
-    // as part of its answer.
+    // Reads each student's trigrams for a question, minus the starter's,
+    // and puts each one's number of new lines of code in lineCounts. The
+    // question's other source files, such as GoldMember.java, count as
+    // part of its answer.
     private List<Set<String>> readNewCode(List<Submission> submissions,
-            Assessment assessment, Question question, Path starter) {
+            Assessment assessment, Question question, Path starter,
+            List<Integer> lineCounts) {
         Path starterFolder = starter.resolve(question.getFolderName());
         Set<String> starterTrigrams = readQuestionTrigrams(starterFolder,
+                question);
+        Set<String> starterLines = CodeLineCounter.readLines(starterFolder,
                 question);
         List<Set<String>> answers = new ArrayList<>();
 
@@ -166,6 +174,8 @@ public class TokenSimilarityDetector implements SimilarityDetector {
 
             answer.removeAll(starterTrigrams);
             answers.add(answer);
+            lineCounts.add(CodeLineCounter.countNewLines(studentFolder,
+                    question, starterLines));
         }
 
         return answers;

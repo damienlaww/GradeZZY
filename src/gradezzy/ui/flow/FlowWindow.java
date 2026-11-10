@@ -48,6 +48,7 @@ import javafx.util.Duration;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.SavedAssessment;
+import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.ui.AppFonts;
 import gradezzy.ui.AppIcons;
@@ -219,8 +220,20 @@ public class FlowWindow {
             scene.getStylesheets().add(css.toExternalForm());
         }
         addShortcuts(scene);
+        noteAssessmentInUse();
         showPage(Page.HOME);
         return scene;
+    }
+
+    // Tells the state which assessment is in use, so Set up lists the
+    // zip files chosen for it and not those of another lab test.
+    private void noteAssessmentInUse() {
+        Assessment inUse = backend.getAssessment();
+        String name = "";
+        if (inUse != null) {
+            name = inUse.getName();
+        }
+        state.setAssessmentName(name);
     }
 
     /**
@@ -274,6 +287,19 @@ public class FlowWindow {
     }
 
     /**
+     * Opens the Statistics tab on one run: its section and assessment,
+     * with that run picked, even when it is an earlier one.
+     *
+     * @param run the run, which has a section and an assessment
+     */
+    public void openStatistics(GradingRun run) {
+        StatisticsScreen statistics =
+                (StatisticsScreen) getPageScreen(Page.STATISTICS);
+        statistics.selectRun(run);
+        showPage(Page.STATISTICS);
+    }
+
+    /**
      * Opens Set up on a section, as Home's cards do. Zip files chosen
      * for another section are cleared, so they are not graded as this
      * one.
@@ -293,9 +319,9 @@ public class FlowWindow {
 
     /**
      * Makes a section the one being set up, as Home's dropdowns do. Zip
-     * files chosen for another section are cleared, so they are not
-     * graded as this one. While a batch is being graded, its section
-     * stays: nothing changes and false is returned.
+     * files chosen for another section are put away, so they are not
+     * graded as this one. A section being graded carries on grading
+     * while another is set up or graded.
      *
      * @param moduleCode the module, such as CS102
      * @param sectionCode the section, such as G2
@@ -311,9 +337,6 @@ public class FlowWindow {
                 state.restoreSubmissions();
             }
             return true;
-        }
-        if (state.isGrading()) {
-            return false;
         }
         // FlowState puts this section's zip files away and brings back
         // the ones chosen earlier for the new section
@@ -359,8 +382,11 @@ public class FlowWindow {
      * @return true when it is now in use
      */
     public boolean useAssessment(String name) {
-        if (state.isGrading()) {
-            notify("Wait for the current batch to finish first.");
+        // Grading reads the assessment's tester and starter folders from
+        // the settings, so they stay while any section grades
+        if (state.isAnyGrading()) {
+            notify("Wait until every section has finished grading, then "
+                    + "switch the assessment.");
             return false;
         }
         ActionResult result = backend.useAssessment(name);
@@ -377,6 +403,9 @@ public class FlowWindow {
      * it holds changes that are not saved.
      */
     public void assessmentChanged() {
+        if (!state.isAnyGrading()) {
+            noteAssessmentInUse();
+        }
         if (!hasUnsavedSettings()) {
             pages.remove(Page.SETTINGS);
         }
@@ -505,13 +534,98 @@ public class FlowWindow {
     }
 
     /**
+     * Shows a section's batch being graded: makes the section the one on
+     * screen and opens the Grade step.
+     *
+     * @param section the section
+     */
+    public void watchGrading(Section section) {
+        chooseSection(section.getModuleCode(), section.getSectionCode());
+        state.reach(Step.GRADE);
+        show(Step.GRADE);
+    }
+
+    /**
+     * Shows a batch's progress: on Grade when its section is on screen,
+     * and on Home's cards each time a student finishes. GradingJob calls
+     * it on the window's thread.
+     *
+     * @param job the batch
+     * @param counted true when a student has just finished
+     */
+    public void gradingProgressed(GradingJob job, boolean counted) {
+        // The Grade step shows the section on screen and links to the
+        // others with how far each has got
+        gradeScreen().progressed(job);
+        boolean homeShown = currentPage == Page.HOME && sheet == null;
+        if (counted && homeShown) {
+            refreshScreen();
+        }
+    }
+
+    /**
+     * Takes in a batch that has ended. The batch of the section on screen
+     * becomes the run Review and Export show, and Grade moves on; a batch
+     * of another section only says how it ended, with a link to it, so
+     * the work on screen is not taken away. GradingJob calls it on the
+     * window's thread.
+     *
+     * @param job the batch, ended
+     */
+    public void gradingEnded(GradingJob job) {
+        GradingRun run = job.getRun();
+        state.attachSkippedFiles(run, job.getSkippedFiles());
+        if (job.isOf(state.getSection())) {
+            endOnScreen(job);
+            return;
+        }
+        Section section = job.getSection();
+        String label = section.getLabel();
+        if (job.getFailure() != null) {
+            notify(label + " could not be graded.", "Show why",
+                    () -> watchGrading(section));
+        } else if (job.hasUnfinished()) {
+            notify(label + " stopped before every student was graded.",
+                    "Show", () -> watchGrading(section));
+        } else if (run != null) {
+            notify(label + " has finished grading.", "Open results",
+                    () -> openRun(run));
+        }
+        if (sheet == null) {
+            refreshScreen();
+        }
+    }
+
+    // Takes in the ended batch of the section on screen: its run is the
+    // one Review and Export show, and a finished one opens Review.
+    private void endOnScreen(GradingJob job) {
+        GradingRun run = job.getRun();
+        if (run != null) {
+            state.setRun(run);
+            // A late batch adds students, so who has no submission changes
+            state.forgetMissingStudents();
+        }
+        boolean finished = run != null && job.getFailure() == null
+                && !job.hasUnfinished();
+        if (finished) {
+            state.reach(Step.REVIEW);
+            notify("Grading of " + job.getSection().getLabel()
+                    + " finished.");
+        } else if (job.getFailure() != null && currentStep != Step.GRADE) {
+            notify("Grading could not run. See step 2.");
+        }
+        gradeScreen().ended(job);
+    }
+
+    /**
      * Opens an earlier run on the Review step.
      *
      * @param run the run
      */
     public void openRun(GradingRun run) {
-        if (state.isGrading()) {
-            notify("Wait for the current batch to finish first.");
+        if (state.isGrading(run.getSection())) {
+            notify("Wait until " + run.getSection().getLabel()
+                    + " has finished grading.");
             return;
         }
         matchAssessment(run);
@@ -738,7 +852,7 @@ public class FlowWindow {
      * @param event the request to close the window
      */
     public void closeRequested(WindowEvent event) {
-        if (state.isGrading()) {
+        if (state.isAnyGrading()) {
             event.consume();
             confirm("Grading is still running. Stop and close?",
                     "Students already graded keep their marks. GradeZZY "
@@ -763,7 +877,10 @@ public class FlowWindow {
 
     // Stops grading after the current student, then closes the window.
     private void stopAndClose() {
-        backend.cancelGrading();
+        for (GradingJob job : state.getRunningJobs()) {
+            job.markCancelling();
+            backend.cancelGrading(job.getSection());
+        }
         actionBar.setStatus("Stopping after the current student, then "
                 + "closing.");
         closeWhenStopped();
@@ -772,7 +889,7 @@ public class FlowWindow {
     // Closes the window once grading has stopped, checking again later
     // while it has not.
     private void closeWhenStopped() {
-        if (!state.isGrading()) {
+        if (!state.isAnyGrading()) {
             closeWindow();
             return;
         }
@@ -1042,8 +1159,9 @@ public class FlowWindow {
 
     // Resumes or retries a run on the Grade step.
     private void continueRun(GradingRun run, boolean retryFailed) {
-        if (state.isGrading()) {
-            notify("Wait for the current batch to finish first.");
+        if (state.isGrading(run.getSection())) {
+            notify("Wait until " + run.getSection().getLabel()
+                    + " has finished grading.");
             return;
         }
         if (blockedByFix()) {
@@ -1099,7 +1217,9 @@ public class FlowWindow {
         Assessment inUse = backend.getAssessment();
         boolean nothingToSwitch = graded == null || inUse == null
                 || graded.getName().equalsIgnoreCase(inUse.getName());
-        if (nothingToSwitch) {
+        // The run keeps its own questions and testers, so while other
+        // sections grade the assessment in use is left as it is
+        if (nothingToSwitch || state.isAnyGrading()) {
             return;
         }
         for (SavedAssessment saved : backend.listAssessments()) {

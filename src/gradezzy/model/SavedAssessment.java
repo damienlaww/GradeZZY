@@ -2,7 +2,8 @@
  * File: SavedAssessment.java
  *
  * Purpose: One assessment the instructor has saved: its name, questions,
- * tester folder, starter folder and the files that come with them.
+ * tester folder, starter folder, model answers folder and the files that
+ * come with them.
  *
  * Where it fits: AssessmentLibrary reads and writes these, one file each.
  * Choosing one copies its settings into config.properties, so the rest of
@@ -31,6 +32,10 @@ public class SavedAssessment {
 
     // The folder of starter files given to students
     private String starterDirectory = "";
+
+    // The folder of model answers, laid out like the starter folder, or
+    // "" when this assessment has none
+    private String modelAnswersDirectory = "";
 
     // The module the assessment belongs to, or "" for every module
     private String moduleCode = "";
@@ -68,6 +73,7 @@ public class SavedAssessment {
         copy.getQuestions().addAll(questions);
         copy.setTestersDirectory(testersDirectory);
         copy.setStarterDirectory(starterDirectory);
+        copy.setModelAnswersDirectory(modelAnswersDirectory);
         copy.setModuleCode(moduleCode);
         copy.getProvidedClassFiles().addAll(providedClassFiles);
         copy.getTesterDataFiles().addAll(testerDataFiles);
@@ -150,6 +156,33 @@ public class SavedAssessment {
      */
     public void setStarterDirectory(String starterDirectory) {
         this.starterDirectory = starterDirectory;
+    }
+
+    /**
+     * Returns the model answers folder, used to check the testers and
+     * to try random inputs.
+     *
+     * <p>Tier: COULD.
+     *
+     * @return the folder, as typed or chosen, or "" for none
+     */
+    public String getModelAnswersDirectory() {
+        return modelAnswersDirectory;
+    }
+
+    /**
+     * Changes the model answers folder.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param modelAnswersDirectory the new folder, or "" for none
+     */
+    public void setModelAnswersDirectory(String modelAnswersDirectory) {
+        if (modelAnswersDirectory == null) {
+            this.modelAnswersDirectory = "";
+        } else {
+            this.modelAnswersDirectory = modelAnswersDirectory;
+        }
     }
 
     /**

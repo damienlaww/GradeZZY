@@ -301,13 +301,19 @@ public class CsvScoreSheetExporter implements Exporter {
     }
 
     // Maps each username, in lower case, to its submission, so an upload
-    // named PING.LEE.2023 still fills the row of ping.lee.2023. A
-    // rejected duplicate never replaces a submission that was loaded.
+    // named PING.LEE.2023 still fills the row of ping.lee.2023. A student
+    // matched to the score sheet by hand, such as an upload named with a
+    // typo, fills the row of the student it was matched to. A rejected
+    // duplicate never replaces a submission that was loaded.
     private Map<String, Submission> indexByUsername(
             List<Submission> submissions) {
         Map<String, Submission> submissionsByUsername = new HashMap<>();
         for (Submission submission : submissions) {
-            String key = submission.getUsername().toLowerCase(Locale.ROOT);
+            String username = submission.getUsername();
+            if (submission.getStudent() != null) {
+                username = submission.getStudent().getUsername();
+            }
+            String key = username.toLowerCase(Locale.ROOT);
             Submission earlier = submissionsByUsername.get(key);
             if (earlier == null || earlier.getIngestFailure() != null) {
                 submissionsByUsername.put(key, submission);
