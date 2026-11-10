@@ -13,6 +13,7 @@ package gradezzy.ui.flow;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
+import gradezzy.service.ChosenSubmissionsStore;
 import gradezzy.ui.backend.ImportBatch;
 import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.InputKind;
@@ -200,6 +202,70 @@ public class FlowState {
      */
     public void renameAssessment(String assessmentName) {
         this.assessmentName = assessmentName;
+    }
+
+    /**
+     * Forgets the zip files chosen for a deleted assessment in every
+     * module and section: put away, saved or cleared on purpose, so a new
+     * assessment with its name starts with none. The assessment in use
+     * cannot be deleted, so the list open now stays.
+     *
+     * @param deletedName the deleted assessment's name
+     */
+    public void forgetAssessment(String deletedName) {
+        submissionsBySection.keySet().removeAll(keysOf(
+                submissionsBySection.keySet(), deletedName));
+        savedPaths.keySet().removeAll(keysOf(savedPaths.keySet(),
+                deletedName));
+        clearedSections.removeAll(keysOf(clearedSections, deletedName));
+    }
+
+    /**
+     * Brings back the paths saved for a deleted assessment after Undo, so
+     * Set up lists them again when each section is opened.
+     *
+     * @param paths the paths saved for it, by module, section and
+     *        assessment, such as CS102/G2/Lab Test 2
+     */
+    public void putBackSavedPaths(Map<String, List<Path>> paths) {
+        savedPaths.putAll(paths);
+    }
+
+    /**
+     * Moves the zip files chosen for a renamed assessment to its new name
+     * in every module and section, so they stay with it.
+     *
+     * @param oldName the name it had
+     * @param newName its new name
+     */
+    public void moveAssessment(String oldName, String newName) {
+        for (String key : keysOf(submissionsBySection.keySet(), oldName)) {
+            List<ImportItem> items = submissionsBySection.remove(key);
+            submissionsBySection.put(ChosenSubmissionsStore.renameKey(key,
+                    oldName, newName), items);
+        }
+        for (String key : keysOf(savedPaths.keySet(), oldName)) {
+            List<Path> paths = savedPaths.remove(key);
+            savedPaths.put(ChosenSubmissionsStore.renameKey(key, oldName,
+                    newName), paths);
+        }
+        for (String key : keysOf(clearedSections, oldName)) {
+            clearedSections.remove(key);
+            clearedSections.add(ChosenSubmissionsStore.renameKey(key,
+                    oldName, newName));
+        }
+    }
+
+    // Lists the keys that belong to an assessment, such as
+    // CS102/G2/Lab Test 2 for Lab Test 2.
+    private List<String> keysOf(Collection<String> keys, String name) {
+        List<String> found = new ArrayList<>();
+        for (String key : keys) {
+            if (ChosenSubmissionsStore.isKeyOf(key, name)) {
+                found.add(key);
+            }
+        }
+        return found;
     }
 
     // Names the chosen module, section and assessment, such as

@@ -185,11 +185,11 @@ public class CompareChart extends Region {
         double top = TOP_MARGIN;
         double plotWidth = width - left - RIGHT_MARGIN;
         double plotHeight = height - top - BOTTOM_MARGIN;
-        double bottom = top + plotHeight;
         double max = stats.get(0).getMaxTotal();
         if (plotWidth <= 0 || plotHeight <= 0 || max <= 0) {
             return;
         }
+        double bottom = top + plotHeight;
 
         double tallest = 0;
         for (MarkStats one : stats) {

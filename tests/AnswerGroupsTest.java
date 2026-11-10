@@ -12,10 +12,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.exec.ProcessResult;
+import gradezzy.grading.TesterOutputScoreParser;
 import gradezzy.model.*;
 import gradezzy.persistence.SqliteResultRepository;
 import gradezzy.plagiarism.JavaTokenizer;
@@ -40,6 +44,15 @@ public class AnswerGroupsTest {
 
     // The highest score of Q3
     private static final int Q3_MAX_SCORE = 4;
+
+    // The longest test name a title shows, as AnswerGrouper cuts it
+    private static final int SHOWN_NAME_LENGTH = 60;
+
+    // The length of a test name long enough to be cut
+    private static final int LONG_NAME_LENGTH = 100;
+
+    // The test the checks give a name to and that ben fails in Q2b
+    private static final int NAMED_TEST = 3;
 
     // The mark for a passed test in an answer pattern
     private static final char PASSED = 'P';
@@ -66,6 +79,7 @@ public class AnswerGroupsTest {
         tokenizer();
         patterns();
         grouping();
+        caseNames();
         notes();
         exports();
         reviewFixes();
@@ -350,6 +364,121 @@ public class AnswerGroupsTest {
         check(noShape, "a student without a file is grouped with no shape");
     }
 
+    // Checks that a group is titled with the name the tester printed for
+    // its test, and keeps its key.
+    private static void caseNames() throws Exception {
+        readCaseNames();
+        namedTitles();
+        namedGroups();
+        savedCaseNames();
+    }
+
+    // Checks how a case's name is read from its header line and output.
+    private static void readCaseNames() throws Exception {
+        String name = TesterOutputScoreParser.readCaseName(
+                "Test 1: getIsogramWords([alice, ben])", "Test");
+        check("getIsogramWords([alice, ben])".equals(name),
+                "name after the number and colon: " + name);
+        name = TesterOutputScoreParser.readCaseName(
+                "  Test 12 - getHighest with an empty array:", "Test");
+        check("getHighest with an empty array".equals(name),
+                "dash and end colon dropped: " + name);
+        check(TesterOutputScoreParser.readCaseName("Test 3", "Test") == null
+                && TesterOutputScoreParser.readCaseName("Test 4:", "Test")
+                        == null, "a header with no words has no name");
+
+        TesterOutputScoreParser parser = new TesterOutputScoreParser(
+                TestConfig.load());
+        String output = "Test 1: getA([1])\nPassed\nTest 2: getB([])\n"
+                + "Failed\nPassed\n1.0";
+        ProcessResult run = new ProcessResult(0, output, "", false, 0L);
+        Question question = question(assessment(), "Q1a");
+        List<TestCaseResult> cases = parser.parse(question, run)
+                .getTestCaseResults();
+        int expectedCases = 3;
+        boolean named = cases.size() == expectedCases
+                && "getA([1])".equals(cases.get(0).getName())
+                && "getB([])".equals(cases.get(1).getName())
+                && cases.get(expectedCases - 1).getName() == null;
+        check(named, "parsed cases keep their header names");
+    }
+
+    // Checks the titles of patterns with and without names.
+    private static void namedTitles() {
+        Map<Integer, String> names = new HashMap<>();
+        names.put(NAMED_TEST, "getTopStudent(students.txt, CS102)");
+        check(AnswerGrouper.titleOf("F:3", names)
+                .equals("Failed test 3: getTopStudent(students.txt, CS102)"),
+                "named failed test: " + AnswerGrouper.titleOf("F:3", names));
+        check(AnswerGrouper.titleOf("F:2", names).equals("Failed test 2"),
+                "a test with no name keeps the plain title");
+        check(AnswerGrouper.titleOf("T:PPF", names).equals("Ran too long "
+                + "at test 3: getTopStudent(students.txt, CS102)"),
+                "named timeout: " + AnswerGrouper.titleOf("T:PPF", names));
+        check(AnswerGrouper.titleOf("X:PF", names)
+                .equals("Crashed after test 1"),
+                "a crash at a test with no name keeps the plain title");
+        names.put(1, "x".repeat(LONG_NAME_LENGTH));
+        String cut = AnswerGrouper.titleOf("F:1", names);
+        int longest = "Failed test 1: ".length() + SHOWN_NAME_LENGTH;
+        check(cut.length() == longest && cut.endsWith("..."),
+                "a long name is cut: " + cut);
+    }
+
+    // Checks that groups take the names of any student's cases, keep
+    // their keys, and that a run with no names keeps the plain titles.
+    private static void namedGroups() {
+        Assessment assessment = assessment();
+        GradingRun run = new GradingRun("run-names", assessment, SECTION,
+                LocalDateTime.now());
+        run.addSubmission(student(assessment, "amy", "Q2b", "PPFPF"));
+        Submission ben = student(assessment, "ben", "Q2b", "PPFPF");
+        QuestionResult benQ2b = result(ben, "Q2b");
+        benQ2b.getTestCaseResults().clear();
+        for (int number = 1; number <= Q2B_MAX_SCORE; number++) {
+            boolean passed = number != NAMED_TEST
+                    && number != Q2B_MAX_SCORE;
+            benQ2b.addTestCaseResult(new TestCaseResult(number, passed, "",
+                    "getTopStudent(case " + number + ")"));
+        }
+        run.addSubmission(ben);
+
+        List<AnswerGroup> groups = AnswerGrouper.group(run);
+        AnswerGroup first = groups.get(0);
+        check(first.getTitle().equals("Failed test 3: getTopStudent(case 3)")
+                && first.getKey().equals("Q2b|F:3")
+                && first.getUsernames().equals(Arrays.asList("amy", "ben")),
+                "named title, same key: " + first.getTitle());
+        check(groups.get(1).getTitle()
+                .equals("Failed test 5: getTopStudent(case 5)"),
+                "second named title: " + groups.get(1).getTitle());
+
+        List<AnswerGroup> plain = AnswerGrouper.group(twoStudentRun());
+        check(plain.get(0).getTitle().equals("Failed test 3"),
+                "a run with no names keeps the plain title");
+    }
+
+    // Checks that a case's name is saved and read back.
+    private static void savedCaseNames() throws Exception {
+        Path file = Files.createTempFile("answer-groups-names-", ".db");
+        SqliteResultRepository repository = new SqliteResultRepository(
+                file.toString());
+        repository.open();
+        GradingRun run = twoStudentRun();
+        QuestionResult amyQ1a = result(run.getSubmissions().get(0), "Q1a");
+        amyQ1a.getTestCaseResults().clear();
+        amyQ1a.addTestCaseResult(new TestCaseResult(1, false, "Failed",
+                "getA([1])"));
+        repository.saveRun(run);
+        GradingRun loaded = repository.loadRun(run.getId());
+        repository.close();
+        TestCaseResult loadedCase = result(loaded.getSubmissions().get(0),
+                "Q1a").getTestCaseResults().get(0);
+        check("getA([1])".equals(loadedCase.getName()),
+                "a case's name is saved: " + loadedCase.getName());
+        Files.deleteIfExists(file);
+    }
+
     // ---------------------------------------------------------- Task 3
 
     // Returns a run where amy and ben failed the same Q2b tests.
@@ -364,7 +493,7 @@ public class AnswerGroupsTest {
 
     // Returns the settings with saving switched on or off.
     static AppConfig config(boolean database, Path file) throws Exception {
-        AppConfig config = new AppConfig("config.properties");
+        AppConfig config = TestConfig.load();
         config.setString(ConfigKeys.DATABASE_ENABLED,
                 String.valueOf(database));
         config.setString(ConfigKeys.DATABASE_FILE, file.toString());

@@ -27,6 +27,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
 import gradezzy.model.Anomaly;
+import gradezzy.model.AnomalyType;
 import gradezzy.model.AnswerGroup;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
@@ -101,6 +102,9 @@ public class AnswerGroupActions {
 
     // Where the first letter of a title ends
     private static final int FIRST_LETTER_END = 1;
+
+    // The most students named in the warning about other groups
+    private static final int MOST_NAMED = 3;
 
     // The one change a group mark change adds to each student
     private static final int ONE_CHANGE = 1;
@@ -213,6 +217,10 @@ public class AnswerGroupActions {
         String aboutText = group.getTitle() + ". Every student below gets "
                 + "the same new mark for " + questionId + ", with the same "
                 + "reason. You can undo it.";
+        String overlap = describeOverlap(run, group, listed);
+        if (!overlap.isEmpty()) {
+            aboutText = aboutText + SENTENCE_SEPARATOR + overlap;
+        }
         Label about = wrapped(Parts.muted(aboutText));
         Button cancel = Parts.secondary("Cancel", () -> window.closeSheet());
         Button save = Parts.primary("Change " + Parts.plural(count, "mark"));
@@ -226,6 +234,44 @@ public class AnswerGroupActions {
         showSheet(new Node[] {title, about, table, markField, reasonField,
             problem, buttonRow});
         mark.requestFocus();
+    }
+
+    // Warns about the listed students who are also in another group of
+    // the same question, such as a student who failed every test: the
+    // new mark replaces their whole mark for the question, not only what
+    // this group's test is worth. Returns "" when there is none.
+    private String describeOverlap(GradingRun run, AnswerGroup group,
+            List<String> listed) {
+        List<String> inOthers = new ArrayList<>();
+        for (AnswerGroup other : window.getBackend().listAnswerGroups(run)) {
+            boolean sameQuestion = other.getQuestionId().equals(
+                    group.getQuestionId())
+                    && !other.getKey().equals(group.getKey());
+            if (sameQuestion) {
+                addListed(inOthers, other.getUsernames(), listed);
+            }
+        }
+        if (inOthers.isEmpty()) {
+            return "";
+        }
+        String who = TextUtils.join(ITEM_SEPARATOR, inOthers);
+        if (inOthers.size() > MOST_NAMED) {
+            who = Parts.plural(inOthers.size(), "student") + " below";
+        }
+        String questionId = group.getQuestionId();
+        return "Check first: " + who + " also lost marks in another "
+                + questionId + " group, and this sets their whole "
+                + questionId + " mark.";
+    }
+
+    // Adds each username that is listed and not added yet.
+    private void addListed(List<String> added, List<String> usernames,
+            List<String> listed) {
+        for (String username : usernames) {
+            if (listed.contains(username) && !added.contains(username)) {
+                added.add(username);
+            }
+        }
     }
 
     // Builds the table of the listed students with their mark of the
@@ -259,7 +305,7 @@ public class AnswerGroupActions {
             showProblem(problem, error);
             return;
         }
-        double newMark = Double.parseDouble(mark.getText().trim());
+        double newMark = AdjustMarkSheet.parseMark(mark.getText());
         String why = reason.getText().trim();
         DashboardBackend backend = window.getBackend();
         List<String> still = stillInGroup(run, group, listed);
@@ -346,10 +392,7 @@ public class AnswerGroupActions {
             ScoreAdjustment change, int count) {
         List<ScoreAdjustment> now = changesOf(run, submission,
                 change.getQuestionId());
-        if (!now.contains(change)) {
-            return false;
-        }
-        if (now.size() != count) {
+        if (!now.contains(change) || now.size() != count) {
             return false;
         }
         ActionResult result = window.getBackend().undoAdjustment(run,
@@ -411,7 +454,42 @@ public class AnswerGroupActions {
                     + describeStudent(run, username, question));
             content.getChildren().add(wrapped(line));
         }
+        if (hasOpenSimilarCode(run, listed, question)) {
+            Label similar = Parts.muted("Similar code flags are left as "
+                    + "they are: decide them under Similarity.");
+            content.getChildren().add(wrapped(similar));
+        }
         return content;
+    }
+
+    // Says whether a listed student has a Similar code flag about the
+    // question still open, which checking the group leaves as it is.
+    private boolean hasOpenSimilarCode(GradingRun run, List<String> listed,
+            Question question) {
+        DashboardBackend backend = window.getBackend();
+        for (String username : listed) {
+            Submission submission = findSubmission(run, username);
+            if (submission != null && hasOpenSimilarCode(backend,
+                    submission, question)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Says whether a student has a Similar code flag about the question
+    // still open.
+    private boolean hasOpenSimilarCode(DashboardBackend backend,
+            Submission submission, Question question) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            boolean open = anomaly.getType() == AnomalyType.SIMILAR_CODE
+                    && backend.needsReview(anomaly)
+                    && AnswerGrouper.isAbout(anomaly, submission, question);
+            if (open) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Counts the open items of a question of the listed students.
@@ -495,16 +573,14 @@ public class AnswerGroupActions {
     }
 
     // Says whether an item of a student waits for a look and is about a
-    // question; a fix waiting for Keep or Reject does not count.
+    // question; a fix waiting for Keep or Reject does not count, nor does
+    // Similar code, which is decided under Similarity.
     private boolean isOpenItem(Anomaly anomaly, Submission submission,
             Question question) {
-        if (anomaly.getFixStatus() == FixStatus.APPLIED) {
-            return false;
-        }
-        if (!window.getBackend().needsReview(anomaly)) {
-            return false;
-        }
-        return AnswerGrouper.isAbout(anomaly, submission, question);
+        return anomaly.getFixStatus() != FixStatus.APPLIED
+                && anomaly.getType() != AnomalyType.SIMILAR_CODE
+                && window.getBackend().needsReview(anomaly)
+                && AnswerGrouper.isAbout(anomaly, submission, question);
     }
 
     // Names a student with the open items of a question, such as "KAI
@@ -650,10 +726,7 @@ public class AnswerGroupActions {
     // Says whether a result is for the question with an id.
     private static boolean isFor(QuestionResult result, String questionId) {
         Question question = result.getQuestion();
-        if (question == null) {
-            return false;
-        }
-        return question.getId().equals(questionId);
+        return question != null && question.getId().equals(questionId);
     }
 
     // Shows a student's name with the username under it.
@@ -671,10 +744,7 @@ public class AnswerGroupActions {
 
     // Returns the question of a group in a run, or null.
     private static Question questionOf(GradingRun run, AnswerGroup group) {
-        if (run == null) {
-            return null;
-        }
-        if (run.getAssessment() == null) {
+        if (run == null || run.getAssessment() == null) {
             return null;
         }
         for (Question question : run.getAssessment().getQuestions()) {

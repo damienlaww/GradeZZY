@@ -11,12 +11,16 @@ package gradezzy.ui.demo;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
+import gradezzy.report.CsvScoreSheetExporter;
+import gradezzy.report.ScoreSheetColumns;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.util.TextUtils;
 
@@ -61,14 +65,21 @@ public final class DemoExports {
      *
      * @param run the run
      * @param scope the students to include
+     * @param remarks each student's remark by username in lower case,
+     *        as the live score sheet's Remarks column has them
      * @return the CSV text
      */
-    public static String toCsv(GradingRun run, List<Submission> scope) {
+    public static String toCsv(GradingRun run, List<Submission> scope,
+            Map<String, String> remarks) {
         String csv = "Username,Last Name,First Name";
+        // The question columns are named as the live score sheet names
+        // them, such as Lab Test 2 Q1a Points Grade
         for (Question question : run.getAssessment().getQuestions()) {
-            csv += COMMA + question.getId();
+            csv += COMMA + ScoreSheetColumns.nameColumn(
+                    run.getAssessment(), question);
         }
-        csv += COMMA + "Total" + CSV_LINE_END;
+        csv += COMMA + "Total" + COMMA
+                + CsvScoreSheetExporter.REMARKS_COLUMN + CSV_LINE_END;
 
         for (Submission submission : scope) {
             Student student = submission.getStudent();
@@ -87,6 +98,8 @@ public final class DemoExports {
             if (graded) {
                 csv += format(submission.getTotalScore());
             }
+            String key = submission.getUsername().toLowerCase(Locale.ROOT);
+            csv += COMMA + csvValue(remarks.getOrDefault(key, ""));
             csv += CSV_LINE_END;
         }
         return csv;

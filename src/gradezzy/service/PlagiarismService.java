@@ -27,6 +27,7 @@ import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
+import gradezzy.plagiarism.IdenticalCopyFinder;
 import gradezzy.plagiarism.SimilarityDetector;
 import gradezzy.plagiarism.SimilarityPair;
 
@@ -57,9 +58,28 @@ public class PlagiarismService {
     // Turns a similarity from 0 to 1 into a percentage
     private static final int PERCENT = 100;
 
+    // Ends the message of a flag whose two files are an identical copy;
+    // listPairs looks for it to read the pair back as identical
+    private static final String IDENTICAL_NOTE = " Identical copy: both "
+            + "files have the same Name, Email ID and code.";
+
+    // Ends the message of a flag whose two files give the same Email ID
+    // in their header but are not an identical copy
+    private static final String SAME_EMAIL_NOTE = " Same Email ID: both "
+            + "files give the same Email ID in their header.";
+
     // What the instructor can do about a Similar code anomaly
     private static final String SUGGESTED_ACTION =
             "Use Compare to read both answers side by side.";
+
+    // The settings each check reads when it runs, which the run's
+    // recorded settings are brought up to date with
+    private static final String[] SIMILARITY_KEYS = {
+        ConfigKeys.PLAGIARISM_ENABLED,
+        ConfigKeys.PLAGIARISM_ALGORITHM,
+        ConfigKeys.PLAGIARISM_THRESHOLD,
+        ConfigKeys.PLAGIARISM_MIN_LINES
+    };
 
     // The application settings
     private final AppConfig config;
@@ -69,6 +89,9 @@ public class PlagiarismService {
 
     // The store the checked run is saved to, or null to save nothing
     private final ResultRepository repository;
+
+    // Finds the files handed in twice: same header and same code
+    private final IdenticalCopyFinder identicalFinder;
 
     /**
      * Creates a new plagiarism service that saves the run after each
@@ -87,6 +110,7 @@ public class PlagiarismService {
         this.config = config;
         this.similarityDetector = similarityDetector;
         this.repository = repository;
+        this.identicalFinder = new IdenticalCopyFinder(config);
     }
 
     /**
@@ -100,16 +124,22 @@ public class PlagiarismService {
      * cannot both add their anomalies. The run is then saved when the
      * database is switched on, so the flags are kept after a restart.
      *
+     * <p>Two files with the same Email ID in their header are always
+     * flagged, whatever the settings say, and marked as sharing it; with
+     * the same Name and the same code too, they are an identical copy,
+     * at 100%. That is, even when the answer is too short to compare,
+     * less alike than the threshold, and even when plagiarism.enabled is
+     * false, which only switches off the search for code that is merely
+     * similar.
+     *
      * <p>Tier: COULD.
      *
      * @param gradingRun the grading run
-     * @return the similar pairs found, most similar first, or an empty
-     *         list when there is no run or plagiarism.enabled is false
+     * @return the pairs found, most similar first, or an empty list when
+     *         there is no run
      */
     public synchronized List<SimilarityPair> check(GradingRun gradingRun) {
-        boolean checkOff = gradingRun == null
-                || !config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED);
-        if (checkOff) {
+        if (gradingRun == null) {
             return new ArrayList<>();
         }
 
@@ -122,10 +152,21 @@ public class PlagiarismService {
             }
         }
 
-        // The starter folder chosen for the run, as grading uses it
-        List<SimilarityPair> pairs = similarityDetector.findSimilar(
-                finished, gradingRun.getAssessment(),
-                gradingRun.getStarterDirectory());
+        // Every check uses the similar code settings of now, so the run
+        // records those in place of the ones it started with
+        gradingRun.setGradingSettings(RunSettings.update(
+                gradingRun.getGradingSettings(), config, SIMILARITY_KEYS));
+
+        // The starter folder chosen for the run, as grading uses it.
+        // Only the search for similar code can be switched off.
+        List<SimilarityPair> found = new ArrayList<>();
+        if (config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED)) {
+            found = similarityDetector.findSimilar(finished,
+                    gradingRun.getAssessment(),
+                    gradingRun.getStarterDirectory());
+        }
+        List<SimilarityPair> pairs = addIdentical(found,
+                identicalFinder.find(finished, gradingRun.getAssessment()));
 
         for (SimilarityPair pair : pairs) {
             flag(gradingRun, finished, earlierFlags,
@@ -162,17 +203,23 @@ public class PlagiarismService {
         for (Submission submission : gradingRun.getSubmissions()) {
             for (Anomaly anomaly : submission.getAnomalies()) {
                 SimilarityPair pair = readFlag(anomaly, idStart);
-                if (pair == null) {
-                    continue;
-                }
-                String pairKey = makePairKey(pair);
-                if (!pairKeys.contains(pairKey)) {
-                    pairKeys.add(pairKey);
-                    insertBySimilarity(pairs, pair);
+                if (pair != null) {
+                    addNewPair(pairs, pairKeys, pair);
                 }
             }
         }
         return pairs;
+    }
+
+    // Adds a pair, by similarity, unless a pair with the same key was
+    // added before; the key is then kept as seen.
+    private void addNewPair(List<SimilarityPair> pairs, List<String> pairKeys,
+            SimilarityPair pair) {
+        String pairKey = makePairKey(pair);
+        if (!pairKeys.contains(pairKey)) {
+            pairKeys.add(pairKey);
+            insertBySimilarity(pairs, pair);
+        }
     }
 
     /**
@@ -223,11 +270,52 @@ public class PlagiarismService {
             String percentText = message.substring(start.length(), end);
             int percent = Integer.parseInt(percentText);
             double similarity = (double) percent / PERCENT;
+            boolean identical = message.endsWith(IDENTICAL_NOTE);
+            boolean sameEmail = identical
+                    || message.endsWith(SAME_EMAIL_NOTE);
             return new SimilarityPair(parts[STUDENT_PART],
-                    parts[OTHER_STUDENT_PART], questionId, similarity);
+                    parts[OTHER_STUDENT_PART], questionId, similarity,
+                    identical, sameEmail);
         } catch (NumberFormatException exception) {
             return null;
         }
+    }
+
+    // Puts the pairs whose headers match first, in place of the same
+    // pairs the similarity check found, then the check's other pairs in
+    // order. A same Email ID pair the check also found keeps the check's
+    // similarity, which leaves the starter code out.
+    private List<SimilarityPair> addIdentical(List<SimilarityPair> found,
+            List<SimilarityPair> headerPairs) {
+        List<SimilarityPair> pairs = new ArrayList<>();
+        List<String> headerKeys = new ArrayList<>();
+        for (SimilarityPair pair : headerPairs) {
+            headerKeys.add(makePairKey(pair));
+            SimilarityPair checked = findByKey(found, makePairKey(pair));
+            if (checked != null && !pair.isIdentical()) {
+                pair = new SimilarityPair(pair.getFirstUsername(),
+                        pair.getSecondUsername(), pair.getQuestionId(),
+                        checked.getSimilarity(), false, true);
+            }
+            pairs.add(pair);
+        }
+        for (SimilarityPair pair : found) {
+            if (!headerKeys.contains(makePairKey(pair))) {
+                pairs.add(pair);
+            }
+        }
+        return pairs;
+    }
+
+    // Finds the pair with a key in a list, or returns null.
+    private SimilarityPair findByKey(List<SimilarityPair> pairs,
+            String key) {
+        for (SimilarityPair pair : pairs) {
+            if (makePairKey(pair).equals(key)) {
+                return pair;
+            }
+        }
+        return null;
     }
 
     // Names a pair the same way whichever student comes first.
@@ -333,6 +421,11 @@ public class PlagiarismService {
                 + PERCENT_SIGN + " similar to "
                 + describeStudent(submissions, otherUsername) + ". This is "
                 + "a review aid, not a finding.";
+        if (pair.isIdentical()) {
+            message = message + IDENTICAL_NOTE;
+        } else if (pair.isSameEmail()) {
+            message = message + SAME_EMAIL_NOTE;
+        }
         Anomaly anomaly = new Anomaly(id, AnomalyType.SIMILAR_CODE,
                 Severity.INFO, username, message, SUGGESTED_ACTION);
 

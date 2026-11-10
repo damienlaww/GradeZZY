@@ -18,12 +18,16 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ScrollPane;
 import javafx.geometry.Insets;
 import javafx.scene.image.WritableImage;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
 import gradezzy.model.GradingRun;
+import gradezzy.model.SavedAssessment;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.service.ServiceRegistry;
@@ -151,6 +155,7 @@ public class FlowCheck {
             window.show(Step.SET_UP);
             shoot(scene, tag, "1-set-up-empty");
             shootExplanation(scene, tag);
+            shootGradingContext(window, backend, scene, tag);
 
             for (Path path : backend.getSampleFiles(
                     InputKind.SUBMISSION)) {
@@ -249,6 +254,19 @@ public class FlowCheck {
                     gradezzy.ui.backend.Capability.ANSWER_GROUPS)) {
                 review.showMistakes();
                 shoot(scene, tag, "5m-mistakes");
+                // The Similarity view, then its first group opened, as
+                // Enter does
+                review.showSimilarity();
+                shoot(scene, tag, "5m0-similarity");
+                if (pressEnterOn(scene, ".similarity-group-header")) {
+                    shoot(scene, tag, "5m1-similarity-open");
+                    // Scrolled down to its buttons under the code
+                    scrollTo(scene, ".similarity-view",
+                            ".similarity-footer");
+                    shoot(scene, tag, "5m1b-similarity-buttons");
+                    pressEnterOn(scene, ".similarity-group-header");
+                }
+                review.showMistakes();
                 java.util.List<gradezzy.model.AnswerGroup> groups =
                         backend.listAnswerGroups(reviewRun);
                 if (!groups.isEmpty() && backend.supports(
@@ -423,6 +441,11 @@ public class FlowCheck {
                 window.getPageScreen(Page.RUNS);
         runs.showBackups();
         shoot(scene, tag, "8b-runs-backups");
+        // The end of the kept backups, with the older ones and Show all
+        ScrollPane runsPage = (ScrollPane) runs.getView();
+        runsPage.setVvalue(1.0);
+        shoot(scene, tag, "8b-runs-backups-end");
+        runsPage.setVvalue(0.0);
         runs.showActivity();
         shoot(scene, tag, "8c-runs-activity");
         runs.showRuns();
@@ -486,6 +509,83 @@ public class FlowCheck {
             }
         }
         return found;
+    }
+
+    // Scrolls a scroll pane so a node inside it is at the bottom of the
+    // view, or as near as it can go.
+    private void scrollTo(Scene scene, String paneSelector,
+            String nodeSelector) {
+        Node pane = scene.lookup(paneSelector);
+        Node node = scene.lookup(nodeSelector);
+        if (!(pane instanceof ScrollPane) || node == null) {
+            return;
+        }
+        ScrollPane scroll = (ScrollPane) pane;
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+        double contentHeight = scroll.getContent().getBoundsInLocal()
+                .getHeight();
+        double viewHeight = scroll.getViewportBounds().getHeight();
+        double nodeBottom = scroll.getContent().sceneToLocal(
+                node.localToScene(node.getBoundsInLocal())).getMaxY();
+        double hidden = contentHeight - viewHeight;
+        if (hidden > 0) {
+            double place = (nodeBottom - viewHeight) / hidden;
+            scroll.setVvalue(Math.max(0, Math.min(1, place)));
+        }
+    }
+
+    // Presses Enter on the first node with a style class, as the keyboard
+    // would. Returns false when there is no such node to press.
+    private boolean pressEnterOn(Scene scene, String selector) {
+        Node node = scene.lookup(selector);
+        if (node == null || node.getOnKeyPressed() == null) {
+            return false;
+        }
+        node.getOnKeyPressed().handle(new KeyEvent(KeyEvent.KEY_PRESSED,
+                "", "", KeyCode.ENTER, false, false, false, false));
+        return true;
+    }
+
+    // Saves pictures of the section picker and, in the demo, of Set up
+    // with the Continue card, with the warning about another assessment
+    // and for a module with no assessment, then goes back to the
+    // section Set up opened on. Live mode only opens the picker, so no
+    // file chosen for a section is changed.
+    private void shootGradingContext(FlowWindow window,
+            DashboardBackend backend, Scene scene, String tag)
+            throws IOException {
+        window.openSectionPicker();
+        shoot(scene, tag, "1e-section-picker");
+        window.closeSheet();
+        if (!backend.isDemo()) {
+            return;
+        }
+        String module = window.getState().getModuleCode();
+        String section = window.getState().getSectionCode();
+        String assessment = backend.getAssessment().getName();
+        String other = null;
+        for (String code : backend.getSectionCodes(module)) {
+            if (other == null && !code.equals(section)) {
+                other = code;
+            }
+        }
+        if (other != null) {
+            window.openSetUp(module, other);
+            shoot(scene, tag, "1c-set-up-continue");
+        }
+        for (SavedAssessment saved : backend.listAssessments()) {
+            if (!saved.getName().equals(assessment)) {
+                window.useAssessment(saved.getName());
+            }
+        }
+        window.openSetUp(module, section);
+        shoot(scene, tag, "1f-set-up-other-assessment");
+        window.useAssessment(assessment);
+        window.openSetUp(DemoData.EMPTY_MODULE_CODE,
+                DemoData.EMPTY_MODULE_SECTION);
+        shoot(scene, tag, "1d-set-up-no-assessment");
+        window.openSetUp(module, section);
     }
 
     // Saves a picture of what a "?" opens, in its own small scene with

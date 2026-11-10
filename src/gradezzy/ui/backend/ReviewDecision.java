@@ -8,6 +8,8 @@
  */
 package gradezzy.ui.backend;
 
+import gradezzy.model.AnomalyType;
+
 /**
  * A review decision about one anomaly.
  *
@@ -29,6 +31,9 @@ public enum ReviewDecision {
 
     /** The log's words for a flag or problem marked as checked. */
     public static final String AUDIT_CHECKED = "Marked as checked";
+
+    /** The log's words for a flag kept flagged. */
+    public static final String AUDIT_KEPT_FLAGGED = "Kept flagged";
 
     /** The log's words for a flag marked as looking fine. */
     public static final String AUDIT_LOOKS_FINE = "Marked as looks fine";
@@ -65,5 +70,20 @@ public enum ReviewDecision {
             return AUDIT_LOOKS_FINE;
         }
         return AUDIT_TAKEN_BACK;
+    }
+
+    /**
+     * Returns the words the activity log uses for this decision on a kind
+     * of problem: a flag, such as Similar code, that is reviewed was kept
+     * flagged, while any other problem was marked as checked.
+     *
+     * @param type the kind of problem decided
+     * @return such as "Kept flagged" or "Marked as checked"
+     */
+    public String getAuditAction(AnomalyType type) {
+        if (this == REVIEWED && ReviewRules.isFlag(type)) {
+            return AUDIT_KEPT_FLAGGED;
+        }
+        return getAuditAction();
     }
 }

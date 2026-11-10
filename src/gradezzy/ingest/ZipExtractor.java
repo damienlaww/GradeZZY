@@ -380,27 +380,26 @@ public class ZipExtractor {
                     throw tooBig(maxMegabytes, maxEntries);
                 }
                 String entryName = unpackedName(entry, renamedNames);
-                // Some ZIP tools emit an explicit ./ directory entry.
-                if (isOnlyCurrentFolder(entryName)) {
-                    continue;
-                }
-
-                boolean skip = shouldSkip(entryName, ignored, target,
-                        skippedNames);
-                if (entryName.endsWith(ENTRY_SEPARATOR)) {
-                    if (!skip) {
+                // Some ZIP tools emit an explicit ./ directory entry,
+                // which is left out.
+                if (!isOnlyCurrentFolder(entryName)) {
+                    boolean skip = shouldSkip(entryName, ignored, target,
+                            skippedNames);
+                    boolean folderEntry = entryName.endsWith(
+                            ENTRY_SEPARATOR);
+                    if (!folderEntry) {
+                        Path output = chooseOutput(target, entryName, skip,
+                                writtenPaths);
+                        long remaining = maxBytes - totalBytes;
+                        long written = extractFile(zip, entry, output,
+                                remaining, maxMegabytes, maxEntries);
+                        totalBytes += written;
+                        if (!skip) {
+                            fileCount++;
+                        }
+                    } else if (!skip) {
                         Path folder = target.resolve(entryName).normalize();
                         Files.createDirectories(folder);
-                    }
-                } else {
-                    Path output = chooseOutput(target, entryName, skip,
-                            writtenPaths);
-                    long remaining = maxBytes - totalBytes;
-                    long written = extractFile(zip, entry, output,
-                            remaining, maxMegabytes, maxEntries);
-                    totalBytes += written;
-                    if (!skip) {
-                        fileCount++;
                     }
                 }
             }

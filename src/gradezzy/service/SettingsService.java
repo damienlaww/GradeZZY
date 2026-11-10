@@ -154,7 +154,8 @@ public class SettingsService {
         ConfigKeys.STARTER_DIR
     };
 
-    // Settings that name a file which must already exist
+    // Settings that name a file which must already exist when one is
+    // given; blank means none is chosen yet, as for a new assessment
     private static final String[] EXISTING_FILE_KEYS = {
         ConfigKeys.SCORE_SHEET_FILE
     };
@@ -408,7 +409,7 @@ public class SettingsService {
         }
 
         if (contains(EXISTING_FILE_KEYS, key)) {
-            return checkPath(key, text, false);
+            return checkOptionalFile(key, text);
         }
 
         if (contains(WRITTEN_FOLDER_KEYS, key)) {
@@ -806,6 +807,15 @@ public class SettingsService {
             return "";
         }
         return checkPath(key, text, true);
+    }
+
+    // Checks a file setting that may be left empty, such as the score
+    // sheet of a new assessment, which is chosen on Set up.
+    private String checkOptionalFile(String key, String text) {
+        if (text.isEmpty()) {
+            return "";
+        }
+        return checkPath(key, text, false);
     }
 
     // Checks that a value names an existing folder or file. A relative

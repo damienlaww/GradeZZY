@@ -63,6 +63,16 @@ public interface ResultRepository {
     List<GradingRun> listRuns() throws PersistenceException;
 
     /**
+     * Lists every saved run with its section, start time and questions
+     * but without its submissions, newest first. It is much quicker than
+     * listRuns, for a caller that only needs to know which runs exist.
+     *
+     * @return the saved runs, without their submissions
+     * @throws PersistenceException if the operation fails
+     */
+    List<GradingRun> listRunHeaders() throws PersistenceException;
+
+    /**
      * Saves the current state of one submission of a run.
      *
      * @param runId the run id

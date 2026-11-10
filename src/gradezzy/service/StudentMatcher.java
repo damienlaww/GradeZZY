@@ -29,6 +29,10 @@ public final class StudentMatcher {
     // typo, such as two digits swapped
     private static final int MAX_TYPO_CHANGES = 2;
 
+    // How far back a swap of two letters next to each other looks: the
+    // letter before the one just before
+    private static final int TWO_LETTERS_BACK = 2;
+
     // Not used: every method is static.
     private StudentMatcher() {
     }
@@ -115,10 +119,14 @@ public final class StudentMatcher {
                 cost[row][column - 1] + 1);
         best = Math.min(best, cost[row - 1][column - 1] + change);
         boolean swapped = row > 1 && column > 1
-                && left.charAt(row - 1) == right.charAt(column - 2)
-                && left.charAt(row - 2) == right.charAt(column - 1);
+                && left.charAt(row - 1)
+                        == right.charAt(column - TWO_LETTERS_BACK)
+                && left.charAt(row - TWO_LETTERS_BACK)
+                        == right.charAt(column - 1);
         if (swapped) {
-            best = Math.min(best, cost[row - 2][column - 2] + 1);
+            int beforeSwap = cost[row - TWO_LETTERS_BACK]
+                    [column - TWO_LETTERS_BACK];
+            best = Math.min(best, beforeSwap + 1);
         }
         return best;
     }

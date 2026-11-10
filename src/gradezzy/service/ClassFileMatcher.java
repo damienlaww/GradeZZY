@@ -200,6 +200,8 @@ public class ClassFileMatcher {
         if (problem == null && onSheet * HALF >= total) {
             return ClassFileMatch.fits();
         }
+        // Read, but none of the students are on it
+        boolean noneOnSheet = problem == null && onSheet == 0;
         if (problem == null) {
             problem = describeStudentsOnSheet(onSheet, total, noun);
         }
@@ -220,12 +222,18 @@ public class ClassFileMatcher {
                 bestCount = count;
             }
         }
+        ClassFileMatch match = null;
         if (best == null || bestCount * HALF < total) {
-            return new ClassFileMatch(problem, null, "");
+            match = new ClassFileMatch(problem, null, "");
+        } else {
+            match = new ClassFileMatch(problem, best, ", "
+                    + describeWhere(best, sheet, configured) + ", lists "
+                    + describeShare(bestCount, total, noun) + ".");
         }
-        return new ClassFileMatch(problem, best, ", "
-                + describeWhere(best, sheet, configured) + ", lists "
-                + describeShare(bestCount, total, noun) + ".");
+        if (noneOnSheet) {
+            match.markNoneOnSheet();
+        }
+        return match;
     }
 
     // Says whether a score sheet is laid out as eLearn exports it: no

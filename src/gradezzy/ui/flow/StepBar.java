@@ -2,10 +2,12 @@
  * File: StepBar.java
  *
  * Purpose: The four numbered steps across the top of the window. Steps
- * before the current one show a tick and can be clicked to go back; the
- * current step is blue; later steps are grey, and can be clicked when
- * they were reached before. Each says in a tip what it is for, or what
- * opens it.
+ * that are done show a tick: those before the current one, and, for the
+ * run on screen, those before the furthest step reached, so going back
+ * to a graded section's Grade keeps Grade ticked. The current step is
+ * blue, with a tick when it is done; later steps are grey, and can be
+ * clicked when they were reached before. Each says in a tip what it is
+ * for, or what opens it.
  *
  * Where it fits: FlowWindow puts it in the middle of the top bar and
  * updates it whenever the step changes.
@@ -55,34 +57,44 @@ public class StepBar extends HBox {
      *
      * @param current the step on screen
      * @param furthest the furthest step the instructor may open
+     * @param doneBefore every step before this one is done, for the run
+     *        on screen; Set up when no run of the chosen section is open
      * @param away true while History, Settings or Help is open
      */
-    public void update(Step current, Step furthest, boolean away) {
+    public void update(Step current, Step furthest, Step doneBefore,
+            boolean away) {
         getChildren().clear();
         Step[] steps = Step.values();
-        getChildren().add(createItem(steps[0], current, furthest, away));
+        getChildren().add(createItem(steps[0], current, furthest,
+                doneBefore, away));
         for (int index = 1; index < steps.length; index++) {
             Region line = new Region();
             line.getStyleClass().add("step-line");
             getChildren().add(line);
             getChildren().add(createItem(steps[index], current, furthest,
-                    away));
+                    doneBefore, away));
         }
     }
 
     // Builds one dot and name.
     private HBox createItem(Step step, Step current, Step furthest,
-            boolean away) {
+            Step doneBefore, boolean away) {
         StackPane dot = new StackPane();
         dot.getStyleClass().add("step-dot");
         Label name = new Label(step.getLabel());
         name.getStyleClass().add("step-name");
 
         boolean isCurrent = step == current && !away;
-        // Only the steps before the one on screen are done: after a new
-        // section is chosen, Grade and Review are not done for it yet
-        boolean done = step.ordinal() < current.ordinal();
-        if (isCurrent) {
+        // A step is done once the instructor moved past it, also when
+        // they went back to it. A section not graded yet has no run on
+        // screen, so its Grade and Review are not done.
+        boolean done = step.ordinal() < current.ordinal()
+                || step.ordinal() < doneBefore.ordinal();
+        if (isCurrent && done) {
+            dot.getStyleClass().addAll("current", "done");
+            name.getStyleClass().add("current");
+            dot.getChildren().add(Parts.icon(Parts.CHECK, TICK_SIZE));
+        } else if (isCurrent) {
             dot.getStyleClass().add("current");
             name.getStyleClass().add("current");
             dot.getChildren().add(new Label(String.valueOf(

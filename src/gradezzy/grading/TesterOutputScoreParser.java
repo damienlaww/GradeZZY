@@ -36,6 +36,10 @@ public class TesterOutputScoreParser implements ScoreParser {
     // Exit code of a tester that finished normally
     private static final int SUCCESS_EXIT_CODE = 0;
 
+    // The marks that may come between a case's number and its name, such
+    // as the colon of "Test 1: getIsogramWords([alice])"
+    private static final String NAME_SEPARATORS = ":-.)]#=>|";
+
     /**
      * Detail of a test case that was still running when the tester stopped.
      */
@@ -75,6 +79,8 @@ public class TesterOutputScoreParser implements ScoreParser {
         String failMarker = config.getString(ConfigKeys.FAIL_MARKER);
         // The verdict of each case in order, empty while it has none
         List<String> verdicts = new ArrayList<>();
+        // The name of each case in order, null when its header gave none
+        List<String> names = new ArrayList<>();
 
         // A test case runs from its header to the next header. Lines that
         // student code printed are marked by TesterRunner and never count.
@@ -90,11 +96,13 @@ public class TesterOutputScoreParser implements ScoreParser {
 
             if (header) {
                 verdicts.add("");
+                names.add(readCaseName(line, headerMarker));
             } else if (verdict) {
                 // A verdict with no open case, as from a tester that
                 // prints no headers, is a case of its own
                 if (!hasOpenCase(verdicts)) {
                     verdicts.add("");
+                    names.add(null);
                 }
                 int openCase = verdicts.size() - 1;
                 verdicts.set(openCase, line);
@@ -103,8 +111,8 @@ public class TesterOutputScoreParser implements ScoreParser {
 
         for (int index = 0; index < verdicts.size(); index++) {
             int testNumber = index + 1;
-            addCase(result, testNumber, verdicts.get(index), passMarker,
-                    failMarker);
+            addCase(result, testNumber, verdicts.get(index),
+                    names.get(index), passMarker, failMarker);
         }
 
         int passCount = countPasses(result);
@@ -122,7 +130,7 @@ public class TesterOutputScoreParser implements ScoreParser {
      *
      * @param processResult the process result
      * @return the printed total, or null if the last tester line is not
-     *         a number or there is no run
+     *         a number, is NaN, infinite or below 0, or there is no run
      */
     @Override
     public Double readTotal(ProcessResult processResult) {
@@ -132,11 +140,18 @@ public class TesterOutputScoreParser implements ScoreParser {
 
         String lastLine = findLastTesterLine(
                 processResult.getStandardOutput());
+        Double total = null;
         try {
-            return Double.valueOf(lastLine);
+            total = Double.valueOf(lastLine);
         } catch (NumberFormatException exception) {
             return null;
         }
+        // NaN, Infinity or a negative total cannot be a mark, so the
+        // passed cases are counted instead
+        if (!Double.isFinite(total) || total < 0) {
+            return null;
+        }
+        return total;
     }
 
     /**
@@ -208,20 +223,91 @@ public class TesterOutputScoreParser implements ScoreParser {
      * @param result where the case is added
      * @param testNumber the position of the case, from 1
      * @param verdict the verdict line, or empty if none was printed
+     * @param name what the case's header calls it, or null
      * @param passMarker the start of the line printed for a pass
      * @param failMarker the start of the line printed for a fail
      */
     private void addCase(QuestionResult result, int testNumber,
-            String verdict, String passMarker, String failMarker) {
+            String verdict, String name, String passMarker,
+            String failMarker) {
         if (verdict.isEmpty()) {
             result.addTestCaseResult(new TestCaseResult(testNumber, false,
-                    NOT_FINISHED));
+                    NOT_FINISHED, name));
         } else {
             boolean passed = !verdict.startsWith(failMarker)
                     && verdict.startsWith(passMarker);
             result.addTestCaseResult(new TestCaseResult(testNumber, passed,
-                    verdict));
+                    verdict, name));
         }
+    }
+
+    /**
+     * Reads the name of a test case from its header line: the words after
+     * the header marker and the case's number, without the colon or dash
+     * between them. "Test 1: getIsogramWords([alice, ben])" is named
+     * "getIsogramWords([alice, ben])".
+     *
+     * @param line the header line, such as "Test 1: getHighest([])"
+     * @param headerMarker the start of a header line, such as "Test"
+     * @return the name, or null when the header has nothing after its
+     *         number or is not a header
+     */
+    public static String readCaseName(String line, String headerMarker) {
+        String text = line.trim();
+        if (!text.startsWith(headerMarker)) {
+            return null;
+        }
+
+        // Past the marker, the spaces and the case's number
+        int index = headerMarker.length();
+        index = skipSpaces(text, index);
+        while (index < text.length()
+                && Character.isDigit(text.charAt(index))) {
+            index++;
+        }
+
+        // Past the marks and spaces between the number and the name
+        index = skipSpaces(text, index);
+        while (index < text.length()
+                && NAME_SEPARATORS.indexOf(text.charAt(index)) >= 0) {
+            index++;
+            index = skipSpaces(text, index);
+        }
+
+        String name = trimEndSeparators(text.substring(index));
+        if (name.isEmpty()) {
+            return null;
+        }
+        return name;
+    }
+
+    // Returns the first position at or after index that is not a space.
+    private static int skipSpaces(String text, int index) {
+        int position = index;
+        while (position < text.length()
+                && Character.isWhitespace(text.charAt(position))) {
+            position++;
+        }
+        return position;
+    }
+
+    // Removes the spaces and colons or dashes at the end of a name, such
+    // as the colon of "getHighest with an empty array:".
+    private static String trimEndSeparators(String name) {
+        int end = name.length();
+        while (end > 0 && isEndSeparator(name.charAt(end - 1))) {
+            end--;
+        }
+        return name.substring(0, end);
+    }
+
+    // Says whether a character is cut from the end of a name. A closing
+    // bracket is kept, as it ends a call such as "getHighest([])".
+    private static boolean isEndSeparator(char character) {
+        boolean bracket = character == ')' || character == ']';
+        boolean separator = NAME_SEPARATORS.indexOf(character) >= 0
+                && !bracket;
+        return separator || Character.isWhitespace(character);
     }
 
     /**

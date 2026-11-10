@@ -372,8 +372,9 @@ public class ExportScreen extends FlowScreen {
         choices.getStyleClass().add("export-choices");
 
         Label about = Parts.muted("Your score sheet with each student's "
-                + "mark filled in, in the same format, ready to upload to "
-                + "eLearn.");
+                + "total filled in, in the same format, ready to upload to "
+                + "eLearn. A column with the mark of each question is "
+                + "added before the last column.");
         about.setWrapText(true);
         result.setVisible(false);
         result.setManaged(false);
@@ -874,9 +875,7 @@ public class ExportScreen extends FlowScreen {
             String itemUser = item.getUsername();
             boolean fileOfStudent = itemUser.isEmpty()
                     && isNameOf(item.getName(), username, prefixPattern);
-            if (itemUser.equalsIgnoreCase(username)) {
-                return true;
-            } else if (fileOfStudent) {
+            if (itemUser.equalsIgnoreCase(username) || fileOfStudent) {
                 return true;
             }
         }
@@ -1067,9 +1066,12 @@ public class ExportScreen extends FlowScreen {
     private void refreshSimilar(GradingRun run) {
         similar.getChildren().clear();
         shownPairs.clear();
+        // With the check off, the card still shows identical copies,
+        // which are always looked for
         boolean show = run != null
                 && getBackend().supports(Capability.SIMILARITY)
-                && getBackend().isSimilarityEnabled();
+                && (getBackend().isSimilarityEnabled()
+                || !getBackend().listSimilarPairs(run).isEmpty());
         similar.setVisible(show);
         similar.setManaged(show);
         if (!show) {
@@ -1451,9 +1453,12 @@ public class ExportScreen extends FlowScreen {
         }
     }
 
-    // Shows the outcome under the export choices.
+    // Shows the outcome under the export choices. Demo mode writes no
+    // file, so its pill says Preview.
     private void showResult(boolean done, String message) {
-        if (done) {
+        if (done && getBackend().isDemo()) {
+            showNote("Preview", Tone.GOOD, message);
+        } else if (done) {
             showNote("Saved", Tone.GOOD, message);
         } else {
             showNote("Not saved", Tone.BAD, message);

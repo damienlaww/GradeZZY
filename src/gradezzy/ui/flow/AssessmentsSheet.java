@@ -21,7 +21,6 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import gradezzy.model.SavedAssessment;
-import gradezzy.ui.backend.ActionResult;
 
 /**
  * Builds the list of saved assessments.
@@ -173,16 +172,17 @@ public final class AssessmentsSheet {
     // Asks, then deletes an assessment that is not in use.
     private void delete(SavedAssessment assessment) {
         window.confirm("Delete " + assessment.getName() + "?", "It is "
-                + "removed from the list of assessments. Results already "
-                + "graded with it are kept.", "Delete",
+                + "removed from the list of assessments, with the files "
+                + "chosen for it on Set up. Results already graded with it "
+                + "are kept.", "Delete",
                 () -> deleteNow(assessment));
     }
 
-    // Deletes an assessment once the instructor has confirmed.
+    // Deletes an assessment, with the files chosen for it on Set up, once
+    // the instructor has confirmed. Undo puts it back and lists it again.
     private void deleteNow(SavedAssessment assessment) {
-        ActionResult result = window.getBackend().deleteAssessment(
-                assessment.getName());
-        window.notify(result.getMessage());
+        window.deleteAssessment(assessment.getName(),
+                () -> window.openAssessments());
         window.openAssessments();
     }
 

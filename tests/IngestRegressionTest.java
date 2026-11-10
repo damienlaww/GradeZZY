@@ -26,6 +26,7 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.ingest.*;
 import gradezzy.model.*;
 import gradezzy.report.CsvScoreSheetExporter;
+import gradezzy.report.RunAuditFilter;
 import gradezzy.service.*;
 import gradezzy.testcase.*;
 import gradezzy.ui.backend.*;
@@ -87,7 +88,7 @@ public class IngestRegressionTest {
         Path root = Files.createTempDirectory("gradezzy-ingest-tests-")
                 .toRealPath();
         try {
-            AppConfig config = new AppConfig("config.properties");
+            AppConfig config = TestConfig.copyInto(root);
             config.setString(ConfigKeys.WORKING_DIR,
                     root.resolve("working").toString());
             Path roster = root.resolve("roster.csv");
@@ -105,6 +106,8 @@ public class IngestRegressionTest {
             checkNamelessUploads(root, loader);
             checkDeepStudentZip(root, loader);
             checkExportCase(root, config, upperAlice);
+            checkExportQuestionColumns(root, config);
+            checkRunAuditFilter();
             Path duplicate = checkMixedBatch(root, config, roster, alice);
 
             ZipExtractor extractor = new ZipExtractor(config);
@@ -113,6 +116,7 @@ public class IngestRegressionTest {
             checkCaseClash(root, extractor);
             checkExplorerZip(root, extractor);
             checkRosters(root, config, roster);
+            checkScoreSheetProblems(root, config);
             checkImportBatch(root, roster, alice, duplicate);
             checkAnswerFolders(root.resolve("answer-folders"), config);
             checkInputFixes(root.resolve("input-fixes"), config, loader);
@@ -272,6 +276,164 @@ public class IngestRegressionTest {
                 "the CSV export finds a username in any case");
     }
 
+    // Checks that the CSV export adds one column per question before the
+    // End-of-Line Indicator, blank for a student who was not graded, and
+    // fills those columns in place when the template already has them.
+    private static void checkExportQuestionColumns(Path root,
+            AppConfig config) throws Exception {
+        Path sheet = root.resolve("question-sheet.csv");
+        Files.writeString(sheet, "OrgDefinedId,Username,Last Name,"
+                + "First Name,Email,Calculated Final Grade Numerator,"
+                + "Calculated Final Grade Denominator,"
+                + "End-of-Line Indicator\r\n"
+                + "#1,#bob,B,Bob,bob@example.com,,7,#\r\n"
+                + "#2,#carl,C,Carl,carl@example.com,3,7,#\r\n"
+                + "#3,#dave,D,Dave,dave@example.com,,7,#\r\n");
+        Assessment assessment = new Assessment("Lab Test 2", "CS102");
+        int firstMaxScore = 4;
+        int secondMaxScore = 3;
+        Question first = new Question("Q1a", "Q1", "Q1a.java",
+                firstMaxScore);
+        Question second = new Question("Q1b", "Q1", "Q1b.java",
+                secondMaxScore);
+        assessment.addQuestion(first);
+        assessment.addQuestion(second);
+        GradingRun run = new GradingRun("RUN-columns", assessment, SECTION,
+                LocalDateTime.now());
+        Submission bob = new Submission("bob", SECTION, sheet);
+        bob.setStatus(SubmissionStatus.GRADED);
+        QuestionResult bobFirst = new QuestionResult(first);
+        bobFirst.setScore(firstMaxScore);
+        bob.addQuestionResult(bobFirst);
+        QuestionResult bobSecond = new QuestionResult(second);
+        bobSecond.setScore(1.5);
+        bob.addQuestionResult(bobSecond);
+        run.addSubmission(bob);
+        Submission carl = new Submission("carl", SECTION, sheet);
+        carl.setStatus(SubmissionStatus.FAILED);
+        run.addSubmission(carl);
+        run.setScoreSheetFile(sheet);
+        config.setString(ConfigKeys.CSV_LINE_ENDING, "CRLF");
+
+        Path csv = root.resolve("question-export.csv");
+        new CsvScoreSheetExporter(config, sheet).export(run, csv);
+        String expected = "OrgDefinedId,Username,Last Name,First Name,"
+                + "Email,Calculated Final Grade Numerator,"
+                + "Calculated Final Grade Denominator,"
+                + "Lab Test 2 Q1a Points Grade,Lab Test 2 Q1b Points Grade,"
+                + "Remarks,End-of-Line Indicator\r\n"
+                + "#1,#bob,B,Bob,bob@example.com,5.5,7,4,1.5,,#\r\n"
+                + "#2,#carl,C,Carl,carl@example.com,,7,,,,#\r\n"
+                + "#3,#dave,D,Dave,dave@example.com,,7,,,,#\r\n";
+        String exported = Files.readString(csv);
+        check(exported.equals(expected), "the CSV export adds a points "
+                + "column per question and a Remarks column before the "
+                + "End-of-Line Indicator: " + exported);
+
+        // An exported sheet used again as the template is not widened
+        run.setScoreSheetFile(csv);
+        Path again = root.resolve("question-export-again.csv");
+        new CsvScoreSheetExporter(config, csv).export(run, again);
+        check(Files.readString(again).equals(expected), "question columns "
+                + "the template already has are filled in place");
+
+        // A remark is written, in quotes when it holds a comma
+        CsvScoreSheetExporter withRemarks =
+                new CsvScoreSheetExporter(config, sheet);
+        withRemarks.setRemarks(gradingRun -> remarksOf("bob",
+                "Cheated with CARL C (carl)", "carl",
+                "Possible cheating with BOB B (bob), DAVE D (dave)"));
+        run.setScoreSheetFile(sheet);
+        Path remarked = root.resolve("question-export-remarks.csv");
+        withRemarks.export(run, remarked);
+        String withRemark = Files.readString(remarked);
+        check(withRemark.contains("#1,#bob,B,Bob,bob@example.com,5.5,7,4,"
+                + "1.5,Cheated with CARL C (carl),#\r\n"), "a student's "
+                + "remark goes in the Remarks column: " + withRemark);
+        check(withRemark.contains(",\"Possible cheating with BOB B (bob), "
+                + "DAVE D (dave)\",#\r\n"), "a remark with a comma is "
+                + "quoted: " + withRemark);
+    }
+
+    // Returns two students' remarks by username.
+    private static java.util.Map<String, String> remarksOf(String first,
+            String firstRemark, String second, String secondRemark) {
+        java.util.Map<String, String> remarks = new java.util.HashMap<>();
+        remarks.put(first, firstRemark);
+        remarks.put(second, secondRemark);
+        return remarks;
+    }
+
+    // Checks which audit log lines belong to a run: by reference, by the
+    // run id in the words, or by the section or a student while the run
+    // was the newest of its section. Lines about no run are left out.
+    private static void checkRunAuditFilter() {
+        LocalDateTime start = LocalDateTime.of(2026, 11, 2, 9, 0);
+        Section other = new Section("CS102", "G2");
+        Assessment assessment = new Assessment("Lab Test 2", "CS102");
+        int maxScore = 4;
+        assessment.addQuestion(new Question("Q1a", "Q1", "Q1a.java",
+                maxScore));
+        GradingRun first = new GradingRun("RUN-100", assessment, SECTION,
+                start);
+        Submission bob = new Submission("bob.2025", SECTION, null);
+        bob.addAnomaly(new Anomaly("flag-1", AnomalyType.COMPILE_ERROR,
+                Severity.ERROR, "bob.2025", "Q1a did not compile.", "Read "
+                + "the output."));
+        first.addSubmission(bob);
+        GradingRun second = new GradingRun("RUN-200", assessment, other,
+                start.plusMinutes(1));
+        second.addSubmission(new Submission("carl.2025", other, null));
+        GradingRun third = new GradingRun("RUN-300", assessment, SECTION,
+                start.plusMinutes(10));
+        third.addSubmission(new Submission("bob.2025", SECTION, null));
+        List<GradingRun> runs = Arrays.asList(third, second, first);
+
+        AuditEntry byRun = new AuditEntry(start.plusMinutes(20),
+                "Question graded again", AuditEntry.withReference(
+                "bob.2025 Q1a: 0 to 4.", "RUN-100"));
+        AuditEntry byFlag = new AuditEntry(start.plusMinutes(20),
+                "Marked as checked", AuditEntry.withReference(
+                "bob.2025: Q1a did not compile.", "flag-1"));
+        AuditEntry goneFlag = new AuditEntry(start.plusMinutes(2),
+                "Marked as checked", AuditEntry.withReference(
+                "bob.2025: Q1a did not compile.", "flag-gone"));
+        AuditEntry started = new AuditEntry(start.plusSeconds(5),
+                "Grading started", "Grading 1 submission(s) for CS102 G1.");
+        AuditEntry startedLater = new AuditEntry(start.plusMinutes(11),
+                "Grading started", "Grading 1 submission(s) for CS102 G1.");
+        AuditEntry fix = new AuditEntry(start.plusMinutes(2),
+                "Fix approved", "bob.2025: The top folder was renamed.");
+        AuditEntry stopped = new AuditEntry(start.plusMinutes(2),
+                "Grading cancelled", "Grading of RUN-200 (CS102 G2) was "
+                + "stopped.");
+        AuditEntry settings = new AuditEntry(start.plusMinutes(2),
+                "Settings saved", "Pass mark: 50 to 40.");
+        AuditEntry group = new AuditEntry(start.plusMinutes(2),
+                "Group checked", "Q1a Did not compile");
+        AuditEntry notStarted = new AuditEntry(start.plusMinutes(2),
+                "Grading could not start", "bob.2025 is also in CS102 G1, "
+                + "which is being graded now.");
+        List<AuditEntry> log = Arrays.asList(byRun, byFlag, goneFlag,
+                started, startedLater, fix, stopped, settings, group,
+                notStarted);
+
+        List<AuditEntry> firstLines = new RunAuditFilter(first, runs)
+                .keep(log);
+        check(firstLines.equals(Arrays.asList(byRun, byFlag, started, fix)),
+                "a run's audit export keeps its own lines by reference, "
+                + "section and student, and nothing about another run");
+        List<AuditEntry> secondLines = new RunAuditFilter(second, runs)
+                .keep(log);
+        check(secondLines.equals(Arrays.asList(stopped)),
+                "a line naming a run id belongs to that run only");
+        List<AuditEntry> thirdLines = new RunAuditFilter(third, runs)
+                .keep(log);
+        check(thirdLines.equals(Arrays.asList(startedLater)), "a later run "
+                + "of the same section gets the lines written after it "
+                + "started");
+    }
+
     // Grades a mixed batch through the service, retries it, then grades
     // with a chosen roster; returns the second upload for alice.
     private static Path checkMixedBatch(Path root, AppConfig config,
@@ -303,13 +465,54 @@ public class IngestRegressionTest {
         service.retryFailed(run, new ConsoleProgressListener());
         checkRetry(run, duplicate, broken, unnamed);
 
+        // A file only the first run's copy holds, to see it survive
+        Path firstCopy = accepted.getWorkingCopyPath();
+        write(firstCopy.resolve("first-run.txt"), "first");
         config.setString(ConfigKeys.SCORE_SHEET_FILE,
                 root.resolve("missing.csv").toString());
         GradingRun selected = service.startGrading(Arrays.asList(alice),
                 SECTION, testers, new ConsoleProgressListener(), roster);
         check(selected.getSubmissions().get(0).getStudent() != null,
                 "selected roster overrides configured roster");
+        checkRunFolders(root, config, run, firstCopy,
+                selected.getSubmissions().get(0).getWorkingCopyPath());
         return duplicate;
+    }
+
+    // Checks that two runs grading one student keep two working copies,
+    // each in its run's folder, and that a copy made before runs had
+    // their own folders still passes the safety check.
+    private static void checkRunFolders(Path root, AppConfig config,
+            GradingRun firstRun, Path firstCopy, Path secondCopy)
+            throws Exception {
+        Path working = root.resolve("working");
+        Path expected = working.resolve(firstRun.getId()).resolve("alice");
+        check(firstCopy.equals(expected),
+                "a working copy sits in its run's folder");
+        boolean twoCopies = !firstCopy.equals(secondCopy)
+                && Files.exists(secondCopy.resolve("Q1/Answer.java"));
+        check(twoCopies, "a second run grading the same student gets its "
+                + "own working copy");
+        check(Files.exists(firstCopy.resolve("first-run.txt")),
+                "a later run leaves the earlier run's copy untouched");
+
+        WorkingCopyManager manager = new WorkingCopyManager(config,
+                new ZipExtractor(config));
+        Path oldCopy = working.resolve("old-layout-student");
+        // Old.java is beside it, so Old.class can be rebuilt and goes
+        write(oldCopy.resolve("Q1/Old.java"), "class Old {}");
+        write(oldCopy.resolve("Q1/Old.class"), "old");
+        manager.removeStudentClassFiles(oldCopy, null);
+        check(!Files.exists(oldCopy.resolve("Q1/Old.class")),
+                "a copy straight in the working folder is still cleaned");
+        Path tooDeep = firstCopy.resolve("Q1");
+        boolean refused = false;
+        try {
+            manager.removeStudentClassFiles(tooDeep, null);
+        } catch (java.io.UncheckedIOException exception) {
+            refused = true;
+        }
+        check(refused, "a folder deeper than a run's copy is refused");
     }
 
     // Checks the valid upload of the mixed batch and that the second
@@ -490,6 +693,55 @@ public class IngestRegressionTest {
         } catch (IngestException expected) {
             checks++;
         }
+    }
+
+    // Checks that Set up's score sheet check, which reads the sheet as
+    // grading does, refuses a sheet with ; between values with a plain
+    // reason that blocks Start grading, accepts a good sheet, and reads
+    // the denominator Set up compares with the assessment's total.
+    private static void checkScoreSheetProblems(Path root,
+            AppConfig config) throws Exception {
+        String header = "OrgDefinedId,Username,Last Name,First Name,Email,"
+                + "Calculated Final Grade Numerator,"
+                + "Calculated Final Grade Denominator,End-of-Line Indicator";
+        String row = "#01600101,#aaron.koh.2025,KOH,AARON,"
+                + "aaron.koh.2025@smu.edu.sg,,20,#";
+        RosterReader reader = new RosterReader(config);
+
+        Path semicolons = root.resolve("semicolons.csv");
+        Files.writeString(semicolons, header.replace(',', ';') + "\r\n"
+                + row.replace(',', ';') + "\r\n");
+        String problem = reader.findProblem(semicolons);
+        check(problem.startsWith("No OrgDefinedId column.")
+                && problem.contains(";"), "a score sheet with ; between "
+                + "values cannot be used, and the reason says so");
+
+        Path noId = root.resolve("no-id.csv");
+        Files.writeString(noId, "Username,Last Name,First Name,Email\r\n"
+                + "#aaron,KOH,AARON,a@example.com\r\n");
+        check(reader.findProblem(noId).equals("No OrgDefinedId column."),
+                "a score sheet with no OrgDefinedId column says so");
+
+        Path outOfTwenty = root.resolve("denominator-20.csv");
+        Files.writeString(outOfTwenty, header + "\r\n" + row + "\r\n");
+        check(reader.findProblem(outOfTwenty).isEmpty(),
+                "a good score sheet has no problem");
+        check(reader.readDenominator(outOfTwenty) == 20.0,
+                "the score sheet's denominator is read for Set up");
+
+        ImportBatch batch = new ImportBatch();
+        batch.add(new ImportItem(InputKind.SUBMISSION, root.resolve(
+                "aaron.koh.2025.zip"), "aaron.koh.2025",
+                ImportState.ACCEPTED, "Ready"));
+        batch.add(new ImportItem(InputKind.ROSTER, semicolons, "",
+                ImportState.INVALID, problem));
+        batch.add(new ImportItem(InputKind.TESTERS, root, "",
+                ImportState.ACCEPTED, "Ready"));
+        List<String> reasons = batch.getBlockingReasons();
+        check(!batch.isReady() && reasons.size() == 1
+                && reasons.get(0).contains(problem),
+                "a score sheet that cannot be used blocks Start grading "
+                + "with its reason");
     }
 
     // Checks that the Set up batch finds case-only duplicates and still

@@ -119,8 +119,8 @@ public class ModuleRuns {
             GradingRun run = record.getRun();
             boolean ofModule = isUsable(run)
                     && moduleCode.equals(run.getSection().getModuleCode())
-                    && sectionCodes.contains(
-                    run.getSection().getSectionCode());
+                    && sectionCodes.contains(run.getSection()
+                            .getSectionCode());
             boolean notListed = ofModule && !contains(run);
             if (notListed) {
                 runs.add(run);
@@ -140,12 +140,8 @@ public class ModuleRuns {
 
     // Says whether a run has marks, a section and an assessment.
     private static boolean isUsable(GradingRun run) {
-        if (!StatisticsScreen.isGraded(run)) {
-            return false;
-        }
-        boolean described = run.getSection() != null
+        return StatisticsScreen.isGraded(run) && run.getSection() != null
                 && run.getAssessment() != null;
-        return described;
     }
 
     // Says whether a run was graded with the named assessment.

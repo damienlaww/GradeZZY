@@ -17,6 +17,7 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -52,6 +53,7 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.SavedAssessment;
 import gradezzy.model.Submission;
+import gradezzy.model.SubmissionStatus;
 import gradezzy.modelanswer.QuestionStrength;
 import gradezzy.service.ChosenSubmissionsStore;
 import gradezzy.service.ClassFileMatch;
@@ -88,6 +90,10 @@ public class SetUpScreen extends FlowScreen {
 
     // The separator between a file and what is known about it
     private static final String DOT = "  ·  ";
+
+    // Comes between a module, section and assessment, as on the line
+    // above the steps
+    private static final String CONTEXT_DOT = " \u00B7 ";
 
     // The table of questions and marks shown before grading starts
     private static final double MARKS_TABLE_WIDTH = 420.0;
@@ -138,20 +144,11 @@ public class SetUpScreen extends FlowScreen {
     // The end of a zip file's name
     private static final String ZIP_EXTENSION = ".zip";
 
-    // Where the chosen files are kept when the setting is missing
-    private static final String DEFAULT_CHOSEN_FILE =
-            "workspace/chosen-submissions.properties";
-
-    // The file beside it that keeps the score sheet, tester and starter
-    // folder chosen for each module, section and assessment
-    private static final String CLASS_FILES_NAME =
-            "chosen-class-files.properties";
-    private static final String CLASS_FILES_COMMENT = "Score sheet, tester "
-            + "and starter folder chosen on Set up, by "
-            + "module/section/assessment|kind. Written by GradeZZY.";
-
     // The most submissions listed on the page; Show all opens the rest
     private static final int MAX_FILE_ROWS = 5;
+
+    // The most students named in a sentence before "and 3 more"
+    private static final int MAX_NAMED_STUDENTS = 3;
 
     // The share of the class row for Module and for Section
     private static final double CHOICE_PERCENT = 27.8;
@@ -201,6 +198,13 @@ public class SetUpScreen extends FlowScreen {
     private static final String TESTERS_TITLE = "Tester files";
     private static final String STARTER_TITLE = "Starter files";
 
+    // The most unfinished runs the Continue card lists; History lists
+    // the rest
+    private static final int MOST_CONTINUE_RUNS = 3;
+
+    // Comes between a run's names and where it is on the Continue card
+    private static final String CONTINUE_DASH = "\u2014 ";
+
     // The names of the background threads that check files
     private static final String INSPECT_THREAD = "gradezzy-inspect";
     private static final String REOPEN_THREAD = "gradezzy-reopen";
@@ -247,6 +251,18 @@ public class SetUpScreen extends FlowScreen {
 
     // A note when the chosen section was graded before
     private final HBox earlierRun = Parts.row(Parts.GAP_SMALL);
+
+    // A warning when the section was last graded with another
+    // assessment than the one chosen now, with a link to use that one
+    private final HBox otherAssessment = Parts.row(Parts.GAP_SMALL);
+
+    // Says the chosen module has no assessment yet, with a link to add
+    // one
+    private final HBox noAssessment = Parts.row(Parts.GAP_SMALL);
+
+    // The runs not finished yet, with a Continue button each; hidden
+    // when there are none
+    private final VBox continueCard = new VBox();
 
     // The drop area
     private final HBox dropArea = Parts.row(Parts.GAP);
@@ -353,7 +369,10 @@ public class SetUpScreen extends FlowScreen {
         super(window);
         Node header = Parts.header("Set up a grading run", "Choose the "
                 + "class, add the students' zip files, then start grading.");
-        view = Parts.narrowPage(new Node[] {header, createClassCard(),
+        continueCard.getStyleClass().addAll("flow-card", "continue-card");
+        showNode(continueCard, false);
+        view = Parts.narrowPage(new Node[] {header, continueCard,
+            createClassCard(),
             createSubmissionCard(),
             Parts.card("Class files", new Node[] {classFiles}),
             createSettingsCard()});
@@ -374,6 +393,7 @@ public class SetUpScreen extends FlowScreen {
     @Override
     public void onShow() {
         fillChoices();
+        refreshContinue();
         if (!filledDefaults) {
             fillClassFiles();
             filledDefaults = true;
@@ -400,6 +420,16 @@ public class SetUpScreen extends FlowScreen {
      */
     public void assessmentChanged() {
         assessmentChanged = true;
+    }
+
+    /**
+     * Reads the score sheet, tester and starter folder chosen for each
+     * section again when they are next needed, after an assessment was
+     * deleted, put back or renamed and its lines in the file changed.
+     */
+    public void reloadClassFiles() {
+        classFileStore = null;
+        chosenClassFiles.clear();
     }
 
     /**
@@ -454,7 +484,8 @@ public class SetUpScreen extends FlowScreen {
                 + "Manage assessments.");
         assessmentField.getChildren().add(manage);
         fields.add(assessmentField, ASSESSMENT_COLUMN, 0);
-        return Parts.card("Class", new Node[] {fields, earlierRun});
+        return Parts.card("Class", new Node[] {fields, noAssessment,
+            otherAssessment, earlierRun});
     }
 
     // Builds the drop area and the file list.
@@ -619,14 +650,24 @@ public class SetUpScreen extends FlowScreen {
 
     // Fills the assessment choice with the saved assessments.
     private void fillAssessments() {
+        // Only the chosen module's assessments, as on Home, so a module
+        // with none is never graded with another module's
         List<String> names = new ArrayList<>();
-        for (SavedAssessment saved : getBackend().listAssessments()) {
+        for (SavedAssessment saved : getWindow().listModuleAssessments(
+                getState().getModuleCode())) {
             names.add(saved.getName());
         }
         assessmentBox.getItems().setAll(names);
         Assessment assessment = getBackend().getAssessment();
-        if (assessment != null) {
+        if (assessment != null && names.contains(assessment.getName())) {
             assessmentBox.setValue(assessment.getName());
+        } else {
+            assessmentBox.setValue(null);
+        }
+        if (names.isEmpty()) {
+            assessmentBox.setPromptText("None yet");
+        } else {
+            assessmentBox.setPromptText("Choose one");
         }
         // Grading reads the assessment from the settings, so it stays
         // while any section grades; another section can be chosen and
@@ -637,10 +678,10 @@ public class SetUpScreen extends FlowScreen {
     // Switches the assessment in use.
     private void chooseAssessment() {
         String chosen = assessmentBox.getValue();
-        Assessment inUse = getBackend().getAssessment();
         if (filling || chosen == null) {
             return;
         }
+        Assessment inUse = getBackend().getAssessment();
         boolean alreadyInUse = inUse != null
                 && chosen.equals(inUse.getName());
         if (alreadyInUse) {
@@ -662,7 +703,14 @@ public class SetUpScreen extends FlowScreen {
         getState().setModuleCode(moduleBox.getValue());
         fillSections();
         filling = false;
+        // As on Home: the module's own assessment, when the one in use
+        // is another module's
+        getWindow().useModuleAssessment(moduleBox.getValue());
+        filling = true;
+        fillAssessments();
+        filling = false;
         useSectionScoreSheet();
+        refreshContinue();
         refresh();
     }
 
@@ -673,6 +721,7 @@ public class SetUpScreen extends FlowScreen {
         }
         getState().setSectionCode(sectionBox.getValue());
         useSectionScoreSheet();
+        refreshContinue();
         refresh();
     }
 
@@ -730,12 +779,9 @@ public class SetUpScreen extends FlowScreen {
         }
 
         if (chosenStore == null) {
-            String file = getBackend().getSetting(
-                    ConfigKeys.CHOSEN_SUBMISSIONS_FILE);
-            if (file.trim().isEmpty()) {
-                file = DEFAULT_CHOSEN_FILE;
-            }
-            chosenStore = new ChosenSubmissionsStore(Paths.get(file));
+            chosenStore = ChosenSubmissionsStore.forSubmissions(
+                    getBackend().getSetting(
+                            ConfigKeys.CHOSEN_SUBMISSIONS_FILE));
             getState().setSavedPaths(chosenStore.load());
         }
 
@@ -840,12 +886,31 @@ public class SetUpScreen extends FlowScreen {
         return uploads;
     }
 
-    // Says whether a run graded the assessment in use.
+    // Says whether a run graded the assessment in use. A run started
+    // before it was first saved graded a deleted assessment of the same
+    // name, whose files are not this one's.
     private boolean gradedAssessmentInUse(GradingRun run) {
         Assessment graded = run.getAssessment();
-        return graded != null
+        boolean sameName = graded != null
                 && graded.getName().equalsIgnoreCase(
                         getState().getAssessmentName());
+        if (!sameName) {
+            return false;
+        }
+        LocalDateTime created = findCreatedAt(graded.getName());
+        return created == null || run.getStartedAt() == null
+                || !run.getStartedAt().isBefore(created);
+    }
+
+    // Returns when the saved assessment with a name was first saved, or
+    // null when it is not known.
+    private LocalDateTime findCreatedAt(String name) {
+        for (SavedAssessment saved : getBackend().listAssessments()) {
+            if (saved.getName().equalsIgnoreCase(name)) {
+                return saved.getCreatedAt();
+            }
+        }
+        return null;
     }
 
     // Says whether a path is inside a folder, such as a copy GradeZZY
@@ -1054,10 +1119,10 @@ public class SetUpScreen extends FlowScreen {
     // assessment; else the configured path of a kind, or the demo sample.
     private void addDefault(InputKind kind) {
         Path remembered = findRememberedClassFile(kind);
-        if (remembered != null && kind == InputKind.ROSTER) {
-            keepMissingSectionSheet(remembered);
-        }
         if (remembered != null) {
+            if (kind == InputKind.ROSTER) {
+                keepMissingSectionSheet(remembered);
+            }
             inspectClassFile(kind, remembered);
             return;
         }
@@ -1106,15 +1171,9 @@ public class SetUpScreen extends FlowScreen {
             return null;
         }
         if (classFileStore == null) {
-            String chosenFile = getBackend().getSetting(
-                    ConfigKeys.CHOSEN_SUBMISSIONS_FILE);
-            if (chosenFile.trim().isEmpty()) {
-                chosenFile = DEFAULT_CHOSEN_FILE;
-            }
-            Path beside = Paths.get(chosenFile.trim()).toAbsolutePath()
-                    .resolveSibling(CLASS_FILES_NAME);
-            classFileStore = new ChosenSubmissionsStore(beside,
-                    CLASS_FILES_COMMENT);
+            classFileStore = ChosenSubmissionsStore.forClassFiles(
+                    getBackend().getSetting(
+                            ConfigKeys.CHOSEN_SUBMISSIONS_FILE));
             chosenClassFiles.putAll(classFileStore.load());
         }
         return classFileStore;
@@ -1214,8 +1273,7 @@ public class SetUpScreen extends FlowScreen {
         // with Change or Use this file instead, shows there too
         if (kind == InputKind.ROSTER) {
             rememberScoreSheet(path);
-        }
-        if (kind == InputKind.TESTERS) {
+        } else if (kind == InputKind.TESTERS) {
             getState().getBatch().setUsingTypedTestCases(false);
         }
         inspectClassFile(kind, path);
@@ -1348,6 +1406,7 @@ public class SetUpScreen extends FlowScreen {
         refreshClassFiles();
         refreshSettings();
         refreshActions();
+        getWindow().refreshContext();
     }
 
     // Shows the questions and marks of the assessment in use under its
@@ -1359,6 +1418,11 @@ public class SetUpScreen extends FlowScreen {
         if (assessment == null) {
             assessmentText.setText("None is set yet.");
             return;
+        } else if (!describeAssessmentProblem().isEmpty()) {
+            // The one in use is another module's, so its size is not
+            // this module's
+            assessmentText.setText("");
+            return;
         }
         int questionCount = assessment.getQuestions().size();
         assessmentText.setText(Parts.plural(questionCount, "question")
@@ -1367,6 +1431,8 @@ public class SetUpScreen extends FlowScreen {
 
     // Offers the results of an earlier run of the chosen section.
     private void refreshEarlierRun() {
+        refreshNoAssessment();
+        refreshOtherAssessment();
         earlierRun.getChildren().clear();
         GradingRun run = getBackend().getRun(getState().getSection());
         boolean show = run != null && !run.getSubmissions().isEmpty();
@@ -1391,6 +1457,215 @@ public class SetUpScreen extends FlowScreen {
                 + "you can open or restore them.");
         earlierRun.getChildren().addAll(note, Parts.link("Open its results",
                 () -> getWindow().openRun(run)));
+    }
+
+    // Says the chosen module has no assessment yet, so grading cannot
+    // start, with a link that adds one.
+    private void refreshNoAssessment() {
+        noAssessment.getChildren().clear();
+        boolean none = hasNoAssessment();
+        showNode(noAssessment, none);
+        if (!none) {
+            return;
+        }
+        Label note = new Label(getState().getModuleCode() + " has no "
+                + "assessment yet.");
+        note.getStyleClass().addAll("small-text", "problem-text");
+        Hyperlink add = smallLink("Add an assessment",
+                () -> getWindow().editAssessment(null));
+        Parts.tip(add, "Create the lab test or exam of "
+                + getState().getModuleCode() + ": its questions, marks, "
+                + "tester files and starter files.");
+        noAssessment.getChildren().addAll(Parts.icon(Parts.WARNING,
+                ROW_ICON_SIZE), note, add);
+        noAssessment.getStyleClass().add("set-up-warning");
+    }
+
+    // Warns when the section was last graded with another assessment
+    // than the one chosen now, with a link to use that one when it is
+    // still saved for this module. Grading with the chosen one is still
+    // allowed.
+    private void refreshOtherAssessment() {
+        otherAssessment.getChildren().clear();
+        GradingRun run = getBackend().getRun(getState().getSection());
+        Assessment inUse = getBackend().getAssessment();
+        boolean differs = run != null && !run.getSubmissions().isEmpty()
+                && run.getAssessment() != null && inUse != null
+                && !hasNoAssessment()
+                && !SectionProgress.isGradedWith(run, inUse.getName());
+        showNode(otherAssessment, differs);
+        if (!differs) {
+            return;
+        }
+        String lastName = run.getAssessment().getName();
+        Label note = new Label(getState().getSection().getLabel() + " was "
+                + "last graded with " + lastName + ", but "
+                + inUse.getName() + " is chosen now. Grading goes ahead "
+                + "with " + inUse.getName() + ".");
+        note.getStyleClass().addAll("small-text", "problem-text");
+        note.setWrapText(true);
+        note.setMinWidth(0);
+        HBox.setHgrow(note, Priority.ALWAYS);
+        otherAssessment.getChildren().addAll(Parts.icon(Parts.WARNING,
+                ROW_ICON_SIZE), note);
+        otherAssessment.getStyleClass().add("set-up-warning");
+        String savedName = findModuleAssessment(lastName);
+        if (savedName != null && !getState().isAnyGrading()) {
+            Hyperlink use = smallLink("Use " + savedName,
+                    () -> getWindow().useAssessment(savedName));
+            use.setMinWidth(Hyperlink.USE_PREF_SIZE);
+            Parts.tip(use, "Grade " + getState().getSection().getLabel()
+                    + " with " + savedName + " again, as last time.");
+            otherAssessment.getChildren().add(use);
+        }
+    }
+
+    // Says whether the chosen module has no assessment of its own, nor
+    // one for every module.
+    private boolean hasNoAssessment() {
+        return getWindow().listModuleAssessments(
+                getState().getModuleCode()).isEmpty();
+    }
+
+    // Returns the saved name of an assessment of the chosen module, or
+    // null when the module has none of that name.
+    private String findModuleAssessment(String name) {
+        for (SavedAssessment saved : getWindow().listModuleAssessments(
+                getState().getModuleCode())) {
+            if (saved.getName().equalsIgnoreCase(name)) {
+                return saved.getName();
+            }
+        }
+        return null;
+    }
+
+    // Says why the assessment stops grading from starting: the module
+    // has none, or the one in use is another module's. Returns "" when
+    // it can be graded.
+    private String describeAssessmentProblem() {
+        String module = getState().getModuleCode();
+        if (hasNoAssessment()) {
+            return module + " has no assessment yet. Add one to grade "
+                    + "this module.";
+        }
+        Assessment inUse = getBackend().getAssessment();
+        boolean ownChosen = inUse != null
+                && findModuleAssessment(inUse.getName()) != null;
+        if (!ownChosen) {
+            return "Choose the assessment to grade for " + module + ".";
+        }
+        return "";
+    }
+
+    // Lists the runs not finished yet, newest first, at most three, with
+    // a Continue button each that opens the run on the step it needs.
+    // The card is hidden when there are none.
+    private void refreshContinue() {
+        continueCard.getChildren().clear();
+        List<GradingRun> unfinished = findUnfinishedRuns();
+        boolean shown = !unfinished.isEmpty();
+        showNode(continueCard, shown);
+        if (!shown) {
+            return;
+        }
+        Label title = Parts.strong("Continue where you left off");
+        continueCard.getChildren().add(title);
+        int listed = Math.min(MOST_CONTINUE_RUNS, unfinished.size());
+        for (int index = 0; index < listed; index++) {
+            continueCard.getChildren().add(continueLine(
+                    unfinished.get(index)));
+        }
+        int more = unfinished.size() - listed;
+        if (more > 0) {
+            Hyperlink history = smallLink("+" + more + " more in History",
+                    () -> getWindow().showPage(Page.RUNS));
+            continueCard.getChildren().add(history);
+        }
+    }
+
+    // Builds one line of the Continue card, such as "CS102 · G1 · Lab
+    // Test 2 — Review · 5 students to check", with its button.
+    private HBox continueLine(GradingRun run) {
+        Step step = SectionProgress.stepToOpen(getState(), getBackend(),
+                run.getSection(), run);
+        Label names = Parts.strong(run.getSection().getModuleCode()
+                + CONTEXT_DOT + run.getSection().getSectionCode()
+                + CONTEXT_DOT + run.getAssessment().getName());
+        names.getStyleClass().add("small-text");
+        names.setMinWidth(Label.USE_PREF_SIZE);
+        Label where = Parts.muted(CONTINUE_DASH + step.getLabel()
+                + CONTEXT_DOT + describeLeft(run, step));
+        where.getStyleClass().add("small-text");
+        where.setMinWidth(0);
+        HBox.setHgrow(where, Priority.ALWAYS);
+        Button go = Parts.small("Continue",
+                () -> getWindow().openSectionStep(run));
+        go.setMinWidth(Button.USE_PREF_SIZE);
+        Parts.tip(go, "Open " + run.getSection().getLabel() + " on "
+                + step.getLabel() + ".");
+        HBox line = Parts.row(Parts.GAP_SMALL, new Node[] {names, where,
+            go});
+        line.getStyleClass().add("continue-line");
+        return line;
+    }
+
+    // Says what is left of a run on the step it needs.
+    private String describeLeft(GradingRun run, Step step) {
+        if (step == Step.GRADE) {
+            return Parts.plural(SectionProgress.countWaiting(run),
+                    "student") + " not graded";
+        } else if (step == Step.REVIEW) {
+            return Parts.plural(SectionProgress.countToCheck(run,
+                    getBackend()), "student") + " to check";
+        }
+        return "not exported yet";
+    }
+
+    // Returns the runs shown for their section that are not finished,
+    // newest first: stopped early, with students to check, or not
+    // exported yet. Runs of the section on screen (unless stopped
+    // early), of sections being graded now and of deleted assessments are
+    // left out.
+    private List<GradingRun> findUnfinishedRuns() {
+        List<GradingRun> unfinished = new ArrayList<>();
+        if (!getBackend().supports(Capability.HISTORY)) {
+            return unfinished;
+        }
+        List<String> savedNames = new ArrayList<>();
+        for (SavedAssessment saved : getBackend().listAssessments()) {
+            savedNames.add(saved.getName().toLowerCase(Locale.ROOT));
+        }
+        String onScreen = getState().getSection().getLabel();
+        for (RunRecord record : getBackend().listRuns()) {
+            GradingRun run = record.getRun();
+            boolean listed = record.isCurrent() && run.getSection() != null
+                    && run.getAssessment() != null
+                    && !run.getSubmissions().isEmpty()
+                    && savedNames.contains(run.getAssessment().getName()
+                            .toLowerCase(Locale.ROOT))
+                    && (!run.getSection().getLabel().equalsIgnoreCase(
+                            onScreen) || isStopped(run))
+                    && !getState().isGrading(run.getSection())
+                    && isUnfinished(run);
+            if (listed) {
+                unfinished.add(run);
+            }
+        }
+        return unfinished;
+    }
+
+    // Says whether a run still needs the instructor: students not
+    // graded or to check, or a score sheet not exported yet.
+    private boolean isUnfinished(GradingRun run) {
+        return SectionProgress.countWaiting(run) > 0
+                || SectionProgress.countToCheck(run, getBackend()) > 0
+                || !getState().isExported(run);
+    }
+
+    // Shows or hides a node and frees its space.
+    private void showNode(Node node, boolean visible) {
+        node.setVisible(visible);
+        node.setManaged(visible);
     }
 
     // Redraws the zip file list and the count above it.
@@ -1744,8 +2019,33 @@ public class SetUpScreen extends FlowScreen {
         VBox denominatorRow = createDenominatorRow(assessment.getMaxTotal(),
                 denominator);
         VBox content = new VBox(Parts.GAP, table, denominatorRow);
-        getWindow().confirm("Are these questions and marks right?",
-                content, "Start grading", () -> startOrAddToRun());
+        // A score sheet out of other marks is graded only when the
+        // instructor says so, never without a word
+        String mismatch = describeDenominatorMismatch(assessment,
+                denominator);
+        String title = "Are these questions and marks right?";
+        String okText = "Start grading";
+        if (!mismatch.isEmpty()) {
+            title = mismatch + " Grade anyway?";
+            okText = "Grade anyway";
+        }
+        // Grading against the wrong score sheet is never the default
+        getWindow().confirm(title, content, "Cancel", null, null, okText,
+                () -> startOrAddToRun(), mismatch.isEmpty());
+    }
+
+    // Says the score sheet is out of other marks than the assessment,
+    // such as "The score sheet is out of 20 but Lab Test 3 is out of 25.",
+    // or "" when they match or the sheet gives no single denominator.
+    private String describeDenominatorMismatch(Assessment assessment,
+            double denominator) {
+        double total = assessment.getMaxTotal();
+        if (denominator < 0 || denominator == total) {
+            return "";
+        }
+        return "The score sheet is out of " + Parts.mark(denominator)
+                + " but " + assessment.getName() + " is out of "
+                + Parts.mark(total) + ".";
     }
 
     // Starts grading, first asking whether the section's run takes it.
@@ -1765,12 +2065,52 @@ public class SetUpScreen extends FlowScreen {
         int studentCount = run.getSubmissions().size();
         String detail = getState().getSection().getLabel() + " was graded"
                 + when + " (" + Parts.plural(studentCount, "student")
-                + "). A student graded before is graded again, and the new "
-                + "result replaces the old one.";
+                + ")." + describeRegraded(run);
+        Label text = Parts.subtitle(detail);
+        text.setMaxWidth(Parts.TEXT_WIDTH);
+        text.setWrapText(true);
         GradingRun joined = run;
-        getWindow().choose("Add these students to that run?", detail,
+        getWindow().confirm("Add these students to that run?", text,
                 "Start a new run", () -> getWindow().startGrading(),
                 "Add to that run", () -> getWindow().addToRun(joined));
+    }
+
+    // Names the students of the batch that the run already graded, such
+    // as " 1 of them (cheng.hao.2025) was graded before; the new mark
+    // replaces the old one.", or "" when there are none.
+    private String describeRegraded(GradingRun run) {
+        List<String> again = new ArrayList<>();
+        for (String username : getState().getBatch().listStudents()) {
+            if (isInRun(run, username) && !again.contains(username)) {
+                again.add(username);
+            }
+        }
+        if (again.isEmpty()) {
+            return "";
+        }
+        int shownCount = Math.min(again.size(), MAX_NAMED_STUDENTS);
+        String names = String.join(", ", again.subList(0, shownCount));
+        int notNamed = again.size() - shownCount;
+        if (notNamed > 0) {
+            names = names + " and " + notNamed + " more";
+        }
+        if (again.size() == 1) {
+            return " 1 of them (" + names + ") was graded before; the new "
+                    + "mark replaces the old one.";
+        }
+        return " " + again.size() + " of them (" + names + ") were graded "
+                + "before; the new marks replace the old ones.";
+    }
+
+    // Says whether a run has a submission of a student.
+    private static boolean isInRun(GradingRun run, String username) {
+        boolean found = false;
+        for (Submission submission : run.getSubmissions()) {
+            if (submission.getUsername().equalsIgnoreCase(username)) {
+                found = true;
+            }
+        }
+        return found;
     }
 
     // One row per question with its folder, file and maximum mark, then
@@ -1996,26 +2336,9 @@ public class SetUpScreen extends FlowScreen {
     }
 
     // Sums up the strength results, such as "2 of 5 testers miss some
-    // broken copies".
+    // broken copies", saying first which could not be checked and why.
     private String describeStrength() {
-        int weak = 0;
-        int checked = 0;
-        for (QuestionStrength result : strengthResults) {
-            if (result.countTried() > 0) {
-                checked++;
-            }
-            if (result.countSurvived() > 0) {
-                weak++;
-            }
-        }
-        if (checked == 0) {
-            return "no tester could be checked";
-        }
-        if (weak == 0) {
-            return "every tester caught every broken copy";
-        }
-        return weak + " of " + Parts.plural(checked, "tester")
-                + " miss some broken copies of the model answer";
+        return QuestionStrength.summariseAll(strengthResults);
     }
 
     // Adds the tester strength line to the tester row: running, its
@@ -2103,6 +2426,8 @@ public class SetUpScreen extends FlowScreen {
         matchCheck = null;
         showMatches(check.getFiles(), check.getValue());
         refreshClassFiles();
+        // The action bar says when none of them are on the score sheet
+        refreshActions();
     }
 
     // Shows no match problem when the check stopped before it finished:
@@ -2257,7 +2582,6 @@ public class SetUpScreen extends FlowScreen {
                 status = Parts.pill("Check", Tone.WARN);
             }
         }
-        String iconPath = classFileIcon(kind);
         HBox line = detailLine(detail);
         if (extra != null) {
             line.getChildren().add(extra);
@@ -2273,6 +2597,7 @@ public class SetUpScreen extends FlowScreen {
             }
             addStrengthNotes(details);
         }
+        String iconPath = classFileIcon(kind);
         Hyperlink change = changeLink(kind);
         return classFileRow(iconPath, title, details, status, change);
     }
@@ -2476,11 +2801,34 @@ public class SetUpScreen extends FlowScreen {
         List<String> unknownMarks = findMarkProblems();
         String overlap = describeOverlap(batch);
         showOverlap(overlap);
+        String assessmentProblem = describeAssessmentProblem();
         boolean ready = batch.isReady() && !getState().isGrading()
                 && filesBeingChecked == 0 && unknownMarks.isEmpty()
-                && overlap.isEmpty();
-        actions.setPrimary("Start grading", () -> confirmStart(), ready);
-        if (!overlap.isEmpty() && !getState().isGrading()) {
+                && overlap.isEmpty() && assessmentProblem.isEmpty();
+        GradingRun stopped = findStoppedRun();
+        boolean noneOnSheet = findMatch(InputKind.ROSTER).isNoneOnSheet();
+        if (stopped != null) {
+            // The rest of the stopped run comes first; a new run is the
+            // other way
+            actions.setPrimary("Resume (" + SectionProgress.countWaiting(
+                    stopped) + " left)", () -> resume(stopped), true);
+            Button over = Parts.secondary("Start over",
+                    () -> confirmStart());
+            over.setDisable(!ready);
+            actions.addSecondary(over);
+        } else if (noneOnSheet) {
+            // Grading against a sheet with none of them is surely a
+            // mistake, so Start grading is not the default
+            Button start = Parts.secondary("Start grading",
+                    () -> confirmStart());
+            start.setDisable(!ready);
+            actions.addSecondary(start);
+        } else {
+            actions.setPrimary("Start grading", () -> confirmStart(), ready);
+        }
+        if (!assessmentProblem.isEmpty() && !getState().isGrading()) {
+            actions.setStatus(assessmentProblem);
+        } else if (!overlap.isEmpty() && !getState().isGrading()) {
             actions.setStatus("Some of these students are being graded in "
                     + "another section now. See Submissions.");
         } else if (getState().isGrading()) {
@@ -2499,6 +2847,16 @@ public class SetUpScreen extends FlowScreen {
             } else {
                 actions.setStatus(reasons.get(0));
             }
+        } else if (stopped != null) {
+            int waiting = SectionProgress.countWaiting(stopped);
+            int total = stopped.getSubmissions().size();
+            actions.setStatus(stopped.getSection().getLabel()
+                    + " stopped after " + (total - waiting) + " of "
+                    + Parts.plural(total, "student") + ". Resume grades "
+                    + "the rest; Start over grades these files as a new "
+                    + "run.");
+        } else if (noneOnSheet) {
+            actions.setStatus(describeNoneOnSheet(batch.countStudents()));
         } else {
             String skipped = batch.describeSkipped();
             if (!skipped.isEmpty()) {
@@ -2506,9 +2864,69 @@ public class SetUpScreen extends FlowScreen {
             }
             String students = Parts.plural(batch.countStudents(),
                     "student");
+            String mismatch = describeDenominatorMismatch(markedAssessment,
+                    getBackend().getScoreSheetDenominator(
+                            findUsableScoreSheet()));
+            if (!mismatch.isEmpty()) {
+                mismatch = " " + mismatch;
+            }
             actions.setStatus(students + " ready to grade in "
-                    + getState().getSection().getLabel() + "." + skipped);
+                    + getState().getSection().getLabel() + "." + skipped
+                    + mismatch);
         }
+    }
+
+    // Returns the section's run when it stopped with students not graded
+    // yet and grades the assessment in use, or null.
+    private GradingRun findStoppedRun() {
+        if (!getBackend().supports(Capability.RESUME_RUN)
+                || getState().isGrading()) {
+            return null;
+        }
+        GradingRun run = getBackend().getRun(getState().getSection());
+        Assessment inUse = getBackend().getAssessment();
+        boolean stopped = run != null && inUse != null
+                && run.getAssessment() != null
+                && run.getAssessment().getName().equalsIgnoreCase(
+                        inUse.getName())
+                && isStopped(run);
+        if (stopped) {
+            return run;
+        }
+        return null;
+    }
+
+    // Says whether a run was stopped before every student was graded:
+    // some were cancelled. A file that could not be opened does not
+    // count.
+    private static boolean isStopped(GradingRun run) {
+        boolean cancelled = false;
+        for (Submission submission : run.getSubmissions()) {
+            if (submission.getStatus() == SubmissionStatus.CANCELLED) {
+                cancelled = true;
+            }
+        }
+        return cancelled;
+    }
+
+    // Grades the rest of a stopped run, unless a fix job still grades a
+    // student.
+    private void resume(GradingRun run) {
+        if (getWindow().blockedByFix()) {
+            return;
+        }
+        getWindow().resumeRun(run);
+    }
+
+    // Says none of the students are on the chosen score sheet, such as
+    // "None of the 45 students are on the score sheet".
+    private String describeNoneOnSheet(int students) {
+        if (students == 1) {
+            return "The student is not on the score sheet. Check that it "
+                    + "is the right one.";
+        }
+        return "None of the " + students + " students are on the score "
+                + "sheet. Check that it is the right one.";
     }
 
     // Says which chosen students another section is grading now, such as

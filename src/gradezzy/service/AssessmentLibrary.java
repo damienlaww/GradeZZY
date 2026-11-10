@@ -7,8 +7,13 @@
  * Where it fits: The window lists, creates, edits and chooses assessments
  * through it. Choosing one copies its settings into config.properties
  * with SettingsService, because every part of grading reads the questions,
- * tester folder, starter folder and model answers folder from there. A
- * question's maximum mark is not saved: as in AssessmentFactory, it is
+ * tester folder, starter folder, model answers folder and score sheets
+ * from there. Each assessment keeps its own score sheets, so a new one
+ * starts with none; the ones in config.properties are saved back into
+ * the file of the assessment in use before another one replaces them.
+ * Deleting an assessment also clears the files chosen for it on Set up,
+ * so a new one with the same name starts with none; Undo puts them back.
+ * A question's maximum mark is not saved: as in AssessmentFactory, it is
  * the sum of the "score += <number>" lines of its tester.
  */
 package gradezzy.service;
@@ -18,8 +23,11 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -53,6 +61,9 @@ public class AssessmentLibrary {
 
     // The property that keeps an assessment's module in its file
     private static final String MODULE_PROPERTY = "assessment.module";
+
+    // The property that keeps when an assessment was first saved
+    private static final String CREATED_PROPERTY = "assessment.created";
 
     // The separator between the items of a list setting
     private static final String LIST_SEPARATOR = ",";
@@ -167,7 +178,25 @@ public class AssessmentLibrary {
                 ConfigKeys.TESTER_DATA_FILES));
         current.getPlaceholderFolderNames().addAll(config.getList(
                 ConfigKeys.PLACEHOLDER_FOLDER_NAMES));
+        takeCurrentSheets(current);
         return current;
+    }
+
+    // Gives an assessment the score sheets in config.properties.
+    private void takeCurrentSheets(SavedAssessment assessment) {
+        assessment.setScoreSheetsBySection(readSetting(
+                ConfigKeys.SCORE_SHEET_BY_SECTION));
+        assessment.setScoreSheetFile(readSetting(
+                ConfigKeys.SCORE_SHEET_FILE));
+        assessment.setScoreSheetsSaved(true);
+    }
+
+    // Returns a setting, or "" when an older config.properties has none.
+    private String readSetting(String key) {
+        if (!config.hasKey(key)) {
+            return "";
+        }
+        return config.getString(key);
     }
 
     /**
@@ -188,6 +217,14 @@ public class AssessmentLibrary {
         if (!nameProblem.isEmpty()) {
             return nameProblem;
         }
+        // The folders come first: a new assessment starts blank, and its
+        // questions fill in from the tester folder
+        if (TextUtils.isBlank(draft.getTestersDirectory())) {
+            return "Choose the folder of tester files.";
+        }
+        if (TextUtils.isBlank(draft.getStarterDirectory())) {
+            return "Choose the starter folder the students were given.";
+        }
         if (draft.getQuestions().isEmpty()) {
             return "Add at least one question.";
         }
@@ -198,12 +235,6 @@ public class AssessmentLibrary {
                 return problem;
             }
             ids.add(question.getId().toLowerCase(Locale.ROOT));
-        }
-        if (TextUtils.isBlank(draft.getTestersDirectory())) {
-            return "Choose the folder of tester files.";
-        }
-        if (TextUtils.isBlank(draft.getStarterDirectory())) {
-            return "Choose the starter folder the students were given.";
         }
         return "";
     }
@@ -241,17 +272,17 @@ public class AssessmentLibrary {
      * @return what is wrong, in one sentence, or an empty string
      */
     public String checkFolders(SavedAssessment draft) {
-        if (!Files.isDirectory(Paths.get(draft.getTestersDirectory()))) {
+        if (!isFolder(draft.getTestersDirectory())) {
             return "The tester folder " + draft.getTestersDirectory()
                     + " does not exist.";
         }
-        if (!Files.isDirectory(Paths.get(draft.getStarterDirectory()))) {
+        if (!isFolder(draft.getStarterDirectory())) {
             return "The starter folder " + draft.getStarterDirectory()
                     + " does not exist.";
         }
         String modelAnswers = draft.getModelAnswersDirectory().trim();
         boolean missingAnswers = !modelAnswers.isEmpty()
-                && !Files.isDirectory(Paths.get(modelAnswers));
+                && !isFolder(modelAnswers);
         if (missingAnswers) {
             return "The model answers folder " + modelAnswers
                     + " does not exist. Choose it again, or leave it "
@@ -270,6 +301,19 @@ public class AssessmentLibrary {
             }
         }
         return "";
+    }
+
+    // Says whether a path names a folder that exists. A blank path or
+    // one with characters this computer does not allow names none.
+    private boolean isFolder(String path) {
+        if (TextUtils.isBlank(path)) {
+            return false;
+        }
+        try {
+            return Files.isDirectory(Paths.get(path.trim()));
+        } catch (InvalidPathException exception) {
+            return false;
+        }
     }
 
     // Says why a tester gives no maximum mark: the first problem
@@ -352,15 +396,18 @@ public class AssessmentLibrary {
         if (originalName != null) {
             oldFile = findFile(originalName);
         }
-        // An edit that does not say the module keeps the one saved
-        if (clean.getModuleCode().isEmpty() && oldFile != null) {
-            SavedAssessment before = readOrNull(oldFile);
-            if (before != null) {
-                clean.setModuleCode(before.getModuleCode());
-            }
+        SavedAssessment before = null;
+        if (oldFile != null) {
+            before = readOrNull(oldFile);
         }
+        // An edit that does not say the module keeps the one saved
+        if (clean.getModuleCode().isEmpty() && before != null) {
+            clean.setModuleCode(before.getModuleCode());
+        }
+        keepCreatedAt(clean, before);
         boolean inUse = originalName != null
                 && originalName.equalsIgnoreCase(getActiveName());
+        keepScoreSheets(clean, before, inUse);
         if (inUse) {
             // Checked and switched first, so a bad folder saves nothing
             apply(clean);
@@ -374,12 +421,51 @@ public class AssessmentLibrary {
         if (oldFile != null && !oldFile.equals(target)) {
             Files.deleteIfExists(oldFile);
         }
+        boolean renamed = before != null
+                && !before.getName().equals(clean.getName());
+        if (renamed) {
+            submissionsStore().renameAssessment(before.getName(),
+                    clean.getName());
+            classFilesStore().renameAssessment(before.getName(),
+                    clean.getName());
+        }
+    }
+
+    // Gives a saved assessment the time it was first saved: now for a new
+    // one, and the time saved before for an edit.
+    private void keepCreatedAt(SavedAssessment clean,
+            SavedAssessment before) {
+        if (before == null) {
+            clean.setCreatedAt(LocalDateTime.now());
+        } else {
+            clean.setCreatedAt(before.getCreatedAt());
+        }
+    }
+
+    // Gives a saved assessment its score sheets, which the editor does not
+    // show: the ones in the settings for the one in use, the ones saved
+    // before for another edit, and none for a new assessment.
+    private void keepScoreSheets(SavedAssessment clean,
+            SavedAssessment before, boolean inUse) {
+        if (inUse) {
+            takeCurrentSheets(clean);
+        } else if (before != null) {
+            clean.setScoreSheetsBySection(before.getScoreSheetsBySection());
+            clean.setScoreSheetFile(before.getScoreSheetFile());
+            clean.setScoreSheetsSaved(before.isScoreSheetsSaved());
+        } else {
+            clean.setScoreSheetsBySection("");
+            clean.setScoreSheetFile("");
+            clean.setScoreSheetsSaved(true);
+        }
     }
 
     /**
      * Switches GradeZZY to a saved assessment: its questions, tester
-     * folder, starter folder and model answers folder are written to
-     * config.properties.
+     * folder, starter folder, model answers folder and score sheets are
+     * written to config.properties. The score sheets of the one in use
+     * are first saved into its own file. A file saved before assessments
+     * kept score sheets takes the ones in use now, and keeps them.
      *
      * <p>Tier: SHOULD.
      *
@@ -394,31 +480,105 @@ public class AssessmentLibrary {
             throw new IllegalArgumentException("There is no saved "
                     + "assessment named " + name + ".");
         }
+        keepActiveSheets();
+        boolean takesCurrentSheets = !chosen.isScoreSheetsSaved();
+        if (takesCurrentSheets) {
+            takeCurrentSheets(chosen);
+        }
         apply(chosen);
+        if (takesCurrentSheets) {
+            write(chosen, fileFor(chosen.getName()));
+        }
+    }
+
+    // Saves the score sheets in config.properties into the file of the
+    // assessment in use, so they come back when it is chosen again.
+    private void keepActiveSheets() throws IOException {
+        Path file = findFile(getActiveName());
+        SavedAssessment active = null;
+        if (file != null) {
+            active = readOrNull(file);
+        }
+        if (active == null) {
+            active = readCurrent();
+            file = fileFor(active.getName());
+        }
+        takeCurrentSheets(active);
+        write(active, file);
     }
 
     /**
-     * Deletes a saved assessment. The one in use cannot be deleted.
+     * Deletes a saved assessment, with its own score sheets, and clears
+     * the submissions, score sheet, tester and starter folder chosen for
+     * it on Set up in every module and section, so a new assessment with
+     * the same name starts with none. The one in use cannot be deleted.
      * Earlier results graded with it are kept.
      *
      * <p>Tier: SHOULD.
      *
      * @param name the assessment's name
-     * @throws IOException if the file cannot be deleted
+     * @return what was deleted, to put back with restore
+     * @throws IOException if the file cannot be deleted, or the files
+     *         chosen on Set up cannot be cleared
      * @throws IllegalArgumentException if it is the one in use or does
      *         not exist
      */
-    public void delete(String name) throws IOException {
+    public DeletedAssessment delete(String name) throws IOException {
         if (name.equalsIgnoreCase(getActiveName())) {
             throw new IllegalArgumentException(name + " is in use. Choose "
                     + "another assessment first, then delete this one.");
         }
         Path file = findFile(name);
-        if (file == null) {
+        SavedAssessment saved = null;
+        if (file != null) {
+            saved = readOrNull(file);
+        }
+        if (saved == null) {
             throw new IllegalArgumentException("There is no saved "
                     + "assessment named " + name + ".");
         }
         Files.delete(file);
+        Map<String, List<Path>> submissions =
+                submissionsStore().removeAssessment(saved.getName());
+        Map<String, List<Path>> classFiles =
+                classFilesStore().removeAssessment(saved.getName());
+        return new DeletedAssessment(saved, submissions, classFiles);
+    }
+
+    /**
+     * Saves a deleted assessment again as it was, with its own score
+     * sheets, and puts back the files chosen for it on Set up.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param deleted what delete returned
+     * @throws IOException if a file cannot be written
+     * @throws IllegalArgumentException if another assessment has its name
+     *         now
+     */
+    public void restore(DeletedAssessment deleted) throws IOException {
+        SavedAssessment saved = deleted.getAssessment();
+        if (findFile(saved.getName()) != null) {
+            throw new IllegalArgumentException("An assessment named "
+                    + saved.getName() + " already exists, so the deleted "
+                    + "one cannot be put back.");
+        }
+        write(saved, fileFor(saved.getName()));
+        submissionsStore().putBack(deleted.getChosenSubmissions());
+        classFilesStore().putBack(deleted.getChosenClassFiles());
+    }
+
+    // Returns the store of the submissions chosen on Set up.
+    private ChosenSubmissionsStore submissionsStore() {
+        return ChosenSubmissionsStore.forSubmissions(readSetting(
+                ConfigKeys.CHOSEN_SUBMISSIONS_FILE));
+    }
+
+    // Returns the store of the score sheet, tester and starter folder
+    // chosen on Set up.
+    private ChosenSubmissionsStore classFilesStore() {
+        return ChosenSubmissionsStore.forClassFiles(readSetting(
+                ConfigKeys.CHOSEN_SUBMISSIONS_FILE));
     }
 
     /**
@@ -439,6 +599,7 @@ public class AssessmentLibrary {
             SavedAssessment before = readOrNull(file);
             if (before != null) {
                 current.setModuleCode(before.getModuleCode());
+                current.setCreatedAt(before.getCreatedAt());
             }
         }
         write(current, file);
@@ -448,6 +609,10 @@ public class AssessmentLibrary {
     // ids already seen are in lower case.
     private String checkQuestion(Question question, List<String> seenIds) {
         String id = question.getId().trim();
+        if (id.isEmpty()) {
+            return "Give each question an id, such as Q1a, or remove the "
+                    + "empty question row.";
+        }
         if (!id.matches(QUESTION_ID_PATTERN)) {
             return "Question ids use only letters and digits, such as Q1a. "
                     + "Fix \"" + id + "\".";
@@ -483,6 +648,15 @@ public class AssessmentLibrary {
             if (!config.hasKey(key)) {
                 config.setString(key, values.get(key));
             }
+        }
+        // A score sheet moved or deleted since is chosen again on Set up,
+        // so it does not stop the switch
+        String sheetKey = ConfigKeys.SCORE_SHEET_FILE;
+        boolean sheetGone = values.containsKey(sheetKey)
+                && !settings.validate(sheetKey, values.get(sheetKey))
+                        .isEmpty();
+        if (sheetGone) {
+            values.put(sheetKey, "");
         }
         for (String key : keys) {
             String problem = settings.validate(key, values.get(key));
@@ -529,6 +703,14 @@ public class AssessmentLibrary {
                 joinList(assessment.getTesterDataFiles()));
         putSetting(keys, values, ConfigKeys.PLACEHOLDER_FOLDER_NAMES,
                 joinList(assessment.getPlaceholderFolderNames()));
+        // A file saved before assessments kept score sheets leaves the
+        // ones in the settings as they are
+        if (assessment.isScoreSheetsSaved()) {
+            putSetting(keys, values, ConfigKeys.SCORE_SHEET_BY_SECTION,
+                    assessment.getScoreSheetsBySection());
+            putSetting(keys, values, ConfigKeys.SCORE_SHEET_FILE,
+                    assessment.getScoreSheetFile());
+        }
     }
 
     // Sets a value; a key seen before keeps its first place in the order.
@@ -614,7 +796,36 @@ public class AssessmentLibrary {
         assessment.getPlaceholderFolderNames().addAll(AppConfig.splitList(
                 values.getProperty(ConfigKeys.PLACEHOLDER_FOLDER_NAMES,
                         "")));
+        readScoreSheets(values, assessment);
+        assessment.setCreatedAt(readCreatedAt(values));
         return assessment;
+    }
+
+    // Reads when a saved file was first saved, or null when a file saved
+    // before assessments kept the time does not say.
+    private LocalDateTime readCreatedAt(Properties values) {
+        String text = values.getProperty(CREATED_PROPERTY, "").trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(text);
+        } catch (DateTimeParseException exception) {
+            return null;
+        }
+    }
+
+    // Reads the score sheets of a saved file. A file saved before
+    // assessments kept them has neither setting.
+    private void readScoreSheets(Properties values,
+            SavedAssessment assessment) {
+        String bySection = values.getProperty(
+                ConfigKeys.SCORE_SHEET_BY_SECTION);
+        String fallback = values.getProperty(ConfigKeys.SCORE_SHEET_FILE);
+        boolean saved = bySection != null || fallback != null;
+        assessment.setScoreSheetsBySection(bySection);
+        assessment.setScoreSheetFile(fallback);
+        assessment.setScoreSheetsSaved(saved);
     }
 
     // Reads the model answers folder of a saved file. A file saved before
@@ -644,6 +855,10 @@ public class AssessmentLibrary {
         // The module is kept in the file only; it is not a setting
         if (!assessment.getModuleCode().isEmpty()) {
             values.setProperty(MODULE_PROPERTY, assessment.getModuleCode());
+        }
+        if (assessment.getCreatedAt() != null) {
+            values.setProperty(CREATED_PROPERTY,
+                    assessment.getCreatedAt().toString());
         }
         Files.createDirectories(file.getParent());
         Writer writer = null;

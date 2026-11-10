@@ -182,7 +182,8 @@ public class AnomalyService {
      * the fix stays APPLIED, so the caller can tell.
      *
      * <p>A run loaded from the database after a restart has no fix
-     * records in memory, so its fixes cannot be undone; null is returned.
+     * records in memory, so null is returned; undoEarlierFix undoes
+     * such a fix.
      *
      * <p>Tier: SHOULD.
      *
@@ -190,6 +191,23 @@ public class AnomalyService {
      * @return the marks before and after, or null if nothing was undone
      */
     public UndoResult undoFix(Anomaly anomaly) {
+        return undoFix(null, anomaly);
+    }
+
+    /**
+     * Undoes the fix made for an anomaly, as undoFix(Anomaly) does, in a
+     * given run. A fix applied again in this session in a saved run (one
+     * not graded in this session) has a record, but its run is not one
+     * of this session, so the caller names it.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param gradingRun the run that holds the student, or null for the
+     *        newest run of this session that holds the anomaly
+     * @param anomaly the anomaly whose fix to undo
+     * @return the marks before and after, or null if nothing was undone
+     */
+    public UndoResult undoFix(GradingRun gradingRun, Anomaly anomaly) {
         if (anomaly == null) {
             return null;
         }
@@ -203,14 +221,93 @@ public class AnomalyService {
         anomalies.add(anomaly);
         List<FixRecord> fixRecords = new ArrayList<>();
         fixRecords.add(fixRecord);
-        return undoForStudent(anomalies, fixRecords);
+        GradingRun runToGrade = gradingRun;
+        if (runToGrade == null) {
+            runToGrade = findRunOf(anomaly);
+        }
+        return undoForStudent(runToGrade, anomalies, fixRecords);
+    }
+
+    /**
+     * Undoes a fix that has no record in memory, such as one made before
+     * GradeZZY was last opened. The student is graded again first, which
+     * makes the fix again with a record that can undo it. That fix is
+     * then undone as undoFix does, so the student is graded a second
+     * time, without it. Both gradings run the student's testers, so call
+     * this off the window's thread.
+     *
+     * <p>The new fix is the one for a problem of the same kind and words
+     * as the anomaly, because grading again gives each problem a new id.
+     * The anomaly is marked UNDONE too, as the screen may still show it.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param gradingRun the run that holds the student, saved or of this
+     *        session
+     * @param anomaly the anomaly whose fix to undo
+     * @return the marks before and after, or null if nothing was undone:
+     *         grading is running, the student is not in the run or cannot
+     *         be graded again, or grading again did not make the fix
+     */
+    public UndoResult undoEarlierFix(GradingRun gradingRun,
+            Anomaly anomaly) {
+        boolean cannotGrade = anomaly == null || gradingRun == null
+                || gradingService == null || gradingService.isGrading();
+        if (cannotGrade) {
+            return null;
+        }
+
+        Submission submission = findSubmission(gradingRun,
+                anomaly.getUsername());
+        if (submission == null) {
+            return null;
+        }
+
+        // Grading again makes the fix again, with a record of how to undo
+        String problem = regradeQuietly(gradingRun, submission);
+        if (!problem.isEmpty()) {
+            return null;
+        }
+
+        FixRecord fixRecord = findRecordLike(anomaly);
+        if (fixRecord == null) {
+            return null;
+        }
+
+        List<Anomaly> anomalies = new ArrayList<>();
+        anomalies.add(fixRecord.getAnomaly());
+        List<FixRecord> fixRecords = new ArrayList<>();
+        fixRecords.add(fixRecord);
+        UndoResult result = undoForStudent(gradingRun, anomalies,
+                fixRecords);
+        if (result != null) {
+            anomaly.setFixStatus(FixStatus.UNDONE);
+        }
+        return result;
+    }
+
+    // Finds the fix of this session for a problem of the same student,
+    // kind and words as an anomaly, or null when there is none.
+    private FixRecord findRecordLike(Anomaly anomaly) {
+        for (FixRecord fixRecord : fixManager.getFixRecords()) {
+            Anomaly fixed = fixRecord.getAnomaly();
+            boolean same = fixed.getUsername().equalsIgnoreCase(
+                    anomaly.getUsername())
+                    && fixed.getType() == anomaly.getType()
+                    && fixed.getMessage().equals(anomaly.getMessage());
+            if (same) {
+                return fixRecord;
+            }
+        }
+        return null;
     }
 
     /**
      * Says whether the fix of an anomaly can be applied again: the fix
      * was undone and grading skipped it in this session, so its key is
-     * known. A run reopened after a restart has no such key in memory, so
-     * the window hides "Apply fix again" for it.
+     * known. A fix rejected before GradeZZY was opened, or in a run not
+     * graded in this session, is applied again with reapplyEarlierFix
+     * (see canReapplyEarlierFix).
      *
      * <p>Tier: SHOULD.
      *
@@ -243,11 +340,7 @@ public class AnomalyService {
      *         student's run is not open in this session
      */
     public ReapplyResult reapplyFix(Anomaly anomaly) {
-        if (anomaly == null || anomaly.getFixStatus() != FixStatus.UNDONE) {
-            return null;
-        }
-        // Grading again would clash with the run being graded
-        if (gradingService == null || gradingService.isGrading()) {
+        if (!canGradeAgain(anomaly)) {
             return null;
         }
 
@@ -263,7 +356,114 @@ public class AnomalyService {
         if (notRejected) {
             return null;
         }
+        return reapplyWithKey(gradingRun, submission, anomaly, fixKey);
+    }
 
+    /**
+     * Says whether the undone fix of an anomaly in a run can be applied
+     * again with reapplyEarlierFix: the student is in the run and has a
+     * rejected fix, which the database keeps, so this works for a run
+     * graded before GradeZZY was opened too.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param gradingRun the run that holds the student, saved or of this
+     *        session
+     * @param anomaly the anomaly whose fix was undone
+     * @return true when reapplyEarlierFix may apply the fix again
+     */
+    public boolean canReapplyEarlierFix(GradingRun gradingRun,
+            Anomaly anomaly) {
+        if (anomaly == null || anomaly.getFixStatus() != FixStatus.UNDONE) {
+            return false;
+        }
+        Submission submission = findSubmission(gradingRun,
+                anomaly.getUsername());
+        return submission != null
+                && !submission.getRejectedFixes().isEmpty();
+    }
+
+    /**
+     * Applies again a fix whose key is not known in this session, such as
+     * one rejected before GradeZZY was last opened. The student is graded
+     * once as they are, which skips the rejected fix again and so finds
+     * its key, then the fix is applied again as reapplyFix does, which
+     * grades the student a second time. Both gradings run the student's
+     * testers, so call this off the window's thread.
+     *
+     * <p>The skipped fix is the one for a problem of the same kind and
+     * words as the anomaly, because grading again gives each problem a
+     * new id.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param gradingRun the run that holds the student, saved or of this
+     *        session
+     * @param anomaly the anomaly whose fix was undone
+     * @return the marks before and after, or null if nothing was tried:
+     *         grading is running, the student is not in the run, or no
+     *         rejected fix was found for the problem
+     */
+    public ReapplyResult reapplyEarlierFix(GradingRun gradingRun,
+            Anomaly anomaly) {
+        if (!canReapplyEarlierFix(gradingRun, anomaly)
+                || !canGradeAgain(anomaly)) {
+            return null;
+        }
+
+        Submission submission = findSubmission(gradingRun,
+                anomaly.getUsername());
+        String fixKey = fixManager.findRejectedKey(anomaly);
+        boolean keyKnown = fixKey != null
+                && submission.getRejectedFixes().contains(fixKey);
+        if (!keyKnown) {
+            // Grading again skips the fix again, which keeps its key
+            String problem = regradeQuietly(gradingRun, submission);
+            if (!problem.isEmpty()) {
+                return null;
+            }
+            fixKey = findSkippedKeyLike(submission, anomaly);
+        }
+        if (fixKey == null) {
+            return null;
+        }
+        return reapplyWithKey(gradingRun, submission, anomaly, fixKey);
+    }
+
+    // Says whether an anomaly is UNDONE and nothing is being graded, so
+    // its student can be graded again.
+    private boolean canGradeAgain(Anomaly anomaly) {
+        if (anomaly == null || anomaly.getFixStatus() != FixStatus.UNDONE) {
+            return false;
+        }
+        // Grading again would clash with the run being graded
+        return gradingService != null && !gradingService.isGrading();
+    }
+
+    // Finds the key of the rejected fix grading skipped for a problem of
+    // the student with the same kind and words as an anomaly, or null.
+    private String findSkippedKeyLike(Submission submission,
+            Anomaly anomaly) {
+        for (Anomaly found : submission.getAnomalies()) {
+            boolean same = found.getType() == anomaly.getType()
+                    && found.getMessage().equals(anomaly.getMessage());
+            String fixKey = null;
+            if (same) {
+                fixKey = fixManager.findRejectedKey(found);
+            }
+            boolean rejected = fixKey != null
+                    && submission.getRejectedFixes().contains(fixKey);
+            if (rejected) {
+                return fixKey;
+            }
+        }
+        return null;
+    }
+
+    // Takes a fix's key off the student's rejected list and grades the
+    // student again, so the fix is made again; see reapplyFix.
+    private ReapplyResult reapplyWithKey(GradingRun gradingRun,
+            Submission submission, Anomaly anomaly, String fixKey) {
         submission.unrejectFix(fixKey);
         double totalBefore = submission.getTotalScore();
         String problem = regradeQuietly(gradingRun, submission);
@@ -407,8 +607,11 @@ public class AnomalyService {
         }
 
         for (int index = 0; index < groupKeys.size(); index++) {
-            UndoResult result = undoForStudent(anomalyGroups.get(index),
-                    recordGroups.get(index));
+            List<FixRecord> recordGroup = recordGroups.get(index);
+            GradingRun gradingRun = findRunOf(
+                    recordGroup.get(0).getAnomaly());
+            UndoResult result = undoForStudent(gradingRun,
+                    anomalyGroups.get(index), recordGroup);
             if (result != null) {
                 results.add(result);
             }
@@ -428,18 +631,17 @@ public class AnomalyService {
         return runId + GROUP_SEPARATOR + lowerUsername;
     }
 
-    // Undoes some fixes of one student, then grades the student again
-    // once. anomalies and fixRecords match place for place. Returns null
-    // if no fix could be undone or rejected, or grading is running.
-    private UndoResult undoForStudent(List<Anomaly> anomalies,
-            List<FixRecord> fixRecords) {
+    // Undoes some fixes of one student of a run, then grades the student
+    // again once. anomalies and fixRecords match place for place. Returns
+    // null if no fix could be undone or rejected, or grading is running.
+    private UndoResult undoForStudent(GradingRun gradingRun,
+            List<Anomaly> anomalies, List<FixRecord> fixRecords) {
         // Grading again would clash with the run being graded
         if (gradingService != null && gradingService.isGrading()) {
             return null;
         }
 
         String username = anomalies.get(0).getUsername();
-        GradingRun gradingRun = findRunOf(fixRecords.get(0).getAnomaly());
         Submission submission = findSubmission(gradingRun, username);
 
         // Read before the files are put back: FixManager.undo marks the

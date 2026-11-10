@@ -52,20 +52,40 @@ public final class ReviewRules {
      * by "Mark all as checked". A flag that means the student was not
      * fully graded, is not on the score sheet or could not be read is
      * left out: it changes what Export does, so it is checked one at a
-     * time.
+     * time. Similar code is left out too: it is decided as Looks fine or
+     * Keep flagged on the Similar code tab, and a kept flag goes into the
+     * score sheet's Remarks.
      *
      * @param type the anomaly type
-     * @return true for a review aid such as an empty answer or similar
-     *         code, or a folder and file finding
+     * @return true for a review aid such as an empty answer, or a folder
+     *         and file finding
      */
     public static boolean canCheckAll(AnomalyType type) {
         return type != AnomalyType.COMPILE_ERROR
+                && type != AnomalyType.SIMILAR_CODE
                 && type != AnomalyType.TIMEOUT
                 && type != AnomalyType.RUNTIME_ERROR
                 && type != AnomalyType.UNKNOWN_STUDENT
                 && type != AnomalyType.INVALID_ARCHIVE
                 && type != AnomalyType.DUPLICATE_SUBMISSION
                 && type != AnomalyType.INTERNAL_ERROR;
+    }
+
+    /**
+     * Says whether a kind of problem is a flag: a suspicion that never
+     * changes a mark and that the instructor judges as Looks fine or
+     * Keep flagged.
+     *
+     * @param type the kind
+     * @return true for a flag
+     */
+    public static boolean isFlag(AnomalyType type) {
+        return type == AnomalyType.UNTOUCHED_STARTER
+                || type == AnomalyType.EMPTY_ANSWER
+                || type == AnomalyType.HARD_CODED_ANSWER
+                || type == AnomalyType.COPIED_HEADER
+                || type == AnomalyType.SIMILAR_CODE
+                || type == AnomalyType.DIFFERENT_FROM_MODEL_ANSWER;
     }
 
     /**

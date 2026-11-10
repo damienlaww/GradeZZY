@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -41,6 +42,7 @@ import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
+import gradezzy.model.BackupInfo;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
@@ -53,7 +55,9 @@ import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.modelanswer.QuestionStrength;
 import gradezzy.plagiarism.SimilarityPair;
+import gradezzy.report.CsvScoreSheetExporter;
 import gradezzy.report.ExportException;
+import gradezzy.report.Exporter;
 import gradezzy.report.ScoreFormatter;
 import gradezzy.service.AnomalyService;
 import gradezzy.service.AnswerGroupService;
@@ -62,6 +66,7 @@ import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.service.ClassFileMatcher;
+import gradezzy.service.DeletedAssessment;
 import gradezzy.service.ReapplyResult;
 import gradezzy.service.ScoreAdjustmentService;
 import gradezzy.service.ServiceRegistry;
@@ -132,7 +137,7 @@ public class LiveBackend implements DashboardBackend {
 
     // The assessment in use, built from the configuration again whenever
     // another one is chosen; read by the file-checking thread too
-    private volatile Assessment assessment;
+    private volatile Assessment assessment = null;
 
     // Says what grading will do with a chosen zip file or folder
     private final SubmissionPreview preview;
@@ -150,6 +155,11 @@ public class LiveBackend implements DashboardBackend {
     // sections can be graded at once
     private final List<String> runsGradedAgain = new ArrayList<>();
 
+    // The assessments deleted since GradeZZY opened, by name in lower
+    // case, with the files chosen for them on Set up, for Undo
+    private final Map<String, DeletedAssessment> deletedAssessments =
+            new HashMap<>();
+
     // The review decisions, by student and anomaly id: those made in this
     // session and those read back with the saved runs
     private final Map<String, ReviewDecision> decisions =
@@ -162,6 +172,17 @@ public class LiveBackend implements DashboardBackend {
     // The ids of the runs started in this session
     private final Set<String> runsStartedNow = ConcurrentHashMap.newKeySet();
 
+    // The whole run being exported, or null. An export of only some
+    // students hands the score sheet a part of the run, so the Remarks
+    // are worked out from this whole run, with every pair and name
+    private volatile GradingRun exportedRun = null;
+
+    // The run id of each fix rejected in this session, by anomaly id.
+    // Grading again gives the problems new ids, so the card used to
+    // reject is no longer found in its run.
+    private final Map<String, String> rejectedInRun =
+            new ConcurrentHashMap<>();
+
     /**
      * Creates a live backend.
      *
@@ -172,6 +193,13 @@ public class LiveBackend implements DashboardBackend {
         this.config = services.getConfig();
         this.assessment = new AssessmentFactory(config).create();
         this.preview = new SubmissionPreview(config);
+        // The score sheet's Remarks come from the decisions held here
+        Exporter scoreSheet = services.getExportService().findExporter(
+                CsvScoreSheetExporter.FORMAT_NAME);
+        if (scoreSheet instanceof CsvScoreSheetExporter) {
+            ((CsvScoreSheetExporter) scoreSheet).setRemarks(
+                    part -> remarksOf(part));
+        }
     }
 
     /**
@@ -339,10 +367,15 @@ public class LiveBackend implements DashboardBackend {
         }
     }
 
-    // Reads a path setting.
+    // Reads a path setting. A new assessment has no score sheet yet, so
+    // a blank one gives null.
     private Path configuredPath(InputKind kind) {
         if (kind == InputKind.ROSTER) {
-            return Paths.get(config.getString(ConfigKeys.SCORE_SHEET_FILE));
+            String sheet = config.getString(ConfigKeys.SCORE_SHEET_FILE);
+            if (sheet.isEmpty()) {
+                return null;
+            }
+            return Paths.get(sheet);
         } else if (kind == InputKind.TESTERS) {
             return Paths.get(config.getString(ConfigKeys.TESTERS_DIR));
         } else if (kind == InputKind.STARTER) {
@@ -352,7 +385,8 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Checks the path with InputValidator and its file name. Student zips
+     * Checks the path with InputValidator and its file name, and reads a
+     * score sheet with RosterReader as grading will. Student zips
      * and folders are checked with SubmissionPreview, a starter folder
      * for the starter file of each question of the assessment in use, and
      * a tester folder for the testers it holds.
@@ -372,6 +406,13 @@ public class LiveBackend implements DashboardBackend {
                 return new ImportItem(kind, path, "", ImportState.INVALID,
                         "Choose the score sheet CSV file.");
             }
+            // Read it as grading will, so a sheet read wrongly, such as
+            // one with ; between values, cannot start grading
+            String problem = new RosterReader(config).findProblem(path);
+            if (!problem.isEmpty()) {
+                return new ImportItem(kind, path, "", ImportState.INVALID,
+                        problem);
+            }
             return new ImportItem(kind, path, "", ImportState.ACCEPTED,
                     "Score sheet found.");
         }
@@ -381,8 +422,7 @@ public class LiveBackend implements DashboardBackend {
         }
         if (kind == InputKind.STARTER) {
             return checkStarter(path, assessment.getQuestions());
-        }
-        if (kind == InputKind.TESTERS) {
+        } else if (kind == InputKind.TESTERS) {
             return inspectTesters(path);
         }
         return new ImportItem(kind, path, "", ImportState.ACCEPTED,
@@ -393,7 +433,8 @@ public class LiveBackend implements DashboardBackend {
      * Calls CompileStage.checkTesterFolder with the chosen starter folder,
      * or the one in Settings when none is chosen. A folder that is missing
      * or holds no tester is one short problem, and a full path in a
-     * problem is shortened to the folder's name.
+     * problem is shortened to the folder's name. Also says when the
+     * starter folder has class files the assessment does not provide.
      */
     @Override
     public List<String> checkTesters(Path testersDirectory,
@@ -426,7 +467,30 @@ public class LiveBackend implements DashboardBackend {
         for (String problem : found) {
             problems.add(problem.replace(fullPath, folderName));
         }
+        addUnlistedClassFiles(starterDirectory, problems);
         return problems;
+    }
+
+    // Adds a problem when the starter folder has class files without
+    // source, such as Order.class, that the assessment does not list as
+    // provided: they are then never given to the students who left them
+    // out, whose copies cannot compile.
+    private void addUnlistedClassFiles(Path starterDirectory,
+            List<String> problems) {
+        Path starter = starterDirectory;
+        if (starter == null) {
+            starter = Paths.get(config.getString(ConfigKeys.STARTER_DIR));
+        }
+        List<String> unlisted = AssessmentFolderScanner
+                .findProvidedClassFiles(starter);
+        unlisted.removeAll(config.getList(ConfigKeys.PROVIDED_CLASS_FILES));
+        if (!unlisted.isEmpty()) {
+            problems.add("The starter folder has " + joinWords(unlisted)
+                    + ", but the assessment does not list them under "
+                    + "Provided class files, so "
+                    + "students who left them out will get a compile "
+                    + "error. Add them to the assessment in Settings.");
+        }
     }
 
     /**
@@ -934,7 +998,8 @@ public class LiveBackend implements DashboardBackend {
         if (before != decision) {
             String flag = anomaly.getUsername() + ACTIVITY_DETAIL_SEPARATOR
                     + anomaly.getMessage();
-            services.getAuditService().record(decision.getAuditAction(),
+            String action = decision.getAuditAction(anomaly.getType());
+            services.getAuditService().record(action,
                     AuditEntry.withReference(flag, anomaly.getId()));
         }
         String message = "Marked the flag for " + anomaly.getUsername()
@@ -1049,7 +1114,10 @@ public class LiveBackend implements DashboardBackend {
 
     /**
      * Calls AnomalyService.undoFix for an applied or approved repair and
-     * checks the fix status changed. Any other repair is left alone.
+     * checks the fix status changed. Any other repair is left alone. A
+     * fix with no record in memory, such as one made before GradeZZY was
+     * last opened, is undone with AnomalyService.undoEarlierFix, which
+     * grades the student again to make the record first.
      */
     @Override
     public ActionResult rejectRepair(RepairItem repair) {
@@ -1061,8 +1129,26 @@ public class LiveBackend implements DashboardBackend {
                     + "it is " + describeFixStatus(before) + ".");
         }
 
+        AnomalyService anomalyService = services.getAnomalyService();
         GradingRun run = findSessionRunWith(anomaly);
-        UndoResult undone = services.getAnomalyService().undoFix(anomaly);
+        UndoResult undone = null;
+        if (anomalyService.findFixRecord(anomaly) != null) {
+            // A fix applied again in a saved run has a record, but its
+            // run is not one of this session
+            GradingRun target = null;
+            if (run == null) {
+                target = findAnyRunWith(anomaly);
+                run = target;
+            }
+            undone = anomalyService.undoFix(target, anomaly);
+        } else {
+            run = findAnyRunWith(anomaly);
+            undone = anomalyService.undoEarlierFix(run, anomaly);
+            rememberFoundNow(run, anomaly.getUsername());
+        }
+        if (run != null) {
+            rejectedInRun.put(anomaly.getId(), run.getId());
+        }
         forgetSavedRuns();
         if (anomaly.getFixStatus() == FixStatus.UNDONE) {
             return ActionResult.done(describeUndo(undone, anomaly)
@@ -1083,16 +1169,50 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls AnomalyService.canReapplyFix.
+     * Calls AnomalyService.canReapplyFix, or canReapplyEarlierFix for a
+     * fix rejected in a run not graded in this session or before
+     * GradeZZY was opened.
      */
     @Override
     public boolean canReapplyRepair(Anomaly anomaly) {
-        return services.getAnomalyService().canReapplyFix(anomaly);
+        AnomalyService anomalyService = services.getAnomalyService();
+        if (anomalyService.canReapplyFix(anomaly)) {
+            return true;
+        }
+        if (anomaly == null || anomaly.getFixStatus() != FixStatus.UNDONE) {
+            return false;
+        }
+        return anomalyService.canReapplyEarlierFix(
+                findRunToReapplyIn(anomaly), anomaly);
+    }
+
+    // Returns the run that holds an anomaly, or, for a card whose fix
+    // was rejected in this session, the run it was rejected in; null
+    // when there is none.
+    private GradingRun findRunToReapplyIn(Anomaly anomaly) {
+        GradingRun run = findAnyRunWith(anomaly);
+        String runId = rejectedInRun.get(anomaly.getId());
+        if (run != null || runId == null) {
+            return run;
+        }
+        // A run of this session first, as findAnyRunWith does
+        List<GradingRun> runs = new ArrayList<>(
+                services.getGradingService().getSessionRuns());
+        Collections.reverse(runs);
+        runs.addAll(getSavedRuns());
+        for (GradingRun candidate : runs) {
+            if (candidate.getId().equals(runId)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     /**
      * Calls AnomalyService.reapplyFix, which grades the student again
-     * with the fix, and says what the marks became.
+     * with the fix, and says what the marks became. A fix whose key is
+     * not known in this session, or whose run is a saved one, is applied
+     * again with AnomalyService.reapplyEarlierFix.
      */
     @Override
     public ActionResult reapplyRepair(RepairItem repair) {
@@ -1101,9 +1221,14 @@ public class LiveBackend implements DashboardBackend {
             return ActionResult.failed(explainReapplyFailure(anomaly));
         }
 
+        AnomalyService anomalyService = services.getAnomalyService();
         GradingRun run = findSessionRunWith(anomaly);
-        ReapplyResult reapplied =
-                services.getAnomalyService().reapplyFix(anomaly);
+        ReapplyResult reapplied = anomalyService.reapplyFix(anomaly);
+        if (reapplied == null) {
+            run = findRunToReapplyIn(anomaly);
+            reapplied = anomalyService.reapplyEarlierFix(run, anomaly);
+            rememberFoundNow(run, anomaly.getUsername());
+        }
         forgetSavedRuns();
         if (reapplied == null) {
             return ActionResult.failed(explainReapplyFailure(anomaly));
@@ -1126,15 +1251,16 @@ public class LiveBackend implements DashboardBackend {
         if (services.getGradingService().isGrading()) {
             return start + "Wait until grading has finished.";
         }
-        return start + "GradeZZY can only apply again a fix rejected "
-                + "since it was opened, or in a run resumed since.";
+        return start + "GradeZZY could not find the student's run or the "
+                + "rejected fix in it, or could not grade them again.";
     }
 
     // Grading the student again cleared their Similar code flags, so the
     // run is checked again. It runs here until GradingService runs it
     // after grading. Returns a sentence when the check failed, else "".
     private String checkAfterUndo(GradingRun run) {
-        if (run == null || !isSimilarityEnabled()) {
+        // Identical copies are checked even with the similarity check off
+        if (run == null) {
             return "";
         }
 
@@ -1159,6 +1285,36 @@ public class LiveBackend implements DashboardBackend {
             }
         }
         return null;
+    }
+
+    // Returns the run that holds an anomaly: a run of this session, else
+    // a saved run; null when none does.
+    private GradingRun findAnyRunWith(Anomaly anomaly) {
+        GradingRun sessionRun = findSessionRunWith(anomaly);
+        if (sessionRun != null) {
+            return sessionRun;
+        }
+
+        List<GradingRun> runs = new ArrayList<>(runsBySection.values());
+        runs.addAll(getSavedRuns());
+        for (GradingRun run : runs) {
+            if (holdsAnomaly(run, anomaly.getId())) {
+                return run;
+            }
+        }
+        return null;
+    }
+
+    // Remembers the problems of one student of a run, once the student
+    // was graded again, as rememberFoundNow does.
+    private void rememberFoundNow(GradingRun run, String username) {
+        if (run == null) {
+            return;
+        }
+        Submission submission = run.findLoaded(username);
+        if (submission != null) {
+            rememberFoundNow(submission);
+        }
     }
 
     // Says whether any submission of a run holds the anomaly with an id.
@@ -1409,6 +1565,7 @@ public class LiveBackend implements DashboardBackend {
 
         String exportFolder = getExportFolder(gradingRun.getSection());
         Path outputFolder = Paths.get(exportFolder);
+        exportedRun = gradingRun;
         try {
             Path written = services.getExportService().export(gradingRun,
                     scope, formatName, outputFolder);
@@ -1424,12 +1581,57 @@ public class LiveBackend implements DashboardBackend {
                 note = " It holds " + chosenCount + " of " + runCount
                         + " students.";
             }
-            return ActionResult.saved("Exported " + formatName
-                    + " to " + written + "." + note, written);
+            return ActionResult.saved("Exported "
+                    + describeFormat(formatName) + " to " + written + "."
+                    + note, written);
         } catch (ExportException exception) {
             return ActionResult.failed("The export did not finish: "
                     + exception.getMessage());
+        } finally {
+            exportedRun = null;
         }
+    }
+
+    // Names an export format as the exports list does, such as "CSV
+    // score sheet" for "csv", rather than as the screen asked for it.
+    private String describeFormat(String formatName) {
+        Exporter exporter = services.getExportService().findExporter(
+                formatName);
+        if (exporter == null) {
+            return formatName.toUpperCase(Locale.ROOT);
+        }
+        return exporter.getFormatName();
+    }
+
+    // Returns the Remarks of the students in a part of a run, worked out
+    // from the whole run, so they are the same as in an export of all.
+    private Map<String, String> remarksOf(GradingRun part) {
+        Map<String, String> remarks = new CheatingRemarks(this).remarksFor(
+                findWholeRun(part));
+        Map<String, String> partRemarks = new HashMap<>();
+        if (part == null) {
+            return partRemarks;
+        }
+        for (Submission submission : part.getSubmissions()) {
+            String key = submission.getUsername().toLowerCase(Locale.ROOT);
+            if (remarks.containsKey(key)) {
+                partRemarks.put(key, remarks.get(key));
+            }
+        }
+        return partRemarks;
+    }
+
+    // Returns the whole run a score sheet export is of: the run being
+    // exported when the part is of it, else the part itself.
+    private GradingRun findWholeRun(GradingRun part) {
+        GradingRun whole = exportedRun;
+        boolean sameRun = whole != null && part != null
+                && whole.getId() != null
+                && whole.getId().equals(part.getId());
+        if (sameRun) {
+            return whole;
+        }
+        return part;
     }
 
     /**
@@ -1456,6 +1658,22 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
+     * Calls HistoryService.listBackups.
+     */
+    @Override
+    public List<BackupInfo> listBackups() {
+        return services.getHistoryService().listBackups();
+    }
+
+    /**
+     * Calls HistoryService.getBackupKeepCount.
+     */
+    @Override
+    public int getBackupKeepCount() {
+        return services.getHistoryService().getBackupKeepCount();
+    }
+
+    /**
      * Returns Not connected yet: no service lists the run in each backup.
      */
     @Override
@@ -1465,7 +1683,8 @@ public class LiveBackend implements DashboardBackend {
 
     /**
      * Calls HistoryService.restore, then forgets every run and decision
-     * so they are read again from the restored history.
+     * so they are read again from the restored history. The result holds
+     * the backup made just before the restore, so it can be undone.
      */
     @Override
     public ActionResult restoreBackup(Path backupFile) {
@@ -1475,8 +1694,17 @@ public class LiveBackend implements DashboardBackend {
                     + "Switch it on, then restore again.");
         }
 
+        // A file that is not a GradeZZY backup is refused before anything
+        // is changed, with a plain reason
+        String problem = services.getHistoryService().checkBackup(
+                backupFile);
+        if (!problem.isEmpty()) {
+            return ActionResult.failed(problem);
+        }
+
+        Path safetyBackup = null;
         try {
-            services.getHistoryService().restore(backupFile);
+            safetyBackup = services.getHistoryService().restore(backupFile);
         } catch (UnsupportedOperationException exception) {
             return ActionResult.notConnected(Capability.RESTORE);
         } catch (RuntimeException exception) {
@@ -1499,8 +1727,14 @@ public class LiveBackend implements DashboardBackend {
         if (Capability.RESTORE.getStatus() != CapabilityStatus.WORKS_NOW) {
             return ActionResult.notConnected(Capability.RESTORE);
         }
-        return ActionResult.done("Restored the saved results from "
-                + backupFile.getFileName() + ".");
+        String message = "Restored the saved results from "
+                + backupFile.getFileName() + ".";
+        if (safetyBackup == null) {
+            return ActionResult.done(message);
+        }
+        return ActionResult.saved(message + " The results saved before "
+                + "were backed up as " + safetyBackup.getFileName() + ".",
+                safetyBackup);
     }
 
     /**
@@ -1580,8 +1814,14 @@ public class LiveBackend implements DashboardBackend {
             return ActionResult.failed("The settings could not be saved: "
                     + exception.getMessage());
         }
-        return ActionResult.done("Saved " + changes.size() + " setting"
-                + plural(changes.size()) + " to config.properties.");
+        String saved = "Saved " + changes.size() + " setting"
+                + plural(changes.size()) + " to config.properties.";
+        // The database file is opened once, when GradeZZY starts
+        if (keys.contains(ConfigKeys.DATABASE_FILE)) {
+            saved = saved + " Restart GradeZZY to use the new database "
+                    + "file.";
+        }
+        return ActionResult.done(saved);
     }
 
     // ----------------------------------------------------- assessments
@@ -1659,21 +1899,51 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
-     * Calls AssessmentLibrary.delete and records it in the activity log.
+     * Calls AssessmentLibrary.delete, which also clears the files chosen
+     * for it on Set up, and keeps what it took for restoreAssessment. The
+     * window records it in the activity log, with its Undo.
      */
     @Override
     public ActionResult deleteAssessment(String name) {
+        DeletedAssessment deleted = null;
         try {
-            library().delete(name);
+            deleted = library().delete(name);
         } catch (IOException exception) {
             return ActionResult.failed(name + " could not be deleted: "
                     + exception.getMessage());
         } catch (IllegalArgumentException exception) {
             return ActionResult.failed(exception.getMessage());
         }
-        recordAudit("Assessment deleted", name);
-        return ActionResult.done("Deleted " + name + ". Results graded "
-                + "with it are kept.");
+        deletedAssessments.put(name.toLowerCase(Locale.ROOT), deleted);
+        String cleared = "";
+        if (deleted.hadChosenFiles()) {
+            cleared = " The files chosen for it on Set up were cleared.";
+        }
+        return ActionResult.done("Deleted " + name + "." + cleared
+                + " Results graded with it are kept.");
+    }
+
+    /**
+     * Calls AssessmentLibrary.restore with what deleteAssessment kept.
+     */
+    @Override
+    public ActionResult restoreAssessment(String name) {
+        String key = name.toLowerCase(Locale.ROOT);
+        DeletedAssessment deleted = deletedAssessments.get(key);
+        if (deleted == null) {
+            return ActionResult.failed(name + " was not deleted since "
+                    + "GradeZZY opened, so it cannot be put back.");
+        }
+        try {
+            library().restore(deleted);
+        } catch (IOException exception) {
+            return ActionResult.failed(name + " could not be put back: "
+                    + exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            return ActionResult.failed(exception.getMessage());
+        }
+        deletedAssessments.remove(key);
+        return ActionResult.done("Put back " + name + ".");
     }
 
     // Says whether any of the changed settings belongs to the assessment.
@@ -1692,7 +1962,9 @@ public class LiveBackend implements DashboardBackend {
     }
 
     // Says whether a setting belongs to the assessment, so a change on
-    // the Settings page is saved into the assessment in use too.
+    // the Settings page is saved into the assessment in use too. Each
+    // assessment keeps its own score sheets, chosen on Set up, Home or
+    // Settings.
     private boolean isAssessmentSetting(String key) {
         return key.startsWith(ConfigKeys.QUESTION_PREFIX)
                 || key.equals(ConfigKeys.ASSESSMENT_NAME)
@@ -1701,7 +1973,9 @@ public class LiveBackend implements DashboardBackend {
                 || key.equals(ConfigKeys.MODEL_ANSWERS_DIR)
                 || key.equals(ConfigKeys.PROVIDED_CLASS_FILES)
                 || key.equals(ConfigKeys.TESTER_DATA_FILES)
-                || key.equals(ConfigKeys.PLACEHOLDER_FOLDER_NAMES);
+                || key.equals(ConfigKeys.PLACEHOLDER_FOLDER_NAMES)
+                || key.equals(ConfigKeys.SCORE_SHEET_BY_SECTION)
+                || key.equals(ConfigKeys.SCORE_SHEET_FILE);
     }
 
     /**
@@ -2073,9 +2347,8 @@ public class LiveBackend implements DashboardBackend {
         task.setOnSucceeded(event -> finishTask(task, callback, capability,
                 gradedAgainId));
         task.setOnFailed(event -> failTask(task, callback, gradedAgainId));
-        if (isSimilarityEnabled()) {
-            task.checkSimilarityAfter(services.getPlagiarismService());
-        }
+        // Identical copies are checked even with the similarity check off
+        task.checkSimilarityAfter(services.getPlagiarismService());
 
         Thread worker = new Thread(task, GRADING_THREAD_NAME);
         worker.setDaemon(true);
@@ -2094,7 +2367,8 @@ public class LiveBackend implements DashboardBackend {
         rememberAnomalies(run, capability);
         if (task.getSimilarityProblem() != null) {
             recordActivity("Similar code not checked",
-                    task.getSimilarityProblem());
+                    AuditEntry.withReference(task.getSimilarityProblem(),
+                            run.getId()));
         }
         if (run.getSection() != null) {
             runsBySection.put(run.getSection().getLabel(), run);
@@ -2190,14 +2464,20 @@ public class LiveBackend implements DashboardBackend {
                 if (checkedZeros.contains(submission.getUsername())) {
                     ZeroChecks.set(submission, true);
                 }
-                for (Anomaly anomaly : submission.getAnomalies()) {
-                    String savedName = savedDecisions.get(anomaly.getId());
-                    ReviewDecision decision = decisionNamed(savedName);
-                    if (decision != null) {
-                        decisions.putIfAbsent(decisionKey(anomaly),
-                                decision);
-                    }
-                }
+                readBackDecisions(submission, savedDecisions);
+            }
+        }
+    }
+
+    // Reads back the saved decisions on one student's anomalies, keeping
+    // any decision already made in this session.
+    private void readBackDecisions(Submission submission,
+            Map<String, String> savedDecisions) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            String savedName = savedDecisions.get(anomaly.getId());
+            ReviewDecision decision = decisionNamed(savedName);
+            if (decision != null) {
+                decisions.putIfAbsent(decisionKey(anomaly), decision);
             }
         }
     }
@@ -2322,19 +2602,22 @@ public class LiveBackend implements DashboardBackend {
         return "The automatic fix did not work: " + reason;
     }
 
-    // Explains why a repair waiting for review could not be undone.
-    // FixManager keeps the record of each fix only in memory, and forgets
-    // a student's fixes when the student is graded again.
+    // Explains why a repair waiting for review could not be undone. A
+    // fix with no record in memory is undone by grading the student
+    // again, so that grading is what failed.
     private String explainUndoFailure(Anomaly anomaly) {
         String start = "The fix for " + anomaly.getUsername()
                 + " could not be undone, so it still shows as applied. ";
-        if (!anomaliesFoundNow.contains(anomaly.getId())) {
-            return start + "Its run was graded before GradeZZY was last "
-                    + "opened, and GradeZZY can only undo a fix made "
-                    + "since then.";
+        if (services.getGradingService().isGrading()) {
+            return start + "Wait until grading has finished.";
         }
-        return start + "Either the student was graded again since, or "
-                + "the files the fix changed were moved or deleted.";
+        if (!anomaliesFoundNow.contains(anomaly.getId())) {
+            return start + "To undo it, GradeZZY grades the student again, "
+                    + "and that did not work. Check that the run's tester "
+                    + "folder and the student's upload are still there.";
+        }
+        return start + "The files the fix changed may have been moved or "
+                + "deleted. Grade the student again, then undo the fix.";
     }
 
     // Explains why HistoryService.backupNow wrote no backup.

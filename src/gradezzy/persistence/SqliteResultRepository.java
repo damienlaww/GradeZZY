@@ -244,6 +244,36 @@ public class SqliteResultRepository implements ResultRepository {
     }
 
     /**
+     * Lists every saved run without its submissions, newest first. A run
+     * that cannot be read is left out, as in listRuns.
+     *
+     * @return the saved runs, without their submissions
+     * @throws PersistenceException if the operation fails
+     */
+    @Override
+    public synchronized List<GradingRun> listRunHeaders()
+            throws PersistenceException {
+        requireOpen();
+
+        List<String> runIds = null;
+        try {
+            runIds = RunTables.readRunIds(connection);
+        } catch (SQLException exception) {
+            throw new PersistenceException("The saved runs could not be "
+                    + "listed: " + exception.getMessage(), exception);
+        }
+
+        List<GradingRun> runs = new ArrayList<>();
+        for (String runId : runIds) {
+            GradingRun header = readHeader(runId);
+            if (header != null) {
+                runs.add(header);
+            }
+        }
+        return runs;
+    }
+
+    /**
      * Saves the current state of one submission of a run.
      *
      * <p>A submission saved before keeps its place in the run; a new one
@@ -611,6 +641,21 @@ public class SqliteResultRepository implements ResultRepository {
             connection.setAutoCommit(true);
         } catch (SQLException exception) {
             // The next transaction sets it again
+        }
+    }
+
+    // Reads one run without its submissions for listRunHeaders, or null
+    // if it cannot be read
+    private GradingRun readHeader(String runId) {
+        try {
+            return RunTables.readRun(connection, runId);
+        } catch (SQLException exception) {
+            return null;
+        } catch (IllegalArgumentException exception) {
+            // A path or name this version cannot read
+            return null;
+        } catch (DateTimeParseException exception) {
+            return null;
         }
     }
 

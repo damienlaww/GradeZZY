@@ -1,11 +1,13 @@
 /*
  * File: CsvScoreSheetExporter.java
  *
- * Purpose: Writes the provided score sheet with the final grade filled in.
+ * Purpose: Writes the provided score sheet with the final grade, and the
+ * mark of every question, filled in.
  *
  * Where it fits: The export required by the brief. Columns, the id prefix, the
  * end marker, quotes, the encoding and the line ending stay exactly as
- * provided.
+ * provided. One "Points Grade" column per question is added just before
+ * the End-of-Line Indicator, which stays last (see ScoreSheetColumns).
  */
 package gradezzy.report;
 
@@ -28,6 +30,8 @@ import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.config.ExportFolders;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Question;
+import gradezzy.model.QuestionResult;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
@@ -49,6 +53,13 @@ public class CsvScoreSheetExporter implements Exporter {
      * The file extension, without the dot.
      */
     public static final String FILE_EXTENSION = "csv";
+
+    /** The column of each student's remark, added after the marks. */
+    public static final String REMARKS_COLUMN = "Remarks";
+
+    // Stands for a column the sheet does not have
+    private static final int NO_COLUMN = -1;
+
 
     // Header of the column that holds each student's username
     private static final String USERNAME_COLUMN = "Username";
@@ -84,6 +95,9 @@ public class CsvScoreSheetExporter implements Exporter {
     // A sheet that is not valid UTF-8 was saved by Excel on Windows
     private static final String WINDOWS_CHARSET = "windows-1252";
 
+    // The mark some editors put at the very start of a UTF-8 file
+    private static final String BYTE_ORDER_MARK = "\uFEFF";
+
     // Places in the int[] that findField returns
     private static final int FIELD_START = 0;
     private static final int FIELD_END = 1;
@@ -91,12 +105,18 @@ public class CsvScoreSheetExporter implements Exporter {
     // Written when a student has no graded submission
     private static final String NO_SCORE = "";
 
+    // Separates the fields that are added to a record
+    private static final String FIELD_SEPARATOR = ",";
+
     // The application settings
     private final AppConfig config;
 
     // The score sheet from the settings, used only for a run that does
     // not record the sheet it was graded against
     private final Path templateScoreSheet;
+
+    // Gives each student's remark, or null for a blank Remarks column
+    private ScoreSheetRemarks remarks;
 
     /**
      * Creates a new csv score sheet exporter.
@@ -106,8 +126,20 @@ public class CsvScoreSheetExporter implements Exporter {
      *        a run that does not record the sheet it was graded against
      */
     public CsvScoreSheetExporter(AppConfig config, Path templateScoreSheet) {
+        this.remarks = null;
         this.config = config;
         this.templateScoreSheet = templateScoreSheet;
+    }
+
+    /**
+     * Sets what gives each student's remark, such as "Cheated with
+     * KEVIN LIM (kevin.lim.2025)". With none set, the Remarks column is
+     * left blank.
+     *
+     * @param remarks the remarks, or null for none
+     */
+    public void setRemarks(ScoreSheetRemarks remarks) {
+        this.remarks = remarks;
     }
 
     /**
@@ -135,9 +167,15 @@ public class CsvScoreSheetExporter implements Exporter {
      *
      * <p>Every row and value of the template is kept as it is, quotes
      * included, apart from the numerator, which receives the student's
-     * total. A student without a graded submission is left blank so the
-     * instructor notices, even if the template held a mark. The file is
-     * written in the encoding the template was saved in.
+     * total. Each question of the run's assessment gets a column, such
+     * as "Lab Test 2 Q1a Points Grade", in assessment order, just before
+     * the End-of-Line Indicator; a column the template already has is
+     * filled in place. A Remarks column follows them, with each student's
+     * remark from setRemarks, such as "Possible cheating with KEVIN LIM
+     * (kevin.lim.2025)"; a sheet that has one already is filled in place.
+     * A student without a graded submission is left
+     * blank so the instructor notices, even if the template held a mark.
+     * The file is written in the encoding the template was saved in.
      *
      * @param gradingRun the grading run
      * @param outputFile the output file
@@ -155,26 +193,40 @@ public class CsvScoreSheetExporter implements Exporter {
         byte[] templateBytes = readTemplateBytes(template);
         Charset charset = chooseCharset(templateBytes);
         String templateText = new String(templateBytes, charset);
+        // Set a byte order mark aside, as RosterReader does, so the first
+        // column is still found by name; it is written back below
+        String byteOrderMark = "";
+        if (templateText.startsWith(BYTE_ORDER_MARK)) {
+            byteOrderMark = BYTE_ORDER_MARK;
+            templateText = templateText.substring(BYTE_ORDER_MARK.length());
+        }
         List<String> records = splitRecords(templateText);
         if (records.isEmpty()) {
             throw new ExportException("The score sheet template "
                     + template + " is empty.");
         }
 
-        // Find the two columns by name so a reordered sheet still works
+        // Find the columns by name so a reordered sheet still works
         List<String> header = splitLine(records.get(0), HEADER_RECORD_NUMBER);
         int usernameIndex = findColumn(header, USERNAME_COLUMN);
         int numeratorIndex = findColumn(header, NUMERATOR_COLUMN);
+        ScoreSheetColumns columns = new ScoreSheetColumns(header,
+                usernameIndex, numeratorIndex, gradingRun.getAssessment());
 
         Map<String, Submission> submissionsByUsername =
                 indexByUsername(gradingRun.getSubmissions());
         String lineEnding = getLineEnding();
-        List<String> outputRecords = fillRecords(records, usernameIndex,
-                numeratorIndex, submissionsByUsername);
+        Map<String, String> remarkMap = new HashMap<>();
+        if (remarks != null) {
+            remarkMap = remarks.remarksFor(gradingRun);
+        }
+        int remarksIndex = header.indexOf(REMARKS_COLUMN);
+        List<String> outputRecords = fillRecords(records, columns,
+                submissionsByUsername, remarkMap, remarksIndex);
 
         // Every record, the header included, ends with the line ending
-        String output = TextUtils.join(lineEnding, outputRecords)
-                + lineEnding;
+        String output = byteOrderMark
+                + TextUtils.join(lineEnding, outputRecords) + lineEnding;
 
         try {
             Files.write(outputFile, output.getBytes(charset));
@@ -185,19 +237,27 @@ public class CsvScoreSheetExporter implements Exporter {
         }
     }
 
-    // The header as it was, then every other record with its numerator
-    // filled in, in the template's order
-    private List<String> fillRecords(List<String> records, int usernameIndex,
-            int numeratorIndex, Map<String, Submission> submissionsByUsername)
+    // The header with the question columns added, then every other
+    // record with its marks filled in, in the template's order
+    private List<String> fillRecords(List<String> records,
+            ScoreSheetColumns columns,
+            Map<String, Submission> submissionsByUsername,
+            Map<String, String> remarkMap, int remarksIndex)
             throws ExportException {
         List<String> outputRecords = new ArrayList<>();
-        outputRecords.add(records.get(0));
+        List<String> addedNames = new ArrayList<>(columns.listAddedNames());
+        if (remarksIndex == NO_COLUMN) {
+            addedNames.add(REMARKS_COLUMN);
+        }
+        String header = insertFields(records.get(0),
+                columns.getInsertIndex(), addedNames);
+        outputRecords.add(header);
 
         for (int index = 1; index < records.size(); index++) {
             String record = records.get(index);
             int recordNumber = index + 1;
-            String filledRecord = fillRow(record, recordNumber,
-                    usernameIndex, numeratorIndex, submissionsByUsername);
+            String filledRecord = fillRow(record, recordNumber, columns,
+                    submissionsByUsername, remarkMap, remarksIndex);
             outputRecords.add(filledRecord);
         }
         return outputRecords;
@@ -233,8 +293,8 @@ public class CsvScoreSheetExporter implements Exporter {
     }
 
     // UTF-8 when the bytes are valid UTF-8, otherwise Windows-1252, the
-    // encoding Excel uses on Windows. A UTF-8 byte order mark is kept as
-    // part of the first header, so it is written back too.
+    // encoding Excel uses on Windows. A UTF-8 byte order mark is set
+    // aside by export and written back at the start of the file.
     private Charset chooseCharset(byte[] bytes) {
         CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
         decoder.onMalformedInput(CodingErrorAction.REPORT);
@@ -322,21 +382,24 @@ public class CsvScoreSheetExporter implements Exporter {
         return submissionsByUsername;
     }
 
-    // Returns the record with the numerator filled in. Only the text of
-    // the numerator field changes; every other character, quotes
+    // Returns the record with the total and the question marks filled
+    // in. Only the text of those fields changes, and the added fields go
+    // before the End-of-Line Indicator; every other character, quotes
     // included, is copied as it is. The username is matched without the
-    // spaces around it. A blank record, or one too short to hold both
-    // columns, is kept exactly as it was.
+    // spaces around it. A blank record, or one too short to hold the
+    // username and the total, is kept exactly as it was.
     private String fillRow(String record, int recordNumber,
-            int usernameIndex, int numeratorIndex,
-            Map<String, Submission> submissionsByUsername)
+            ScoreSheetColumns columns,
+            Map<String, Submission> submissionsByUsername,
+            Map<String, String> remarkMap, int remarksIndex)
             throws ExportException {
         if (TextUtils.isBlank(record)) {
             return record;
         }
 
-        int[] usernameField = findField(record, usernameIndex);
-        int[] numeratorField = findField(record, numeratorIndex);
+        int[] usernameField = findField(record, columns.getUsernameIndex());
+        int[] numeratorField = findField(record,
+                columns.getNumeratorIndex());
         if (usernameField == null || numeratorField == null) {
             return record;
         }
@@ -350,9 +413,82 @@ public class CsvScoreSheetExporter implements Exporter {
         String key = username.toLowerCase(Locale.ROOT);
         Submission submission = submissionsByUsername.get(key);
 
-        return record.substring(0, numeratorField[FIELD_START])
-                + formatScore(submission)
-                + record.substring(numeratorField[FIELD_END]);
+        String filled = replaceField(record, columns.getNumeratorIndex(),
+                formatScore(submission));
+        List<String> addedMarks = new ArrayList<>();
+        List<Question> questions = columns.getQuestions();
+        for (int position = 0; position < questions.size(); position++) {
+            String mark = formatQuestionScore(submission,
+                    questions.get(position));
+            if (columns.isInSheet(position)) {
+                filled = replaceField(filled,
+                        columns.getQuestionIndex(position), mark);
+            } else {
+                addedMarks.add(mark);
+            }
+        }
+        // An added field is quoted when it is joined in; a field in place
+        // is written whole, so it is quoted here
+        String remark = remarkMap.getOrDefault(key, "");
+        if (remarksIndex == NO_COLUMN) {
+            addedMarks.add(remark);
+        } else {
+            List<String> field = new ArrayList<>();
+            field.add(remark);
+            filled = replaceField(filled, remarksIndex,
+                    TextUtils.joinCsvLine(field));
+        }
+        return insertFields(filled, columns.getInsertIndex(), addedMarks);
+    }
+
+    // Returns the record with the text of one field replaced, or the
+    // record as it was when it is too short to have that field
+    private String replaceField(String record, int fieldIndex, String value) {
+        int[] field = findField(record, fieldIndex);
+        if (field == null) {
+            return record;
+        }
+        return record.substring(0, field[FIELD_START]) + value
+                + record.substring(field[FIELD_END]);
+    }
+
+    // Returns the record with new fields put in at a place, before the
+    // field that was there. A record with fewer fields gets empty fields
+    // first, so the new ones still line up with the header.
+    private String insertFields(String record, int fieldIndex,
+            List<String> values) {
+        if (values.isEmpty()) {
+            return record;
+        }
+        String joined = TextUtils.joinCsvLine(values);
+        int[] field = findField(record, fieldIndex);
+        if (field != null) {
+            return record.substring(0, field[FIELD_START]) + joined
+                    + FIELD_SEPARATOR + record.substring(field[FIELD_START]);
+        }
+
+        String padded = record;
+        int fieldCount = countFields(record);
+        for (int count = fieldCount; count < fieldIndex; count++) {
+            padded += FIELD_SEPARATOR;
+        }
+        return padded + FIELD_SEPARATOR + joined;
+    }
+
+    // Counts the fields of a record; a comma inside quotes is part of a
+    // value
+    private int countFields(String record) {
+        int fieldCount = 1;
+        boolean quoted = false;
+        for (int index = 0; index < record.length(); index++) {
+            char current = record.charAt(index);
+            if (current == QUOTE) {
+                quoted = !quoted;
+            } else if (!quoted && current == COMMA) {
+                fieldCount++;
+            }
+        }
+        return fieldCount;
     }
 
     // Finds where field number fieldIndex starts and ends in a record, as
@@ -413,6 +549,24 @@ public class CsvScoreSheetExporter implements Exporter {
         }
 
         return ScoreFormatter.format(submission.getTotalScore());
+    }
+
+    // Writes a question's mark, as formatScore writes the total: blank
+    // for a student who was not graded, and blank for a question the
+    // student has no result for
+    private String formatQuestionScore(Submission submission,
+            Question question) {
+        boolean notGraded = submission == null
+                || submission.getStatus() != SubmissionStatus.GRADED;
+        if (notGraded) {
+            return NO_SCORE;
+        }
+
+        QuestionResult result = submission.findResult(question.getId());
+        if (result == null) {
+            return NO_SCORE;
+        }
+        return ScoreFormatter.format(result.getScore());
     }
 
     // Reads the line ending setting: CRLF as provided, or LF

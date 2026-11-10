@@ -376,17 +376,19 @@ public class ConsoleMain {
                 + " submission(s) processed.");
     }
 
-    // Prints the similar pairs that grading flagged, when the similar
-    // code check is switched on. The flags are added once the whole batch
-    // is graded, so they are not in the lines printed per student.
+    // Prints the similar pairs that grading flagged. With the similar
+    // code check off, only identical copies can be flagged, and the
+    // pairs are printed only when there are some. The flags are added
+    // once the whole batch is graded, so they are not in the lines
+    // printed per student.
     private static void printSimilarPairs(AppConfig config,
             ApplicationContext context, GradingRun gradingRun) {
-        if (!config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED)) {
-            return;
-        }
-
+        boolean checkOn = config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED);
         List<SimilarityPair> pairs = context.getServices()
                 .getPlagiarismService().listPairs(gradingRun);
+        if (pairs.isEmpty() && !checkOn) {
+            return;
+        }
         if (pairs.isEmpty()) {
             System.out.println("Similar code: no pair found.");
             return;

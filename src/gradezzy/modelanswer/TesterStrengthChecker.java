@@ -60,6 +60,14 @@ public class TesterStrengthChecker {
     // Splits compiler output into lines
     private static final String LINE_BREAK = "\\R";
 
+    // Joins javac's error and normal output
+    private static final String LINE_END = "\n";
+
+    // Starts the line javac prints with a name it could not find, and
+    // splits that line into words
+    private static final String SYMBOL_PREFIX = "symbol:";
+    private static final String SPACES = "\\s+";
+
     // The place of the first line of compiler output
     private static final int FIRST_LINE = 0;
 
@@ -220,6 +228,7 @@ public class TesterStrengthChecker {
         if (compiled.getExitCode() != COMPILED) {
             result.setProblem("The model answer does not compile with its "
                     + "tester: " + firstLine(compiled) + ".");
+            result.markModelNotCompiling(findMissingNames(compiled));
             return false;
         }
 
@@ -352,6 +361,32 @@ public class TesterStrengthChecker {
         } else {
             mutant.setOutcome(MutantOutcome.CAUGHT);
         }
+    }
+
+    /**
+     * Lists the names javac could not find, from its "symbol:" lines,
+     * such as InvalidOrderException for "symbol:   class
+     * InvalidOrderException", each once.
+     *
+     * @param compiled what javac printed
+     * @return the names, possibly none
+     */
+    public static List<String> findMissingNames(ProcessResult compiled) {
+        String output = compiled.getStandardError() + LINE_END
+                + compiled.getStandardOutput();
+        List<String> names = new ArrayList<>();
+        for (String line : output.split(LINE_BREAK)) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith(SYMBOL_PREFIX)) {
+                String[] words = trimmed.split(SPACES);
+                String name = words[words.length - 1];
+                boolean named = words.length > 1 && !names.contains(name);
+                if (named) {
+                    names.add(name);
+                }
+            }
+        }
+        return names;
     }
 
     // Returns the first line the compiler printed, for a problem.

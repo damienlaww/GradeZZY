@@ -41,15 +41,14 @@ final class FlagQuestionMatcher {
         int foundLength = 0;
         for (QuestionResult result : submission.getQuestionResults()) {
             Question question = result.getQuestion();
-            if (question == null) {
-                continue;
-            }
-            String[] names = {question.getId(), question.getFileName(),
-                question.getFolderName()};
-            for (String name : names) {
-                if (namesLonger(text, name, foundLength)) {
-                    found = question.getId();
-                    foundLength = name.length();
+            if (question != null) {
+                String[] names = {question.getId(), question.getFileName(),
+                    question.getFolderName()};
+                for (String name : names) {
+                    if (namesLonger(text, name, foundLength)) {
+                        found = question.getId();
+                        foundLength = name.length();
+                    }
                 }
             }
         }
@@ -97,13 +96,9 @@ final class FlagQuestionMatcher {
             Submission submission, Question question) {
         for (QuestionResult result : submission.getQuestionResults()) {
             Question other = result.getQuestion();
-            if (other == null) {
-                continue;
-            }
-            if (other.getId().equals(question.getId())) {
-                continue;
-            }
-            if (namesQuestion(text, other)) {
+            boolean another = other != null
+                    && !other.getId().equals(question.getId());
+            if (another && namesQuestion(text, other)) {
                 return true;
             }
         }

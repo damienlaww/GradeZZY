@@ -48,9 +48,9 @@ import gradezzy.model.Anomaly;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
+import gradezzy.model.SavedAssessment;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
-import gradezzy.model.SubmissionStatus;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
@@ -203,6 +203,10 @@ public class RunsScreen extends FlowScreen {
     // The Backups view
     private final VBox backups = new VBox(Parts.CARD_GAP);
 
+    // The kept backups and the runs inside each, in the Backups view
+    private final KeptBackupsView keptBackups =
+            new KeptBackupsView(file -> askRestore(file));
+
     // The Activity view
     private final VBox activity = new VBox(Parts.CARD_GAP);
 
@@ -333,8 +337,9 @@ public class RunsScreen extends FlowScreen {
             createRunsFilter(), Parts.grow(), runsCount});
         runsView.getChildren().addAll(tools, runsTable, restoreNote(
                 "Current marks the run each section shows on Home, Review "
-                + "and Statistics. Restore makes an earlier run current; "
-                + "the other is kept here, so you can switch back."));
+                + "and Statistics for the assessment in use. Restore makes "
+                + "an earlier run current; the other is kept here, so you "
+                + "can switch back."));
     }
 
     // Builds the All runs | Latest runs switch. All runs is on at first.
@@ -441,6 +446,7 @@ public class RunsScreen extends FlowScreen {
         }
 
         Map<String, GradingRun> shown = new HashMap<>();
+        Map<String, Map<String, GradingRun>> onHome = new HashMap<>();
         Set<String> newerSeen = new HashSet<>();
         String text = runsSearch.getText().trim().toLowerCase();
         int listed = 0;
@@ -451,7 +457,8 @@ public class RunsScreen extends FlowScreen {
             newerSeen.add(key);
             boolean hidden = hasNewer && latestRunsButton.isSelected();
             if (!hidden && runMatches(record.getRun(), text)) {
-                addRunRow(record, isShown(record, shown), hasNewer);
+                addRunRow(record, isOnHome(record, records, onHome),
+                        isShown(record, shown), hasNewer);
                 listed++;
             }
         }
@@ -489,9 +496,11 @@ public class RunsScreen extends FlowScreen {
                 () -> getWindow().showPage(Page.MARKING)));
     }
 
-    // Adds one run to the table.
-    private void addRunRow(RunRecord record, boolean shown,
-            boolean hasNewer) {
+    // Adds one run to the table. A current run is the one Home, Review
+    // and Statistics show; a shown run is the backend's run of its
+    // section, which Restore replaces.
+    private void addRunRow(RunRecord record, boolean current,
+            boolean shown, boolean hasNewer) {
         GradingRun run = record.getRun();
         Section section = run.getSection();
         String module = NO_VALUE;
@@ -500,8 +509,6 @@ public class RunsScreen extends FlowScreen {
             module = section.getModuleCode();
             sectionCode = section.getSectionCode();
         }
-        Label students = new Label(String.valueOf(
-                run.getSubmissions().size()));
         String assessmentName = NO_VALUE;
         if (run.getAssessment() != null) {
             assessmentName = run.getAssessment().getName();
@@ -514,13 +521,13 @@ public class RunsScreen extends FlowScreen {
         name.setMinWidth(Label.USE_PREF_SIZE);
         HBox title = Parts.row(Parts.GAP_SMALL, new Node[] {name,
             assessment});
-        if (shown) {
-            Label current = new Label("Current");
-            current.getStyleClass().addAll("small-text", "current-badge");
-            current.setMinWidth(Label.USE_PREF_SIZE);
-            Parts.tip(current, "The run Home, Review and Statistics show "
+        if (current) {
+            Label badge = new Label("Current");
+            badge.getStyleClass().addAll("small-text", "current-badge");
+            badge.setMinWidth(Label.USE_PREF_SIZE);
+            Parts.tip(badge, "The run Home, Review and Statistics show "
                     + "for this section.");
-            title.getChildren().add(current);
+            title.getChildren().add(badge);
         }
         Label when = Parts.muted("Graded " + when(run));
         when.getStyleClass().add("small-text");
@@ -538,6 +545,8 @@ public class RunsScreen extends FlowScreen {
         runCell.setOnMouseClicked(event -> showSettings(run));
         Tooltip.install(runCell, new Tooltip("Click to see the files and "
                 + "settings this run was graded with."));
+        Label students = new Label(String.valueOf(
+                run.getSubmissions().size()));
         runsTable.addRow(new Node[] {runCell, students, average(run),
             status(run, hasNewer), actions(record, shown)});
     }
@@ -638,6 +647,48 @@ public class RunsScreen extends FlowScreen {
     // Shows the files and grading settings a run was graded with.
     private void showSettings(GradingRun run) {
         getWindow().showSheet(RunSettingsSheet.create(getWindow(), run));
+    }
+
+    // Says whether a run is the one Home, Review and Statistics show for
+    // its section: by the same rule as Home's section cards, for the
+    // assessment the module uses and the run open on Review. The runs
+    // are looked up once per module and kept in a map.
+    private boolean isOnHome(RunRecord record, List<RunRecord> records,
+            Map<String, Map<String, GradingRun>> onHome) {
+        GradingRun run = record.getRun();
+        if (run.getSection() == null || run.getId() == null) {
+            return false;
+        }
+        String module = run.getSection().getModuleCode();
+        if (!onHome.containsKey(module)) {
+            onHome.put(module, SectionProgress.findShownRuns(records,
+                    module, assessmentOf(module), getState().getRun()));
+        }
+        GradingRun current = onHome.get(module).get(
+                run.getSection().getSectionCode());
+        return current != null && run.getId().equals(current.getId());
+    }
+
+    // Returns the assessment Home shows for a module: the one in use when
+    // it is the module's own, else the module's first, as Home switches
+    // to when the module is chosen.
+    private String assessmentOf(String module) {
+        String inUse = "";
+        if (getBackend().getAssessment() != null) {
+            inUse = getBackend().getAssessment().getName();
+        }
+        List<SavedAssessment> own = getWindow().listModuleAssessments(
+                module);
+        boolean ownInUse = false;
+        for (SavedAssessment saved : own) {
+            if (saved.getName().equalsIgnoreCase(inUse)) {
+                ownInUse = true;
+            }
+        }
+        if (ownInUse || own.isEmpty()) {
+            return inUse;
+        }
+        return own.get(0).getName();
     }
 
     // Says whether a run is the one shown for its section now. The shown
@@ -746,18 +797,10 @@ public class RunsScreen extends FlowScreen {
         return true;
     }
 
-    // Counts the students of a run still waiting to be graded.
+    // Counts the students of a run still waiting to be graded, as Home
+    // and Set up count them.
     private int countWaiting(GradingRun run) {
-        int waiting = 0;
-        for (Submission submission : run.getSubmissions()) {
-            boolean notGraded =
-                    submission.getStatus() == SubmissionStatus.CANCELLED
-                    || submission.getStatus() == SubmissionStatus.PENDING;
-            if (notGraded) {
-                waiting++;
-            }
-        }
-        return waiting;
+        return SectionProgress.countWaiting(run);
     }
 
     // Returns the section of a run, such as "CS102 G1".
@@ -807,6 +850,12 @@ public class RunsScreen extends FlowScreen {
         if (canRestoreFile) {
             backups.getChildren().add(restoreFileCard());
         }
+        if (canBackUp) {
+            backups.getChildren().add(keptBackups.build(
+                    getBackend().listBackups(),
+                    getBackend().getBackupKeepCount(),
+                    !getState().isAnyGrading()));
+        }
         if (canPreview) {
             backups.getChildren().addAll(Parts.title("Saved copies"),
                     snapshotTable(), restoreNote("Restore on a saved copy "
@@ -819,10 +868,11 @@ public class RunsScreen extends FlowScreen {
 
     // Builds the card with Back up now.
     private VBox backupCard() {
-        String folder = getBackend().getSetting(ConfigKeys.BACKUP_DIR);
-        String keep = getBackend().getSetting(ConfigKeys.BACKUP_KEEP_COUNT);
         String where = "A backup is a copy of every saved run.";
         if (!getBackend().isDemo()) {
+            String folder = getBackend().getSetting(ConfigKeys.BACKUP_DIR);
+            String keep = getBackend().getSetting(
+                    ConfigKeys.BACKUP_KEEP_COUNT);
             where = where + " Backups are saved in " + folder + ", and the "
                     + "newest " + keep + " are kept.";
         }
@@ -949,7 +999,15 @@ public class RunsScreen extends FlowScreen {
         if (file == null) {
             return;
         }
-        Path backupFile = file.toPath();
+        askRestore(file.toPath());
+    }
+
+    // Asks before restoring a backup file, from Choose a backup or from
+    // Restore this backup on a kept backup.
+    private void askRestore(Path backupFile) {
+        if (blockedByGrading()) {
+            return;
+        }
         getWindow().confirm("Restore " + backupFile.getFileName() + "?",
                 "The saved results are replaced by the ones in this file. "
                 + "The results saved now are backed up first, so you can "
@@ -959,21 +1017,14 @@ public class RunsScreen extends FlowScreen {
     }
 
     // Puts back the saved results from a backup file, once the
-    // instructor has confirmed.
+    // instructor has confirmed. The backend backs up the results saved
+    // now first and returns that copy, so Undo can put them back.
     private void restoreFile(Path backupFile) {
         if (blockedByGrading()) {
             return;
         }
-        // A copy of the results saved now, so Undo can put them back
-        Path safety = null;
-        if (getBackend().supports(Capability.BACKUP)) {
-            ActionResult copy = getBackend().backupNow();
-            if (copy.isDone()) {
-                safety = copy.getPath();
-            }
-        }
         ActionResult result = getBackend().restoreBackup(backupFile);
-        Path undoFile = safety;
+        Path undoFile = result.getPath();
         if (result.isDone() && undoFile != null) {
             afterRestore(result, () -> undoFileRestore(undoFile));
         } else {
@@ -1009,7 +1060,6 @@ public class RunsScreen extends FlowScreen {
         }
         activitySearch.setDisable(false);
 
-        String text = activitySearch.getText().trim().toLowerCase();
         List<AuditEntry> entries = getBackend().listAuditEntries();
         if (entries.isEmpty()) {
             activityTable.showMessage(empty("Nothing recorded yet.",
@@ -1023,6 +1073,7 @@ public class RunsScreen extends FlowScreen {
         String kind = String.valueOf(kindGroup.getSelectedToggle()
                 .getUserData());
         activityDays.getChildren().clear();
+        String text = activitySearch.getText().trim().toLowerCase();
         int shown = fillActivityDays(sorted, text, kind);
         activityCount.setText(Parts.plural(shown, "entry", "entries"));
         if (shown == 0) {
@@ -1079,7 +1130,6 @@ public class RunsScreen extends FlowScreen {
     // matched by its words.
     private Runnable findUndo(AuditEntry entry, String student,
             String message) {
-        String reference = entry.getReference();
         if (getState().isAnyGrading()) {
             return null;
         }
@@ -1108,30 +1158,46 @@ public class RunsScreen extends FlowScreen {
         if (ReviewDecision.AUDIT_LOOKS_FINE.equals(action)) {
             logged = ReviewDecision.REJECTED;
         }
+        String reference = entry.getReference();
         for (GradingRun run : runsToSearch()) {
             boolean runNamed = reference.isEmpty()
                     || reference.equals(run.getId());
             for (Submission submission : run.getSubmissions()) {
-                if (!submission.getUsername().equals(student)) {
-                    continue;
-                }
-                boolean zeroCheckLine = decision
-                        && logged == ReviewDecision.REVIEWED
-                        && DashboardBackend.ZERO_CHECK_WORDS.equals(message)
-                        && runNamed
-                        && getBackend().isZeroChecked(submission);
-                if (zeroCheckLine) {
-                    return () -> takeBackZeroCheck(submission);
-                }
-                for (Anomaly anomaly : submission.getAnomalies()) {
-                    if (!isAbout(message, reference, anomaly, !decision)) {
-                        continue;
-                    }
-                    Runnable undo = findAnomalyUndo(run, anomaly, action,
-                            logged);
+                if (submission.getUsername().equals(student)) {
+                    Runnable undo = findStudentUndo(run, runNamed,
+                            submission, entry, message, logged);
                     if (undo != null) {
                         return undo;
                     }
+                }
+            }
+        }
+        return null;
+    }
+
+    // Returns what takes back a log line's action on one student's
+    // result in a run: a checked 0, or one of the student's flags. Returns
+    // null when the line is about nothing that can be taken back.
+    private Runnable findStudentUndo(GradingRun run, boolean runNamed,
+            Submission submission, AuditEntry entry, String message,
+            ReviewDecision logged) {
+        String reference = entry.getReference();
+        String action = entry.getAction();
+        boolean decision = isDecisionAction(action);
+        boolean zeroCheckLine = decision
+                && logged == ReviewDecision.REVIEWED
+                && DashboardBackend.ZERO_CHECK_WORDS.equals(message)
+                && runNamed
+                && getBackend().isZeroChecked(submission);
+        if (zeroCheckLine) {
+            return () -> takeBackZeroCheck(submission);
+        }
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            if (isAbout(message, reference, anomaly, !decision)) {
+                Runnable undo = findAnomalyUndo(run, anomaly, action,
+                        logged);
+                if (undo != null) {
+                    return undo;
                 }
             }
         }
@@ -1171,6 +1237,7 @@ public class RunsScreen extends FlowScreen {
     // Says whether a log line's action is a decision on a flag.
     private static boolean isDecisionAction(String action) {
         return ReviewDecision.AUDIT_CHECKED.equals(action)
+                || ReviewDecision.AUDIT_KEPT_FLAGGED.equals(action)
                 || ReviewDecision.AUDIT_LOOKS_FINE.equals(action);
     }
 

@@ -86,11 +86,15 @@
 }
 
 .page-tab .icon {
-    -fx-stroke: -color-fg-muted;
+    -fx-icon-color: -color-fg-muted;
 }
 
 .page-tab.selected .icon {
-    -fx-stroke: -color-fg-default;
+    -fx-icon-color: -color-fg-default;
+}
+
+.page-tab .setting-dot {
+    -fx-fill: -color-accent-emphasis;
 }
 
 .step-row {
@@ -187,8 +191,16 @@
 }
 
 .step-dot.done .icon {
-    -fx-stroke: -color-success-fg;
-    -fx-stroke-width: 2.6;
+    -fx-icon-color: -color-success-fg;
+}
+
+/* The step on screen when it is done: blue, with a white tick */
+.step-dot.current.done {
+    -fx-background-color: -color-accent-emphasis;
+}
+
+.step-dot.current.done .icon {
+    -fx-icon-color: -color-fg-emphasis;
 }
 
 .step-dot.later {
@@ -304,16 +316,11 @@
 }
 
 .icon {
-    -fx-fill: transparent;
-    -fx-stroke: -color-fg-muted;
-    -fx-stroke-width: 1.8;
-    -fx-stroke-line-cap: round;
-    -fx-stroke-line-join: round;
+    -fx-icon-color: -color-fg-muted;
 }
 
 .good-icon .icon {
-    -fx-stroke: -color-success-fg;
-    -fx-stroke-width: 2.4;
+    -fx-icon-color: -color-success-fg;
 }
 
 /* ------------------------------------------------------------- buttons */
@@ -324,6 +331,11 @@
     -fx-padding: 9px 22px;
     -fx-font-size: 14px;
     -fx-font-weight: bold;
+}
+
+/* An icon on a blue pill button matches its white text */
+.button.primary-pill .icon {
+    -fx-icon-color: -color-fg-emphasis;
 }
 
 .button.small {
@@ -583,8 +595,7 @@
 }
 
 .drop-icon .icon {
-    -fx-stroke: -color-fg-muted;
-    -fx-stroke-width: 2;
+    -fx-icon-color: -color-fg-muted;
 }
 
 /* Set up: the grading settings facts, four cells in one outlined box */
@@ -633,8 +644,7 @@
 }
 
 .arrow-link .icon {
-    -fx-stroke: -color-accent-fg;
-    -fx-stroke-width: 2.2;
+    -fx-icon-color: -color-accent-fg;
 }
 
 /* Export: a disabled choice keeps readable text and says why */
@@ -765,7 +775,7 @@
 }
 
 .review-search .icon {
-    -fx-stroke: -color-fg-subtle;
+    -fx-icon-color: -color-fg-subtle;
 }
 
 .banner {
@@ -1093,8 +1103,7 @@
 }
 
 .code-panel .run-button .icon {
-    -fx-fill: -color-fg-default;
-    -fx-stroke-width: 0;
+    -fx-icon-color: -color-fg-default;
 }
 
 /* The Similar code sheet: both students' files in one box, each in its
@@ -1602,8 +1611,7 @@
 }
 
 .chip-tick .icon {
-    -fx-stroke: -color-fg-emphasis;
-    -fx-stroke-width: 3;
+    -fx-icon-color: -color-fg-emphasis;
 }
 
 .series-dot,
@@ -1801,22 +1809,21 @@
 }
 
 .results-table .open-cell .icon {
-    -fx-stroke: -color-fg-subtle;
-    -fx-stroke-width: 2;
+    -fx-icon-color: -color-fg-subtle;
 }
 
 .results-table .table-row-cell:filled:hover .open-cell .icon,
 .results-table .table-row-cell:selected .open-cell .icon {
-    -fx-stroke: -color-accent-fg;
+    -fx-icon-color: -color-accent-fg;
 }
 
 .results-table .table-row-cell:filled:hover .open-cell .icon {
-    -fx-stroke: -color-accent-fg;
+    -fx-icon-color: -color-accent-fg;
 }
 
 /* Under the tools: how to open a student and what ticking does. */
 .review-guide .icon {
-    -fx-stroke: -color-fg-subtle;
+    -fx-icon-color: -color-fg-subtle;
 }
 
 /* Once students are ticked, the line becomes a calm blue band. */
@@ -2163,7 +2170,7 @@
 }
 
 .card-open .icon {
-    -fx-stroke: -color-accent-fg;
+    -fx-icon-color: -color-accent-fg;
 }
 
 /* A graded card can be clicked anywhere; it lifts under the pointer */
@@ -2231,7 +2238,7 @@
 }
 
 .section-card .card-drop-hint .icon {
-    -fx-stroke: -color-fg-subtle;
+    -fx-icon-color: -color-fg-subtle;
 }
 
 /* ---- section cards: labelled figures, a footer, a quiet menu ---- */
@@ -2297,7 +2304,7 @@
 }
 
 .card-meta .icon {
-    -fx-stroke: -color-fg-subtle;
+    -fx-icon-color: -color-fg-subtle;
 }
 
 /* The next step, first in the card's menu */
@@ -2347,8 +2354,7 @@
 }
 
 .button.section-chip-delete .icon {
-    -fx-stroke: -color-fg-muted;
-    -fx-stroke-width: 2;
+    -fx-icon-color: -color-fg-muted;
 }
 
 .button.section-chip-delete:hover {
@@ -2356,7 +2362,7 @@
 }
 
 .button.section-chip-delete:hover .icon {
-    -fx-stroke: -color-danger-fg;
+    -fx-icon-color: -color-danger-fg;
 }
 
 /* Delete module: a red outline, so it reads as a destructive action */
@@ -2371,7 +2377,7 @@
 }
 
 .menu-item.danger-item .icon {
-    -fx-stroke: -color-danger-fg;
+    -fx-icon-color: -color-danger-fg;
 }
 
 /* ---- confirm sheets: two buttons of one shape; the one that goes
@@ -2503,11 +2509,6 @@
     -fx-border-radius: 12px;
 }
 
-.errors-card.similar-clusters {
-    -fx-padding: 16px 18px;
-    -fx-border-color: -color-warning-muted;
-}
-
 /* One error: a line above every row but the first */
 .error-row {
     -fx-border-color: -color-border-muted transparent transparent
@@ -2552,15 +2553,121 @@
     -fx-border-style: dashed solid solid solid;
 }
 
-/* A cluster of similar code: its students as tick boxes */
-.cluster-block {
-    -fx-padding: 10px 0 2px 0;
-    -fx-border-color: -color-border-muted transparent transparent
-        transparent;
+/* Similarity groups: one card a group, a row that opens like the
+   errors under it. An open group has a blue edge, an overview at its
+   left and two students' code side by side at its right. */
+.similarity-groups {
+    -fx-padding: 0 0 8px 0;
 }
 
-.cluster-student {
-    -fx-padding: 2px 0;
+.similarity-group {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 12px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 12px;
+}
+
+.similarity-group.open {
+    -fx-border-color: -color-accent-emphasis;
+    -fx-border-width: 1.5px;
+}
+
+.similarity-group-header {
+    -fx-padding: 12px 16px;
+    -fx-cursor: hand;
+    -fx-background-radius: 12px;
+}
+
+.similarity-group-header:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.similarity-group.open > .similarity-group-header:hover {
+    -fx-background-color: transparent;
+}
+
+.similarity-group-header:focused {
+    -fx-border-color: -color-accent-emphasis;
+    -fx-border-radius: 8px;
+}
+
+.group-title {
+    -fx-font-size: 15px;
+}
+
+.fact-icon .icon {
+    -fx-icon-color: -color-fg-muted;
+}
+
+.fact-divider {
+    -fx-background-color: -color-border-muted;
+    -fx-min-height: 24px;
+}
+
+.pill.matches-chip {
+    -fx-background-color: -color-accent-subtle;
+    -fx-text-fill: -color-accent-fg;
+    -fx-border-color: -color-accent-muted;
+    -fx-font-weight: normal;
+}
+
+.strength-bar {
+    -fx-background-color: -color-border-default;
+    -fx-background-radius: 1px;
+}
+
+.strength-bar.filled {
+    -fx-background-color: -color-fg-default;
+}
+
+.similarity-group-detail {
+    -fx-padding: 0 16px 16px 16px;
+}
+
+.similarity-overview,
+.similarity-compare {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 10px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 10px;
+    -fx-padding: 14px 16px;
+}
+
+.student-chip {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 999px;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 999px;
+    -fx-padding: 3px 10px 3px 4px;
+    -fx-alignment: center-left;
+}
+
+.initials-badge {
+    -fx-background-color: -color-accent-subtle;
+    -fx-text-fill: -color-accent-fg;
+    -fx-background-radius: 999px;
+    -fx-min-width: 24px;
+    -fx-min-height: 24px;
+    -fx-alignment: center;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+/* In a group the matching lines are blue, as in the group's own colour;
+   the full comparison sheet keeps them red. */
+.similarity-compare .code-line.same {
+    -fx-background-color: -color-accent-subtle;
+}
+
+.similarity-compare .code-line.same .line-number {
+    -fx-background-color: -color-bg-subtle, -color-accent-subtle;
+    -fx-border-color: -color-accent-emphasis;
+}
+
+.similarity-footer {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 8px;
+    -fx-padding: 8px 12px;
 }
 
 /* The Similar code warning beside a student's name */
@@ -2594,4 +2701,185 @@
 
 .student-panel .menu-button.compare-with:hover {
     -fx-background-color: -color-border-default, -color-bg-subtle;
+}
+
+/* The share of a compared pair, under the code of a similarity group */
+.similarity-percent {
+    -fx-text-fill: -color-accent-fg;
+    -fx-font-size: 16px;
+}
+
+/* The icon of a similarity group's status takes its pill's colour */
+.pill.good .pill-icon .icon {
+    -fx-icon-color: -color-success-fg;
+}
+
+.pill.warn .pill-icon .icon {
+    -fx-icon-color: -color-warning-fg;
+}
+
+.pill.bad .pill-icon .icon {
+    -fx-icon-color: -color-danger-fg;
+}
+
+/* The bars of a strength pill take its colour */
+.pill.bad .strength-bar.filled {
+    -fx-background-color: -color-danger-fg;
+}
+
+.pill.warn .strength-bar.filled {
+    -fx-background-color: -color-warning-fg;
+}
+
+/* The Similarity view: a question's header above its groups, with room
+   above it as on the Errors view */
+.similarity-question {
+    -fx-padding: 12px 0 2px 0;
+}
+
+/* An identical copy's pill: its copy icon takes the pill's red */
+.pill.identical-pill {
+    -fx-font-weight: bold;
+}
+
+/* ---------------------------------------------- Settings: assessments */
+
+/* The note shown in place of the assessment form when the module chosen
+   under Course has no assessment yet */
+.settings-assessment-empty {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 10px;
+    -fx-padding: 16px 14px;
+    -fx-alignment: center-left;
+}
+
+/* ---------------------------------------------- Settings: who it is for */
+
+/* The title of a card that changes with the module or the assessment,
+   with the note under it */
+.settings-card-head {
+    -fx-min-height: 22px;
+}
+
+.scope-note {
+    -fx-wrap-text: true;
+}
+
+/* Lights such a card up for a moment when its settings change; it
+   fades out again from code */
+.scope-flash {
+    -fx-background-color: -color-accent-subtle;
+    -fx-background-radius: 12px;
+}
+
+/* The Similarity view's warning about two students alike on several
+   questions: one line per pair, with a hairline between lines */
+.repeat-warning .repeat-icon .icon {
+    -fx-icon-color: -color-warning-fg;
+}
+
+.repeat-line {
+    -fx-padding: 6px 0 0 0;
+    -fx-border-color: -color-warning-muted transparent transparent
+        transparent;
+}
+
+/* ---------------------------------------------------------------------
+   Kept backups (History, Backups): one row a backup file, which opens
+   like an error row to list the saved runs inside it.
+   --------------------------------------------------------------------- */
+.kept-backups {
+    -fx-spacing: 12px;
+}
+
+.backup-icon {
+    -fx-opacity: 0.7;
+}
+
+/* A backup that cannot be read does not open, so it shows no hand */
+.backup-plain {
+    -fx-padding: 12px 16px 4px 16px;
+}
+
+.backup-row.unreadable > .small-text {
+    -fx-padding: 0 16px 12px 42px;
+}
+
+/* The runs of an open backup, indented under its time */
+.backup-runs {
+    -fx-padding: 0 16px 8px 42px;
+}
+
+.backup-run {
+    -fx-padding: 8px 0;
+    -fx-alignment: center-left;
+    -fx-border-color: -color-border-muted transparent transparent
+        transparent;
+    -fx-border-style: dashed solid solid solid;
+}
+
+.backup-more {
+    -fx-padding: 8px 0 0 0;
+}
+
+/* ---------------------------------------------------------------------
+   Grading context: the line under the steps that names the module,
+   section and assessment on screen, the section picker it opens, the
+   Continue card and the assessment warnings on Set up.
+   --------------------------------------------------------------------- */
+.grading-context {
+    -fx-background-color: -color-bg-default;
+    -fx-padding: 0 24px 8px 24px;
+    -fx-spacing: 0;
+    -fx-border-color: transparent transparent -color-border-muted
+        transparent;
+}
+
+/* The steps and the line under them read as one header, so the line
+   carries the rule under both */
+.step-row {
+    -fx-border-color: transparent;
+}
+
+.grading-context-names {
+    -fx-text-fill: -color-fg-default;
+}
+
+.grading-context-status {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.grading-context .hyperlink {
+    -fx-padding: 0;
+}
+
+/* One card of small lines at the top of Set up */
+.continue-card {
+    -fx-padding: 12px 20px;
+    -fx-spacing: 6px;
+}
+
+.continue-line {
+    -fx-padding: 2px 0;
+}
+
+/* A warning inside the Class card of Set up */
+.set-up-warning {
+    -fx-background-color: -color-warning-subtle;
+    -fx-background-radius: 8px;
+    -fx-border-color: -color-warning-muted;
+    -fx-border-radius: 8px;
+    -fx-padding: 8px 12px;
+}
+
+.set-up-warning .icon {
+    -fx-icon-color: -color-warning-fg;
+}
+
+.set-up-warning .hyperlink {
+    -fx-padding: 0;
+}
+
+.section-picker-row {
+    -fx-alignment: center-left;
 }

@@ -57,7 +57,8 @@ public final class GradingSettingsSheet {
                 + "reject it.", SettingKind.SWITCH));
         fields.add(new SettingField(window, ConfigKeys.PLAGIARISM_ENABLED,
                 "Similar code check", "Runs after grading; pairs are "
-                + "flagged.", SettingKind.SWITCH));
+                + "flagged. Identical copies are flagged even when it is "
+                + "off.", SettingKind.SWITCH));
 
         boolean editable = window.getBackend().supports(
                 Capability.SETTINGS);

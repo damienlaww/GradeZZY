@@ -44,6 +44,20 @@ public class WorkingCopyManager {
     // Ending of every compiled Java file
     private static final String CLASS_EXTENSION = ".class";
 
+    // Ending of every Java source file
+    private static final String JAVA_EXTENSION = ".java";
+
+    // Separates a nested class from its outer class in a class file name,
+    // as in Order$1.class
+    private static final String NESTED_SEPARATOR = "$";
+
+    // How many folders deep Java source is looked for, in the working
+    // copy and in the starter folder
+    private static final int MAX_SOURCE_DEPTH = 16;
+
+    // Start of the name of a macOS resource fork file, as in ._Q1a.java
+    private static final String RESOURCE_FORK_PREFIX = "._";
+
     // Start of the folder an inner zip is moved to while it is unpacked
     private static final String INNER_ZIP_PREFIX = ".inner-zip-";
 
@@ -102,11 +116,33 @@ public class WorkingCopyManager {
      */
     public Path createWorkingCopy(
             Submission submission) throws IngestException {
+        return createWorkingCopy(submission, null);
+    }
+
+    /**
+     * Unzips or copies a submission into the folder of its run inside
+     * the working folder, as paths.working.dir/RUN-1794337883768/alice,
+     * attaches its path and returns it. Each run keeps its own copies, so
+     * grading the same student in another section or assessment never
+     * replaces the files an earlier run reviews. Without a run id the
+     * copy goes straight into the working folder, as before.
+     *
+     * <p>Tier: MUST.
+     *
+     * @param submission the submission
+     * @param runId the id of the run, or null for no run folder
+     * @return the path of the new working copy
+     * @throws InvalidArchiveException if the zip is damaged, unsafe, too
+     *         big or holds two files with one name
+     * @throws IngestException if the operation fails for another reason
+     */
+    public Path createWorkingCopy(Submission submission,
+            String runId) throws IngestException {
         Path staging = null;
         List<String> skippedNames = new ArrayList<>();
         List<String> renamedNames = new ArrayList<>();
         try {
-            Path target = workingPath(submission);
+            Path target = workingPath(submission, runId);
             Path original = submission.getOriginalPath().toRealPath();
             if (original.startsWith(target) || target.startsWith(original)) {
                 throw new IOException("Original and working copy overlap.");
@@ -158,7 +194,12 @@ public class WorkingCopyManager {
 
     /**
      * Deletes compiled files the student submitted, keeping the provided
-     * ones listed in assessment.provided.class.files. Each provided one
+     * ones listed in assessment.provided.class.files. A class file whose
+     * class has no Java source in the working copy or the starter folder,
+     * such as an Order.class the assessment forgot to list, is kept too:
+     * it cannot be built again, so deleting it could only stop the
+     * question compiling. A question's main class and a class named like
+     * a tester are always deleted. Each provided one
      * the starter folder holds, such as Q2/DataException.class, is then
      * copied into every matching question folder of the working copy,
      * replacing the student's copy, so a missing or edited file cannot
@@ -180,9 +221,11 @@ public class WorkingCopyManager {
             requireWorkingChild(workingCopy);
             List<String> provided = config.getList(
                     ConfigKeys.PROVIDED_CLASS_FILES);
-            removeClassFiles(workingCopy, provided);
-
             Path starter = chooseStarter(starterDirectory);
+            List<String> sourceNames = listSourceNames(workingCopy, starter,
+                    assessment);
+            removeClassFiles(workingCopy, provided, sourceNames);
+
             if (assessment != null) {
                 copyFromStarter(workingCopy, starter, assessment, provided);
             }
@@ -386,42 +429,143 @@ public class WorkingCopyManager {
         }
     }
 
-    // A username is one directory name, never an arbitrary path.
-    private Path workingPath(Submission submission) throws IOException {
+    // A username and a run id are each one directory name, never an
+    // arbitrary path.
+    private Path workingPath(Submission submission, String runId)
+            throws IOException {
         String username = submission.getUsername();
-        boolean notOneName = TextUtils.isBlank(username)
-                || username.equals(CURRENT_FOLDER)
-                || username.equals(PARENT_FOLDER)
-                || username.contains(SLASH)
-                || username.contains(BACKSLASH)
-                || username.contains(COLON);
-        if (notOneName) {
+        if (!isOneName(username)) {
             throw new IOException("Invalid submission username.");
         }
         Path root = Path.of(config.getString(ConfigKeys.WORKING_DIR))
                 .toAbsolutePath().normalize();
-        Path target = root.resolve(username).normalize();
+        Path folder = root;
+        if (runId != null) {
+            if (!isOneName(runId)) {
+                throw new IOException("Invalid run id.");
+            }
+            folder = root.resolve(runId);
+        }
+        Path target = folder.resolve(username).normalize();
         requireWorkingChild(target);
         return target;
     }
 
-    // Restrict destructive operations to one direct child of the root.
+    // Says whether a name is one folder name: not blank, not a link to
+    // the current or parent folder and without path separators.
+    private boolean isOneName(String name) {
+        boolean notOneName = TextUtils.isBlank(name)
+                || name.equals(CURRENT_FOLDER)
+                || name.equals(PARENT_FOLDER)
+                || name.contains(SLASH)
+                || name.contains(BACKSLASH)
+                || name.contains(COLON);
+        return !notOneName;
+    }
+
+    // Restricts destructive operations to a working copy inside the
+    // root: a run's copy in root/runId/username, or one made before runs
+    // had their own folders, straight in root/username.
     private void requireWorkingChild(Path path) throws IOException {
         Path root = Path.of(config.getString(ConfigKeys.WORKING_DIR))
                 .toAbsolutePath().normalize();
         Path target = path.toAbsolutePath().normalize();
-        if (!root.equals(target.getParent())) {
+        Path parent = target.getParent();
+        boolean directChild = root.equals(parent);
+        boolean runChild = parent != null && root.equals(parent.getParent());
+        if (!directChild && !runChild) {
             throw new IOException("Path is outside the working folder.");
         }
-        String name = target.getFileName().toString();
+        String name = root.relativize(target).toString();
         if (!zipExtractor.isSafeEntry(name, root)) {
             throw new IOException("Working path contains a symbolic link.");
         }
     }
 
+    // Lists, in lower case, the classes built from source when graded:
+    // each one with a .java file in the working copy or the starter
+    // folder, and each question's main class.
+    private List<String> listSourceNames(Path workingCopy, Path starter,
+            Assessment assessment) throws IOException {
+        List<String> names = new ArrayList<>();
+        addSourceNames(workingCopy, 0, names);
+        if (assessment != null) {
+            for (Question question : assessment.getQuestions()) {
+                addSourceName(question.getFileName(), names);
+            }
+        }
+        try {
+            if (Files.isDirectory(starter, LinkOption.NOFOLLOW_LINKS)) {
+                addSourceNames(starter, 0, names);
+            }
+        } catch (IOException exception) {
+            // A starter folder that cannot be read adds no names; the
+            // question files of the working copy are still listed
+            return names;
+        }
+        return names;
+    }
+
+    // Adds the class name of each .java file in a folder and the folders
+    // inside it, down to MAX_SOURCE_DEPTH. Links are not followed.
+    private void addSourceNames(Path directory, int depth,
+            List<String> names) throws IOException {
+        DirectoryStream<Path> children = null;
+        try {
+            children = Files.newDirectoryStream(directory);
+            for (Path child : children) {
+                boolean folder = Files.isDirectory(child,
+                        LinkOption.NOFOLLOW_LINKS);
+                if (folder && depth < MAX_SOURCE_DEPTH) {
+                    int childDepth = depth + 1;
+                    addSourceNames(child, childDepth, names);
+                } else if (!folder) {
+                    addSourceName(child.getFileName().toString(), names);
+                }
+            }
+        } finally {
+            FileUtils.closeIfOpen(children);
+        }
+    }
+
+    // Adds the class name of a .java file name, in lower case, once.
+    private void addSourceName(String fileName, List<String> names) {
+        String lower = fileName.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(JAVA_EXTENSION)) {
+            int nameEnd = lower.length() - JAVA_EXTENSION.length();
+            String className = lower.substring(0, nameEnd);
+            if (!names.contains(className)) {
+                names.add(className);
+            }
+        }
+    }
+
+    // Says whether a class file is built again from source when graded,
+    // so the student's copy is stale and must go: its outer class (Order
+    // for Order$1.class) has a .java file or is a question's main class,
+    // or it is named like a tester, which is always compiled fresh. A
+    // precompiled tester or main class could otherwise replace the real
+    // one.
+    private boolean isRebuilt(String classFileName,
+            List<String> sourceNames) {
+        String lower = classFileName.toLowerCase(Locale.ROOT);
+        int nameEnd = lower.length() - CLASS_EXTENSION.length();
+        String className = lower.substring(0, nameEnd);
+        int nestedStart = className.indexOf(NESTED_SEPARATOR);
+        if (nestedStart >= 0) {
+            className = className.substring(0, nestedStart);
+        }
+        String testerSuffix = config.getString(
+                ConfigKeys.TESTER_CLASS_SUFFIX).toLowerCase(Locale.ROOT);
+        boolean testerName = !testerSuffix.isEmpty()
+                && className.endsWith(testerSuffix);
+        return testerName || sourceNames.contains(className);
+    }
+
     // Only ordinary files are deleted; links are rejected, not followed.
-    private void removeClassFiles(Path directory, List<String> provided)
-            throws IOException {
+    // A class file that cannot be built again from source is kept.
+    private void removeClassFiles(Path directory, List<String> provided,
+            List<String> sourceNames) throws IOException {
         DirectoryStream<Path> children = null;
         try {
             children = Files.newDirectoryStream(directory);
@@ -430,11 +574,12 @@ public class WorkingCopyManager {
                     throw new IOException("Linked working file: " + child);
                 }
                 if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
-                    removeClassFiles(child, provided);
+                    removeClassFiles(child, provided, sourceNames);
                 } else {
                     String name = child.getFileName().toString();
                     boolean studentClass = name.endsWith(CLASS_EXTENSION)
-                            && !provided.contains(name);
+                            && !provided.contains(name)
+                            && isRebuilt(name, sourceNames);
                     if (studentClass) {
                         Files.delete(child);
                     }
@@ -445,14 +590,18 @@ public class WorkingCopyManager {
         }
     }
 
-    // Apply the same ignored-name setting to folder uploads as ZIPs.
+    // Apply the same ignored-name setting to folder uploads as ZIPs, and
+    // drop macOS ._ resource forks as ZipExtractor does
     private void removeIgnoredFiles(Path directory) throws IOException {
         List<String> ignored = config.getList(ConfigKeys.IGNORED_FILE_NAMES);
         DirectoryStream<Path> children = null;
         try {
             children = Files.newDirectoryStream(directory);
             for (Path child : children) {
-                if (ignored.contains(child.getFileName().toString())) {
+                String childName = child.getFileName().toString();
+                boolean ignoredChild = ignored.contains(childName)
+                        || childName.startsWith(RESOURCE_FORK_PREFIX);
+                if (ignoredChild) {
                     FileUtils.deleteDirectory(child);
                 } else if (Files.isDirectory(child,
                         LinkOption.NOFOLLOW_LINKS)) {

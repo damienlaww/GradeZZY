@@ -337,6 +337,7 @@ public final class TesterMarks {
         int index = 0;
         while (index < code.length()) {
             char current = code.charAt(index);
+            int next = index + 1;
             if (isWordStart(code, index)) {
                 int wordEnd = findWordEnd(code, index);
                 String word = code.substring(index, wordEnd);
@@ -352,32 +353,30 @@ public final class TesterMarks {
                         marks.add(mark);
                     }
                 }
-                index = wordEnd;
-            } else {
-                if (current == LINE_END) {
-                    lineNumber++;
-                } else if (current == OPEN_PARENTHESIS) {
-                    parenDepth++;
-                } else if (current == CLOSE_PARENTHESIS) {
-                    parenDepth--;
-                } else if (current == OPEN_BRACE) {
-                    braceIsLoop.add(loopStarting);
-                    if (loopStarting) {
-                        loopDepth++;
-                    }
-                    loopStarting = false;
-                } else if (current == CLOSE_BRACE && !braceIsLoop.isEmpty()) {
-                    int lastBrace = braceIsLoop.size() - 1;
-                    boolean closesLoop = braceIsLoop.remove(lastBrace);
-                    if (closesLoop) {
-                        loopDepth--;
-                    }
-                } else if (current == SEMICOLON && parenDepth == 0) {
-                    // A loop with no braces ends with its one statement
-                    loopStarting = false;
+                next = wordEnd;
+            } else if (current == LINE_END) {
+                lineNumber++;
+            } else if (current == OPEN_PARENTHESIS) {
+                parenDepth++;
+            } else if (current == CLOSE_PARENTHESIS) {
+                parenDepth--;
+            } else if (current == OPEN_BRACE) {
+                braceIsLoop.add(loopStarting);
+                if (loopStarting) {
+                    loopDepth++;
                 }
-                index++;
+                loopStarting = false;
+            } else if (current == CLOSE_BRACE && !braceIsLoop.isEmpty()) {
+                int lastBrace = braceIsLoop.size() - 1;
+                boolean closesLoop = braceIsLoop.remove(lastBrace);
+                if (closesLoop) {
+                    loopDepth--;
+                }
+            } else if (current == SEMICOLON && parenDepth == 0) {
+                // A loop with no braces ends with its one statement
+                loopStarting = false;
             }
+            index = next;
         }
         return total;
     }

@@ -130,7 +130,7 @@ public class SettingField {
     private final HBox row = new HBox(COLUMN_GAP);
 
     // The value saved in config.properties
-    private String original;
+    private String original = "";
 
     // Called after every change
     private Runnable onChange = null;

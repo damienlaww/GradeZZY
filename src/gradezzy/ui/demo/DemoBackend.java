@@ -9,6 +9,7 @@
 package gradezzy.ui.demo;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -24,6 +25,8 @@ import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
+import gradezzy.model.BackupInfo;
+import gradezzy.model.BackupRun;
 import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
@@ -44,6 +47,7 @@ import gradezzy.service.ServiceRegistry;
 import gradezzy.stats.StatisticsSummary;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
+import gradezzy.ui.backend.CheatingRemarks;
 import gradezzy.ui.backend.DashboardBackend;
 import gradezzy.ui.backend.ImportBatch;
 import gradezzy.ui.backend.ImportItem;
@@ -71,6 +75,10 @@ public final class DemoBackend implements DashboardBackend {
     // The question of the sample similar pair
     private static final String SIMILAR_QUESTION = "Q2a";
 
+    // The second question the sample pair is alike on, and how alike
+    private static final String SECOND_SIMILAR_QUESTION = "Q2b";
+    private static final double SECOND_SIMILARITY = 0.78;
+
     // The file of the sample similar pair
     private static final String SIMILAR_FILE = "Q2/Q2a.java";
 
@@ -92,6 +100,9 @@ public final class DemoBackend implements DashboardBackend {
 
     // Minutes after a run started when its sample snapshot was saved
     private static final long SNAPSHOT_DELAY_MINUTES = 16L;
+
+    // The newest backup is always kept, whatever the setting says
+    private static final int MIN_BACKUPS_KEPT = 1;
 
     // How times are written in backup descriptions
     private static final DateTimeFormatter TIME_FORMAT =
@@ -144,10 +155,15 @@ public final class DemoBackend implements DashboardBackend {
 
     // The assessment in use: the sample assessment, changed when another
     // sample assessment is chosen
-    private Assessment assessment;
+    private Assessment assessment = null;
 
     // The sample saved assessments, kept for this session only
     private final List<SavedAssessment> savedAssessments = new ArrayList<>();
+
+    // The sample assessments deleted in this session, for Undo; the demo
+    // keeps no files chosen on Set up
+    private final List<SavedAssessment> deletedAssessments =
+            new ArrayList<>();
 
     // Hands out anomaly ids
     private final DemoIdCounter ids = new DemoIdCounter();
@@ -175,7 +191,7 @@ public final class DemoBackend implements DashboardBackend {
     private final Map<String, Integer> gradeCounts = new HashMap<>();
 
     // The six-student run of the sample section
-    private GradingRun sampleRun;
+    private GradingRun sampleRun = null;
 
     // The 240-student run, built when first needed
     private GradingRun largeRun = null;
@@ -196,6 +212,9 @@ public final class DemoBackend implements DashboardBackend {
 
     // The number of the next run started in demo mode
     private int nextRunNumber = FIRST_NEW_RUN;
+
+    // The sample backups listed on History, newest first; held in memory
+    private final List<BackupInfo> backups = new ArrayList<>();
 
     /**
      * Creates the demo backend with its sample runs.
@@ -225,6 +244,7 @@ public final class DemoBackend implements DashboardBackend {
         history.add(new DemoHistoryItem(earlierRun,
                 snapshotText(earlierRun, SAMPLE_SNAPSHOT_LETTER), true));
         seedAudit();
+        backups.addAll(DemoData.sampleBackups(backupFolder()));
     }
 
     // ---------------------------------------------------- self-test hooks
@@ -802,7 +822,8 @@ public final class DemoBackend implements DashboardBackend {
         ReviewDecision before = getDecision(anomaly);
         decisions.put(anomaly.getId(), decision);
         if (before != decision) {
-            recordAudit(decision.getAuditAction(), anomaly.getUsername()
+            String action = decision.getAuditAction(anomaly.getType());
+            recordAudit(action, anomaly.getUsername()
                     + ACTIVITY_DETAIL_SEPARATOR + anomaly.getMessage());
         }
         return ActionResult.done("Marked the flag for "
@@ -1036,7 +1057,8 @@ public final class DemoBackend implements DashboardBackend {
         if (JSON_FORMAT.equalsIgnoreCase(formatName)) {
             preview = DemoExports.toJson(gradingRun, scope);
         } else if (CSV_FORMAT.equalsIgnoreCase(formatName)) {
-            preview = DemoExports.toCsv(gradingRun, scope);
+            preview = DemoExports.toCsv(gradingRun, scope,
+                    new CheatingRemarks(this).remarksFor(gradingRun));
         } else {
             // The reports have no preview; live mode writes them
             return ActionResult.done("Demo mode writes no " + formatName
@@ -1077,8 +1099,32 @@ public final class DemoBackend implements DashboardBackend {
         entry.recordSnapshot("Snapshot " + runId + SNAPSHOT_SEPARATOR
                 + NEW_SNAPSHOT_LETTER + ", "
                 + LocalDateTime.now().format(TIME_FORMAT));
+        addSampleBackup();
         return ActionResult.done("Backed up run " + runId
                 + ". Demo mode keeps the snapshot in memory only.");
+    }
+
+    /**
+     * Returns the sample backups, newest first, as many as are kept.
+     */
+    @Override
+    public List<BackupInfo> listBackups() {
+        List<BackupInfo> kept = new ArrayList<>();
+        int keepCount = getBackupKeepCount();
+        for (int index = 0; index < backups.size() && index < keepCount;
+                index++) {
+            kept.add(backups.get(index));
+        }
+        return kept;
+    }
+
+    /**
+     * Returns database.backup.keep.count, at least one.
+     */
+    @Override
+    public int getBackupKeepCount() {
+        return Math.max(MIN_BACKUPS_KEPT,
+                config.getInt(ConfigKeys.BACKUP_KEEP_COUNT));
     }
 
     /**
@@ -1120,6 +1166,14 @@ public final class DemoBackend implements DashboardBackend {
      */
     @Override
     public ActionResult restoreBackup(Path backupFile) {
+        for (BackupInfo backup : backups) {
+            if (backup.getFile().equals(backupFile)) {
+                return ActionResult.failed("Demo mode only shows sample "
+                        + "backups and never reads backup files, so "
+                        + backupFile.getFileName() + " was not restored. "
+                        + "Use Restore on a saved copy instead.");
+            }
+        }
         return ActionResult.failed("Demo mode never reads backup files. "
                 + "Select a run with a snapshot on History and press "
                 + "Restore instead.");
@@ -1300,9 +1354,34 @@ public final class DemoBackend implements DashboardBackend {
                     + "assessment first, then delete this one.");
         }
         savedAssessments.remove(chosen);
-        recordAudit("Assessment deleted", chosen.getName());
+        deletedAssessments.add(chosen);
         return ActionResult.done("Deleted " + chosen.getName()
                 + ". Results graded with it are kept.");
+    }
+
+    /**
+     * Lists a sample assessment deleted in this session again.
+     */
+    @Override
+    public ActionResult restoreAssessment(String name) {
+        SavedAssessment deleted = null;
+        for (SavedAssessment saved : deletedAssessments) {
+            if (saved.getName().equalsIgnoreCase(name)) {
+                deleted = saved;
+            }
+        }
+        if (deleted == null) {
+            return ActionResult.failed(name + " was not deleted in this "
+                    + "demo session.");
+        }
+        if (findAssessment(name) != null) {
+            return ActionResult.failed("An assessment named " + name
+                    + " already exists, so the deleted one cannot be put "
+                    + "back.");
+        }
+        deletedAssessments.remove(deleted);
+        addSorted(deleted);
+        return ActionResult.done("Put back " + deleted.getName() + ".");
     }
 
     // Saves the sample assessment and a shorter second one, so the demo
@@ -1366,6 +1445,11 @@ public final class DemoBackend implements DashboardBackend {
             pairs.add(new SimilarityPair(first.getUsername(),
                     second.getUsername(), SIMILAR_QUESTION,
                     SAMPLE_SIMILARITY));
+            // A second question alike too, so the Similarity view warns
+            // about the pair
+            pairs.add(new SimilarityPair(first.getUsername(),
+                    second.getUsername(), SECOND_SIMILAR_QUESTION,
+                    SECOND_SIMILARITY));
         }
         return pairs;
     }
@@ -1653,6 +1737,25 @@ public final class DemoBackend implements DashboardBackend {
             }
         }
         return null;
+    }
+
+    // The folder the sample backups would be in
+    private Path backupFolder() {
+        return Paths.get(getSetting(ConfigKeys.BACKUP_DIR));
+    }
+
+    // Lists a new sample backup made now, holding the same runs as the
+    // newest one, and forgets the oldest beyond the number kept
+    private void addSampleBackup() {
+        List<BackupRun> runs = new ArrayList<>();
+        if (!backups.isEmpty()) {
+            runs = backups.get(0).getRuns();
+        }
+        backups.add(0, DemoData.sampleBackup(backupFolder(),
+                LocalDateTime.now(), runs));
+        while (backups.size() > getBackupKeepCount()) {
+            backups.remove(backups.size() - 1);
+        }
     }
 
     // Returns the run shown for the sample section.

@@ -22,10 +22,10 @@ public class DemoHistoryItem {
     private final GradingRun run;
 
     // A description of its latest snapshot
-    private String backupText;
+    private String backupText = "";
 
     // Whether a snapshot can be restored
-    private boolean restorable;
+    private boolean restorable = false;
 
     /**
      * Creates a history item.

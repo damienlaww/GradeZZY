@@ -90,6 +90,52 @@ public final class RunSettings {
     }
 
     /**
+     * Writes some settings into the text a run keeps again, with their
+     * values now, such as the similar code settings when the check runs
+     * again after they were changed. A run that kept no settings keeps
+     * none, and a setting config.properties does not have is left as it
+     * was.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param settings the run's text, from capture
+     * @param config the application settings
+     * @param keys the settings to write again
+     * @return the run's new text
+     */
+    public static String update(String settings, AppConfig config,
+            String[] keys) {
+        if (settings == null || settings.isEmpty()) {
+            return settings;
+        }
+        List<String> lines = new ArrayList<>();
+        for (String line : settings.split(LINE_END)) {
+            lines.add(line);
+        }
+        for (String key : keys) {
+            if (config.hasKey(key)) {
+                String value = config.getString(key).replace(LINE_END, " ");
+                replaceLine(lines, key, key + KEY_VALUE_SEPARATOR + value);
+            }
+        }
+        return TextUtils.join(LINE_END, lines);
+    }
+
+    // Puts a setting's new line in place of its old one, or at the end
+    // when the run did not keep it.
+    private static void replaceLine(List<String> lines, String key,
+            String newLine) {
+        String start = key + KEY_VALUE_SEPARATOR;
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).startsWith(start)) {
+                lines.set(i, newLine);
+                return;
+            }
+        }
+        lines.add(newLine);
+    }
+
+    /**
      * Reads one setting back from the text a run keeps.
      *
      * <p>Tier: COULD.

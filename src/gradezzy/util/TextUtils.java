@@ -27,6 +27,10 @@ public final class TextUtils {
         (byte) 0xFF, (byte) 0xFE
     };
 
+    // The character a UTF-8 byte order mark is read as, at the start of a
+    // file Notepad saved as "UTF-8 with BOM"
+    private static final String UTF8_MARK = "\uFEFF";
+
     // The two bytes at the start of a big-endian UTF-16 file, as Notepad
     // saves "Unicode big endian"
     private static final byte[] UTF16_BE_MARK = {
@@ -253,15 +257,20 @@ public final class TextUtils {
     /**
      * Reads the content of a source file as text. A file that starts with
      * a UTF-16 byte order mark is read as UTF-16 in that byte order,
-     * leaving the mark out. Any other file is read as UTF-8, and a
-     * character that is not valid UTF-8 is replaced.
+     * leaving the mark out. Any other file is read as UTF-8, leaving out
+     * a UTF-8 byte order mark, and a character that is not valid UTF-8 is
+     * replaced.
      *
      * @param bytes the content of the file
      * @return the text
      */
     public static String decodeSource(byte[] bytes) {
         if (!isUtf16(bytes)) {
-            return new String(bytes, StandardCharsets.UTF_8);
+            String text = new String(bytes, StandardCharsets.UTF_8);
+            if (text.startsWith(UTF8_MARK)) {
+                return text.substring(UTF8_MARK.length());
+            }
+            return text;
         }
 
         byte[] withoutMark = Arrays.copyOfRange(bytes, UTF16_LE_MARK.length,
