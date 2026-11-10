@@ -63,6 +63,8 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
     /**
      * Creates a new winnowing similarity detector.
      *
+     * <p>Tier: COULD.
+     *
      * @param config the application settings
      */
     public WinnowingSimilarityDetector(AppConfig config) {
@@ -71,6 +73,8 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
 
     /**
      * Returns the name of the algorithm.
+     *
+     * <p>Tier: COULD.
      *
      * @return the name of the algorithm
      */
@@ -82,6 +86,8 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
     /**
      * Compares every pair of submissions whose answers hold enough new
      * code, leaving out the code in paths.starter.dir.
+     *
+     * <p>Tier: COULD.
      *
      * @param submissions the submissions
      * @param assessment the assessment
@@ -96,6 +102,8 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
     /**
      * Compares every pair of submissions whose answers hold enough new
      * code, leaving out the code in the run's starter folder.
+     *
+     * <p>Tier: COULD.
      *
      * @param submissions the submissions
      * @param assessment the assessment

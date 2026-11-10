@@ -25,6 +25,8 @@ public class CallResult {
     /**
      * Creates a call's result.
      *
+     * <p>Tier: COULD.
+     *
      * @param threw whether the call threw an exception
      * @param text the result as text, or the exception's class
      */
@@ -36,6 +38,8 @@ public class CallResult {
     /**
      * Says whether the call threw an exception.
      *
+     * <p>Tier: COULD.
+     *
      * @return true when it threw
      */
     public boolean hasThrown() {
@@ -45,6 +49,8 @@ public class CallResult {
     /**
      * Returns the result as text, or the exception's class when the call
      * threw.
+     *
+     * <p>Tier: COULD.
      *
      * @return the text
      */

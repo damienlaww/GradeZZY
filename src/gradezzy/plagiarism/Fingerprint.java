@@ -25,6 +25,8 @@ public class Fingerprint {
     /**
      * Creates a new fingerprint.
      *
+     * <p>Tier: COULD.
+     *
      * @param hash the hash of the run of tokens
      * @param position the position of the run's first token, counted
      *        from 0
@@ -37,18 +39,11 @@ public class Fingerprint {
     /**
      * Returns the hash of the run of tokens.
      *
+     * <p>Tier: COULD.
+     *
      * @return the hash
      */
     public int getHash() {
         return hash;
-    }
-
-    /**
-     * Returns the position of the run's first token, counted from 0.
-     *
-     * @return the position
-     */
-    public int getPosition() {
-        return position;
     }
 }

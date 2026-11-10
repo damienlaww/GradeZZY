@@ -87,6 +87,8 @@ public class TesterStrengthChecker {
     /**
      * Creates a checker.
      *
+     * <p>Tier: COULD.
+     *
      * @param config the settings
      * @param processRunner the helper that runs javac and java
      */
@@ -224,7 +226,6 @@ public class TesterStrengthChecker {
         ProcessResult run = testerRunner.runTester(modelFolder,
                 testerClassName);
         double score = scoreParser.parse(question, run).getScore();
-        result.setModelScore(score);
         if (!ModelAnswerCopy.isFullMarks(score, question)) {
             result.setProblem("The model answer itself gets " + score
                     + " of " + question.getMaxScore() + ", so check the "
@@ -346,7 +347,6 @@ public class TesterStrengthChecker {
 
         double score = scoreParser.parse(batch.getQuestion(), run)
                 .getScore();
-        mutant.setScore(score);
         if (ModelAnswerCopy.isFullMarks(score, batch.getQuestion())) {
             mutant.setOutcome(MutantOutcome.SURVIVED);
         } else {

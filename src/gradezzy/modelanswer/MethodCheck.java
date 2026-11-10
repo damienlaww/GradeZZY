@@ -35,6 +35,8 @@ public class MethodCheck {
     /**
      * Creates a method ready to check.
      *
+     * <p>Tier: COULD.
+     *
      * @param method the method
      * @param inputs the inputs
      * @param driverSource the program that calls the method
@@ -51,6 +53,8 @@ public class MethodCheck {
     /**
      * Returns the method.
      *
+     * <p>Tier: COULD.
+     *
      * @return the method
      */
     public MethodSignature getMethod() {
@@ -59,6 +63,8 @@ public class MethodCheck {
 
     /**
      * Returns the inputs.
+     *
+     * <p>Tier: COULD.
      *
      * @return the inputs, one argument per parameter, as Java text
      */
@@ -69,6 +75,8 @@ public class MethodCheck {
     /**
      * Returns the program that calls the method with every input.
      *
+     * <p>Tier: COULD.
+     *
      * @return the source
      */
     public String getDriverSource() {
@@ -77,6 +85,8 @@ public class MethodCheck {
 
     /**
      * Returns what the model answer gave.
+     *
+     * <p>Tier: COULD.
      *
      * @return the results, by call number from 1
      */
