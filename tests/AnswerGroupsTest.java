@@ -27,9 +27,8 @@ import gradezzy.stats.AnswerGrouper;
 
 /**
  * Runs the answer group checks and prints how many passed.
- * Compile: javac -cp classes -d /tmp/gradezzy-tests
- * tests/AnswerGroupsTest.java; run: java -cp
- * classes:lib/*:/tmp/gradezzy-tests AnswerGroupsTest
+ * Compile: javac -cp classes -d /tmp/gradezzy-tests tests/*.java; run:
+ * java -cp classes:lib/*:/tmp/gradezzy-tests AnswerGroupsTest
  */
 public class AnswerGroupsTest {
 
@@ -41,6 +40,18 @@ public class AnswerGroupsTest {
 
     // The highest score of Q3
     private static final int Q3_MAX_SCORE = 4;
+
+    // The mark for a passed test in an answer pattern
+    private static final char PASSED = 'P';
+
+    // The start of the id of every flag these checks add
+    private static final String ANOMALY_ID_PREFIX = "id-";
+
+    // The character that escapes the next one in JSON text
+    private static final char ESCAPE = '\\';
+
+    // The character that starts and ends a JSON string
+    private static final char QUOTE = '"';
 
     // The number of checks passed so far
     private static int checks = 0;
@@ -118,13 +129,16 @@ public class AnswerGroupsTest {
         for (Question question : assessment.getQuestions()) {
             QuestionResult result = new QuestionResult(question);
             result.setCompiled(true);
-            String outcome = "P".repeat((int) question.getMaxScore());
+            int testCount = (int) question.getMaxScore();
+            String outcome = String.valueOf(PASSED).repeat(testCount);
             if (question.getId().equals(questionId)) {
                 outcome = pattern;
             }
             for (int i = 0; i < outcome.length(); i++) {
-                result.addTestCaseResult(new TestCaseResult(i + 1,
-                        outcome.charAt(i) == 'P', ""));
+                int testNumber = i + 1;
+                boolean passed = outcome.charAt(i) == PASSED;
+                result.addTestCaseResult(new TestCaseResult(testNumber,
+                        passed, ""));
             }
             submission.addQuestionResult(result);
         }
@@ -146,13 +160,24 @@ public class AnswerGroupsTest {
     // Adds an error flag with the given message to a submission.
     static void flag(Submission submission, AnomalyType type,
             String message) {
-        submission.addAnomaly(new Anomaly("id-" + message.hashCode(), type,
-                Severity.ERROR, submission.getUsername(), message, ""));
+        String id = ANOMALY_ID_PREFIX + message.hashCode();
+        submission.addAnomaly(new Anomaly(id, type, Severity.ERROR,
+                submission.getUsername(), message, ""));
     }
 
     // Checks the pattern and title given to each kind of lost mark.
     private static void patterns() {
         Assessment assessment = assessment();
+        failedTestPatterns(assessment);
+        Submission missing = missingFilePattern(assessment);
+        fixedFolderPatterns(assessment);
+        missingFolderPatterns(assessment);
+        compileAndTimeoutPatterns(assessment);
+        crashAndTesterPatterns(assessment, missing);
+    }
+
+    // Checks a full answer and the titles of failed tests.
+    private static void failedTestPatterns(Assessment assessment) {
         Submission all = student(assessment, "all", "Q2b", "PPPPP");
         check(AnswerGrouper.patternOf(all, result(all, "Q2b")) == null,
                 "a full answer is not grouped");
@@ -167,7 +192,10 @@ public class AnswerGroupsTest {
         check(AnswerGrouper.titleOf("FFPF")
                 .equals("Failed tests 1, 2 and 4"),
                 "three failed tests: " + AnswerGrouper.titleOf("FFPF"));
+    }
 
+    // Checks a missing file and returns the student who left it out.
+    private static Submission missingFilePattern(Assessment assessment) {
         Submission missing = student(assessment, "missing", "Q1b", "");
         result(missing, "Q1b").setCompiled(false);
         flag(missing, AnomalyType.MISSING_FILE, "Q1/Q1b.java is missing.");
@@ -175,7 +203,11 @@ public class AnswerGroupsTest {
                 result(missing, "Q1b"))), "a missing file is MISSING");
         check(AnswerGrouper.titleOf("MISSING").equals("No answer handed in"),
                 "missing title");
+        return missing;
+    }
 
+    // Checks a question folder that a fix put back.
+    private static void fixedFolderPatterns(Assessment assessment) {
         Submission fixed = student(assessment, "fixed", "Q3", "PPPP");
         flag(fixed, AnomalyType.MISSING_QUESTION_FOLDER,
                 "The Q3 folder is missing.");
@@ -191,17 +223,21 @@ public class AnswerGroupsTest {
         check("COMPILE".equals(AnswerGrouper.patternOf(fixedBroken,
                 result(fixedBroken, "Q3"))),
                 "a fixed folder that did not compile is COMPILE");
+    }
 
+    // Checks a missing question folder and a file missing beside another.
+    private static void missingFolderPatterns(Assessment assessment) {
         Submission noFolder = student(assessment, "noFolder", "Q1a", "");
         result(noFolder, "Q1a").setCompiled(false);
         result(noFolder, "Q1b").setCompiled(false);
         result(noFolder, "Q1b").getTestCaseResults().clear();
         flag(noFolder, AnomalyType.MISSING_QUESTION_FOLDER,
                 "The Q1 folder is missing. Keep Q1a and Q1b at 0.");
-        check("MISSING".equals(AnswerGrouper.patternOf(noFolder,
-                result(noFolder, "Q1a")))
-                && "MISSING".equals(AnswerGrouper.patternOf(noFolder,
-                        result(noFolder, "Q1b"))),
+        boolean aboutQ1a = "MISSING".equals(AnswerGrouper.patternOf(noFolder,
+                result(noFolder, "Q1a")));
+        boolean aboutQ1b = "MISSING".equals(AnswerGrouper.patternOf(noFolder,
+                result(noFolder, "Q1b")));
+        check(aboutQ1a && aboutQ1b,
                 "a missing folder naming both its questions is about both");
         Submission otherFile = student(assessment, "otherFile", "Q1a", "");
         result(otherFile, "Q1a").setCompiled(false);
@@ -209,7 +245,10 @@ public class AnswerGroupsTest {
         check("COMPILE".equals(AnswerGrouper.patternOf(otherFile,
                 result(otherFile, "Q1a"))),
                 "a missing Q1b.java is not about Q1a in the same folder");
+    }
 
+    // Checks an answer that did not compile and one that ran too long.
+    private static void compileAndTimeoutPatterns(Assessment assessment) {
         Submission compile = student(assessment, "compile", "Q1b", "");
         result(compile, "Q1b").setCompiled(false);
         check("COMPILE".equals(AnswerGrouper.patternOf(compile,
@@ -227,7 +266,11 @@ public class AnswerGroupsTest {
         check(AnswerGrouper.titleOf("T:")
                 .equals("Ran too long before test 1"),
                 "timeout before any test");
+    }
 
+    // Checks a crash, a tester problem and which name a flag is about.
+    private static void crashAndTesterPatterns(Assessment assessment,
+            Submission missing) {
         Submission crash = student(assessment, "crash", "Q1a", "PF");
         flag(crash, AnomalyType.RUNTIME_ERROR,
                 "Q1a case 2 threw an exception.");
@@ -263,12 +306,15 @@ public class AnswerGroupsTest {
         run.addSubmission(failed);
 
         List<AnswerGroup> groups = AnswerGrouper.group(run);
-        check(groups.size() == 2, "two groups: " + groups.size());
+        // The Q2b group and the Q3 group
+        int expectedGroups = 2;
+        check(groups.size() == expectedGroups, "two groups: "
+                + groups.size());
         AnswerGroup first = groups.get(0);
-        check(first.getQuestionId().equals("Q2b")
+        boolean q2bFirst = first.getQuestionId().equals("Q2b")
                 && first.getPattern().equals("PPFPF")
-                && first.getTitle().equals("Failed tests 3 and 5"),
-                "Q2b comes before Q3 in question order");
+                && first.getTitle().equals("Failed tests 3 and 5");
+        check(q2bFirst, "Q2b comes before Q3 in question order");
         check(first.getUsernames().equals(Arrays.asList("amy", "ben",
                 "cat")), "usernames in run order, not graded left out: "
                 + first.getUsernames());
@@ -286,14 +332,15 @@ public class AnswerGroupsTest {
                     submission.getUsername()));
         }
         AnswerGroup shaped = AnswerGrouper.group(run).get(0);
-        check(shaped.getSameShapes().size() == 1
+        boolean oneShape = shaped.getSameShapes().size() == 1
                 && shaped.getSameShapes().get(0)
-                        .equals(Arrays.asList("amy", "ben")),
+                        .equals(Arrays.asList("amy", "ben"));
+        check(oneShape,
                 "amy and ben share a shape: " + shaped.getSameShapes());
         AnswerGroup q3 = AnswerGrouper.group(run).get(1);
-        check(q3.getUsernames().equals(Arrays.asList("q3only"))
-                && q3.getSameShapes().isEmpty(),
-                "a student without a file is grouped with no shape");
+        boolean noShape = q3.getUsernames().equals(Arrays.asList("q3only"))
+                && q3.getSameShapes().isEmpty();
+        check(noShape, "a student without a file is grouped with no shape");
     }
 
     // ---------------------------------------------------------- Task 3
@@ -319,7 +366,12 @@ public class AnswerGroupsTest {
 
     // Checks that names and ticks are kept for the session or saved.
     private static void notes() throws Exception {
-        // sessionOnlyWithoutRepository
+        sessionNotes();
+        savedNotes();
+    }
+
+    // Checks names and ticks kept for the session only.
+    private static void sessionNotes() throws Exception {
         GradingRun run = twoStudentRun();
         AnswerGroupService session = new AnswerGroupService(null,
                 config(false, Path.of("unused.db")));
@@ -338,7 +390,11 @@ public class AnswerGroupsTest {
         session.setChecked(run, grown, false);
         check(session.listGroups(run).get(0).getCheckedUsernames()
                 .isEmpty(), "unchecking forgets who was checked");
+    }
 
+    // Checks names and ticks saved in a database, read back after a
+    // restart, and kept for the session when a save fails.
+    private static void savedNotes() throws Exception {
         // round trip through the database
         Path file = Files.createTempFile("answer-groups-", ".db");
         AppConfig saving = config(true, file);
@@ -375,9 +431,10 @@ public class AnswerGroupsTest {
         reopened.close();
         failing.setLabel(saved, failing.listGroups(saved).get(0),
                 "kept anyway");
-        check(failing.listGroups(saved).get(0).getLabel()
+        boolean keptAnyway = failing.listGroups(saved).get(0).getLabel()
                 .equals("kept anyway")
-                && !failing.getSaveProblem().isEmpty(),
+                && !failing.getSaveProblem().isEmpty();
+        check(keptAnyway,
                 "a failed save keeps the name for the session and says why");
         Files.deleteIfExists(file);
     }
@@ -397,12 +454,15 @@ public class AnswerGroupsTest {
         check(lines.get(0).equals("Module,Section,Question,Mistake,Pattern,"
                 + "Label,Students,Same code shape,Checked,Usernames"),
                 "header: " + lines.get(0));
-        check(lines.size() == 2 && lines.get(1).contains("Q2b")
+        // The header and the row of the one group
+        int expectedLines = 2;
+        boolean oneRow = lines.size() == expectedLines
+                && lines.get(1).contains("Q2b")
                 && lines.get(1).contains("Failed tests 3 and 5")
                 && lines.get(1).contains("uses < instead of <=")
                 && lines.get(1).contains("amy ben")
-                && lines.get(1).contains(",2,"),
-                "one row per group: " + lines);
+                && lines.get(1).contains(",2,");
+        check(oneRow, "one row per group: " + lines);
         check(CommonMistakesExporter.FORMAT_NAME.equals("Common mistakes"),
                 "format name");
 
@@ -410,18 +470,20 @@ public class AnswerGroupsTest {
         service.setLabel(run, service.listGroups(run).get(0), "a, \"b\"");
         new CommonMistakesExporter(service).export(run, csv);
         List<String> quoted = Files.readAllLines(csv);
-        check(quoted.size() == 2
-                && quoted.get(1).contains("\"a, \"\"b\"\"\""),
-                "a comma and quote stay in one quoted cell: " + quoted);
+        boolean oneCell = quoted.size() == expectedLines
+                && quoted.get(1).contains("\"a, \"\"b\"\"\"");
+        check(oneCell, "a comma and quote stay in one quoted cell: "
+                + quoted);
 
         Path json = Files.createTempFile("results-", ".json");
         JsonExporter jsonExporter = new JsonExporter(new JsonWriter());
         jsonExporter.setAnswerGroupSource(service);
         jsonExporter.export(run, json);
         String text = Files.readString(json);
-        check(text.contains("\"mistake\"") && text.contains("a, \\\"b\\\"")
-                && text.contains("Failed tests 3 and 5"),
-                "the JSON names the mistake");
+        boolean mistakeNamed = text.contains("\"mistake\"")
+                && text.contains("a, \\\"b\\\"")
+                && text.contains("Failed tests 3 and 5");
+        check(mistakeNamed, "the JSON names the mistake");
         check(count(text, '{') == count(text, '}'),
                 "the JSON stays balanced");
         Files.deleteIfExists(csv);
@@ -434,10 +496,10 @@ public class AnswerGroupsTest {
         boolean inString = false;
         for (int i = 0; i < text.length(); i++) {
             char character = text.charAt(i);
-            if (character == '\\') {
+            if (character == ESCAPE) {
                 // skip the escaped character
                 i++;
-            } else if (character == '"') {
+            } else if (character == QUOTE) {
                 inString = !inString;
             } else if (!inString && character == wanted) {
                 count++;
@@ -450,6 +512,14 @@ public class AnswerGroupsTest {
 
     // Checks the fixes made after the answer group review.
     private static void reviewFixes() throws Exception {
+        sessionCheckFixes();
+        failedReadFixes();
+        flaggedAnswerFixes();
+    }
+
+    // Checks fixes I1 and I2: a check keeps only the students the sheet
+    // listed, and the note shown when saving is off.
+    private static void sessionCheckFixes() throws Exception {
         // I1: a check keeps only the students the sheet listed
         GradingRun run = twoStudentRun();
         AnswerGroupService session = new AnswerGroupService(null,
@@ -467,7 +537,11 @@ public class AnswerGroupsTest {
         check(session.describeSaving().equals(" For this session only; saving "
                 + "results is switched off."), "I2: session-only note: "
                 + session.describeSaving());
+    }
 
+    // Checks fixes I3 and I4: a failed read never overwrites saved data,
+    // and forgetAll reads the store again.
+    private static void failedReadFixes() throws Exception {
         // I3: a failed read is retried and never overwrites saved data
         Path file = Files.createTempFile("answer-groups-read-", ".db");
         AppConfig saving = config(true, file);
@@ -507,7 +581,11 @@ public class AnswerGroupsTest {
                 "I4: forgetAll drops the cached names");
         repository.close();
         Files.deleteIfExists(file);
+    }
 
+    // Checks fixes M2 and M5: a full answer with a runtime flag and a
+    // student not on the score sheet are not grouped.
+    private static void flaggedAnswerFixes() {
         // M2: a full answer with a runtime flag is not a mistake
         Assessment assessment = assessment();
         Submission full = student(assessment, "full", "Q1a", "PPP");

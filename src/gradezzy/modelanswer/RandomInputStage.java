@@ -127,7 +127,8 @@ public class RandomInputStage implements GradingStage {
             severity = Severity.WARNING;
             message = message + FULL_MARKS_NOTE;
         }
-        submission.addAnomaly(new Anomaly(ID_PREFIX + UUID.randomUUID(),
+        String anomalyId = ID_PREFIX + UUID.randomUUID();
+        submission.addAnomaly(new Anomaly(anomalyId,
                 AnomalyType.DIFFERENT_FROM_MODEL_ANSWER, severity,
                 submission.getUsername(), message, SUGGESTED_ACTION));
     }

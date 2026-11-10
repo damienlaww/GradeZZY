@@ -31,12 +31,12 @@ network requests and does not read dropped files.
 | Exact 3/3/5/5/4 rubric; visible retained marks and review flags | Keep numerical columns, add distinct ungraded / zero / failure / review / completed labels. |
 | Working-copy corrections and approve/undo concepts | Add original/proposed comparison, reject and scoped bulk approval. |
 | Actual sample usernames and names embedded in the current HTML | Replace all identities and evidence with synthetic fixtures. Do not reuse private sample files. |
-| macOS traffic-light decoration, floating shadow, large pill controls | Flat desktop shell without platform window controls; modest 5–6px corners. |
+| macOS traffic-light decoration, floating shadow, large pill controls | Flat desktop shell without platform window controls; modest 5 to 6px corners. |
 | Import emphasizes a single drop area; roster and starter readiness not explicit | Four independent input groups and explicit disabled Start Grading explanation. |
 | Navigation omits Overview, Modules, Assessments and persistent Help | Add proposed destinations, clearly record missing production mappings below. |
 | Several actions only show a toast saying export/backup succeeded | Label previews as simulated and state no file was saved. |
 | Student detail remains an inspector; limited case recovery | Separate evidence view with six sections, narrow retry scope and manual-score reason. |
-| 24–30px controls; keyboard selection and focus need review | 44px buttons, native inputs, explicit focus ring, native modal focus handling. |
+| 24 to 30px controls; keyboard selection and focus need review | 44px buttons, native inputs, explicit focus ring, native modal focus handling. |
 | Existing dark theme and reduced-motion CSS are useful | Preserve both, add an explicit animation-disabled state. |
 | History and audit are static examples | Record prototype decisions dynamically; restore shows consequences and recovery snapshot. |
 
@@ -78,7 +78,7 @@ so all score states are visible without first running the import walkthrough.
 | View | Purpose / primary action | Important states | Data shown |
 |---|---|---|---|
 | Overview | Orient instructor / Import Submissions | Recent activity, pending run, empty sections | Module, section, assessment, counts |
-| Modules | Group sections / Open Assessment | G1 populated; G2–G10 empty; DEMO module empty | Configured CS102, ten sections |
+| Modules | Group sections / Open Assessment | G1 populated; G2 to G10 empty; DEMO module empty | Configured CS102, ten sections |
 | Assessments | Verify rubric / Prepare Submissions | Uploaded tester context, proposed case execution | Exact question folders, files, testers and maximums |
 | Submissions | Preflight / Start Grading | Empty, six selected, invalid ZIP, replaced ZIP, duplicate, warning, missing supporting inputs, ready | Four input groups |
 | Validation | Inspect working-copy change / Approve Selected | Pending, approved, rejected, undone, missing-file blocked | Folder, filename, required file, header name; before/after |
@@ -249,7 +249,7 @@ Platform.runLater; do not block the JavaFX thread.
    to validate, not implemented database behavior.
 8. Statistics exclude ungraded totals; pass threshold is 50%; distribution
    uses two-mark (10%) bands. Partial results must have a defined denominator.
-9. Proposed settings validation of 1–300 seconds is a design guardrail,
+9. Proposed settings validation of 1 to 300 seconds is a design guardrail,
    not a new configuration constraint implemented in production.
 
 ## Verification

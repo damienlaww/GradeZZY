@@ -4,7 +4,7 @@
  * Purpose: Drives the real window with real mouse and keyboard input and
  * takes pictures of the screen.
  *
- * Where it fits: Used by WindowTest, which runs on its own thread. Every
+ * Where it fits: Used by FlowWindowTest, which runs on its own thread. Every
  * call that touches the window is handed to the JavaFX thread.
  *
  * Note on untaught Java: javafx.scene.robot.Robot sends real mouse and
@@ -327,7 +327,7 @@ public final class RobotDriver {
      *
      * @param root where to look
      * @param text the words on the control
-     * @param data the user data set in FXML, or null to ignore it
+     * @param data the user data set on the control, or null to ignore it
      * @return the control, or null when none is on show
      */
     public Labeled findWithData(Parent root, String text, Object data) {
@@ -457,10 +457,10 @@ public final class RobotDriver {
         int down = (int) picture.getHeight();
         int band = (int) Math.ceil(RING_BAND * 2);
         int matches = 0;
-        for (int x = 0; x < across; x++) {
-            for (int y = 0; y < down; y++) {
-                boolean nearEdge = y < band || y >= down - band;
-                Color pixel = pixels.getColor(x, y);
+        for (int column = 0; column < across; column++) {
+            for (int row = 0; row < down; row++) {
+                boolean nearEdge = row < band || row >= down - band;
+                Color pixel = pixels.getColor(column, row);
                 if (nearEdge && (close(pixel, ring) || close(pixel, edge))) {
                     matches++;
                 }

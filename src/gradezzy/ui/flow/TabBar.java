@@ -18,7 +18,7 @@ import javafx.scene.control.Button;
 import javafx.scene.layout.HBox;
 
 /**
- * The tabs Grading, Statistics, Runs and Settings.
+ * The tabs Home, Grading, Statistics, Runs and Settings.
  *
  * <p>Tier: SHOULD.
  */

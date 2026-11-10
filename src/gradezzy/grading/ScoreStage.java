@@ -128,8 +128,8 @@ public class ScoreStage implements GradingStage {
         String action = "Add " + testerFile + " to the tester folder, then "
                 + "grade again.";
 
-        submission.addAnomaly(new Anomaly(NO_TESTER_ID_PREFIX
-                + UUID.randomUUID(), AnomalyType.INTERNAL_ERROR,
+        String id = NO_TESTER_ID_PREFIX + UUID.randomUUID();
+        submission.addAnomaly(new Anomaly(id, AnomalyType.INTERNAL_ERROR,
                 Severity.ERROR, submission.getUsername(), message, action));
     }
 

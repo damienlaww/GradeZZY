@@ -50,6 +50,9 @@ public class ZipExtractor {
     // Bytes read at once, so a large entry never has to fit in memory
     private static final int BUFFER_SIZE = 8192;
 
+    // What InputStream.read returns when the entry has no more bytes
+    private static final int END_OF_STREAM = -1;
+
     // The folder separators of a zip entry name: the standard one, and
     // the one some Windows tools write instead
     private static final String ENTRY_SEPARATOR = "/";
@@ -355,12 +358,7 @@ public class ZipExtractor {
             throws IOException, InvalidArchiveException {
         long maxMegabytes = config.getLong(ConfigKeys.MAX_ZIP_SIZE_MB);
         int maxEntries = config.getInt(ConfigKeys.MAX_ZIP_ENTRIES);
-        boolean limitsOutOfRange = maxMegabytes <= 0
-                || maxMegabytes > Long.MAX_VALUE / BYTES_PER_MB
-                || maxEntries <= 0;
-        if (limitsOutOfRange) {
-            throw new IOException("Extraction limits are out of range.");
-        }
+        requireLimitsInRange(maxMegabytes, maxEntries);
         long maxBytes = maxMegabytes * BYTES_PER_MB;
         long totalBytes = 0;
         long entryCount = 0;
@@ -381,10 +379,7 @@ public class ZipExtractor {
                 if (entryCount > maxEntries) {
                     throw tooBig(maxMegabytes, maxEntries);
                 }
-                String zipName = entry.getName().replace(
-                        WINDOWS_SEPARATOR, ENTRY_SEPARATOR);
-                String entryName = trimNameParts(zipName);
-                noteRenamed(zipName, renamedNames);
+                String entryName = unpackedName(entry, renamedNames);
                 // Some ZIP tools emit an explicit ./ directory entry.
                 if (isOnlyCurrentFolder(entryName)) {
                     continue;
@@ -398,11 +393,8 @@ public class ZipExtractor {
                         Files.createDirectories(folder);
                     }
                 } else {
-                    Path output = null;
-                    if (!skip) {
-                        output = reserveOutput(target, entryName,
-                                writtenPaths);
-                    }
+                    Path output = chooseOutput(target, entryName, skip,
+                            writtenPaths);
                     long remaining = maxBytes - totalBytes;
                     long written = extractFile(zip, entry, output,
                             remaining, maxMegabytes, maxEntries);
@@ -420,10 +412,48 @@ public class ZipExtractor {
         } finally {
             FileUtils.closeIfOpen(zip);
         }
+        requireFilesToGrade(fileCount);
+    }
+
+    // Refuses a zip in which no file was unpacked.
+    private void requireFilesToGrade(int fileCount)
+            throws InvalidArchiveException {
         if (fileCount == 0) {
             throw new InvalidArchiveException("This zip file holds no files "
                     + "to grade." + NEW_COPY_ADVICE);
         }
+    }
+
+    // Returns where a file entry is written, or null for an entry left
+    // out, which is still read so that its bytes count towards the limit.
+    private Path chooseOutput(Path target, String entryName, boolean skip,
+            Set<String> writtenPaths) throws InvalidArchiveException {
+        if (skip) {
+            return null;
+        }
+        return reserveOutput(target, entryName, writtenPaths);
+    }
+
+    // Refuses size and entry limits that are not positive, or so large
+    // that the size in bytes would not fit in a long.
+    private void requireLimitsInRange(long maxMegabytes, int maxEntries)
+            throws IOException {
+        boolean limitsOutOfRange = maxMegabytes <= 0
+                || maxMegabytes > Long.MAX_VALUE / BYTES_PER_MB
+                || maxEntries <= 0;
+        if (limitsOutOfRange) {
+            throw new IOException("Extraction limits are out of range.");
+        }
+    }
+
+    // Returns the name an entry is unpacked under, with forward slashes
+    // and the ends of its parts trimmed, after noting any shortened part.
+    private String unpackedName(ZipEntry entry, List<String> renamedNames) {
+        String zipName = entry.getName().replace(WINDOWS_SEPARATOR,
+                ENTRY_SEPARATOR);
+        String entryName = trimNameParts(zipName);
+        noteRenamed(zipName, renamedNames);
+        return entryName;
     }
 
     // Says whether an entry is left out: an ignored name, or a name that
@@ -512,7 +542,7 @@ public class ZipExtractor {
             CRC32 checksum = new CRC32();
             long total = 0;
             int count = reader.read(buffer);
-            while (count != -1) {
+            while (count != END_OF_STREAM) {
                 if (count > remaining - total) {
                     throw tooBig(maxMegabytes, maxEntries);
                 }
@@ -715,18 +745,15 @@ public class ZipExtractor {
     // unpacked under a shorter name, once, as "ping /Q1" as "ping/Q1".
     private void noteRenamed(String zipName, List<String> renamedNames) {
         String[] parts = zipName.split(ENTRY_SEPARATOR, KEEP_EMPTY_PARTS);
-        String pathBefore = "";
-        String pathAfter = "";
-        for (int i = 0; i < parts.length; i++) {
-            String part = parts[i];
+        List<String> partsBefore = new ArrayList<>();
+        List<String> partsAfter = new ArrayList<>();
+        for (String part : parts) {
             String trimmed = trimNameParts(part);
-            if (i > 0) {
-                pathBefore = pathBefore + ENTRY_SEPARATOR;
-                pathAfter = pathAfter + ENTRY_SEPARATOR;
-            }
-            pathBefore = pathBefore + part;
-            pathAfter = pathAfter + trimmed;
+            partsBefore.add(part);
+            partsAfter.add(trimmed);
 
+            String pathBefore = TextUtils.join(ENTRY_SEPARATOR, partsBefore);
+            String pathAfter = TextUtils.join(ENTRY_SEPARATOR, partsAfter);
             String shown = QUOTE + printable(pathBefore) + QUOTE
                     + RENAMED_AS + QUOTE + printable(pathAfter) + QUOTE;
             boolean newRename = !trimmed.equals(part)

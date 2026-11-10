@@ -49,9 +49,9 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.config.ExportFolders;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Question;
 import gradezzy.model.SavedAssessment;
 import gradezzy.model.Submission;
-import gradezzy.model.Question;
 import gradezzy.service.ChosenSubmissionsStore;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.ui.DragDropHandler;
@@ -63,6 +63,7 @@ import gradezzy.ui.backend.ImportItem;
 import gradezzy.ui.backend.ImportState;
 import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.RunRecord;
+import gradezzy.util.TextUtils;
 
 /**
  * The Set up step.
@@ -149,11 +150,20 @@ public class SetUpScreen extends FlowScreen {
     // The share of the class row for the assessment
     private static final double ASSESSMENT_PERCENT = 44.4;
 
+    // The column of the class row the assessment sits in, after Module
+    // and Section
+    private static final int ASSESSMENT_COLUMN = 2;
+
     // How many facts the settings card shows
     private static final int FACT_COUNT = 4;
 
     // The share of the facts row for each fact
     private static final double FACT_PERCENT = 100.0 / FACT_COUNT;
+
+    // The columns of the facts row for Fix common mistakes and for
+    // Similar code check, after the two time limits
+    private static final int FIXES_FACT_COLUMN = 2;
+    private static final int SIMILAR_FACT_COLUMN = 3;
 
     // Where each class file's result sits in the match check's list
     private static final int ROSTER_MATCH = 0;
@@ -406,7 +416,7 @@ public class SetUpScreen extends FlowScreen {
                 + "files and starter files. Choose another, or add one with "
                 + "Manage assessments.");
         assessmentField.getChildren().add(manage);
-        fields.add(assessmentField, 2, 0);
+        fields.add(assessmentField, ASSESSMENT_COLUMN, 0);
         return Parts.card("Class", new Node[] {fields, earlierRun});
     }
 
@@ -2061,10 +2071,11 @@ public class SetUpScreen extends FlowScreen {
                 + "mistakes, such as a wrong folder name or a missing "
                 + "wrapper folder, are fixed in a copy, never in the "
                 + "original. On Review you approve or undo each fix."),
-                2, 0);
+                FIXES_FACT_COLUMN, 0);
         facts.add(fact("Similar code check", similar, false, "After "
                 + "grading, compares answers and flags pairs that look "
-                + "alike. It only flags; marks never change."), 3, 0);
+                + "alike. It only flags; marks never change."),
+                SIMILAR_FACT_COLUMN, 0);
         checksLine.setText(describeChecks());
     }
 
@@ -2125,15 +2136,14 @@ public class SetUpScreen extends FlowScreen {
         if (words.isEmpty()) {
             return "";
         }
-        String text = words.get(0);
-        int lastIndex = words.size() - 1;
-        for (int index = 1; index < lastIndex; index++) {
-            text += WORD_SEPARATOR + words.get(index);
+        List<String> allButLast = new ArrayList<>(words);
+        int lastIndex = allButLast.size() - 1;
+        String last = allButLast.remove(lastIndex);
+        if (allButLast.isEmpty()) {
+            return last;
         }
-        if (lastIndex > 0) {
-            text += LAST_WORD_SEPARATOR + words.get(lastIndex);
-        }
-        return text;
+        return TextUtils.join(WORD_SEPARATOR, allButLast)
+                + LAST_WORD_SEPARATOR + last;
     }
 
     // Says whether an on or off setting is on.

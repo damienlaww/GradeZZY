@@ -1,7 +1,7 @@
 /*
  * File: FlowSelfTest.java
  *
- * Purpose: Runs nine everyday tasks through the window with the demo
+ * Purpose: Runs ten everyday tasks through the window with the demo
  * data and prints PASS or FAIL for each.
  *
  * Where it fits: Run by "sh run.sh --selftest". Needs no screen. It
@@ -74,7 +74,7 @@ import gradezzy.ui.flow.StudentPanel;
 import gradezzy.ui.flow.Students;
 
 /**
- * The seven demo flows of the window.
+ * The ten demo flows of the window.
  */
 public class FlowSelfTest {
 
@@ -188,7 +188,7 @@ public class FlowSelfTest {
     }
 
     /**
-     * Runs the nine flows and prints PASS or FAIL for each.
+     * Runs the ten flows and prints PASS or FAIL for each.
      *
      * @return 0 when every flow passed, 1 otherwise
      */
@@ -1679,7 +1679,8 @@ public class FlowSelfTest {
         return "";
     }
 
-    // Returns the text of the notice, or an empty string when hidden.
+    // Returns the button of the notice, such as Undo, or null when the
+    // notice is hidden or has none.
     private ButtonBase noticeAction() {
         Node notice = scene.lookup(".notice");
         if (notice instanceof Label && notice.isVisible()

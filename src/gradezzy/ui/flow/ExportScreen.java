@@ -116,6 +116,16 @@ public class ExportScreen extends FlowScreen {
     private static final String FILE_ENDING_PATTERN =
             "\\.[a-z0-9]*[a-z][a-z0-9]*$";
 
+    // What the score sheet gets for one submission: not counted, a mark
+    // filled in, left blank because grading failed, not graded yet or
+    // not chosen, or a graded student who is not on the sheet
+    private static final int ROW_NONE = 0;
+    private static final int ROW_FILLED = 1;
+    private static final int ROW_FAILED = 2;
+    private static final int ROW_WAITING = 3;
+    private static final int ROW_NOT_TICKED = 4;
+    private static final int ROW_OFF_SHEET = 5;
+
     // The names of the background threads
     private static final String SHEET_THREAD = "gradezzy-score-sheet";
     private static final String SIMILARITY_THREAD = "gradezzy-similarity";
@@ -521,29 +531,11 @@ public class ExportScreen extends FlowScreen {
         }
 
         List<Submission> scope = chooseScope(run);
-        int filled = 0;
-        int failed = 0;
-        int waiting = 0;
-        int notTicked = 0;
-        int offSheet = 0;
-        for (Submission submission : run.getSubmissions()) {
-            boolean onSheet = submission.getStudent() != null;
-            boolean graded = ResultState.hasTotal(submission);
-            boolean gradingFailed = submission.getStatus()
-                    == SubmissionStatus.FAILED;
-            boolean exported = graded && scope.contains(submission);
-            if (!onSheet && graded) {
-                offSheet++;
-            } else if (onSheet && exported) {
-                filled++;
-            } else if (onSheet && graded) {
-                notTicked++;
-            } else if (onSheet && gradingFailed) {
-                failed++;
-            } else if (onSheet) {
-                waiting++;
-            }
-        }
+        int filled = countRows(run, scope, ROW_FILLED);
+        int failed = countRows(run, scope, ROW_FAILED);
+        int waiting = countRows(run, scope, ROW_WAITING);
+        int notTicked = countRows(run, scope, ROW_NOT_TICKED);
+        int offSheet = countRows(run, scope, ROW_OFF_SHEET);
         int notOpened = countSkipped(run, missing);
         int noSubmission = missing.size() - notOpened;
 
@@ -559,10 +551,54 @@ public class ExportScreen extends FlowScreen {
             return;
         }
 
+        String reasonList = TextUtils.join(LIST_SEPARATOR, reasons);
+        showCounts(filled, blank, offSheet, reasonList);
+        refreshWarning(run, filled, offSheet, missing.size());
+        int inRun = filled + failed + waiting + notTicked;
+        refreshOtherRun(run, inRun, missing);
+        blankSummary = summarise(filled, blank, offSheet, reasonList);
+    }
+
+    // Counts the submissions of a run that end up in one row kind.
+    private int countRows(GradingRun run, List<Submission> scope,
+            int kind) {
+        int count = 0;
+        for (Submission submission : run.getSubmissions()) {
+            if (rowKind(submission, scope) == kind) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Says what the score sheet gets for one submission: one of the
+    // ROW_ kinds, or ROW_NONE when it is not counted.
+    private int rowKind(Submission submission, List<Submission> scope) {
+        boolean onSheet = submission.getStudent() != null;
+        boolean graded = ResultState.hasTotal(submission);
+        boolean gradingFailed = submission.getStatus()
+                == SubmissionStatus.FAILED;
+        boolean exported = graded && scope.contains(submission);
+        if (!onSheet && graded) {
+            return ROW_OFF_SHEET;
+        } else if (onSheet && exported) {
+            return ROW_FILLED;
+        } else if (onSheet && graded) {
+            return ROW_NOT_TICKED;
+        } else if (onSheet && gradingFailed) {
+            return ROW_FAILED;
+        } else if (onSheet) {
+            return ROW_WAITING;
+        }
+        return ROW_NONE;
+    }
+
+    // Shows the three counts of "What the score sheet will get".
+    private void showCounts(int filled, int blank, int offSheet,
+            String reasonList) {
         filledCount.setText(String.valueOf(filled));
         blankCount.setText(String.valueOf(blank));
         blankWhy.setText("left blank");
-        String reasonList = TextUtils.join(LIST_SEPARATOR, reasons);
         if (blank > 0) {
             blankWhy.setText("left blank: " + reasonList);
         }
@@ -570,10 +606,6 @@ public class ExportScreen extends FlowScreen {
         offCell.setVisible(offSheet > 0);
         offCell.setManaged(offSheet > 0);
         showOutcome(true);
-        refreshWarning(run, filled, offSheet, missing.size());
-        int inRun = filled + failed + waiting + notTicked;
-        refreshOtherRun(run, inRun, missing);
-        blankSummary = summarise(filled, blank, offSheet, reasonList);
     }
 
     // Puts the counts of the score sheet in one sentence, for the
@@ -840,10 +872,11 @@ public class ExportScreen extends FlowScreen {
                 ConfigKeys.ZIP_NAME_PREFIX_PATTERN);
         for (ImportItem item : getState().getSkippedFiles(run)) {
             String itemUser = item.getUsername();
+            boolean fileOfStudent = itemUser.isEmpty()
+                    && isNameOf(item.getName(), username, prefixPattern);
             if (itemUser.equalsIgnoreCase(username)) {
                 return true;
-            } else if (itemUser.isEmpty()
-                    && isNameOf(item.getName(), username, prefixPattern)) {
+            } else if (fileOfStudent) {
                 return true;
             }
         }

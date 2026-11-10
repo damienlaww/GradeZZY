@@ -124,8 +124,8 @@ public class PipelineFactory {
         pipeline.addStage(new FixStage(fixManager,
                 createFileCheckRunner(), workingCopyManager,
                 starterDirectory));
-        pipeline.addStage(new DetectStage(createDetectors(
-                starterDirectory), createRosterChecks()));
+        List<Detector> detectors = createDetectors(starterDirectory);
+        pipeline.addStage(new DetectStage(detectors, createRosterChecks()));
         addRunStages(pipeline, processRunner, starterDirectory);
         pipeline.addStage(new ScoreStage(new ScoreCalculator()));
         pipeline.addStage(new PersistStage(repository));

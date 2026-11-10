@@ -109,8 +109,8 @@ final class JavaSourceScanner {
             if (current == SLASH && next == SLASH) {
                 index = skipPast(source, index, LINE_END);
             } else if (current == SLASH && next == STAR) {
-                index = skipPast(source, index + COMMENT_START_LENGTH,
-                        COMMENT_END);
+                int afterStart = index + COMMENT_START_LENGTH;
+                index = skipPast(source, afterStart, COMMENT_END);
             } else if (isQuote) {
                 index = skipQuoted(source, index);
             } else if (Character.isJavaIdentifierStart(current)) {
@@ -166,9 +166,11 @@ final class JavaSourceScanner {
         // The two tokens before the current one, empty at the start
         String twoBefore = "";
         String before = "";
-        for (int index = 0; index + 1 < tokens.size(); index++) {
+        int lastIndex = tokens.size() - 1;
+        for (int index = 0; index < lastIndex; index++) {
             String name = tokens.get(index);
-            String after = tokens.get(index + 1);
+            int afterIndex = index + 1;
+            String after = tokens.get(afterIndex);
             boolean onClass = before.equals(DOT)
                     && twoBefore.equals(className);
             boolean isCall = after.equals(OPEN_PARENTHESIS) && isName(name)
@@ -225,7 +227,8 @@ final class JavaSourceScanner {
     // looks at no more than MAX_DECLARATION_TOKENS tokens and stops at
     // the next "static", so the whole file is read in one pass.
     private static String findDeclaredName(List<String> tokens, int start) {
-        int stop = Math.min(tokens.size(), start + MAX_DECLARATION_TOKENS);
+        int furthest = start + MAX_DECLARATION_TOKENS;
+        int stop = Math.min(tokens.size(), furthest);
         for (int index = start; index < stop; index++) {
             String token = tokens.get(index);
             if (token.equals(STATIC_KEYWORD)) {

@@ -292,8 +292,8 @@ public class RandomInputChecker {
     private Map<Integer, CallResult> runProgram(Path folder, String source)
             throws ProcessExecutionException {
         Path sourceFile = folder.resolve(InputDriver.FILE_NAME);
-        Path classFile = folder.resolve(InputDriver.CLASS_NAME
-                + CLASS_EXTENSION);
+        String classFileName = InputDriver.CLASS_NAME + CLASS_EXTENSION;
+        Path classFile = folder.resolve(classFileName);
         try {
             FileUtils.writeText(sourceFile, source);
             List<String> sourceNames = new ArrayList<>();

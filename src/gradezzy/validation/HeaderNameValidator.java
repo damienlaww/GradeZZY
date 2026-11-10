@@ -226,7 +226,8 @@ public class HeaderNameValidator extends AbstractValidator {
         String word = label.substring(0, wordEnd);
         int position = line.indexOf(word);
         while (position >= 0) {
-            int colon = skipSpaces(line, position + word.length());
+            int afterWord = position + word.length();
+            int colon = skipSpaces(line, afterWord);
             if (line.startsWith(LABEL_END, colon)) {
                 return colon + LABEL_END.length();
             }

@@ -94,9 +94,9 @@ public class StatisticsCalculator {
             return summary;
         }
 
-        // Percentages let runs with different maximums share one scale
         summary.setMean(mean(totals));
         summary.setMedian(median(totals));
+        // Percentages let runs with different maximums share one scale
         summary.setPassRate(passRate(percents, FULL_PERCENT));
         summary.getMarkBands().addAll(markBands(percents, FULL_PERCENT));
         addQuestionPassRates(summary, runs, graded);
