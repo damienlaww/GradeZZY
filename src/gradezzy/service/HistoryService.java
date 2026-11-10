@@ -56,19 +56,6 @@ public class HistoryService {
     private final Path databaseFile;
 
     /**
-     * Creates a new history service.
-     *
-     * @param config the application settings
-     * @param repository the store results are saved to
-     * @param backupManager the helper that copies the database
-     */
-    public HistoryService(AppConfig config, ResultRepository repository,
-            BackupManager backupManager) {
-        this(config, repository, backupManager,
-                new AuditService(config, repository));
-    }
-
-    /**
      * Creates a new history service that writes backups and restores to
      * the given audit log.
      *

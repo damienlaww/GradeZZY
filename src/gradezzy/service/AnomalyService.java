@@ -65,30 +65,6 @@ public class AnomalyService {
     private final GradingService gradingService;
 
     /**
-     * Creates a new anomaly service that logs nothing.
-     *
-     * @param fixManager the helper that applies and undoes fixes
-     * @param repository the store results are saved to
-     */
-    public AnomalyService(FixManager fixManager, ResultRepository repository) {
-        this(fixManager, repository, null);
-    }
-
-    /**
-     * Creates a new anomaly service that writes every approve and undo to
-     * the audit log.
-     *
-     * @param fixManager the helper that applies and undoes fixes
-     * @param repository the store results are saved to
-     * @param auditService the log of instructor actions, or null to log
-     *        nothing
-     */
-    public AnomalyService(FixManager fixManager, ResultRepository repository,
-            AuditService auditService) {
-        this(fixManager, repository, auditService, null);
-    }
-
-    /**
      * Creates a new anomaly service that logs every approve and undo and
      * grades a student again when one of their fixes is undone.
      *

@@ -979,12 +979,6 @@ folder of the section (`paths.output.dir.by.section`, else
 | Audit log | `AuditLogExporter` | Every logged instructor action. |
 | Common mistakes | `CommonMistakesExporter` | One CSV row per answer group: question, mistake, pattern, the marker's name for it, the number of students, how many share a code shape, whether it was checked, and the usernames. The JSON also gives each question result its group's title and name. |
 
-`ExportService.summarizeScoreSheet` can list which students get a mark,
-which are on the sheet with no submission, which were not graded, and
-which graded students are not on the sheet. Nothing calls it yet: the
-Export step does not show this summary, so blank numerators in the CSV
-are not reported.
-
 ## Statistics
 
 `StatisticsService` filters runs by module and section (newest run per
@@ -1198,7 +1192,6 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `plagiarism.enabled` | `true` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
 | `plagiarism.algorithm` | `trigrams` | How answers are compared: `winnowing` (rename-proof fingerprints, `WinnowingSimilarityDetector`) or `trigrams` (the first version, `TokenSimilarityDetector`). See "Similar code check". |
-| `export.formats` | `csv,json` | Formats offered by default. |
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
 | `export.csv.id.prefix` | `#` | Character in front of the id and username. |
 | `export.csv.end.of.line.marker` | `#` | Value of the last column. |

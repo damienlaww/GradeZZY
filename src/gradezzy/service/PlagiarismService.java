@@ -71,17 +71,6 @@ public class PlagiarismService {
     private final ResultRepository repository;
 
     /**
-     * Creates a new plagiarism service that saves nothing.
-     *
-     * @param config the application settings
-     * @param similarityDetector the algorithm used to compare submissions
-     */
-    public PlagiarismService(AppConfig config,
-            SimilarityDetector similarityDetector) {
-        this(config, similarityDetector, null);
-    }
-
-    /**
      * Creates a new plagiarism service that saves the run after each
      * check.
      *

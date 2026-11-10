@@ -310,11 +310,6 @@ public final class ConfigKeys {
     public static final String PLAGIARISM_ALGORITHM = "plagiarism.algorithm";
 
     /**
-     * Comma separated export formats offered by default.
-     */
-    public static final String EXPORT_FORMATS = "export.formats";
-
-    /**
      * Line ending of the score sheet: CRLF or LF.
      */
     public static final String CSV_LINE_ENDING = "export.csv.line.ending";

@@ -36,17 +36,6 @@ public class StatisticsService {
     private final GradingService gradingService;
 
     /**
-     * Creates a new statistics service that reads saved runs only.
-     *
-     * @param statisticsCalculator the helper that does the calculations
-     * @param repository the store results are saved to
-     */
-    public StatisticsService(StatisticsCalculator statisticsCalculator,
-            ResultRepository repository) {
-        this(statisticsCalculator, repository, null);
-    }
-
-    /**
      * Creates a new statistics service that also counts the runs of this
      * session.
      *

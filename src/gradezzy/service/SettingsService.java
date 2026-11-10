@@ -178,8 +178,7 @@ public class SettingsService {
     // List settings that need at least one item
     private static final String[] REQUIRED_LIST_KEYS = {
         ConfigKeys.MODULE_CODES,
-        ConfigKeys.SECTION_CODES,
-        ConfigKeys.EXPORT_FORMATS
+        ConfigKeys.SECTION_CODES
     };
 
     // List settings that may be empty
@@ -242,7 +241,6 @@ public class SettingsService {
         ConfigKeys.PLAGIARISM_ENABLED,
         ConfigKeys.PLAGIARISM_THRESHOLD,
         ConfigKeys.PLAGIARISM_ALGORITHM,
-        ConfigKeys.EXPORT_FORMATS,
         ConfigKeys.CSV_LINE_ENDING,
         ConfigKeys.CSV_ID_PREFIX,
         ConfigKeys.CSV_END_OF_LINE_MARKER,

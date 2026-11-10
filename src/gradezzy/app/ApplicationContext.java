@@ -75,9 +75,6 @@ public class ApplicationContext {
     // Every service, ready for the user interface
     private final ServiceRegistry services;
 
-    // Why the database could not be opened, or empty when it is fine
-    private final String startupProblem;
-
     /**
      * Builds every service from the configuration. Every setting is
      * checked first, so a bad value stops the app at once with a message
@@ -94,7 +91,7 @@ public class ApplicationContext {
         this.repository = new SqliteResultRepository(
                 config.getString(ConfigKeys.DATABASE_FILE));
 
-        this.startupProblem = openRepository();
+        openRepository();
         FixManager fixManager = createFixManager();
         PipelineFactory pipelineFactory = new PipelineFactory(config,
                 fixManager, repository);
@@ -160,34 +157,19 @@ public class ApplicationContext {
         return services;
     }
 
-    /**
-     * Returns why the database could not be opened at start-up.
-     *
-     * <p>Grading still works without the database, but nothing is saved,
-     * so a screen should show this message when it is not empty.
-     *
-     * @return the problem, or an empty string when there is none
-     */
-    public String getStartupProblem() {
-        return startupProblem;
-    }
-
     // Opens the database when it is switched on. A failure is reported
-    // on the error stream and returned, but does not stop the app: grading
-    // still works, only saving does not.
-    private String openRepository() {
+    // on the error stream but does not stop the app: grading still
+    // works, only saving does not.
+    private void openRepository() {
         if (!config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
-            return "";
+            return;
         }
 
         try {
             repository.open();
-            return "";
         } catch (PersistenceException exception) {
-            String problem = "Results will not be saved: "
-                    + exception.getMessage();
-            System.err.println(problem);
-            return problem;
+            System.err.println("Results will not be saved: "
+                    + exception.getMessage());
         }
     }
 
@@ -230,7 +212,7 @@ public class ApplicationContext {
     // answer groups from answerGroups.
     private ExportService createExportService(
             AnswerGroupSource answerGroups) {
-        ExportService exportService = new ExportService(config);
+        ExportService exportService = new ExportService();
         JsonExporter jsonExporter = new JsonExporter(new JsonWriter());
         jsonExporter.setAnswerGroupSource(answerGroups);
 
