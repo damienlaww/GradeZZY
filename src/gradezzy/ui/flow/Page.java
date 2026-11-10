@@ -11,6 +11,8 @@ package gradezzy.ui.flow;
 
 /**
  * A tab along the top of the window.
+ *
+ * <p>Tier: SHOULD.
  */
 public enum Page {
 

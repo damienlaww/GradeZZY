@@ -31,6 +31,8 @@ import gradezzy.model.TestCaseResult;
 
 /**
  * Synthetic data for demo mode.
+ *
+ * <p>Tier: COULD.
  */
 public final class DemoData {
 
@@ -116,6 +118,28 @@ public final class DemoData {
         {"Devan Alexandra-Rose", "Montgomery-Abernathy"},
         {"Ellis", "Tan"}, {"Frankie", "Park"}};
 
+    // Positions of the first and last name in a row of NAMES
+    private static final int FIRST_NAME = 0;
+    private static final int LAST_NAME = 1;
+
+    // The text before the number of a synthetic OrgDefinedId
+    private static final String ID_PREFIX = "#";
+
+    // The OrgDefinedId of a student who is not a sample student
+    private static final String UNLISTED_ID = ID_PREFIX + "0";
+
+    // The pattern of a generated username: learner.g and three digits
+    private static final String GENERATED_USERNAME_FORMAT = "learner.g%03d";
+
+    // The separator between folders in a relative source path
+    private static final char PATH_SEPARATOR = '/';
+
+    // The line ending of tester output
+    private static final String LINE_END = "\n";
+
+    // The line a tester prints for a passed case
+    private static final String PASSED = "Passed";
+
     /** The name of the sample assessment. */
     public static final String ASSESSMENT_NAME = "Lab Test";
 
@@ -156,6 +180,10 @@ public final class DemoData {
     private static final int Q1B = 1;
     private static final int Q2A = 2;
     private static final int Q2B = 3;
+
+    // The first two cases of Q1a, which pass in the sample run
+    private static final int FIRST_CASE = 1;
+    private static final int SECOND_CASE = 2;
 
     // The case of Q1a that hangs or throws in the sample run
     private static final int FAILING_CASE = 3;
@@ -249,13 +277,14 @@ public final class DemoData {
      */
     public static Student studentFor(String username) {
         int index = indexOf(username);
+        String email = username + EMAIL_DOMAIN;
         if (index >= 0) {
-            return new Student("#" + (index + 1), username,
-                    NAMES[index][1], NAMES[index][0],
-                    username + EMAIL_DOMAIN);
+            int idNumber = index + 1;
+            return new Student(ID_PREFIX + idNumber, username,
+                    NAMES[index][LAST_NAME], NAMES[index][FIRST_NAME],
+                    email);
         }
-        return new Student("#0", username, "", username, username
-                + EMAIL_DOMAIN);
+        return new Student(UNLISTED_ID, username, "", username, email);
     }
 
     /**
@@ -331,15 +360,20 @@ public final class DemoData {
                 timeoutSeconds, ids);
         Random random = new Random(COHORT_SEED);
 
-        for (int number = USERNAMES.length + 1;
-                number <= LARGE_COHORT_SIZE; number++) {
-            String username = String.format("learner.g%03d", number);
+        int firstNumber = USERNAMES.length + 1;
+        for (int number = firstNumber; number <= LARGE_COHORT_SIZE;
+                number++) {
+            String username = String.format(GENERATED_USERNAME_FORMAT,
+                    number);
+            String fileName = username + ZIP_EXTENSION;
             Submission submission = new Submission(username, section,
-                    samplePath(username + ZIP_EXTENSION));
-            submission.setStudent(new Student("#" + number, username,
-                    LAST_NAMES[number % LAST_NAMES.length],
-                    FIRST_NAMES[number % FIRST_NAMES.length],
-                    username + EMAIL_DOMAIN));
+                    samplePath(fileName));
+            int lastNameIndex = number % LAST_NAMES.length;
+            int firstNameIndex = number % FIRST_NAMES.length;
+            String email = username + EMAIL_DOMAIN;
+            submission.setStudent(new Student(ID_PREFIX + number, username,
+                    LAST_NAMES[lastNameIndex], FIRST_NAMES[firstNameIndex],
+                    email));
             applyGeneratedOutcome(submission, assessment, number, random,
                     timeoutSeconds, ids);
             run.addSubmission(submission);
@@ -396,12 +430,12 @@ public final class DemoData {
         result.getTestCaseResults().clear();
         for (int number = 1; number <= cases; number++) {
             result.addTestCaseResult(new TestCaseResult(number, true,
-                    "Passed"));
+                    PASSED));
         }
         result.setTimedOut(false);
         result.setScore(result.getQuestion().getMaxScore());
-        result.setOutput(testerOutput(cases, cases)
-                + "\n(Retried: every case finished within the limit.)");
+        result.setOutput(testerOutput(cases, cases) + LINE_END
+                + "(Retried: every case finished within the limit.)");
     }
 
     /**
@@ -413,15 +447,16 @@ public final class DemoData {
      */
     public static String sourceText(String username, String relativePath) {
         Student student = studentFor(username);
-        String className = relativePath.substring(
-                relativePath.lastIndexOf('/') + 1,
-                relativePath.length() - ".java".length());
+        int nameStart = relativePath.lastIndexOf(PATH_SEPARATOR) + 1;
+        int nameEnd = relativePath.length() - JAVA_EXTENSION.length();
+        String className = relativePath.substring(nameStart, nameEnd);
         String header = "/*\n * Name: " + student.getFirstName() + " "
                 + student.getLastName() + "\n * Email ID: " + username
                 + "\n * Synthetic sample file for the GradeZZY demo.\n */\n";
 
-        if (username.equals(TIMEOUT_USERNAME)
-                && className.equals(TIMEOUT_QUESTION)) {
+        boolean hangingAnswer = username.equals(TIMEOUT_USERNAME)
+                && className.equals(TIMEOUT_QUESTION);
+        if (hangingAnswer) {
             return header + "public class Q1a {\n"
                     + "    public static int countWords(String[] words) {\n"
                     + "        int count = 0;\n"
@@ -456,7 +491,8 @@ public final class DemoData {
      * @return the path
      */
     public static Path samplePath(String fileName) {
-        if (fileName.equals(LONG_PATH_USERNAME + ZIP_EXTENSION)) {
+        String longPathZip = LONG_PATH_USERNAME + ZIP_EXTENSION;
+        if (fileName.equals(longPathZip)) {
             return Paths.get(SAMPLE_FOLDER, LONG_PATH_FOLDERS)
                     .resolve(fileName);
         }
@@ -498,8 +534,9 @@ public final class DemoData {
     // Creates a pending submission of a sample student.
     private static Submission newSubmission(String username,
             Section section) {
+        String fileName = username + ZIP_EXTENSION;
         Submission submission = new Submission(username, section,
-                samplePath(username + ZIP_EXTENSION));
+                samplePath(fileName));
         submission.setStudent(studentFor(username));
         return submission;
     }
@@ -522,8 +559,8 @@ public final class DemoData {
         String username = submission.getUsername();
         QuestionResult q1a = submission.getQuestionResults().get(Q1A);
         q1a.getTestCaseResults().clear();
-        q1a.addTestCaseResult(new TestCaseResult(1, true, "Passed"));
-        q1a.addTestCaseResult(new TestCaseResult(2, true, "Passed"));
+        q1a.addTestCaseResult(new TestCaseResult(FIRST_CASE, true, PASSED));
+        q1a.addTestCaseResult(new TestCaseResult(SECOND_CASE, true, PASSED));
         q1a.addTestCaseResult(new TestCaseResult(FAILING_CASE, false,
                 "Not finished: the tester was stopped at the "
                 + timeoutSeconds + " s limit before case 3 printed a "
@@ -571,7 +608,7 @@ public final class DemoData {
                 "Q2b did not compile: cannot find symbol class Q2b. The "
                 + "other questions were still graded.",
                 "Open code and test output on Review to read the "
-                    + "compiler output."));
+                + "compiler output."));
 
         Path found = workingCopyPath(username).resolve("Q2")
                 .resolve("q2b.java");
@@ -615,8 +652,8 @@ public final class DemoData {
         String username = submission.getUsername();
         QuestionResult q1a = submission.getQuestionResults().get(Q1A);
         q1a.getTestCaseResults().clear();
-        q1a.addTestCaseResult(new TestCaseResult(1, true, "Passed"));
-        q1a.addTestCaseResult(new TestCaseResult(2, false,
+        q1a.addTestCaseResult(new TestCaseResult(FIRST_CASE, true, PASSED));
+        q1a.addTestCaseResult(new TestCaseResult(SECOND_CASE, false,
                 "Failed: expected 4 but got 3"));
         q1a.addTestCaseResult(new TestCaseResult(FAILING_CASE, false,
                 "Failed: IllegalArgumentException at Q1a.java:27"));
@@ -692,16 +729,31 @@ public final class DemoData {
             return;
         }
 
+        addGeneratedScores(submission, assessment, number, random);
+        addGeneratedFlags(submission, number, timeoutSeconds, ids);
+        submission.setWorkingCopyPath(workingCopyPath(username));
+        submission.setStatus(SubmissionStatus.GRADED);
+    }
+
+    // Gives a generated student random marks, or zero on every question.
+    private static void addGeneratedScores(Submission submission,
+            Assessment assessment, int number, Random random) {
         boolean zero = number % ZERO_EVERY == 0;
         for (Question question : assessment.getQuestions()) {
             int max = (int) question.getMaxScore();
             int score = 0;
             if (!zero) {
-                score = random.nextInt(max + 1);
+                int bound = max + 1;
+                score = random.nextInt(bound);
             }
             submission.addQuestionResult(passedFirst(question, score));
         }
+    }
 
+    // Adds the flags a generated student gets, picked by its number.
+    private static void addGeneratedFlags(Submission submission, int number,
+            int timeoutSeconds, DemoIdCounter ids) {
+        String username = submission.getUsername();
         if (number % COMPILE_ERROR_EVERY == 0) {
             QuestionResult q2a = submission.getQuestionResults().get(Q2A);
             markNotCompiled(q2a, "Q2a.java:12: error: ';' expected");
@@ -730,8 +782,6 @@ public final class DemoData {
                     username, "The Q3 folder is missing.",
                     "Ask for a corrected submission."));
         }
-        submission.setWorkingCopyPath(workingCopyPath(username));
-        submission.setStatus(SubmissionStatus.GRADED);
     }
 
     // Returns a sample student's mark for the question at a position, or
@@ -752,7 +802,7 @@ public final class DemoData {
         for (int number = 1; number <= cases; number++) {
             if (number <= score) {
                 result.addTestCaseResult(new TestCaseResult(number, true,
-                        "Passed"));
+                        PASSED));
             } else {
                 result.addTestCaseResult(new TestCaseResult(number, false,
                         failedLine(number)));
@@ -778,9 +828,9 @@ public final class DemoData {
         String output = "";
         for (int number = 1; number <= cases; number++) {
             if (number <= passed) {
-                output += "Passed\n";
+                output += PASSED + LINE_END;
             } else {
-                output += failedLine(number) + "\n";
+                output += failedLine(number) + LINE_END;
             }
         }
         output += (double) passed;
@@ -790,13 +840,15 @@ public final class DemoData {
     // Writes the made-up Failed line of one test case.
     private static String failedLine(int number) {
         int expected = number * EXPECTED_FACTOR;
-        return "Failed: expected " + expected + " but got " + (expected - 1);
+        int got = expected - 1;
+        return "Failed: expected " + expected + " but got " + got;
     }
 
     // Builds a log of about 100,000 characters, to test long output. The
     // text is long, so it is built in a char array, not with + in a loop.
     private static String longLog() {
-        char[] log = new char[LONG_LOG_CHARACTERS + LOG_SPARE_CHARACTERS];
+        int capacity = LONG_LOG_CHARACTERS + LOG_SPARE_CHARACTERS;
+        char[] log = new char[capacity];
         int count = copyInto(log, 0, "Passed\nFailed: expected 4 "
                 + "but got 3\nException in thread \"main\" "
                 + "java.lang.IllegalArgumentException: empty word list\n");

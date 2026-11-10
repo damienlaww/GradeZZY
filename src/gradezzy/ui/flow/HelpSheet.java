@@ -24,6 +24,8 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * Builds the Help sheet.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class HelpSheet {
 
@@ -44,6 +46,15 @@ public final class HelpSheet {
 
     // The gap between the two columns of a table
     private static final double COLUMN_GAP = 12.0;
+
+    // The position of the name in each pair, and its column in a table
+    private static final int NAME_COLUMN = 0;
+
+    // The position of the text in each pair, and its column in a table
+    private static final int TEXT_COLUMN = 1;
+
+    // What a tab name starts with when it is a step of Grading
+    private static final String STEP_MARK = " ";
 
     // The tabs and what each one is for; a leading space marks a step
     private static final String[][] TABS = {
@@ -94,7 +105,8 @@ public final class HelpSheet {
                 + "each part of the window. Click any \"?\" to see "
                 + "what a word means.");
         start.setWrapText(true);
-        start.setMaxWidth(TAB_NAME_WIDTH + TAB_TEXT_WIDTH + COLUMN_GAP);
+        double tabsWidth = TAB_NAME_WIDTH + TAB_TEXT_WIDTH + COLUMN_GAP;
+        start.setMaxWidth(tabsWidth);
         VBox tabs = new VBox(Parts.GAP, Parts.title("How GradeZZY works"),
                 start, table(TABS, TAB_NAME_WIDTH, TAB_TEXT_WIDTH));
         VBox other = new VBox(Parts.GAP, Parts.title("Keyboard"),
@@ -119,15 +131,16 @@ public final class HelpSheet {
         grid.getColumnConstraints().addAll(column(nameWidth),
                 column(textWidth));
         for (int i = 0; i < rows.length; i++) {
-            Label name = Parts.strong(rows[i][0].trim());
-            if (rows[i][0].startsWith(" ")) {
+            String nameText = rows[i][NAME_COLUMN];
+            Label name = Parts.strong(nameText.trim());
+            if (nameText.startsWith(STEP_MARK)) {
                 name.getStyleClass().setAll("label", "help-step");
             }
-            Label text = Parts.muted(rows[i][1]);
+            Label text = Parts.muted(rows[i][TEXT_COLUMN]);
             text.setWrapText(true);
             text.setMinHeight(Region.USE_PREF_SIZE);
-            grid.add(name, 0, i);
-            grid.add(text, 1, i);
+            grid.add(name, NAME_COLUMN, i);
+            grid.add(text, TEXT_COLUMN, i);
         }
         return grid;
     }

@@ -77,6 +77,10 @@ public class GuidedTour {
     // The width of the blue border
     private static final double RING_WIDTH = 2.0;
 
+    // How much wider and taller the border is than the light: RING_GAP
+    // on each side
+    private static final double RING_SPREAD = 2 * RING_GAP;
+
     // How far the pulse spreads out from the border
     private static final double PULSE_SPREAD = 14.0;
 
@@ -247,7 +251,8 @@ public class GuidedTour {
         if (!open) {
             return;
         }
-        if (index == stops.size() - 1) {
+        int lastIndex = stops.size() - 1;
+        if (index == lastIndex) {
             end();
             return;
         }
@@ -403,6 +408,14 @@ public class GuidedTour {
     // Lists every stop, in the order the tour shows them.
     private static List<TourStop> createStops() {
         List<TourStop> list = new ArrayList<>();
+        addHomeStops(list);
+        addGradingStops(list);
+        addOtherTabStops(list);
+        return list;
+    }
+
+    // Adds the stops on Home: the welcome, the tabs and the Home page.
+    private static void addHomeStops(List<TourStop> list) {
         list.add(new TourStop(Page.HOME, null, "Welcome",
                 "Welcome to GradeZZY",
                 "This tour shows what each part of the window does. It "
@@ -423,6 +436,10 @@ public class GuidedTour {
                 "Each card shows how far its section has got and its "
                 + "average mark. Click a card to carry on, or drop zip "
                 + "files on it to start."));
+    }
+
+    // Adds the stops on the four steps of Grading.
+    private static void addGradingStops(List<TourStop> list) {
         list.add(new TourStop(Step.SET_UP, ".step-bar", "Four steps",
                 "Grading goes Set up, Grade, Review, Export. A step opens "
                 + "once you reach it, and you can go back to any step "
@@ -461,6 +478,11 @@ public class GuidedTour {
                 + "the marks filled in. Tick the extras you want, such "
                 + "as a JSON file with each question's marks.",
                 "This step opens after Review."));
+    }
+
+    // Adds the stops on Statistics, History and Settings, and the last
+    // stop on Help.
+    private static void addOtherTabStops(List<TourStop> list) {
         list.add(new TourStop(Page.STATISTICS, ".stats-header",
                 "Statistics", "How a section did",
                 "The average, the spread and the pass rate of a section, "
@@ -480,7 +502,6 @@ public class GuidedTour {
                 "Help is here",
                 "Help explains each tab and the keyboard shortcuts. "
                 + "Take the tour from there to see this again."));
-        return list;
     }
 
     // Builds the card: the area and the count, the title, the text and
@@ -536,11 +557,13 @@ public class GuidedTour {
         TourStop stop = stops.get(index);
         boolean locked = openPlace(stop);
         area.setText(stop.getArea().toUpperCase(Locale.ROOT));
-        count.setText((index + 1) + " of " + stops.size());
+        int stopNumber = index + 1;
+        count.setText(stopNumber + " of " + stops.size());
         title.setText(stop.getTitle());
         text.setText(stop.getText(locked));
         back.setDisable(index == 0);
-        boolean last = index == stops.size() - 1;
+        int lastIndex = stops.size() - 1;
+        boolean last = index == lastIndex;
         skip.setVisible(!last);
         if (last) {
             next.setText("Done");
@@ -577,8 +600,9 @@ public class GuidedTour {
             }
             return true;
         }
-        if (window.getCurrentPage() != Page.MARKING
-                || window.getCurrentStep() != step) {
+        boolean elsewhere = window.getCurrentPage() != Page.MARKING
+                || window.getCurrentStep() != step;
+        if (elsewhere) {
             window.show(step);
         }
         return false;
@@ -648,19 +672,23 @@ public class GuidedTour {
             return;
         }
         Node content = scroll.getContent();
-        Bounds box = content.sceneToLocal(node.localToScene(
-                node.getBoundsInLocal()));
+        Bounds inScene = node.localToScene(node.getBoundsInLocal());
+        Bounds box = content.sceneToLocal(inScene);
         double view = scroll.getViewportBounds().getHeight();
         double extra = content.getBoundsInLocal().getHeight() - view;
         if (extra <= 0) {
             return;
         }
         double top = scroll.getVvalue() * extra;
-        if (box.getMinY() >= top && box.getMaxY() <= top + view) {
+        double viewBottom = top + view;
+        boolean inView = box.getMinY() >= top
+                && box.getMaxY() <= viewBottom;
+        if (inView) {
             return;
         }
         double wanted = (box.getMinY() - SCROLL_MARGIN) / extra;
-        scroll.setVvalue(Math.max(0.0, Math.min(1.0, wanted)));
+        double notAfterEnd = Math.min(1.0, wanted);
+        scroll.setVvalue(Math.max(0.0, notAfterEnd));
     }
 
     // Returns the scroll pane a part sits in, or null.
@@ -691,14 +719,18 @@ public class GuidedTour {
             right = Math.min(right, view.getMaxX());
             bottom = Math.min(bottom, view.getMaxY());
         }
-        Bounds local = overlay.sceneToLocal(new BoundingBox(left, top,
-                Math.max(0.0, right - left), Math.max(0.0, bottom - top)));
+        double sceneWidth = Math.max(0.0, right - left);
+        double sceneHeight = Math.max(0.0, bottom - top);
+        Bounds inScene = new BoundingBox(left, top, sceneWidth,
+                sceneHeight);
+        Bounds local = overlay.sceneToLocal(inScene);
         double minX = Math.max(local.getMinX(), 0.0);
         double minY = Math.max(local.getMinY(), 0.0);
         double maxX = Math.min(local.getMaxX(), overlay.getWidth());
         double maxY = Math.min(local.getMaxY(), overlay.getHeight());
-        return new BoundingBox(minX, minY, Math.max(0.0, maxX - minX),
-                Math.max(0.0, maxY - minY));
+        double width = Math.max(0.0, maxX - minX);
+        double height = Math.max(0.0, maxY - minY);
+        return new BoundingBox(minX, minY, width, height);
     }
 
     // Moves the light to a part, sliding when asked, or dims the whole
@@ -716,33 +748,58 @@ public class GuidedTour {
             placeCard(null);
             return;
         }
-        Bounds box = visibleBox(found);
-        double left = Math.max(EDGE_SPACE, box.getMinX() - HOLE_PADDING);
-        double top = Math.max(EDGE_SPACE, box.getMinY() - HOLE_PADDING);
-        double right = Math.min(overlay.getWidth() - EDGE_SPACE,
-                box.getMaxX() + HOLE_PADDING);
-        double bottom = Math.min(overlay.getHeight() - EDGE_SPACE,
-                box.getMaxY() + HOLE_PADDING);
-        double width = Math.max(0.0, right - left);
-        double height = Math.max(0.0, bottom - top);
+        Bounds hole = holeAround(found);
         ring.setVisible(true);
         pulse.setVisible(true);
         if (!slide) {
-            setHole(left, top, width, height);
+            setHole(hole.getMinX(), hole.getMinY(), hole.getWidth(),
+                    hole.getHeight());
         } else {
-            if (!wasLit) {
-                // Grow out of the part's middle
-                setHole(left + width / 2, top + height / 2, 0.0, 0.0);
-            }
-            KeyFrame end = new KeyFrame(MOVE_TIME, new KeyValue[] {
-                new KeyValue(holeX, left, Interpolator.EASE_BOTH),
-                new KeyValue(holeY, top, Interpolator.EASE_BOTH),
-                new KeyValue(holeWidth, width, Interpolator.EASE_BOTH),
-                new KeyValue(holeHeight, height, Interpolator.EASE_BOTH)});
-            moveTimeline = new Timeline(new KeyFrame[] {end});
-            moveTimeline.play();
+            slideHole(hole, wasLit);
         }
-        placeCard(new BoundingBox(left, top, width, height));
+        placeCard(hole);
+    }
+
+    // Returns where the light goes around a part: the part's visible
+    // box with HOLE_PADDING around it, kept EDGE_SPACE inside the
+    // window.
+    private Bounds holeAround(Node found) {
+        Bounds box = visibleBox(found);
+        double paddedLeft = box.getMinX() - HOLE_PADDING;
+        double paddedTop = box.getMinY() - HOLE_PADDING;
+        double paddedRight = box.getMaxX() + HOLE_PADDING;
+        double paddedBottom = box.getMaxY() + HOLE_PADDING;
+        double rightEdge = overlay.getWidth() - EDGE_SPACE;
+        double bottomEdge = overlay.getHeight() - EDGE_SPACE;
+        double left = Math.max(EDGE_SPACE, paddedLeft);
+        double top = Math.max(EDGE_SPACE, paddedTop);
+        double right = Math.min(rightEdge, paddedRight);
+        double bottom = Math.min(bottomEdge, paddedBottom);
+        double width = Math.max(0.0, right - left);
+        double height = Math.max(0.0, bottom - top);
+        return new BoundingBox(left, top, width, height);
+    }
+
+    // Slides the light to where it is given. A light that was off first
+    // grows out of the middle of that place.
+    private void slideHole(Bounds hole, boolean wasLit) {
+        double left = hole.getMinX();
+        double top = hole.getMinY();
+        double width = hole.getWidth();
+        double height = hole.getHeight();
+        if (!wasLit) {
+            // Grow out of the part's middle
+            double middleX = left + width / 2;
+            double middleY = top + height / 2;
+            setHole(middleX, middleY, 0.0, 0.0);
+        }
+        KeyFrame end = new KeyFrame(MOVE_TIME, new KeyValue[] {
+            new KeyValue(holeX, left, Interpolator.EASE_BOTH),
+            new KeyValue(holeY, top, Interpolator.EASE_BOTH),
+            new KeyValue(holeWidth, width, Interpolator.EASE_BOTH),
+            new KeyValue(holeHeight, height, Interpolator.EASE_BOTH)});
+        moveTimeline = new Timeline(new KeyFrame[] {end});
+        moveTimeline.play();
     }
 
     // Puts the light at once where it is given.
@@ -780,12 +837,17 @@ public class GuidedTour {
 
     // Puts a border just outside the light.
     private void placeRing(Rectangle border) {
-        border.setX(holeX.get() - RING_GAP);
-        border.setY(holeY.get() - RING_GAP);
-        border.setWidth(holeWidth.get() + 2 * RING_GAP);
-        border.setHeight(holeHeight.get() + 2 * RING_GAP);
-        border.setArcWidth(HOLE_ARC + 2 * RING_GAP);
-        border.setArcHeight(HOLE_ARC + 2 * RING_GAP);
+        double left = holeX.get() - RING_GAP;
+        double top = holeY.get() - RING_GAP;
+        double width = holeWidth.get() + RING_SPREAD;
+        double height = holeHeight.get() + RING_SPREAD;
+        double arc = HOLE_ARC + RING_SPREAD;
+        border.setX(left);
+        border.setY(top);
+        border.setWidth(width);
+        border.setHeight(height);
+        border.setArcWidth(arc);
+        border.setArcHeight(arc);
     }
 
     // Puts the card in the bottom-left corner. When the light is there,
@@ -798,12 +860,14 @@ public class GuidedTour {
         double bottom = overlay.getHeight() - height - MARGIN;
         double cardLeft = left;
         double cardTop = bottom;
-        if (light != null && light.intersects(left, bottom, CARD_WIDTH,
-                height)) {
+        boolean coversLeft = light != null
+                && light.intersects(left, bottom, CARD_WIDTH, height);
+        if (coversLeft) {
             cardLeft = right;
             if (light.intersects(right, bottom, CARD_WIDTH, height)) {
+                double aboveLight = light.getMinY() - height - MARGIN;
                 cardLeft = left;
-                cardTop = Math.max(MARGIN, light.getMinY() - height - MARGIN);
+                cardTop = Math.max(MARGIN, aboveLight);
             }
         }
         card.resize(CARD_WIDTH, height);
@@ -817,8 +881,9 @@ public class GuidedTour {
             return;
         }
         Node found = target;
-        if (found != null && (found.getScene() == null
-                || !isShown(found))) {
+        boolean gone = found != null
+                && (found.getScene() == null || !isShown(found));
+        if (gone) {
             found = null;
         }
         moveLight(found, false);

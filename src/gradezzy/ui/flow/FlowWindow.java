@@ -17,6 +17,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import javafx.animation.PauseTransition;
@@ -56,6 +57,8 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * The window of GradeZZY.
+ *
+ * <p>Tier: SHOULD.
  */
 public class FlowWindow {
 
@@ -90,6 +93,18 @@ public class FlowWindow {
     // With Ctrl or Cmd, the keys that open steps 1 to 4
     private static final KeyCode[] STEP_KEYS = {KeyCode.DIGIT1,
         KeyCode.DIGIT2, KeyCode.DIGIT3, KeyCode.DIGIT4};
+
+    // The first word of a confirm button that deletes or removes
+    // something, in lower case
+    private static final String[] DESTRUCTIVE_WORDS = {"delete", "remove",
+        "discard"};
+
+    // The name of the thread that looks up the students with no
+    // submission
+    private static final String ROSTER_THREAD = "gradezzy-roster";
+
+    // The style class of the outer layout and the root in the dark theme
+    private static final String DARK_CLASS = "dark";
 
     // The backend every screen calls
     private final DashboardBackend backend;
@@ -369,8 +384,9 @@ public class FlowWindow {
         if (setUp instanceof SetUpScreen) {
             ((SetUpScreen) setUp).assessmentChanged();
         }
-        if (sheet == null && !(currentPage == Page.SETTINGS
-                && hasUnsavedSettings())) {
+        boolean keepsSettings = currentPage == Page.SETTINGS
+                && hasUnsavedSettings();
+        if (sheet == null && !keepsSettings) {
             refreshScreen();
         }
     }
@@ -617,7 +633,9 @@ public class FlowWindow {
         dim.getStyleClass().add("sheet-dim");
         dim.setOnMouseClicked(event -> clickBehindSheet(event, dim));
         sheet = dim;
-        layers.getChildren().add(layers.getChildren().size() - 1, dim);
+        // Under the notice, which is the last layer
+        int belowNotice = layers.getChildren().size() - 1;
+        layers.getChildren().add(belowNotice, dim);
         actionBar.setDisable(true);
     }
 
@@ -703,8 +721,8 @@ public class FlowWindow {
             Button other = Parts.secondary(otherText,
                     () -> confirmed(onOther));
             // Between Cancel and the filled button
-            buttons.getChildren().add(buttons.getChildren().size() - 1,
-                    other);
+            int beforeOk = buttons.getChildren().size() - 1;
+            buttons.getChildren().add(beforeOk, other);
         }
         VBox body = new VBox(Parts.GAP, Parts.title(title), content,
                 buttons);
@@ -770,9 +788,13 @@ public class FlowWindow {
 
     // Says whether a confirm button's words delete or remove something.
     private static boolean isDestructive(String okText) {
-        String words = okText.toLowerCase(java.util.Locale.ROOT);
-        return words.startsWith("delete") || words.startsWith("remove")
-                || words.startsWith("discard");
+        String words = okText.toLowerCase(Locale.ROOT);
+        for (String start : DESTRUCTIVE_WORDS) {
+            if (words.startsWith(start)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -811,7 +833,7 @@ public class FlowWindow {
             lookup.setOnSucceeded(event -> missingFound(lookup));
             lookup.setOnFailed(event -> missingNotFound(lookup));
             missingLookup = lookup;
-            Thread worker = new Thread(lookup, "gradezzy-roster");
+            Thread worker = new Thread(lookup, ROSTER_THREAD);
             worker.setDaemon(true);
             worker.start();
         }
@@ -1075,8 +1097,9 @@ public class FlowWindow {
     private void matchAssessment(GradingRun run) {
         Assessment graded = run.getAssessment();
         Assessment inUse = backend.getAssessment();
-        if (graded == null || inUse == null
-                || graded.getName().equalsIgnoreCase(inUse.getName())) {
+        boolean nothingToSwitch = graded == null || inUse == null
+                || graded.getName().equalsIgnoreCase(inUse.getName());
+        if (nothingToSwitch) {
             return;
         }
         for (SavedAssessment saved : backend.listAssessments()) {
@@ -1223,6 +1246,7 @@ public class FlowWindow {
      * @param event the key press; consumed when it was a shortcut
      */
     private void handleShortcut(KeyEvent event) {
+        boolean escape = event.getCode() == KeyCode.ESCAPE;
         if (tour != null && tour.isOpen()) {
             tour.handleKey(event);
         } else if (NEXT_KEYS.match(event)) {
@@ -1231,11 +1255,10 @@ public class FlowWindow {
         } else if (FIND_KEYS.match(event) && isReviewShown()) {
             ((ReviewScreen) getScreen(Step.REVIEW)).focusSearch();
             event.consume();
-        } else if (event.getCode() == KeyCode.ESCAPE && sheet != null) {
+        } else if (escape && sheet != null) {
             closeSheet();
             event.consume();
-        } else if (event.getCode() == KeyCode.ESCAPE
-                && currentScreen().onEscape()) {
+        } else if (escape && currentScreen().onEscape()) {
             event.consume();
         } else if (event.isShortcutDown() && sheet == null) {
             for (int i = 0; i < STEP_KEYS.length; i++) {
@@ -1265,11 +1288,11 @@ public class FlowWindow {
     // Adds or removes the dark class on the outer layout and on the root
     // of the scene, which also holds the tour.
     private void applyDarkClass() {
-        frame.getStyleClass().remove("dark");
-        root.getStyleClass().remove("dark");
+        frame.getStyleClass().remove(DARK_CLASS);
+        root.getStyleClass().remove(DARK_CLASS);
         if (dark) {
-            frame.getStyleClass().add("dark");
-            root.getStyleClass().add("dark");
+            frame.getStyleClass().add(DARK_CLASS);
+            root.getStyleClass().add(DARK_CLASS);
         }
     }
 }

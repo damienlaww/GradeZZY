@@ -33,19 +33,23 @@ import gradezzy.util.TextUtils;
  */
 final class RunTables {
 
+    // Saves the row of a run, replacing an earlier one with the same id
     private static final String INSERT_RUN = "INSERT OR REPLACE INTO runs "
             + "(run_id, started_at, module_code, section_code, "
             + "assessment_name, assessment_module, placeholder_folders, "
             + "score_sheet_file, testers_dir, starter_dir) "
             + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+    // Saves one question of a run
     private static final String INSERT_QUESTION = "INSERT INTO "
             + "run_questions (run_id, position, question_id, folder_name, "
             + "file_name, max_score) VALUES (?, ?, ?, ?, ?, ?)";
 
+    // Removes the saved questions of a run
     private static final String DELETE_QUESTIONS = "DELETE FROM "
             + "run_questions WHERE run_id = ?";
 
+    // Reads the row of one run
     private static final String SELECT_RUN = "SELECT started_at, "
             + "module_code, section_code, assessment_name, "
             + "assessment_module, placeholder_folders, score_sheet_file, "
@@ -55,6 +59,7 @@ final class RunTables {
     private static final String SELECT_RUN_IDS = "SELECT run_id FROM runs "
             + "ORDER BY started_at DESC, run_id DESC";
 
+    // Lists the saved questions of a run in their saved order
     private static final String SELECT_QUESTIONS = "SELECT question_id, "
             + "folder_name, file_name, max_score FROM run_questions "
             + "WHERE run_id = ? ORDER BY position";

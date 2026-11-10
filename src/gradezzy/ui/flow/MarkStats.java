@@ -18,6 +18,8 @@ import gradezzy.model.Submission;
 
 /**
  * The figures of one set of total marks.
+ *
+ * <p>Tier: SHOULD.
  */
 public class MarkStats {
 
@@ -161,10 +163,13 @@ public class MarkStats {
             return 0;
         }
         int middle = count / 2;
-        if (count % 2 == 1) {
+        boolean odd = count % 2 == 1;
+        if (odd) {
             return totals.get(middle);
         }
-        return (totals.get(middle - 1) + totals.get(middle)) / 2;
+        int belowMiddle = middle - 1;
+        double middleSum = totals.get(belowMiddle) + totals.get(middle);
+        return middleSum / 2;
     }
 
     /**
@@ -180,7 +185,8 @@ public class MarkStats {
         double mean = getMean();
         double sum = 0;
         for (double total : totals) {
-            sum += (total - mean) * (total - mean);
+            double gap = total - mean;
+            sum += gap * gap;
         }
         return Math.sqrt(sum / totals.size());
     }
@@ -206,7 +212,8 @@ public class MarkStats {
         if (totals.isEmpty()) {
             return 0;
         }
-        return totals.get(totals.size() - 1);
+        int lastIndex = totals.size() - 1;
+        return totals.get(lastIndex);
     }
 
     /**
@@ -252,7 +259,9 @@ public class MarkStats {
         double width = maxTotal / binCount;
         for (double total : totals) {
             int bin = (int) Math.floor(total / width);
-            bin = Math.max(0, Math.min(binCount - 1, bin));
+            int lastBin = binCount - 1;
+            int notAbove = Math.min(lastBin, bin);
+            bin = Math.max(0, notAbove);
             counts[bin]++;
         }
         return counts;

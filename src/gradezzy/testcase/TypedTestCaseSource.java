@@ -108,10 +108,11 @@ public class TypedTestCaseSource implements TestCaseSource {
                 }
             }
 
+            double maxScore = casesOfQuestion.size()
+                    * TesterGenerator.MARKS_PER_CASE;
             questions.set(index, new Question(question.getId(),
                     question.getFolderName(), question.getFileName(),
-                    casesOfQuestion.size()
-                    * TesterGenerator.MARKS_PER_CASE));
+                    maxScore));
 
             if (!casesOfQuestion.isEmpty()) {
                 Path file = testerGenerator.writeTester(question,

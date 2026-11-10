@@ -23,6 +23,9 @@ import gradezzy.model.Submission;
  */
 public class ConsoleProgressListener implements ProgressListener {
 
+    // Indent of each problem line under a finished submission
+    private static final String PROBLEM_INDENT = "       ";
+
     // How many submissions the run has
     private int totalSubmissions = 0;
 
@@ -89,7 +92,7 @@ public class ConsoleProgressListener implements ProgressListener {
                 + submission.getAnomalies().size() + " problem(s)");
 
         for (Anomaly anomaly : submission.getAnomalies()) {
-            System.out.println("       " + anomaly.getType() + ": "
+            System.out.println(PROBLEM_INDENT + anomaly.getType() + ": "
                     + anomaly.getMessage());
         }
     }

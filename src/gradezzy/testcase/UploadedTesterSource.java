@@ -91,8 +91,8 @@ public class UploadedTesterSource implements TestCaseSource {
         // A question without a tester is skipped: it simply gets no score
         for (Question question : assessment.getQuestions()) {
             String className = question.getId() + suffix;
-            Path sourceFile = testersDirectory.resolve(
-                    className + JAVA_EXTENSION);
+            String fileName = className + JAVA_EXTENSION;
+            Path sourceFile = testersDirectory.resolve(fileName);
 
             if (Files.isRegularFile(sourceFile)) {
                 testers.add(new TesterFile(question.getId(), className,

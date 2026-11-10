@@ -13,6 +13,8 @@ package gradezzy.service;
 import java.util.ArrayList;
 import java.util.List;
 
+import gradezzy.util.TextUtils;
+
 /**
  * Which rows of a run's score sheet the CSV export fills, and why the
  * others stay blank.
@@ -20,6 +22,9 @@ import java.util.List;
  * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
 public class ScoreSheetSummary {
+
+    // Comes between two reasons a row is blank
+    private static final String REASON_SEPARATOR = ", ";
 
     // Students on the sheet whose mark is filled in
     private final List<String> filled = new ArrayList<>();
@@ -106,16 +111,13 @@ public class ScoreSheetSummary {
         }
 
         message = message + ", " + getBlankCount() + " left blank: ";
-        String reasons = "";
+        List<String> reasons = new ArrayList<>();
         if (!notGraded.isEmpty()) {
-            reasons = notGraded.size() + " could not be graded";
+            reasons.add(notGraded.size() + " could not be graded");
         }
         if (!noSubmission.isEmpty()) {
-            if (!reasons.isEmpty()) {
-                reasons = reasons + ", ";
-            }
-            reasons = reasons + noSubmission.size() + " no submission";
+            reasons.add(noSubmission.size() + " no submission");
         }
-        return message + reasons + ".";
+        return message + TextUtils.join(REASON_SEPARATOR, reasons) + ".";
     }
 }

@@ -138,18 +138,24 @@ final class SqliteSchema {
     private static final String LIST_SUBMISSION_COLUMNS =
             "PRAGMA table_info(submissions)";
 
+    // Add the columns that a database made before them lacks: the score
+    // sheet of a run
     private static final String ADD_SCORE_SHEET_COLUMN = "ALTER TABLE runs "
             + "ADD COLUMN score_sheet_file TEXT";
 
+    // The tester folder of a run
     private static final String ADD_TESTERS_DIR_COLUMN = "ALTER TABLE runs "
             + "ADD COLUMN testers_dir TEXT";
 
+    // The starter folder of a run
     private static final String ADD_STARTER_DIR_COLUMN = "ALTER TABLE runs "
             + "ADD COLUMN starter_dir TEXT";
 
+    // The review decision of an anomaly
     private static final String ADD_DECISION_COLUMN = "ALTER TABLE "
             + "anomalies ADD COLUMN decision TEXT";
 
+    // The fixes a student's grading skips
     private static final String ADD_REJECTED_FIXES_COLUMN = "ALTER TABLE "
             + "submissions ADD COLUMN rejected_fixes TEXT";
 

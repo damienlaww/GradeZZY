@@ -12,6 +12,8 @@ import gradezzy.model.GradingRun;
 
 /**
  * Receives the end of a background grading run.
+ *
+ * <p>Tier: MUST.
  */
 public interface RunCallback {
 

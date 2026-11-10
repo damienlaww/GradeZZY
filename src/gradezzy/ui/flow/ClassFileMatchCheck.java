@@ -29,6 +29,8 @@ import gradezzy.ui.backend.InputKind;
 /**
  * A background task that checks the three class files against the
  * uploads.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ClassFileMatchCheck extends Task<List<ClassFileMatch>> {
 

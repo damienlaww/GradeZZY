@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import gradezzy.util.FileUtils;
 
@@ -44,7 +45,10 @@ public class FolderSnapshot {
     private final List<String> dataFileNames;
 
     // The bytes of each remembered file, by file name
-    private final HashMap<String, byte[]> savedFiles = new HashMap<>();
+    private final Map<String, byte[]> savedFiles = new HashMap<>();
+
+    // The names of the remembered files, kept beside the map
+    private final List<String> savedNames = new ArrayList<>();
 
     /**
      * Reads the compiled classes and data files of a folder into memory.
@@ -59,8 +63,10 @@ public class FolderSnapshot {
         this.dataFileNames = dataFileNames;
 
         for (Path file : listWatchedFiles()) {
-            savedFiles.put(file.getFileName().toString(),
-                    Files.readAllBytes(file));
+            String name = file.getFileName().toString();
+            byte[] bytes = Files.readAllBytes(file);
+            savedNames.add(name);
+            savedFiles.put(name, bytes);
         }
     }
 
@@ -83,7 +89,7 @@ public class FolderSnapshot {
             }
         }
 
-        for (String name : savedFiles.keySet()) {
+        for (String name : savedNames) {
             Path file = folder.resolve(name);
             byte[] saved = savedFiles.get(name);
             if (!matches(file, saved)) {
@@ -130,8 +136,9 @@ public class FolderSnapshot {
                 String name = child.getFileName().toString();
                 boolean isWatched = name.endsWith(CLASS_EXTENSION)
                         || dataFileNames.contains(name);
-                if (isWatched && !Files.isDirectory(child,
-                        LinkOption.NOFOLLOW_LINKS)) {
+                boolean keep = isWatched && !Files.isDirectory(child,
+                        LinkOption.NOFOLLOW_LINKS);
+                if (keep) {
                     watched.add(child);
                 }
             }

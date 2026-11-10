@@ -22,6 +22,9 @@ public class TourStop {
     /** Lights up the stop's step in the row of four steps. */
     public static final String STEP = "step";
 
+    // Goes between the text and the locked text
+    private static final String SENTENCE_GAP = " ";
+
     // The tab the stop opens
     private final Page page;
 
@@ -137,7 +140,7 @@ public class TourStop {
      */
     public String getText(boolean locked) {
         if (locked && lockedText != null) {
-            return text + " " + lockedText;
+            return text + SENTENCE_GAP + lockedText;
         }
         return text;
     }

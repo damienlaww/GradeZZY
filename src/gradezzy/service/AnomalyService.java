@@ -45,6 +45,12 @@ public class AnomalyService {
     // Joins the run id and username in the key that groups fixes
     private static final String GROUP_SEPARATOR = "/";
 
+    // Joins the student and the problem in an audit log detail
+    private static final String DETAIL_SEPARATOR = ": ";
+
+    // Joins the problem and the outcome in an audit log detail
+    private static final String OUTCOME_SEPARATOR = " ";
+
     // The helper that applies and undoes fixes
     private final FixManager fixManager;
 
@@ -147,8 +153,9 @@ public class AnomalyService {
         }
 
         saveStatus(anomaly);
-        if (before != FixStatus.APPROVED
-                && anomaly.getFixStatus() == FixStatus.APPROVED) {
+        boolean newlyApproved = before != FixStatus.APPROVED
+                && anomaly.getFixStatus() == FixStatus.APPROVED;
+        if (newlyApproved) {
             // Says what was kept, such as the folder's new name
             record(FIX_APPROVED, anomaly, anomaly.describeFix());
         }
@@ -267,20 +274,15 @@ public class AnomalyService {
         GradingRun gradingRun = findRunOf(anomaly);
         Submission submission = findSubmission(gradingRun,
                 anomaly.getUsername());
-        if (submission == null
-                || !submission.getRejectedFixes().contains(fixKey)) {
+        boolean notRejected = submission == null
+                || !submission.getRejectedFixes().contains(fixKey);
+        if (notRejected) {
             return null;
         }
 
         submission.unrejectFix(fixKey);
         double totalBefore = submission.getTotalScore();
-        String problem = "";
-        try {
-            gradingService.regradeSubmission(gradingRun, submission,
-                    new QuietProgressListener());
-        } catch (GradingException exception) {
-            problem = exception.getMessage();
-        }
+        String problem = regradeQuietly(gradingRun, submission);
 
         if (!problem.isEmpty()) {
             // Still skipped next time, as the files are still without it
@@ -311,13 +313,27 @@ public class AnomalyService {
     // Finds the fix of this session with a key, for one student.
     private FixRecord findRecordWithKey(String username, String fixKey) {
         for (FixRecord fixRecord : fixManager.getFixRecords()) {
-            if (fixKey.equals(fixRecord.getFixKey())
-                    && fixRecord.getAnomaly().getUsername()
-                            .equalsIgnoreCase(username)) {
+            String owner = fixRecord.getAnomaly().getUsername();
+            boolean found = fixKey.equals(fixRecord.getFixKey())
+                    && owner.equalsIgnoreCase(username);
+            if (found) {
                 return fixRecord;
             }
         }
         return null;
+    }
+
+    // Grades a student again without telling anyone of the progress.
+    // Returns why that failed, or an empty string.
+    private String regradeQuietly(GradingRun gradingRun,
+            Submission submission) {
+        try {
+            gradingService.regradeSubmission(gradingRun, submission,
+                    new QuietProgressListener());
+        } catch (GradingException exception) {
+            return exception.getMessage();
+        }
+        return "";
     }
 
     /**
@@ -437,17 +453,11 @@ public class AnomalyService {
         // Read before the files are put back: FixManager.undo marks the
         // record's anomaly UNDONE, and in a run graded in this session
         // that is the same object as the card's
-        List<FixStatus> statusesBefore = new ArrayList<>();
-        for (Anomaly anomaly : anomalies) {
-            statusesBefore.add(anomaly.getFixStatus());
-        }
+        List<FixStatus> statusesBefore = readStatuses(anomalies);
 
         // Put the working copy back. A fix whose files cannot be put back
         // can still be skipped by grading again from the upload.
-        List<Boolean> putBack = new ArrayList<>();
-        for (FixRecord fixRecord : fixRecords) {
-            putBack.add(putBack(fixRecord));
-        }
+        List<Boolean> putBack = putBackAll(fixRecords);
 
         if (submission == null) {
             // Not graded in this session, so only the files change
@@ -460,23 +470,10 @@ public class AnomalyService {
                     + "is not open in this session.");
         }
 
-        List<String> addedKeys = new ArrayList<>();
-        for (FixRecord fixRecord : fixRecords) {
-            String fixKey = fixRecord.getFixKey();
-            if (!submission.getRejectedFixes().contains(fixKey)) {
-                submission.rejectFix(fixKey);
-                addedKeys.add(fixKey);
-            }
-        }
+        List<String> addedKeys = rejectAll(submission, fixRecords);
 
         double totalBefore = submission.getTotalScore();
-        String problem = "";
-        try {
-            gradingService.regradeSubmission(gradingRun, submission,
-                    new QuietProgressListener());
-        } catch (GradingException exception) {
-            problem = exception.getMessage();
-        }
+        String problem = regradeQuietly(gradingRun, submission);
 
         if (!problem.isEmpty() && !putBack.contains(Boolean.TRUE)) {
             // Nothing changed at all, so the fixes stay as they were
@@ -488,6 +485,50 @@ public class AnomalyService {
 
         UndoResult result = new UndoResult(username, totalBefore,
                 submission.getTotalScore(), problem);
+        markUndone(anomalies, fixRecords, statusesBefore, result);
+        return result;
+    }
+
+    // Reads the fix status of each anomaly, in the same order.
+    private List<FixStatus> readStatuses(List<Anomaly> anomalies) {
+        List<FixStatus> statuses = new ArrayList<>();
+        for (Anomaly anomaly : anomalies) {
+            statuses.add(anomaly.getFixStatus());
+        }
+        return statuses;
+    }
+
+    // Puts the working copy back for each fix, in the same order. Each
+    // item says whether that fix's files were put back.
+    private List<Boolean> putBackAll(List<FixRecord> fixRecords) {
+        List<Boolean> putBack = new ArrayList<>();
+        for (FixRecord fixRecord : fixRecords) {
+            putBack.add(putBack(fixRecord));
+        }
+        return putBack;
+    }
+
+    // Adds each fix's key to the student's rejected list. Returns the
+    // keys that were not in it before.
+    private List<String> rejectAll(Submission submission,
+            List<FixRecord> fixRecords) {
+        List<String> addedKeys = new ArrayList<>();
+        for (FixRecord fixRecord : fixRecords) {
+            String fixKey = fixRecord.getFixKey();
+            if (!submission.getRejectedFixes().contains(fixKey)) {
+                submission.rejectFix(fixKey);
+                addedKeys.add(fixKey);
+            }
+        }
+        return addedKeys;
+    }
+
+    // Marks every fix of a student who was graded again as undone,
+    // saves the statuses the regraded run did not save, and logs each
+    // fix that was not undone before.
+    private void markUndone(List<Anomaly> anomalies,
+            List<FixRecord> fixRecords, List<FixStatus> statusesBefore,
+            UndoResult result) {
         for (int index = 0; index < anomalies.size(); index++) {
             Anomaly anomaly = anomalies.get(index);
             FixStatus before = statusesBefore.get(index);
@@ -502,7 +543,6 @@ public class AnomalyService {
                 record(FIX_UNDONE, anomaly, result.getMessage());
             }
         }
-        return result;
     }
 
     // Puts the working copy back as it was before one fix. Returns false
@@ -528,8 +568,9 @@ public class AnomalyService {
                 FixStatus before = statusesBefore.get(index);
                 copyStatus(fixRecords.get(index), anomaly);
                 saveStatus(anomaly);
-                if (before != FixStatus.UNDONE
-                        && anomaly.getFixStatus() == FixStatus.UNDONE) {
+                boolean newlyUndone = before != FixStatus.UNDONE
+                        && anomaly.getFixStatus() == FixStatus.UNDONE;
+                if (newlyUndone) {
                     record(FIX_UNDONE, anomaly, "");
                 }
             }
@@ -569,15 +610,7 @@ public class AnomalyService {
         if (gradingRun == null) {
             return null;
         }
-
-        Submission found = null;
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (submission.getUsername().equalsIgnoreCase(username)
-                    && (found == null || found.getIngestFailure() != null)) {
-                found = submission;
-            }
-        }
-        return found;
+        return gradingRun.findLoaded(username);
     }
 
     // Says whether a submission holds the problem with this id.
@@ -604,9 +637,10 @@ public class AnomalyService {
         if (auditService == null) {
             return;
         }
-        String detail = anomaly.getUsername() + ": " + anomaly.getMessage();
+        String detail = anomaly.getUsername() + DETAIL_SEPARATOR
+                + anomaly.getMessage();
         if (!outcome.isEmpty()) {
-            detail = detail + " " + outcome;
+            detail = detail + OUTCOME_SEPARATOR + outcome;
         }
         // The id tells this flag apart from one with the same words in
         // another run
@@ -681,8 +715,9 @@ public class AnomalyService {
      */
     public boolean saveZeroCheck(GradingRun gradingRun,
             Submission submission, boolean checked) {
-        if (repository == null || gradingRun == null
-                || submission == null) {
+        boolean missing = repository == null || gradingRun == null
+                || submission == null;
+        if (missing) {
             return false;
         }
         try {

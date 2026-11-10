@@ -20,17 +20,22 @@ import gradezzy.ui.backend.StatusCounts;
 
 /**
  * The status pill of a student.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ReviewStatusCell extends TableCell<Submission, Submission> {
-
-    // The backend that knows the review decisions
-    private final DashboardBackend backend;
 
     // The most open items the tip lists before it says how many more
     private static final int MAX_LISTED = 5;
 
     // Starts each listed item on its own line
     private static final String BULLET = "\n\u2022 ";
+
+    // Starts the line that says what a click shows
+    private static final String LINE_END = "\n";
+
+    // The backend that knows the review decisions
+    private final DashboardBackend backend;
 
     /**
      * Creates the cell.
@@ -74,12 +79,13 @@ public class ReviewStatusCell extends TableCell<Submission, Submission> {
             }
         }
         if (open > listed) {
-            items += BULLET + (open - listed) + " more";
+            int more = open - listed;
+            items += BULLET + more + " more";
         }
         ResultState state = Students.state(submission, backend);
         if (!items.isEmpty()) {
-            return "To check:" + items + "\nClick the student to approve, "
-                    + "undo or dismiss each one.";
+            return "To check:" + items + LINE_END + "Click the student to "
+                    + "approve, undo or dismiss each one.";
         } else if (StatusCounts.isNotFullyGraded(state)) {
             return Students.words(state) + ". Click the student to see "
                     + "the message for each question.";

@@ -14,6 +14,8 @@ import gradezzy.model.FixStatus;
 
 /**
  * Shared review rules.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class ReviewRules {
 

@@ -49,6 +49,19 @@ public class AnswerGroupService implements AnswerGroupSource {
     // which does not use it
     private static final String NO_TITLE = "";
 
+    // Says a decision is kept only until GradeZZY closes
+    private static final String SESSION_ONLY = " For this session only; "
+            + "saving results is switched off.";
+
+    // Starts the reason a decision was not saved
+    private static final String NOT_SAVED = " It could not be saved, so "
+            + "it lasts until GradeZZY closes: ";
+
+    // Says why nothing is saved for a run whose notes were not read
+    private static final String NOT_READ = "The saved names and checks of "
+            + "this run could not be read, so this change lasts until "
+            + "GradeZZY closes. ";
+
     // The store decisions are saved to, or null when there is none
     private final ResultRepository repository;
 
@@ -66,19 +79,6 @@ public class AnswerGroupService implements AnswerGroupSource {
     // read again before each use, and nothing is saved for them until a
     // read works, so a failed read never overwrites saved decisions.
     private final List<String> unreadRuns = new ArrayList<>();
-
-    // Says a decision is kept only until GradeZZY closes
-    private static final String SESSION_ONLY = " For this session only; "
-            + "saving results is switched off.";
-
-    // Starts the reason a decision was not saved
-    private static final String NOT_SAVED = " It could not be saved, so "
-            + "it lasts until GradeZZY closes: ";
-
-    // Says why nothing is saved for a run whose notes were not read
-    private static final String NOT_READ = "The saved names and checks of "
-            + "this run could not be read, so this change lasts until "
-            + "GradeZZY closes. ";
 
     /**
      * Creates the service.

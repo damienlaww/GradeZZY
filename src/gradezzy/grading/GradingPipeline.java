@@ -127,9 +127,10 @@ public class GradingPipeline {
 
         List<Thread> workers = new ArrayList<>();
         for (int number = 0; number < workerCount; number++) {
-            Thread worker = new Thread(
-                    new GradingWorker(this, handout, context, safeListener),
-                    WORKER_NAME_PREFIX + number);
+            GradingWorker job = new GradingWorker(this, handout, context,
+                    safeListener);
+            String workerName = WORKER_NAME_PREFIX + number;
+            Thread worker = new Thread(job, workerName);
             workers.add(worker);
             worker.start();
         }

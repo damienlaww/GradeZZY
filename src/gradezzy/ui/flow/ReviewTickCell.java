@@ -20,6 +20,8 @@ import gradezzy.ui.backend.ResultState;
 /**
  * A check box that ticks the row's student for the actions on several
  * students.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ReviewTickCell extends TableCell<Submission, Submission> {
 
@@ -51,8 +53,9 @@ public class ReviewTickCell extends TableCell<Submission, Submission> {
     protected void updateItem(Submission submission, boolean isEmpty) {
         super.updateItem(submission, isEmpty);
         // A row made on Review has no marks to export
-        if (isEmpty || submission == null
-                || ResultState.isMadeOnReview(submission)) {
+        boolean noBox = isEmpty || submission == null
+                || ResultState.isMadeOnReview(submission);
+        if (noBox) {
             setGraphic(null);
             return;
         }

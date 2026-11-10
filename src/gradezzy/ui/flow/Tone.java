@@ -11,6 +11,8 @@ package gradezzy.ui.flow;
 
 /**
  * A status colour.
+ *
+ * <p>Tier: SHOULD.
  */
 public enum Tone {
 

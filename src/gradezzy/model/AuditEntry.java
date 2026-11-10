@@ -20,8 +20,10 @@ import java.time.LocalDateTime;
  */
 public class AuditEntry {
 
-    // The text around the reference at the end of a detail
+    // The text before the reference at the end of a detail
     private static final String REFERENCE_START = " [ref ";
+
+    // The text after the reference at the end of a detail
     private static final String REFERENCE_END = "]";
 
     // The time of the action
@@ -98,8 +100,9 @@ public class AuditEntry {
         if (start < 0) {
             return "";
         }
-        return detail.substring(start + REFERENCE_START.length(),
-                detail.length() - REFERENCE_END.length());
+        int idStart = start + REFERENCE_START.length();
+        int idEnd = detail.length() - REFERENCE_END.length();
+        return detail.substring(idStart, idEnd);
     }
 
     /**

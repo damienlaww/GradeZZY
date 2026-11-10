@@ -13,6 +13,8 @@ import java.util.Comparator;
 
 /**
  * Orders contained files by name, ignoring case.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ContainedFileNameComparator
         implements Comparator<ContainedFile> {

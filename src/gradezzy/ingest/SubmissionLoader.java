@@ -16,6 +16,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -32,6 +33,7 @@ import gradezzy.model.Severity;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
+import gradezzy.util.AnswerFolderRule;
 import gradezzy.util.FileUtils;
 import gradezzy.util.TextUtils;
 
@@ -91,6 +93,9 @@ public class SubmissionLoader {
     // The text in front of the id of every anomaly raised while loading
     private static final String ANOMALY_ID_PREFIX = "INGEST-";
 
+    // A plain one-part name, used to check the working folder for links
+    private static final String PROBE_ENTRY = "batch";
+
     // What the instructor can do about an upload that cannot be graded
     private static final String CORRECT_UPLOAD_ACTION =
             "Correct this upload and add it to a new batch.";
@@ -119,6 +124,8 @@ public class SubmissionLoader {
      * number such as " (2)", a file without one being the oldest; for two
      * files of the same name in two chosen folders, such as a late batch
      * chosen with the main one, the newer file, or the one chosen later;
+     * for two zips of the same name in different folders of bulk zips,
+     * the one the bulk zip records as newer, else the first by path;
      * else the one whose username is already in lower case, as on the
      * roster, else the first chosen. Each file left out is named in a
      * DUPLICATE_SUBMISSION warning on the graded one. Uploads without a
@@ -153,7 +160,8 @@ public class SubmissionLoader {
      * without unpacking anything. A folder that holds a question folder is
      * one student. Any other folder gives each visible zip directly inside
      * it and each sub-folder that looks unzipped by hand: one that holds a
-     * question folder, directly or inside its only visible sub-folder.
+     * question folder, directly or inside its only visible sub-folder, or
+     * at the end of a chain of folders that each hold only one folder.
      * A sub-folder with a starter folder name, such as
      * RenameToYourUsername, is skipped. A chosen file is one student; for
      * a bulk zip that is the zip itself, and listBatchEntries names the
@@ -210,9 +218,10 @@ public class SubmissionLoader {
      */
     public List<Path> listSkipped(Path folder) throws IngestException {
         List<Path> skipped = new ArrayList<>();
-        if (folder == null || isIgnored(folder)
+        boolean nothingToSkip = folder == null || isIgnored(folder)
                 || !Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS)
-                || hasQuestionFolder(folder)) {
+                || hasQuestionFolder(folder);
+        if (nothingToSkip) {
             return skipped;
         }
         try {
@@ -237,8 +246,9 @@ public class SubmissionLoader {
      * @return true if each zip inside is graded as one student
      */
     public boolean isBatchArchive(Path zipFile) {
-        if (zipFile == null || !isZipFile(zipFile)
-                || hasStudentPrefix(fileNameOf(zipFile))) {
+        boolean notBulkName = zipFile == null || !isZipFile(zipFile)
+                || hasStudentPrefix(fileNameOf(zipFile));
+        if (notBulkName) {
             return false;
         }
         try {
@@ -267,10 +277,8 @@ public class SubmissionLoader {
         boolean batch = isBatchArchive(archive);
         List<String> names = new ArrayList<>();
         for (String entryName : listVisibleEntries(archive)) {
-            int separator = entryName.lastIndexOf(ENTRY_SEPARATOR);
-            String fileName = entryName.substring(separator + 1);
             if (!batch || isStudentZipEntry(entryName)) {
-                names.add(fileName);
+                names.add(entryFileName(entryName));
             }
         }
         Collections.sort(names);
@@ -293,10 +301,8 @@ public class SubmissionLoader {
             return names;
         }
         for (String entryName : listVisibleEntries(archive)) {
-            int separator = entryName.lastIndexOf(ENTRY_SEPARATOR);
-            String fileName = entryName.substring(separator + 1);
             if (!isStudentZipEntry(entryName)) {
-                names.add(fileName);
+                names.add(entryFileName(entryName));
             }
         }
         Collections.sort(names);
@@ -318,8 +324,10 @@ public class SubmissionLoader {
         if (zipFileName == null) {
             return "";
         }
-        String username = removeZipExtension(zipFileName.replaceFirst(
-                config.getString(ConfigKeys.ZIP_NAME_PREFIX_PATTERN), ""));
+        String prefixPattern = config.getString(
+                ConfigKeys.ZIP_NAME_PREFIX_PATTERN);
+        String withoutPrefix = zipFileName.replaceFirst(prefixPattern, "");
+        String username = removeZipExtension(withoutPrefix);
         return removeCopyMarks(username).toLowerCase(Locale.ROOT);
     }
 
@@ -496,8 +504,9 @@ public class SubmissionLoader {
     }
 
     // Says whether a folder looks unzipped by hand: it holds a question
-    // folder, directly or inside its only visible sub-folder. A folder
-    // that cannot be read does not.
+    // folder, directly or inside its only visible sub-folder, or at the
+    // end of a chain of folders that each hold only one folder, as in
+    // s06/s06/s06/Q1. A folder that cannot be read does not.
     private boolean looksLikeSubmission(Path path) {
         if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
             return false;
@@ -507,7 +516,8 @@ public class SubmissionLoader {
         }
         try {
             Path wrapper = findOnlySubfolder(path);
-            return wrapper != null && hasQuestionFolder(wrapper);
+            return wrapper != null && AnswerFolderRule.findChainEnd(wrapper,
+                    listQuestionFolders()) != null;
         } catch (IOException exception) {
             return false;
         }
@@ -543,8 +553,9 @@ public class SubmissionLoader {
     private List<String> listQuestionFolders() {
         List<String> folders = new ArrayList<>();
         for (String id : config.getList(ConfigKeys.QUESTION_IDS)) {
-            folders.add(config.getString(ConfigKeys.QUESTION_PREFIX
-                    + id + ConfigKeys.QUESTION_FOLDER_SUFFIX));
+            String key = ConfigKeys.QUESTION_PREFIX + id
+                    + ConfigKeys.QUESTION_FOLDER_SUFFIX;
+            folders.add(config.getString(key));
         }
         return folders;
     }
@@ -575,8 +586,9 @@ public class SubmissionLoader {
     // Returns the first visible sub-folder, by name, that holds a zip.
     private Path findSubfolderWithZips(Path folder) throws IOException {
         for (Path child : listVisibleChildren(folder)) {
-            if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
-                    && holdsZips(child)) {
+            boolean folderOfZips = Files.isDirectory(child,
+                    LinkOption.NOFOLLOW_LINKS) && holdsZips(child);
+            if (folderOfZips) {
                 return child;
             }
         }
@@ -611,18 +623,7 @@ public class SubmissionLoader {
         for (Path candidate : candidates) {
             String username = extractUsername(fileNameOf(candidate));
             if (!TextUtils.isBlank(username)) {
-                Submission submission = new Submission(username, section,
-                        candidate);
-                // A chosen file that is not a zip, such as a marking
-                // note, is listed so the instructor sees why it was not
-                // graded, but it is not read as a damaged zip
-                if (Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)
-                        && !isZipFile(candidate)) {
-                    reject(submission, fileNameOf(candidate) + " is not a "
-                            + "ZIP file or a folder, so it cannot be graded. "
-                            + "Choose the student's ZIP file or folder.");
-                }
-                named.add(submission);
+                named.add(createNamed(username, section, candidate));
             } else if (nameless == null) {
                 nameless = new Submission(username, section, candidate);
                 reject(nameless, "No username in " + candidate);
@@ -632,6 +633,34 @@ public class SubmissionLoader {
             }
         }
 
+        keepOnePerUsername(named, submissions);
+        sortByFileName(submissions);
+        return submissions;
+    }
+
+    // Creates the submission of a candidate with a username. A chosen
+    // file that is not a zip, such as a marking note, is listed so the
+    // instructor sees why it was not graded, but it is not read as a
+    // damaged zip.
+    private Submission createNamed(String username, Section section,
+            Path candidate) {
+        Submission submission = new Submission(username, section,
+                candidate);
+        boolean notZip = Files.isRegularFile(candidate,
+                LinkOption.NOFOLLOW_LINKS) && !isZipFile(candidate);
+        if (notZip) {
+            reject(submission, fileNameOf(candidate) + " is not a "
+                    + "ZIP file or a folder, so it cannot be graded. "
+                    + "Choose the student's ZIP file or folder.");
+        }
+        return submission;
+    }
+
+    // Adds to submissions the one submission graded for each username,
+    // and names each other one on it, so the run never holds two
+    // submissions with one username.
+    private void keepOnePerUsername(List<Submission> named,
+            List<Submission> submissions) {
         // The submission graded for each username, in lower case. The
         // candidates are in the order chosen, so a tie keeps the first.
         Map<String, Submission> kept = new HashMap<>();
@@ -643,11 +672,9 @@ public class SubmissionLoader {
             }
         }
 
-        // The others are named on the kept one, so the run never holds
-        // two submissions with one username
         for (Submission submission : named) {
-            Submission keeper = kept.get(
-                    submission.getUsername().toLowerCase(Locale.ROOT));
+            String key = submission.getUsername().toLowerCase(Locale.ROOT);
+            Submission keeper = kept.get(key);
             if (keeper == submission) {
                 warnWindowsCopy(submission);
                 submissions.add(submission);
@@ -655,36 +682,50 @@ public class SubmissionLoader {
                 warnDuplicate(keeper, submission.getOriginalPath());
             }
         }
-        // Insertion sort avoids a comparator/lambda for this short list.
+    }
+
+    // Sorts the submissions by file name. Insertion sort avoids a
+    // comparator for this short list.
+    private void sortByFileName(List<Submission> submissions) {
         for (int index = 1; index < submissions.size(); index++) {
             Submission next = submissions.get(index);
             int position = index;
-            while (position > 0 && submissions.get(position - 1)
-                    .getOriginalPath().getFileName().toString().compareTo(
-                            next.getOriginalPath().getFileName().toString())
-                    > 0) {
+            while (position > 0
+                    && sortsAfter(submissions.get(position - 1), next)) {
                 submissions.set(position, submissions.get(position - 1));
                 position--;
             }
             submissions.set(position, next);
         }
-        return submissions;
+    }
+
+    // Says whether the first submission's file name sorts after the
+    // second's.
+    private boolean sortsAfter(Submission first, Submission second) {
+        String firstName = first.getOriginalPath().getFileName().toString();
+        String secondName = second.getOriginalPath().getFileName()
+                .toString();
+        return firstName.compareTo(secondName) > 0;
     }
 
     // Marks a submission as failed and records why as an anomaly.
     private void reject(Submission submission, String message) {
         submission.setIngestFailure(message);
         submission.setStatus(SubmissionStatus.FAILED);
-        submission.addAnomaly(new Anomaly(ANOMALY_ID_PREFIX
-                + UUID.randomUUID(),
+        submission.addAnomaly(new Anomaly(createAnomalyId(),
                 AnomalyType.INVALID_ARCHIVE, Severity.ERROR,
                 submission.getUsername(), message, CORRECT_UPLOAD_ACTION));
+    }
+
+    // Returns a new id for an anomaly raised while loading.
+    private String createAnomalyId() {
+        return ANOMALY_ID_PREFIX + UUID.randomUUID();
     }
 
     // Names, on the kept upload without a username, another upload
     // without one, which is not added to the run.
     private void warnNameless(Submission kept, Path dropped) {
-        kept.addAnomaly(new Anomaly(ANOMALY_ID_PREFIX + UUID.randomUUID(),
+        kept.addAnomaly(new Anomaly(createAnomalyId(),
                 AnomalyType.INVALID_ARCHIVE, Severity.WARNING,
                 kept.getUsername(), "No username in " + dropped
                 + " either. It cannot be graded, so it is not listed on "
@@ -709,6 +750,12 @@ public class SubmissionLoader {
             return readModifiedMillis(candidatePath)
                     >= readModifiedMillis(currentPath);
         }
+        if (isSameNameInBatch(candidatePath, currentPath)) {
+            // The bulk zip's time for each zip, set when it was unpacked;
+            // on a tie the first by path is kept
+            return readModifiedMillis(candidatePath)
+                    > readModifiedMillis(currentPath);
+        }
         return isLowerCase(fileNameOf(candidatePath))
                 && !isLowerCase(fileNameOf(currentPath));
     }
@@ -721,16 +768,17 @@ public class SubmissionLoader {
                 && !isInsideBatch(first) && !isInsideBatch(second);
     }
 
+    // Says whether two different files share a name and were both
+    // unpacked from bulk zips, in different folders.
+    private boolean isSameNameInBatch(Path first, Path second) {
+        return fileNameOf(first).equals(fileNameOf(second))
+                && !isSameFile(first, second)
+                && isInsideBatch(first) && isInsideBatch(second);
+    }
+
     // Says whether a file was unpacked from a bulk zip.
     private boolean isInsideBatch(Path file) {
-        Path folder = file.getParent();
-        while (folder != null) {
-            if (fileNameOf(folder).startsWith(BATCH_FOLDER_PREFIX)) {
-                return true;
-            }
-            folder = folder.getParent();
-        }
-        return false;
+        return findBatchFolder(file) != null;
     }
 
     // Reads when a file was last changed, or 0 when it cannot be read.
@@ -755,7 +803,7 @@ public class SubmissionLoader {
         if (!isWindowsCopyName(keptName)) {
             return;
         }
-        kept.addAnomaly(new Anomaly(ANOMALY_ID_PREFIX + UUID.randomUUID(),
+        kept.addAnomaly(new Anomaly(createAnomalyId(),
                 AnomalyType.DUPLICATE_SUBMISSION, Severity.WARNING,
                 kept.getUsername(), keptName + " is a copy made by Windows "
                 + "(\" - Copy\" in its name). It was graded as "
@@ -780,7 +828,7 @@ public class SubmissionLoader {
                     + describeFolder(dropped) + ". Only the one "
                     + describeFolder(keptPath) + " was graded.";
         }
-        kept.addAnomaly(new Anomaly(ANOMALY_ID_PREFIX + UUID.randomUUID(),
+        kept.addAnomaly(new Anomaly(createAnomalyId(),
                 AnomalyType.DUPLICATE_SUBMISSION, Severity.WARNING,
                 kept.getUsername(), message, "Check that the graded file "
                 + "is the one to mark. Next time, choose one file per "
@@ -798,12 +846,37 @@ public class SubmissionLoader {
         }
     }
 
-    // Names where a file was found: in its folder, or inside a bulk zip.
+    // Names where a file was found: in its folder, or where inside a
+    // bulk zip, as its path there.
     private String describeFolder(Path file) {
-        if (isInsideBatch(file)) {
-            return "inside the bulk zip";
+        Path batchFolder = findBatchFolder(file);
+        if (batchFolder == null) {
+            return "in " + file.getParent();
         }
-        return "in " + file.getParent();
+
+        Path folderInBatch = batchFolder.relativize(file.getParent());
+        if (folderInBatch.toString().isEmpty()) {
+            return "at the top of the bulk zip";
+        }
+        List<String> parts = new ArrayList<>();
+        for (Path part : folderInBatch) {
+            parts.add(part.toString());
+        }
+        return "in the folder " + TextUtils.join(ENTRY_SEPARATOR, parts)
+                + " of the bulk zip";
+    }
+
+    // Returns the folder a bulk zip was unpacked into that holds a file,
+    // or null when the file was not unpacked from a bulk zip.
+    private Path findBatchFolder(Path file) {
+        Path folder = file.getParent();
+        while (folder != null) {
+            if (fileNameOf(folder).startsWith(BATCH_FOLDER_PREFIX)) {
+                return folder;
+            }
+            folder = folder.getParent();
+        }
+        return null;
     }
 
     // Each batch gets its own directory so original inner ZIPs survive
@@ -813,7 +886,7 @@ public class SubmissionLoader {
         Path root = Path.of(config.getString(ConfigKeys.WORKING_DIR))
                 .toAbsolutePath().normalize();
         ZipExtractor extractor = new ZipExtractor(config);
-        if (!extractor.isSafeEntry("batch", root)) {
+        if (!extractor.isSafeEntry(PROBE_ENTRY, root)) {
             throw new IOException("The working folder contains a link.");
         }
         Files.createDirectories(root);
@@ -823,6 +896,7 @@ public class SubmissionLoader {
             List<Path> innerZips = new ArrayList<>();
             collectBatchZips(batch, innerZips);
             Collections.sort(innerZips);
+            copyZipTimes(extractor.readFileTimes(input), batch, innerZips);
             candidates.addAll(innerZips);
         } catch (IOException exception) {
             deleteFailedBatch(batch, exception);
@@ -830,6 +904,24 @@ public class SubmissionLoader {
         } catch (IngestException exception) {
             deleteFailedBatch(batch, exception);
             throw exception;
+        }
+    }
+
+    // Gives each student zip unpacked from a bulk zip the time the bulk
+    // zip records for it, so the newer of two zips with one name is
+    // graded. A zip with no recorded time keeps the time it was unpacked.
+    private void copyZipTimes(Map<String, Long> times, Path batch,
+            List<Path> innerZips) throws IOException {
+        for (Path innerZip : innerZips) {
+            List<String> parts = new ArrayList<>();
+            for (Path part : batch.relativize(innerZip)) {
+                parts.add(part.toString());
+            }
+            Long time = times.get(TextUtils.join(ENTRY_SEPARATOR, parts));
+            if (time != null) {
+                Files.setLastModifiedTime(innerZip,
+                        FileTime.fromMillis(time));
+            }
         }
     }
 
@@ -848,11 +940,12 @@ public class SubmissionLoader {
     private void collectBatchZips(Path directory, List<Path> candidates)
             throws IOException {
         for (Path child : listVisibleChildren(directory)) {
-            if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
-                    && !isQuestionFolderName(fileNameOf(child))) {
+            String name = fileNameOf(child);
+            boolean otherFolder = Files.isDirectory(child,
+                    LinkOption.NOFOLLOW_LINKS) && !isQuestionFolderName(name);
+            if (otherFolder) {
                 collectBatchZips(child, candidates);
-            } else if (isZipFile(child)
-                    && isStudentZipName(fileNameOf(child))) {
+            } else if (isZipFile(child) && isStudentZipName(name)) {
                 candidates.add(child);
             }
         }
@@ -886,8 +979,7 @@ public class SubmissionLoader {
     // Says whether a zip entry is a student's zip: a student zip name that
     // is not inside a question folder, where it is part of an answer.
     private boolean isStudentZipEntry(String entryName) {
-        int separator = entryName.lastIndexOf(ENTRY_SEPARATOR);
-        if (!isStudentZipName(entryName.substring(separator + 1))) {
+        if (!isStudentZipName(entryFileName(entryName))) {
             return false;
         }
         for (String folder : listEntryFolders(entryName)) {
@@ -896,6 +988,13 @@ public class SubmissionLoader {
             }
         }
         return true;
+    }
+
+    // Returns the file name of a zip entry, without its folders.
+    private String entryFileName(String entryName) {
+        int separator = entryName.lastIndexOf(ENTRY_SEPARATOR);
+        int nameStart = separator + 1;
+        return entryName.substring(nameStart);
     }
 
     // Says whether a zip holds a question folder at its top or one folder
@@ -919,7 +1018,8 @@ public class SubmissionLoader {
         List<String> folders = new ArrayList<>();
         String[] parts = entryName.split(ENTRY_SEPARATOR);
         // The last part is the file name
-        for (int i = 0; i < parts.length - 1; i++) {
+        int folderCount = parts.length - 1;
+        for (int i = 0; i < folderCount; i++) {
             if (!parts[i].isEmpty() && !parts[i].equals(CURRENT_FOLDER)) {
                 folders.add(parts[i]);
             }
@@ -947,12 +1047,15 @@ public class SubmissionLoader {
         return !fileName.replaceFirst(prefix, "").equals(fileName);
     }
 
-    // Removes a .zip ending, in any case, from a name.
+    // Removes every .zip ending, in any case, from a name, so a file
+    // saved as name.zip.zip gives the same name as name.zip.
     private String removeZipExtension(String name) {
-        if (!hasZipExtension(name)) {
-            return name;
+        String withoutEnding = name;
+        while (hasZipExtension(withoutEnding)) {
+            int nameEnd = withoutEnding.length() - ZIP_EXTENSION.length();
+            withoutEnding = withoutEnding.substring(0, nameEnd);
         }
-        return name.substring(0, name.length() - ZIP_EXTENSION.length());
+        return withoutEnding;
     }
 
     // Returns the last part of a path as text.

@@ -22,6 +22,8 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * Runs one question's tester again in the background.
+ *
+ * <p>Tier: SHOULD.
  */
 public class QuestionRerun extends Task<QuestionResult> {
 

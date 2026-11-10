@@ -11,6 +11,8 @@ import gradezzy.model.GradingRun;
 
 /**
  * An earlier grading run and its backup.
+ *
+ * <p>Tier: SHOULD.
  */
 public class RunRecord {
 

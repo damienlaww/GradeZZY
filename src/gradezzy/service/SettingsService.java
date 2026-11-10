@@ -64,8 +64,8 @@ public class SettingsService {
     // Added to the file name for the copy written before replacing it
     private static final String TEMP_SUFFIX = ".tmp";
 
-    // Separator between the items of a list setting
-    private static final String LIST_SEPARATOR = ",";
+    // Separator between the items of a list in a message
+    private static final String SHOWN_LIST_SEPARATOR = ", ";
 
     // Characters allowed in a decimal number setting
     private static final String NUMBER_CHARACTERS = "0123456789.+-eE";
@@ -333,7 +333,16 @@ public class SettingsService {
         }
 
         String text = value.trim();
+        String problem = checkNumberOrChoice(key, text);
+        if (problem != null) {
+            return problem;
+        }
+        return checkPathOrList(key, text);
+    }
 
+    // Checks a setting that holds a number, a choice or a pattern.
+    // Returns null when the setting is of none of those kinds.
+    private String checkNumberOrChoice(String key, String text) {
         if (contains(POSITIVE_INTEGER_KEYS, key)) {
             return checkWholeNumber(key, text, MIN_POSITIVE,
                     Integer.MAX_VALUE);
@@ -376,6 +385,12 @@ public class SettingsService {
             return checkPattern(key, text);
         }
 
+        return null;
+    }
+
+    // Checks a setting that holds a folder, a file, a list or the
+    // sections of each module. Any other setting must not be blank.
+    private String checkPathOrList(String key, String text) {
         if (contains(EXISTING_FOLDER_KEYS, key)) {
             return checkPath(key, text, true);
         }
@@ -408,8 +423,9 @@ public class SettingsService {
             return ModuleSections.validate(text);
         }
 
-        if (key.equals(ConfigKeys.OUTPUT_DIR_BY_SECTION)
-                || key.equals(ConfigKeys.SCORE_SHEET_BY_SECTION)) {
+        boolean bySectionKey = key.equals(ConfigKeys.OUTPUT_DIR_BY_SECTION)
+                || key.equals(ConfigKeys.SCORE_SHEET_BY_SECTION);
+        if (bySectionKey) {
             return ExportFolders.validate(text);
         }
 
@@ -446,10 +462,11 @@ public class SettingsService {
         for (String key : config.getKeys()) {
             // The model answers folder is checked when it is used, so a
             // moved folder skips those checks instead of stopping the app
-            boolean mustExist = contains(EXISTING_FOLDER_KEYS, key)
+            boolean isCheckedElsewhere =
+                    contains(EXISTING_FOLDER_KEYS, key)
                     || contains(EXISTING_FILE_KEYS, key)
                     || key.equals(ConfigKeys.MODEL_ANSWERS_DIR);
-            if (!mustExist) {
+            if (!isCheckedElsewhere) {
                 String message = validate(key, config.getString(key));
                 if (!message.isEmpty()) {
                     problems.add(message);
@@ -515,13 +532,28 @@ public class SettingsService {
         }
 
         Path configFile = Paths.get(config.getConfigFile());
-        String lineEnding = UNIX_LINE_ENDING;
-
-        if (Files.readString(configFile).contains(WINDOWS_LINE_ENDING)) {
-            lineEnding = WINDOWS_LINE_ENDING;
-        }
-
+        String lineEnding = findLineEnding(configFile);
         List<String> lines = Files.readAllLines(configFile);
+        String output = rewriteChanged(lines, lineEnding);
+
+        writeSafely(configFile, output);
+        if (auditService != null) {
+            auditService.record(SETTINGS_SAVED, describeChanges());
+        }
+        changedKeys.clear();
+    }
+
+    // Returns the file's own line ending: CRLF if it uses it, else LF.
+    private String findLineEnding(Path configFile) throws IOException {
+        if (Files.readString(configFile).contains(WINDOWS_LINE_ENDING)) {
+            return WINDOWS_LINE_ENDING;
+        }
+        return UNIX_LINE_ENDING;
+    }
+
+    // Copies the file's lines, rewriting the line of each changed setting
+    // and adding at the end each changed setting the file did not hold.
+    private String rewriteChanged(List<String> lines, String lineEnding) {
         List<String> writtenKeys = new ArrayList<>();
         String output = "";
         int index = 0;
@@ -549,12 +581,7 @@ public class SettingsService {
                 output += formatLine(key) + lineEnding;
             }
         }
-
-        writeSafely(configFile, output);
-        if (auditService != null) {
-            auditService.record(SETTINGS_SAVED, describeChanges());
-        }
-        changedKeys.clear();
+        return output;
     }
 
     // Lists the changed settings with their new values, for the audit log.
@@ -565,14 +592,15 @@ public class SettingsService {
             pairs.add(key + KEY_VALUE_SEPARATOR + config.getString(key));
         }
 
-        return "Changed " + TextUtils.join(", ", pairs) + ".";
+        return "Changed " + TextUtils.join(SHOWN_LIST_SEPARATOR, pairs)
+                + ".";
     }
 
     // Writes a copy first, so a failure halfway leaves the original
     // file untouched, then puts the copy in its place.
     private void writeSafely(Path file, String text) throws IOException {
-        Path tempFile = file.resolveSibling(file.getFileName()
-                + TEMP_SUFFIX);
+        String tempName = file.getFileName() + TEMP_SUFFIX;
+        Path tempFile = file.resolveSibling(tempName);
 
         try {
             Files.writeString(tempFile, text);
@@ -667,7 +695,7 @@ public class SettingsService {
         }
 
         return "'" + key + "' must be one of: "
-                + TextUtils.join(", ", choices) + ".";
+                + TextUtils.join(SHOWN_LIST_SEPARATOR, choices) + ".";
     }
 
     // Checks that a value is a valid regular expression.
@@ -712,9 +740,10 @@ public class SettingsService {
             }
         }
 
-        if (key.equals(ConfigKeys.WORKING_DIR)
+        boolean workingFolderInUse = key.equals(ConfigKeys.WORKING_DIR)
                 && !isSamePath(folder, config.getString(key))
-                && !isNewOrEmpty(folder)) {
+                && !isNewOrEmpty(folder);
+        if (workingFolderInUse) {
             return "'" + key + "' must be a new or empty folder, because "
                     + "GradeZZY deletes and replaces the folders inside it.";
         }
@@ -740,8 +769,9 @@ public class SettingsService {
     // Says whether a folder is the one a setting holds now.
     private boolean isSamePath(Path folder, String currentText) {
         try {
-            return folder.equals(Paths.get(currentText).toAbsolutePath()
-                    .normalize());
+            Path current = Paths.get(currentText).toAbsolutePath()
+                    .normalize();
+            return folder.equals(current);
         } catch (InvalidPathException exception) {
             return false;
         }
@@ -799,7 +829,7 @@ public class SettingsService {
 
     // Checks the question ids: at least one, each with its settings.
     private String checkQuestionIds(String key, String text) {
-        List<String> ids = splitList(text);
+        List<String> ids = AppConfig.splitList(text);
 
         if (ids.isEmpty()) {
             return "'" + key + "' needs at least one question id.";
@@ -807,10 +837,10 @@ public class SettingsService {
 
         for (String id : ids) {
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
-            boolean hasFolder = config.hasKey(prefix
-                    + ConfigKeys.QUESTION_FOLDER_SUFFIX);
-            boolean hasFile = config.hasKey(prefix
-                    + ConfigKeys.QUESTION_FILE_SUFFIX);
+            String folderKey = prefix + ConfigKeys.QUESTION_FOLDER_SUFFIX;
+            String fileKey = prefix + ConfigKeys.QUESTION_FILE_SUFFIX;
+            boolean hasFolder = config.hasKey(folderKey);
+            boolean hasFile = config.hasKey(fileKey);
 
             if (!hasFolder || !hasFile) {
                 return "Question '" + id + "' needs the settings " + prefix
@@ -824,7 +854,7 @@ public class SettingsService {
 
     // Checks that a list setting has at least one item.
     private String checkRequiredList(String key, String text) {
-        if (splitList(text).isEmpty()) {
+        if (AppConfig.splitList(text).isEmpty()) {
             return "'" + key + "' needs at least one item, separated by "
                     + "commas.";
         }
@@ -832,40 +862,33 @@ public class SettingsService {
         return "";
     }
 
-    // Splits a list value the same way AppConfig.getList does: items
-    // are trimmed and empty items are left out.
-    private List<String> splitList(String text) {
-        List<String> items = new ArrayList<>();
-
-        for (String part : text.split(LIST_SEPARATOR)) {
-            String item = part.trim();
-
-            if (!item.isEmpty()) {
-                items.add(item);
-            }
-        }
-
-        return items;
-    }
-
     // Returns the key on a line, or null for a blank or comment line.
     // Keys with escaped characters are not supported; GradeZZY has none.
     private String readKey(String line) {
         String trimmed = line.trim();
 
-        if (trimmed.isEmpty()
-                || COMMENT_STARTS.indexOf(trimmed.charAt(0)) >= 0) {
+        boolean noKey = trimmed.isEmpty()
+                || COMMENT_STARTS.indexOf(trimmed.charAt(0)) >= 0;
+        if (noKey) {
             return null;
         }
 
         int end = 0;
 
-        while (end < trimmed.length()
-                && KEY_END_CHARACTERS.indexOf(trimmed.charAt(end)) < 0) {
+        while (isKeyCharacter(trimmed, end)) {
             end++;
         }
 
         return trimmed.substring(0, end);
+    }
+
+    // Says whether the character at a position is still part of the key:
+    // before the end of the line and not a character that ends a key.
+    private boolean isKeyCharacter(String trimmed, int position) {
+        if (position >= trimmed.length()) {
+            return false;
+        }
+        return KEY_END_CHARACTERS.indexOf(trimmed.charAt(position)) < 0;
     }
 
     // Returns the index of the last line of the entry that starts at
@@ -878,12 +901,21 @@ public class SettingsService {
 
         int lastIndex = index;
 
-        while (lastIndex < lines.size() - 1
-                && endsWithContinuation(lines.get(lastIndex))) {
+        while (continuesPast(lines, lastIndex)) {
             lastIndex++;
         }
 
         return lastIndex;
+    }
+
+    // Says whether the entry goes on after the line at an index: the line
+    // is not the last one and ends with a continuation.
+    private boolean continuesPast(List<String> lines, int index) {
+        int finalLine = lines.size() - 1;
+        if (index >= finalLine) {
+            return false;
+        }
+        return endsWithContinuation(lines.get(index));
     }
 
     // Says whether a line ends with an odd number of backslashes.
@@ -902,8 +934,8 @@ public class SettingsService {
     // Builds the line written for a changed key. A backslash is doubled
     // because the properties format reads it as an escape.
     private String formatLine(String key) {
-        String value = config.getString(key).replace(BACKSLASH,
-                BACKSLASH + BACKSLASH);
+        String doubled = BACKSLASH + BACKSLASH;
+        String value = config.getString(key).replace(BACKSLASH, doubled);
         return key + KEY_VALUE_SEPARATOR + value;
     }
 }

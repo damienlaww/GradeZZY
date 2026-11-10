@@ -20,7 +20,11 @@ cd "$(dirname "$0")" || exit 1
 case "$(uname -s)" in
     Darwin)
         SEPARATOR=":"
-        if [ "$(uname -m)" = "arm64" ]; then
+        # Ask the JDK, not the shell: an Intel JDK on an Apple silicon Mac
+        # (or a shell under Rosetta) needs the other JavaFX folder.
+        JAVA_ARCH=$(java -XshowSettings:properties -version 2>&1 \
+            | sed -n 's/^ *os.arch = //p')
+        if [ "$JAVA_ARCH" = "aarch64" ]; then
             JAVAFX_DIR="lib/javafx/mac-aarch64"
         else
             JAVAFX_DIR="lib/javafx/mac"

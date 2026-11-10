@@ -12,6 +12,8 @@ import java.nio.file.Path;
 
 /**
  * The outcome of one backend action.
+ *
+ * <p>Tier: MUST.
  */
 public class ActionResult {
 
@@ -80,8 +82,8 @@ public class ActionResult {
      * @return the result
      */
     public static ActionResult notConnected(Capability capability) {
-        return new ActionResult(ActionOutcome.NOT_CONNECTED,
-                capability.getTitle() + " is not connected yet.",
+        String message = capability.getTitle() + " is not connected yet.";
+        return new ActionResult(ActionOutcome.NOT_CONNECTED, message,
                 capability, "", null);
     }
 

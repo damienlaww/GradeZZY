@@ -35,6 +35,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * Saves a Java file again as plain UTF-8, so javac can read it.
+ *
+ * <p>Tier: SHOULD. Owner: Jun Sheng.
  */
 public class EncodingFixer extends AbstractFixer {
 
@@ -106,8 +108,9 @@ public class EncodingFixer extends AbstractFixer {
 
         Path root = workingCopy.toAbsolutePath().normalize();
         Path file = findFileInMessage(root, anomaly);
-        if (file == null || !file.startsWith(root)
-                || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+        boolean notFound = file == null || !file.startsWith(root)
+                || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS);
+        if (notFound) {
             throw new FixException("Could not find the file this encoding "
                     + "problem is about, so nothing was changed.");
         }
@@ -166,7 +169,8 @@ public class EncodingFixer extends AbstractFixer {
     @Override
     public void undo(FixRecord fixRecord) throws FixException {
         Path backupPath = fixRecord.getBackupPath();
-        byte[] written = convertToUtf8(readBytes(backupPath));
+        byte[] backedUp = readBytes(backupPath);
+        byte[] written = convertToUtf8(backedUp);
         Path file = findFileNow(fixRecord, written);
 
         try {
@@ -254,13 +258,15 @@ public class EncodingFixer extends AbstractFixer {
         for (Path child : children) {
             String childName = child.getFileName().toString();
             boolean visible = !childName.startsWith(HIDDEN_NAME_PREFIX);
-
-            if (visible
-                    && Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
-                javaFiles.addAll(findJavaFiles(child));
-            } else if (visible
+            boolean isFolder = visible
+                    && Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS);
+            boolean isJavaFile = visible
                     && Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS)
-                    && childName.endsWith(JAVA_SUFFIX)) {
+                    && childName.endsWith(JAVA_SUFFIX);
+
+            if (isFolder) {
+                javaFiles.addAll(findJavaFiles(child));
+            } else if (isJavaFile) {
                 javaFiles.add(child);
             }
         }
@@ -320,16 +326,19 @@ public class EncodingFixer extends AbstractFixer {
     // Returns the file path that starts the message, or null.
     private String findShownPath(String message) {
         if (message.endsWith(MARK_PROBLEM)) {
-            return message.substring(0,
-                    message.length() - MARK_PROBLEM.length());
+            return cutEnding(message, MARK_PROBLEM);
         } else if (message.endsWith(UTF16_PROBLEM)) {
-            return message.substring(0,
-                    message.length() - UTF16_PROBLEM.length());
+            return cutEnding(message, UTF16_PROBLEM);
         } else if (message.endsWith(CHARSET_PROBLEM)) {
-            return message.substring(0,
-                    message.length() - CHARSET_PROBLEM.length());
+            return cutEnding(message, CHARSET_PROBLEM);
         }
         return null;
+    }
+
+    // Returns the message without the ending it is known to have.
+    private String cutEnding(String message, String ending) {
+        int pathEnd = message.length() - ending.length();
+        return message.substring(0, pathEnd);
     }
 
     // Finds the fixed file, even if a later fix moved it.
@@ -342,11 +351,12 @@ public class EncodingFixer extends AbstractFixer {
 
         // Else the one file of that name still holding what the fix wrote
         List<Path> matches = new ArrayList<>();
+        String fixedName = fixedPath.getFileName().toString();
         for (Path candidate : listJavaFiles(fixRecord.getWorkingCopy())) {
             String candidateName = candidate.getFileName().toString();
-            if (candidateName.equalsIgnoreCase(
-                    fixedPath.getFileName().toString())
-                    && holdsBytes(candidate, written)) {
+            boolean isMatch = candidateName.equalsIgnoreCase(fixedName)
+                    && holdsBytes(candidate, written);
+            if (isMatch) {
                 matches.add(candidate);
             }
         }

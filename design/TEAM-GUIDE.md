@@ -368,18 +368,21 @@ Then the submissions. What to build, in order:
      without unpacking, so the Set up step can list the students, and
      what is skipped, before grading starts.
 2. `SubmissionLoader.extractUsername`: remove the prefix matched by
-   `ingest.zip.name.prefix.pattern` and the `.zip` ending, so
-   `2023-2024-ping.lee.2023.zip` gives `ping.lee.2023`. A browser's copy
+   `ingest.zip.name.prefix.pattern` and every `.zip` ending, so
+   `2023-2024-ping.lee.2023.zip` (and `.zip.zip`) gives `ping.lee.2023`. A browser's copy
    number is removed too, so `2023-2024-ping.lee.2023 (1).zip` also gives
    `ping.lee.2023`.
 3. `ZipExtractor.extract` and `isSafeEntry`: unzip with `java.util.zip`.
    Refuse entries that would land outside the target folder (names with
    `..`), and stop at the size and entry limits from the configuration.
+   A name ending with a space or a dot is unpacked without them, with a
+   warning.
 4. `WorkingCopyManager`: unzip into `workspace/working/<username>`. Never
    write to the original zip. `removeStudentClassFiles` deletes `.class`
    files except those in `assessment.provided.class.files`.
 5. `RosterReader`: read `samples/IS442-ScoreSheet.csv` into `Student`
-   objects and remove the `#` in front of the id and username.
+   objects and remove the `#` in front of the id and username, and the
+   spaces around them. Rows of empty cells, as Excel leaves, are skipped.
 6. `ExtractStage`, which calls the classes above.
 
 Facts from the provided files:
@@ -529,14 +532,21 @@ How the fixes work:
   inside a folder that was one level too deep is still filled in.
 - `FolderHierarchyFixer` moves everything visible at the top of the
   working copy (the Q folders and any other files) into a new username
-  folder. It also fixes question folders one level too deep, such as a
-  username folder inside the username folder. The k-th missing-folder
-  anomaly belongs to the k-th question folder still missing, in question
-  order (the order the validator reports them), so each anomaly moves its
-  own folder up out of the one extra folder that holds question folders,
+  folder. It also fixes question folders that sit too deep: one level
+  down, such as a username folder inside the username folder, or at the
+  end of a chain of folders that each hold only one folder, such as
+  `Users/jy/Desktop/<username>` from a command-line zip. The k-th
+  missing-folder anomaly belongs to the k-th question folder still
+  missing or dragged into itself (`Q1/Q1`), in question order (the order
+  the validator reports them), so each anomaly moves its own folder up
+  out of the one extra folder (or chain) that leads to question folders,
   correcting its letter case on the way. Other files and folders stay
-  where they are, the extra folder is removed once empty, and a folder
-  that is truly missing is left reported. `FolderNameFixer` renames the
+  where they are, the folders of the chain are removed once empty, and a
+  folder that is truly missing is left reported. Which folder holds the
+  question folders is decided by `util.AnswerFolderRule`, the one rule
+  the validators, the fixers and `QuestionFolderFinder` share: when
+  several folders hold question folders, it gives none, and the student
+  is not graded from a guess. `FolderNameFixer` renames the
   only top folder to the username, including a change of letter case
   only. Both are undone by moving back.
 - `CaseNameFixer` renames a question folder or a required file whose name
@@ -883,7 +893,13 @@ Notes:
 
 - The JavaFX jars differ per platform, so there are three copies, in
   `lib/javafx/mac`, `lib/javafx/mac-aarch64` and `lib/javafx/win`. The
-  scripts choose one.
+  scripts choose one. On a Mac they ask the JDK which processor it is
+  built for (`os.arch`), not the shell, so an Intel JDK on an Apple
+  Silicon Mac, or a terminal running under Rosetta, still gets the
+  matching jars.
+- `compile.sh` and `compile.bat` pass `--release 25` to `javac`, so an
+  older JDK stops with "release version 25 not supported" instead of a
+  confusing class file version error.
 - JSON export uses a small hand-written `JsonWriter` instead of a library,
   so there is one jar fewer and every line can be explained.
 - No Excel library is included. Exports are CSV and JSON only.
@@ -912,7 +928,7 @@ by this section.
 | JavaFX | `ui` package only | The window. | A library of window parts (buttons, tables, charts) that we arrange in code. |
 | One-line lambdas `event -> exportResults()` | 26 files in `ui` | Button handlers, table cells and callbacks. | Short for a small class that implements the handler interface (like `AgeComparator implements Comparator`) and whose one method calls `exportResults()`. Every lambda is one line that calls one method. |
 | `Runnable`, `Consumer` | `ui.flow` (`ActionBar`, `Parts`, `StepBar`, `TabBar`, ...), `exec.TrustedFrameCheck` | The type of a lambda parameter, for example "what to do when this button is pressed". | Interfaces with one method, so a screen can pass "run this later" to another class. |
-| `java.nio.file` (`Path`, `Paths`, `Files`, `DirectoryStream`, `StandardCopyOption`, `LinkOption`) | About 60 files | Every file and folder the system reads, copies, moves or writes. | `Path` is a file or folder location (like `File`); `Files` has static methods to read, copy, move and list them, and can refuse to follow links. |
+| `java.nio.file` (`Path`, `Paths`, `Files`, `DirectoryStream`, `StandardCopyOption`, `LinkOption`, `FileTime`) | About 60 files | Every file and folder the system reads, copies, moves or writes. | `Path` is a file or folder location (like `File`); `Files` has static methods to read, copy, move and list them, and can refuse to follow links. |
 | `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.UndoFixJob`, `ui.flow.RegradeJob`, `ui.flow.SetUpScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.StudentPanel`, `ui.flow.RunsScreen`, `ui.flow.CodeSheet`, `ui.flow.HomeScreen`, `ui.flow.ScoreSheetSearch`, `ui.flow.ScoreSheetChange` | Grading (with the similar code check at the end of `GradingTask`), checking chosen files, the class files and the tester folder, reading the score sheet for students with no submission, grading a question again, grading one student, one question or the ticked students again, exports, backups, and undoing a fix or applying a rejected one again (each grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread, and the review decisions on flags. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
@@ -922,7 +938,7 @@ by this section.
 | JDBC (`Connection`, `PreparedStatement`, `ResultSet`) | `persistence` only: `SqliteResultRepository` and its table classes (`SqliteSchema`, `RunTables`, `SubmissionTables`, `ReviewTables`, `AdjustmentTable`, `AuditTable`, `JdbcSupport`) | Saves runs, review decisions, checked 0s and changed marks to SQLite so History can list them after a restart. | `Connection` is the open database, `PreparedStatement` is one SQL command with `?` blanks we fill in, `ResultSet` is the rows that come back; each is closed in a `finally` block. |
 | `Thread.sleep`, `InterruptedException` | `util.FileUtils` | Waits briefly before retrying a move or delete that Windows blocked, such as when antivirus holds a new file open. | Pauses for half a second, then tries again, up to five times. |
 | `Files.getFileStore`, `Files.setAttribute(path, "dos:readonly", false)` | `util.FileUtils` | A read-only file cannot be deleted on Windows, so the flag is cleared before a delete is tried again. Elsewhere a failed delete is reported at once. | Asks which kind of disk a file is on, and on a Windows disk switches off the file's read-only tick box. |
-| `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; we check every 50 milliseconds whether it has finished or run out of time. |
+| `ProcessBuilder`, `Process`, `ProcessHandle`, `Thread.sleep` | `exec.ProcessRunner` | Runs `javac` and `java` as separate programs and stops a run and its child programs at the time limit. | Starts another program like typing a command in the terminal; while it runs we read what it prints, and wait 50 milliseconds only when it has printed nothing new. |
 | `ProcessHandle.onExit().get` with `TimeUnit`, `TimeoutException`, `ExecutionException` | `exec.ProcessRunner` | On Windows a stopped `java.exe` holds its folder for a moment, so the runner waits up to 1 second (shared by all the children it stopped) for it to end. | `onExit()` is a result that arrives when the program ends; `get` waits for it, but gives up after the time given. |
 | `default` methods in an interface | `ui.backend.DashboardBackend` | A few methods, such as `getScoreSheet` and `setZeroChecked`, work the same in the live and demo backends, so they are written once in the interface. | An interface method with a body: each class that implements the interface gets it unless it writes its own. |
 | `InputStream.available()` | `exec.ProcessRunner` | Tells whether a running program has output waiting, so the runner reads it at once instead of pausing first. | Asks a stream how many bytes can be read right now without waiting; 0 means nothing has arrived yet. |
@@ -931,6 +947,7 @@ by this section.
 | `Throwable.setStackTrace`, an overridden `toString` | `exec.SkippedCaseException` | The provided testers print the stack trace of any exception in a case, so a case GradeZZY skips prints one plain line instead of a GradeZZY stack trace. | Our exception keeps an empty list of call stack lines and prints as its message alone. |
 | Varargs `format(String, Object...)` | `exec.TrustedPrintStream` only | It overrides `PrintStream.format`, whose signature Java fixes. | `printf` calls this method, so ours must have exactly the same parameters to catch `printf` output too. |
 | Reflection (`Class.forName`, `Method.invoke`, `Class<?>`) | `exec.TesterHarness`, `exec.TrustedPrintStream`, `exec.TrustedFrameCheck` | Starts the tester's `main` from inside the harness. | Loads a class by its name at run time and calls its `main`, the way `java Q1aTester` would. |
+| `Runtime.version().feature()` | `app.ConsoleMain`, `ui.MainApp` | Stops at once with a clear message on a JDK older than 25. | Asks Java which version it is, such as 25. |
 | `Runtime.halt`, the `jdk.lang.Process.launchMechanism` property | `exec.TesterHarness` | Ends the run without waiting for student threads, and stops student code starting other programs (macOS and Linux). | A hard stop for the tester's program, and a switch that blocks it from launching others. |
 | `java` options `--limit-modules`, `--illegal-native-access=deny`; `UUID` | `exec.TesterRunner` (`UUID` also for anomaly ids) | Student code gets only core Java and no native code; a new random token for every tester run. | Command-line options that shrink what student code can reach; a `UUID` is a random id nobody can guess. |
 | `java.util.zip` (`ZipFile`, `ZipEntry`, `Enumeration`, `CRC32`) | `ingest.ZipExtractor` | Unzips submissions safely. | Opens a zip and hands us its entries one at a time, like an `Iterator`. |

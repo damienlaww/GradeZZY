@@ -66,6 +66,8 @@ import gradezzy.ui.backend.RunRecord;
 
 /**
  * The Set up step.
+ *
+ * <p>Tier: SHOULD.
  */
 public class SetUpScreen extends FlowScreen {
 
@@ -138,23 +140,8 @@ public class SetUpScreen extends FlowScreen {
     private static final String DEFAULT_CHOSEN_FILE =
             "workspace/chosen-submissions.properties";
 
-    // Keeps the files chosen for each section between uses, or null
-    // until first needed
-    private ChosenSubmissionsStore chosenStore = null;
-
     // The most submissions listed on the page; Show all opens the rest
     private static final int MAX_FILE_ROWS = 5;
-
-    // The sheet that lists every chosen submission, made when first
-    // opened
-    private SubmissionsSheet allFilesSheet = null;
-
-    // The sections opened on Set up since GradeZZY started, so a
-    // section gets its last run's files back only on the first visit
-    private final List<String> visitedSections = new ArrayList<>();
-
-    // The submissions whose file list is open
-    private final List<Path> openFileLists = new ArrayList<>();
 
     // The share of the class row for Module and for Section
     private static final double CHOICE_PERCENT = 27.8;
@@ -172,6 +159,49 @@ public class SetUpScreen extends FlowScreen {
     private static final int ROSTER_MATCH = 0;
     private static final int TESTERS_MATCH = 1;
     private static final int STARTER_MATCH = 2;
+
+    // The indent of a row's opened file list, past the icon column
+    private static final double FILE_LIST_INDENT = ROW_ICON_COLUMN
+            + Parts.GAP;
+
+    // The separator between the parts of a key that names the files a
+    // check used
+    private static final String KEY_SEPARATOR = "|";
+
+    // The separator between a file's name and its students in the text
+    // the sheet's filter searches
+    private static final String SEARCH_SEPARATOR = " ";
+
+    // The separator between words joined in a sentence, and before the
+    // last of them
+    private static final String WORD_SEPARATOR = ", ";
+    private static final String LAST_WORD_SEPARATOR = " and ";
+
+    // The titles of the class file rows, which also pick each row's help
+    private static final String ROSTER_TITLE = "Score sheet";
+    private static final String TESTERS_TITLE = "Tester files";
+    private static final String STARTER_TITLE = "Starter files";
+
+    // The names of the background threads that check files
+    private static final String INSPECT_THREAD = "gradezzy-inspect";
+    private static final String REOPEN_THREAD = "gradezzy-reopen";
+    private static final String TESTERS_THREAD = "gradezzy-testers";
+    private static final String MATCH_THREAD = "gradezzy-match";
+
+    // Keeps the files chosen for each section between uses, or null
+    // until first needed
+    private ChosenSubmissionsStore chosenStore = null;
+
+    // The sheet that lists every chosen submission, made when first
+    // opened
+    private SubmissionsSheet allFilesSheet = null;
+
+    // The sections opened on Set up since GradeZZY started, so a
+    // section gets its last run's files back only on the first visit
+    private final List<String> visitedSections = new ArrayList<>();
+
+    // The submissions whose file list is open
+    private final List<Path> openFileLists = new ArrayList<>();
 
     // The scrolling page
     private final ScrollPane view;
@@ -524,8 +554,9 @@ public class SetUpScreen extends FlowScreen {
         }
         for (RunRecord record : getBackend().listRuns()) {
             GradingRun run = record.getRun();
-            if (run.getSection() != null
-                    && StatisticsScreen.isGraded(run)) {
+            boolean graded = run.getSection() != null
+                    && StatisticsScreen.isGraded(run);
+            if (graded) {
                 getState().setModuleCode(run.getSection().getModuleCode());
                 getState().setSectionCode(
                         run.getSection().getSectionCode());
@@ -555,8 +586,12 @@ public class SetUpScreen extends FlowScreen {
     private void chooseAssessment() {
         String chosen = assessmentBox.getValue();
         Assessment inUse = getBackend().getAssessment();
-        if (filling || chosen == null
-                || (inUse != null && chosen.equals(inUse.getName()))) {
+        if (filling || chosen == null) {
+            return;
+        }
+        boolean alreadyInUse = inUse != null
+                && chosen.equals(inUse.getName());
+        if (alreadyInUse) {
             return;
         }
         if (!getWindow().useAssessment(chosen)) {
@@ -690,7 +725,9 @@ public class SetUpScreen extends FlowScreen {
         // its last run, once, when it is first opened
         boolean empty = getState().getBatch().getItems(
                 InputKind.SUBMISSION).isEmpty();
-        if (paths.isEmpty() && firstVisit && !kept && empty) {
+        boolean useLastRun = paths.isEmpty() && firstVisit && !kept
+                && empty;
+        if (useLastRun) {
             paths = findLastRunUploads();
         }
         if (paths.isEmpty()) {
@@ -704,7 +741,7 @@ public class SetUpScreen extends FlowScreen {
         inspection.setOnFailed(event -> inspectionFailed(inspection));
         filesBeingChecked += inspection.getPathCount();
 
-        Thread worker = new Thread(inspection, "gradezzy-reopen");
+        Thread worker = new Thread(inspection, REOPEN_THREAD);
         worker.setDaemon(true);
         worker.start();
     }
@@ -722,30 +759,42 @@ public class SetUpScreen extends FlowScreen {
             return uploads;
         }
 
-        Path working = Paths.get(getBackend().getSetting(
-                ConfigKeys.WORKING_DIR)).toAbsolutePath().normalize();
+        String workingSetting = getBackend().getSetting(
+                ConfigKeys.WORKING_DIR);
+        Path working = Paths.get(workingSetting).toAbsolutePath()
+                .normalize();
         boolean fromBulkZip = false;
         for (Submission submission : run.getSubmissions()) {
             Path original = submission.getOriginalPath();
             boolean known = original != null;
-            if (known && original.toAbsolutePath().normalize()
-                    .startsWith(working)) {
+            if (known && isInside(original, working)) {
                 fromBulkZip = true;
-            } else if (known && Files.exists(original)
-                    && !uploads.contains(original)) {
+            } else if (known && isNewUpload(original, uploads)) {
                 uploads.add(original);
             }
         }
 
         Path folder = findSharedFolder(uploads);
-        if (folder != null && uploads.size() > 1
-                && (fromBulkZip || !holdsOtherZips(folder, uploads))) {
+        boolean chosenAsWhole = folder != null && uploads.size() > 1
+                && (fromBulkZip || !holdsOtherZips(folder, uploads));
+        if (chosenAsWhole) {
             List<Path> whole = new ArrayList<>();
             whole.add(folder);
             return whole;
         }
 
         return uploads;
+    }
+
+    // Says whether a path is inside a folder, such as a copy GradeZZY
+    // unpacked into its working folder.
+    private boolean isInside(Path path, Path folder) {
+        return path.toAbsolutePath().normalize().startsWith(folder);
+    }
+
+    // Says whether an upload is still there and not listed yet.
+    private boolean isNewUpload(Path upload, List<Path> uploads) {
+        return Files.exists(upload) && !uploads.contains(upload);
     }
 
     // Returns the folder every path is directly in, or null when they
@@ -803,7 +852,7 @@ public class SetUpScreen extends FlowScreen {
         inspection.setOnFailed(event -> inspectionFailed(inspection));
         filesBeingChecked += inspection.getPathCount();
         refreshActions();
-        Thread worker = new Thread(inspection, "gradezzy-inspect");
+        Thread worker = new Thread(inspection, INSPECT_THREAD);
         worker.setDaemon(true);
         worker.start();
     }
@@ -824,8 +873,9 @@ public class SetUpScreen extends FlowScreen {
 
     // Returns ": " and an error's message, or "." when it has none.
     private String describeError(Throwable error) {
-        if (error == null || error.getMessage() == null
-                || error.getMessage().isBlank()) {
+        boolean noMessage = error == null || error.getMessage() == null
+                || error.getMessage().isBlank();
+        if (noMessage) {
             return ". Try choosing them again.";
         }
         return ": " + error.getMessage();
@@ -842,9 +892,7 @@ public class SetUpScreen extends FlowScreen {
                 + ".");
     }
 
-    /**
-     * Adds the files just dropped on the drop area.
-     */
+    // Adds the files just dropped on the drop area.
     private void addDroppedFiles() {
         addSubmissions(dropHandler.getDroppedPaths());
     }
@@ -987,10 +1035,12 @@ public class SetUpScreen extends FlowScreen {
         }
         String who = ExportFolders.keyOf(getState().getModuleCode(),
                 getState().getSectionCode());
+        String sheets = getBackend().getSetting(
+                ConfigKeys.SCORE_SHEET_BY_SECTION);
+        String updated = ExportFolders.put(sheets, who,
+                Parts.configPath(path));
         Map<String, String> changes = new HashMap<>();
-        changes.put(ConfigKeys.SCORE_SHEET_BY_SECTION, ExportFolders.put(
-                getBackend().getSetting(ConfigKeys.SCORE_SHEET_BY_SECTION),
-                who, Parts.configPath(path)));
+        changes.put(ConfigKeys.SCORE_SHEET_BY_SECTION, updated);
         ActionResult result = getBackend().saveSettings(changes);
         if (result.isDone()) {
             getWindow().notify("Score sheet kept for "
@@ -1022,7 +1072,7 @@ public class SetUpScreen extends FlowScreen {
         inspection.setOnFailed(event -> classFileFailed(inspection));
         latestClassChecks.put(kind, inspection);
         filesBeingChecked += inspection.getPathCount();
-        Thread worker = new Thread(inspection, "gradezzy-inspect");
+        Thread worker = new Thread(inspection, INSPECT_THREAD);
         worker.setDaemon(true);
         worker.start();
     }
@@ -1057,8 +1107,9 @@ public class SetUpScreen extends FlowScreen {
         ImportBatch batch = getState().getBatch();
         batch.clear(item.getKind());
         batch.add(item);
-        if (item.getKind() == InputKind.TESTERS
-                || item.getKind() == InputKind.STARTER) {
+        boolean assessmentFolder = item.getKind() == InputKind.TESTERS
+                || item.getKind() == InputKind.STARTER;
+        if (assessmentFolder) {
             forgetTesterCheck();
         }
     }
@@ -1101,9 +1152,9 @@ public class SetUpScreen extends FlowScreen {
     // Opens the editor of the assessment in use, where its tester and
     // starter files are chosen.
     private void editAssessmentFiles() {
-        if (getBackend().getAssessment() != null) {
-            getWindow().editAssessment(getBackend().getAssessment()
-                    .getName());
+        Assessment inUse = getBackend().getAssessment();
+        if (inUse != null) {
+            getWindow().editAssessment(inUse.getName());
         } else {
             getWindow().openAssessments();
         }
@@ -1145,9 +1196,9 @@ public class SetUpScreen extends FlowScreen {
             assessmentText.setText("None is set yet.");
             return;
         }
-        assessmentText.setText(Parts.plural(assessment.getQuestions()
-                .size(), "question") + DOT
-                + Parts.mark(assessment.getMaxTotal()) + " marks");
+        int questionCount = assessment.getQuestions().size();
+        assessmentText.setText(Parts.plural(questionCount, "question")
+                + DOT + Parts.mark(assessment.getMaxTotal()) + " marks");
     }
 
     // Offers the results of an earlier run of the chosen section.
@@ -1168,10 +1219,10 @@ public class SetUpScreen extends FlowScreen {
         if (run.getAssessment() != null) {
             with = " with " + run.getAssessment().getName();
         }
+        int studentCount = run.getSubmissions().size();
         Label note = Parts.muted(getState().getSection().getLabel()
                 + " was graded" + with + when + " ("
-                + Parts.plural(run.getSubmissions().size(), "student")
-                + ").");
+                + Parts.plural(studentCount, "student") + ").");
         Parts.tip(note, "Grading again keeps these results in History, where "
                 + "you can open or restore them.");
         earlierRun.getChildren().addAll(note, Parts.link("Open its results",
@@ -1193,8 +1244,9 @@ public class SetUpScreen extends FlowScreen {
         }
 
         if (items.size() > shown) {
-            Hyperlink all = smallLink("Show all " + Parts.plural(
-                    items.size(), "file"), () -> showAllFiles());
+            String allText = "Show all " + Parts.plural(items.size(),
+                    "file");
+            Hyperlink all = smallLink(allText, () -> showAllFiles());
             HBox more = Parts.row(0, new Node[] {all});
             more.getStyleClass().add("card-row");
             fileList.getChildren().add(more);
@@ -1204,7 +1256,12 @@ public class SetUpScreen extends FlowScreen {
         fileList.setManaged(!items.isEmpty());
         refreshDuplicateNote(batch);
         refreshAllFilesSheet(items);
+        refreshFileSummary(batch, items);
+    }
 
+    // Redraws the count above the zip file list and its links.
+    private void refreshFileSummary(ImportBatch batch,
+            List<ImportItem> items) {
         fileSummary.getChildren().clear();
         if (items.isEmpty()) {
             return;
@@ -1216,9 +1273,9 @@ public class SetUpScreen extends FlowScreen {
         fileSummary.getChildren().add(count);
         int unusable = countUnusable();
         if (unusable > 0) {
-            Hyperlink drop = smallLink("Remove " + Parts.plural(unusable,
-                    "file") + " that cannot be used",
-                    () -> removeUnusable());
+            String dropText = "Remove " + Parts.plural(unusable, "file")
+                    + " that cannot be used";
+            Hyperlink drop = smallLink(dropText, () -> removeUnusable());
             fileSummary.getChildren().add(drop);
         }
         fileSummary.getChildren().add(smallLink("Clear all",
@@ -1268,7 +1325,8 @@ public class SetUpScreen extends FlowScreen {
     private List<String> searchTextsOf(List<ImportItem> items) {
         List<String> texts = new ArrayList<>();
         for (ImportItem item : items) {
-            texts.add(item.getName() + " " + join(item.getStudents()));
+            texts.add(item.getName() + SEARCH_SEPARATOR
+                    + join(item.getStudents()));
         }
 
         return texts;
@@ -1309,26 +1367,16 @@ public class SetUpScreen extends FlowScreen {
         if (rows.isEmpty()) {
             return;
         }
+        int lastIndex = rows.size() - 1;
         rows.get(0).getStyleClass().add("first");
-        rows.get(rows.size() - 1).getStyleClass().add("last");
+        rows.get(lastIndex).getStyleClass().add("last");
     }
 
     // Builds one row of the zip file list. An opened list of the files
     // inside sits under the row, so the icon, status and Remove stay put.
     private VBox createFileRow(ImportItem item) {
         ImportState state = getState().getBatch().getEffectiveState(item);
-        Label name = Parts.strong(item.getName());
-        name.setMinWidth(0);
-        HBox line = Parts.row(0, new Node[] {name});
-        String who = item.getUsername();
-        if (who.isEmpty() && item.getStudentCount() > 0) {
-            who = Parts.plural(item.getStudentCount(), "student");
-        }
-        if (!who.isEmpty()) {
-            Label whoLabel = Parts.muted(DOT + who);
-            whoLabel.setMinWidth(0);
-            line.getChildren().add(whoLabel);
-        }
+        HBox line = createNameLine(item);
         VBox text = new VBox(line);
         String note = noteFor(item, state);
         if (!note.isEmpty()) {
@@ -1358,11 +1406,29 @@ public class SetUpScreen extends FlowScreen {
         if (insideList != null) {
             // Lines the list up with the text, past the icon column
             VBox.setMargin(insideList, new Insets(FILE_LIST_GAP, 0, 0,
-                    ROW_ICON_COLUMN + Parts.GAP));
+                    FILE_LIST_INDENT));
             row.getChildren().add(insideList);
         }
 
         return row;
+    }
+
+    // Builds the first line of a zip file's row: its name, then whose it
+    // is or how many students it holds.
+    private HBox createNameLine(ImportItem item) {
+        Label name = Parts.strong(item.getName());
+        name.setMinWidth(0);
+        HBox line = Parts.row(0, new Node[] {name});
+        String who = item.getUsername();
+        if (who.isEmpty() && item.getStudentCount() > 0) {
+            who = Parts.plural(item.getStudentCount(), "student");
+        }
+        if (!who.isEmpty()) {
+            Label whoLabel = Parts.muted(DOT + who);
+            whoLabel.setMinWidth(0);
+            line.getChildren().add(whoLabel);
+        }
+        return line;
     }
 
     // Remembers whether a row's file list is open, so it stays that way
@@ -1380,8 +1446,10 @@ public class SetUpScreen extends FlowScreen {
     private String noteFor(ImportItem item, ImportState state) {
         if (state == ImportState.DUPLICATE) {
             return describeDuplicate(item);
-        } else if (state == ImportState.ACCEPTED
-                && !item.getUsername().isEmpty()) {
+        }
+        boolean plainZip = state == ImportState.ACCEPTED
+                && !item.getUsername().isEmpty();
+        if (plainZip) {
             return "";
         }
         return item.getMessage();
@@ -1394,8 +1462,9 @@ public class SetUpScreen extends FlowScreen {
         if (batch.isChosenAgain(item)) {
             return "This was chosen more than once. It is graded once.";
         }
-        return "Not graded: " + batch.findGradedInstead(item).getName()
-                + " is graded instead. " + ONE_FILE_RULE;
+        String gradedName = batch.findGradedInstead(item).getName();
+        return "Not graded: " + gradedName + " is graded instead. "
+                + ONE_FILE_RULE;
     }
 
     // Redraws the score sheet, tester and starter rows.
@@ -1403,9 +1472,9 @@ public class SetUpScreen extends FlowScreen {
         checkTestersIfChanged();
         checkMatchesIfChanged();
         HBox[] rows = {
-            createClassFileRow(InputKind.ROSTER, "Score sheet", null),
+            createClassFileRow(InputKind.ROSTER, ROSTER_TITLE, null),
             createTesterRow(),
-            createClassFileRow(InputKind.STARTER, "Starter files", null)};
+            createClassFileRow(InputKind.STARTER, STARTER_TITLE, null)};
         classFiles.getChildren().clear();
         for (int index = 0; index < rows.length; index++) {
             rows[index].getStyleClass().add("card-row");
@@ -1465,8 +1534,9 @@ public class SetUpScreen extends FlowScreen {
         boolean typed = getState().getBatch().isUsingTypedTestCases();
         boolean sameFolder = (testers == null && markedTesters == null)
                 || (testers != null && testers.equals(markedTesters));
-        if (markedAssessment != null && sameFolder && base == markedBase
-                && typed == markedTyped) {
+        boolean upToDate = markedAssessment != null && sameFolder
+                && base == markedBase && typed == markedTyped;
+        if (upToDate) {
             return;
         }
         readMarks();
@@ -1505,9 +1575,10 @@ public class SetUpScreen extends FlowScreen {
         Assessment assessment = markedAssessment;
         double denominator = getBackend().getScoreSheetDenominator(
                 findUsableScoreSheet());
-        VBox content = new VBox(Parts.GAP, createMarksTable(assessment),
-                createDenominatorRow(assessment.getMaxTotal(),
-                denominator));
+        PlainTable table = createMarksTable(assessment);
+        VBox denominatorRow = createDenominatorRow(assessment.getMaxTotal(),
+                denominator);
+        VBox content = new VBox(Parts.GAP, table, denominatorRow);
         getWindow().confirm("Are these questions and marks right?",
                 content, "Start grading", () -> startOrAddToRun());
     }
@@ -1526,10 +1597,11 @@ public class SetUpScreen extends FlowScreen {
         if (run.getStartedAt() != null) {
             when = " on " + run.getStartedAt().format(WHEN);
         }
+        int studentCount = run.getSubmissions().size();
         String detail = getState().getSection().getLabel() + " was graded"
-                + when + " (" + Parts.plural(run.getSubmissions().size(),
-                "student") + "). A student graded before is graded again, "
-                + "and the new result replaces the old one.";
+                + when + " (" + Parts.plural(studentCount, "student")
+                + "). A student graded before is graded again, and the new "
+                + "result replaces the old one.";
         GradingRun joined = run;
         getWindow().choose("Add these students to that run?", detail,
                 "Start a new run", () -> getWindow().startGrading(),
@@ -1551,9 +1623,9 @@ public class SetUpScreen extends FlowScreen {
                 new Label(question.getFileName()),
                 new Label(Parts.mark(question.getMaxScore()))});
         }
+        String totalText = Parts.mark(assessment.getMaxTotal());
         table.addRow(new Node[] {Parts.strong("Total"), new Label(""),
-            new Label(""), Parts.strong(Parts.mark(
-            assessment.getMaxTotal()))});
+            new Label(""), Parts.strong(totalText)});
         table.setPrefWidth(MARKS_TABLE_WIDTH);
         table.setMaxWidth(MARKS_TABLE_WIDTH);
         return table;
@@ -1595,7 +1667,7 @@ public class SetUpScreen extends FlowScreen {
 
     // Names the tester and starter folders a tester check uses.
     private String describeFolders(Path testers, Path starter) {
-        return testers + "|" + starter;
+        return testers + KEY_SEPARATOR + starter;
     }
 
     // Makes the next refresh check the testers again from scratch.
@@ -1617,13 +1689,15 @@ public class SetUpScreen extends FlowScreen {
         if (folders.equals(checkedFolders)) {
             return;
         }
-        if (testerCheck != null
-                && folders.equals(testerCheck.getFolders())) {
+        boolean alreadyChecking = testerCheck != null
+                && folders.equals(testerCheck.getFolders());
+        if (alreadyChecking) {
             return;
         }
         if (getBackend().isDemo()) {
-            showTesterProblems(folders, getBackend().checkTesters(testers,
-                    starter));
+            List<String> problems = getBackend().checkTesters(testers,
+                    starter);
+            showTesterProblems(folders, problems);
             return;
         }
         TesterCheck check = new TesterCheck(getBackend(), testers, starter,
@@ -1633,7 +1707,7 @@ public class SetUpScreen extends FlowScreen {
         testerCheck = check;
         // Not a daemon: when GradeZZY closes, Java waits for the check to
         // end, so it deletes its temporary folder
-        Thread worker = new Thread(check, "gradezzy-testers");
+        Thread worker = new Thread(check, TESTERS_THREAD);
         worker.setDaemon(false);
         worker.start();
     }
@@ -1696,7 +1770,7 @@ public class SetUpScreen extends FlowScreen {
         check.setOnSucceeded(event -> matchCheckDone(check));
         check.setOnFailed(event -> matchCheckFailed(check));
         matchCheck = check;
-        Thread worker = new Thread(check, "gradezzy-match");
+        Thread worker = new Thread(check, MATCH_THREAD);
         worker.setDaemon(true);
         worker.start();
     }
@@ -1772,10 +1846,10 @@ public class SetUpScreen extends FlowScreen {
             Path[] classFiles) {
         String files = "";
         for (Path path : classFiles) {
-            files = files + path + "|";
+            files = files + path + KEY_SEPARATOR;
         }
         for (ImportItem item : uploads) {
-            files = files + item.getPath() + "|";
+            files = files + item.getPath() + KEY_SEPARATOR;
         }
         return files;
     }
@@ -1811,7 +1885,8 @@ public class SetUpScreen extends FlowScreen {
         if (testers == null) {
             return null;
         }
-        String folders = describeFolders(testers, findUsableStarter());
+        Path starter = findUsableStarter();
+        String folders = describeFolders(testers, starter);
         if (!folders.equals(checkedFolders)) {
             notes.getChildren().add(smallNote("Checking the testers..."));
             return null;
@@ -1822,8 +1897,9 @@ public class SetUpScreen extends FlowScreen {
         for (String problem : testerProblems) {
             notes.getChildren().add(smallNote(problem));
         }
-        return Parts.pill(Parts.plural(testerProblems.size(),
-                "tester problem"), Tone.WARN);
+        String count = Parts.plural(testerProblems.size(),
+                "tester problem");
+        return Parts.pill(count, Tone.WARN);
     }
 
     // Returns a small grey note that wraps.
@@ -1842,11 +1918,12 @@ public class SetUpScreen extends FlowScreen {
         String detail = "Not chosen. The starter folder in Settings is used.";
         Label status = Parts.pill("From Settings", Tone.NEUTRAL);
         ClassFileMatch match = ClassFileMatch.fits();
-        if (items.isEmpty() && kind.isRequired() && filesBeingChecked > 0) {
+        boolean missing = items.isEmpty() && kind.isRequired();
+        if (missing && filesBeingChecked > 0) {
             // Chosen files join the list once checked, so not Missing yet
             detail = "Checking...";
             status = Parts.pill("Checking", Tone.NEUTRAL);
-        } else if (items.isEmpty() && kind.isRequired()) {
+        } else if (missing) {
             detail = "Not chosen yet.";
             status = Parts.pill("Missing", Tone.BAD);
         } else if (!items.isEmpty()) {
@@ -1861,10 +1938,7 @@ public class SetUpScreen extends FlowScreen {
                 status = Parts.pill("Check", Tone.WARN);
             }
         }
-        String iconPath = Parts.FOLDER;
-        if (kind == InputKind.ROSTER) {
-            iconPath = Parts.FILE;
-        }
+        String iconPath = classFileIcon(kind);
         HBox line = detailLine(detail);
         if (extra != null) {
             line.getChildren().add(extra);
@@ -1879,8 +1953,23 @@ public class SetUpScreen extends FlowScreen {
                 status = warning;
             }
         }
-        // Tester and starter files belong to the assessment, so they are
-        // changed in its editor; only the score sheet is chosen here
+        Hyperlink change = changeLink(kind);
+        return classFileRow(iconPath, title, details, status, change);
+    }
+
+    // Returns the icon of a class file row: a file for the score sheet,
+    // a folder for the others.
+    private String classFileIcon(InputKind kind) {
+        if (kind == InputKind.ROSTER) {
+            return Parts.FILE;
+        }
+        return Parts.FOLDER;
+    }
+
+    // Returns the link at the end of a class file row. Tester and starter
+    // files belong to the assessment, so they are changed in its editor;
+    // only the score sheet is chosen here.
+    private Hyperlink changeLink(InputKind kind) {
         Hyperlink change = rowLink("Change", () -> changeClassFile(kind));
         if (kind != InputKind.ROSTER) {
             change = rowLink("Edit assessment",
@@ -1888,7 +1977,7 @@ public class SetUpScreen extends FlowScreen {
             change.setPrefWidth(Region.USE_COMPUTED_SIZE);
             change.setMinWidth(Region.USE_PREF_SIZE);
         }
-        return classFileRow(iconPath, title, details, status, change);
+        return change;
     }
 
     // Builds the tester row: a folder, or the typed test cases.
@@ -1896,26 +1985,28 @@ public class SetUpScreen extends FlowScreen {
         ImportBatch batch = getState().getBatch();
         boolean canType = canTypeTestCases();
         if (!canType) {
-            return createClassFileRow(InputKind.TESTERS, "Tester files",
+            return createClassFileRow(InputKind.TESTERS, TESTERS_TITLE,
                     null);
         }
         if (!batch.isUsingTypedTestCases()) {
-            return createClassFileRow(InputKind.TESTERS, "Tester files",
+            return createClassFileRow(InputKind.TESTERS, TESTERS_TITLE,
                     smallLink("or type test cases", () -> openTestCases()));
         }
 
         int cases = batch.getTypedTestCases().size();
-        HBox detail = detailLine(Parts.plural(cases, "test case")
-                + " typed in the app");
+        String typedText = Parts.plural(cases, "test case")
+                + " typed in the app";
+        HBox detail = detailLine(typedText);
         detail.getChildren().add(smallLink("Edit test cases",
                 () -> openTestCases()));
         Label status = Parts.pill("Missing", Tone.BAD);
         if (cases > 0) {
             status = Parts.pill("Ready", Tone.GOOD);
         }
-        return classFileRow(Parts.CODE, "Tester files", detail, status,
-                rowLink("Change", () -> changeClassFile(
-                InputKind.TESTERS)));
+        Hyperlink change = rowLink("Change",
+                () -> changeClassFile(InputKind.TESTERS));
+        return classFileRow(Parts.CODE, TESTERS_TITLE, detail, status,
+                change);
     }
 
     // Returns the grey line under a class file's name. It wraps, so a
@@ -1932,9 +2023,9 @@ public class SetUpScreen extends FlowScreen {
     private HBox classFileRow(String iconPath, String title, Node detail,
             Label status, Hyperlink change) {
         String help = STARTER_HELP;
-        if (title.equals("Score sheet")) {
+        if (title.equals(ROSTER_TITLE)) {
             help = ROSTER_HELP;
-        } else if (title.equals("Tester files")) {
+        } else if (title.equals(TESTERS_TITLE)) {
             help = TESTERS_HELP;
         }
         VBox text = new VBox(Parts.labelWithInfo(Parts.strong(title), help),
@@ -1956,13 +2047,14 @@ public class SetUpScreen extends FlowScreen {
         if (isOn(ConfigKeys.PLAGIARISM_ENABLED)) {
             similar = "On";
         }
-        facts.add(fact("Time limit per test run",
-                getBackend().getRunTimeoutSeconds() + " s", true, "A "
+        String runLimit = getBackend().getRunTimeoutSeconds() + " s";
+        String compileLimit = getBackend().getCompileTimeoutSeconds()
+                + " s";
+        facts.add(fact("Time limit per test run", runLimit, true, "A "
                 + "tester that runs longer is stopped, so an endless loop "
                 + "cannot hold up the batch. Cases passed before that keep "
                 + "their marks."), 0, 0);
-        facts.add(fact("Compile time limit",
-                getBackend().getCompileTimeoutSeconds() + " s", false,
+        facts.add(fact("Compile time limit", compileLimit, false,
                 "The longest javac may take for one question folder."),
                 1, 0);
         facts.add(fact("Fix common mistakes", fixes, false, "Small "
@@ -2036,10 +2128,10 @@ public class SetUpScreen extends FlowScreen {
         String text = words.get(0);
         int lastIndex = words.size() - 1;
         for (int index = 1; index < lastIndex; index++) {
-            text += ", " + words.get(index);
+            text += WORD_SEPARATOR + words.get(index);
         }
         if (lastIndex > 0) {
-            text += " and " + words.get(lastIndex);
+            text += LAST_WORD_SEPARATOR + words.get(lastIndex);
         }
         return text;
     }
@@ -2084,8 +2176,9 @@ public class SetUpScreen extends FlowScreen {
             if (!skipped.isEmpty()) {
                 skipped = " " + skipped;
             }
-            actions.setStatus(Parts.plural(batch.countStudents(),
-                    "student") + " ready to grade in "
+            String students = Parts.plural(batch.countStudents(),
+                    "student");
+            actions.setStatus(students + " ready to grade in "
                     + getState().getSection().getLabel() + "." + skipped);
         }
     }

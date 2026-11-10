@@ -33,6 +33,27 @@ public final class TextUtils {
         (byte) 0xFE, (byte) 0xFF
     };
 
+    // The quote around a CSV field that holds a separator or a quote
+    private static final char QUOTE = '"';
+
+    // The quote as text, and the two quotes that stand for one inside a
+    // quoted field
+    private static final String QUOTE_TEXT = "\"";
+    private static final String DOUBLED_QUOTE = "\"\"";
+
+    // The character between two CSV fields, and the same as text
+    private static final char FIELD_SEPARATOR = ',';
+    private static final String FIELD_SEPARATOR_TEXT = ",";
+
+    // The two characters a line ending is made of, alone or together
+    private static final char CARRIAGE_RETURN = '\r';
+    private static final char LINE_FEED = '\n';
+
+    // The same characters as text, and the Windows line ending
+    private static final String CARRIAGE_RETURN_TEXT = "\r";
+    private static final String LINE_FEED_TEXT = "\n";
+    private static final String WINDOWS_LINE_END = "\r\n";
+
     /**
      * Not used: every method here is static.
      */
@@ -72,24 +93,28 @@ public final class TextUtils {
 
         for (int index = 0; index < line.length(); index++) {
             char current = line.charAt(index);
+            int nextIndex = index + 1;
+            boolean quoteFollows = nextIndex < line.length()
+                    && line.charAt(nextIndex) == QUOTE;
+            boolean lineEnd = current == CARRIAGE_RETURN
+                    || current == LINE_FEED;
             if (quoted) {
-                if (current != '"') {
+                if (current != QUOTE) {
                     value += current;
-                } else if (index + 1 < line.length()
-                        && line.charAt(index + 1) == '"') {
-                    value += '"';
+                } else if (quoteFollows) {
+                    value += QUOTE;
                     index++;
                 } else {
                     quoted = false;
                     closedQuote = true;
                 }
-            } else if (current == ',') {
+            } else if (current == FIELD_SEPARATOR) {
                 values.add(value);
                 value = "";
                 closedQuote = false;
-            } else if (closedQuote || current == '\r' || current == '\n') {
+            } else if (closedQuote || lineEnd) {
                 throw new IllegalArgumentException("Malformed CSV field.");
-            } else if (current == '"') {
+            } else if (current == QUOTE) {
                 if (!value.isEmpty()) {
                     throw new IllegalArgumentException(
                             "A CSV quote must start a field.");
@@ -121,14 +146,18 @@ public final class TextUtils {
                 throw new IllegalArgumentException(
                         "CSV values must not be null.");
             }
-            if (value.contains(",") || value.contains("\"")
-                    || value.contains("\r") || value.contains("\n")) {
-                fields.add("\"" + value.replace("\"", "\"\"") + "\"");
+            boolean needsQuotes = value.contains(FIELD_SEPARATOR_TEXT)
+                    || value.contains(QUOTE_TEXT)
+                    || value.contains(CARRIAGE_RETURN_TEXT)
+                    || value.contains(LINE_FEED_TEXT);
+            if (needsQuotes) {
+                String escaped = value.replace(QUOTE_TEXT, DOUBLED_QUOTE);
+                fields.add(QUOTE_TEXT + escaped + QUOTE_TEXT);
             } else {
                 fields.add(value);
             }
         }
-        return join(",", fields);
+        return join(FIELD_SEPARATOR_TEXT, fields);
     }
 
     /**
@@ -205,7 +234,8 @@ public final class TextUtils {
      * @return the text with uniform line endings
      */
     public static String normaliseLineEndings(String text) {
-        return text.replace("\r\n", "\n").replace('\r', '\n');
+        return text.replace(WINDOWS_LINE_END, LINE_FEED_TEXT)
+                .replace(CARRIAGE_RETURN, LINE_FEED);
     }
 
     /**

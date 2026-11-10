@@ -22,6 +22,8 @@ import gradezzy.model.Submission;
 
 /**
  * The 0-mark students marked as checked.
+ *
+ * <p>Tier: SHOULD.
  */
 final class ZeroChecks {
 

@@ -121,8 +121,9 @@ public class CopiedHeaderDetector implements RosterCheck {
         List<String> files = new ArrayList<>();
         List<String> others = new ArrayList<>();
         for (Question question : assessment.getQuestions()) {
-            List<String> header = readHeader(findAnswerFile(submission,
-                    assessment, question));
+            Path answerFile = findAnswerFile(submission, assessment,
+                    question);
+            List<String> header = readHeader(answerFile);
             List<String> named = findOthers(header, submission, roster);
             if (!named.isEmpty()) {
                 files.add(question.getFolderName() + FOLDER_SEPARATOR
@@ -140,18 +141,25 @@ public class CopiedHeaderDetector implements RosterCheck {
             return flags;
         }
 
-        String reason = "The work may be copied.";
-        boolean offRoster = !roster.isEmpty()
-                && findByUsername(roster, submission.getUsername()) == null;
-        if (offRoster) {
-            reason = submission.getUsername() + " is not on the score "
-                    + "sheet, so the zip file's name may be wrong.";
-        }
+        String reason = explainReason(submission, roster);
         flags.add(createFlag(submission, "The header of "
                 + TextUtils.join(LIST_SEPARATOR, files) + " names "
                 + TextUtils.join(LIST_SEPARATOR, others) + ", not "
                 + submission.getUsername() + ". " + reason));
         return flags;
+    }
+
+    // Says why the header matters: copied work, or a wrong zip name when
+    // the student is not on the score sheet.
+    private String explainReason(Submission submission,
+            List<Student> roster) {
+        boolean offRoster = !roster.isEmpty()
+                && findByUsername(roster, submission.getUsername()) == null;
+        if (offRoster) {
+            return submission.getUsername() + " is not on the score "
+                    + "sheet, so the zip file's name may be wrong.";
+        }
+        return "The work may be copied.";
     }
 
     // Finds the answer file of a question, or returns null if missing.
@@ -181,8 +189,8 @@ public class CopiedHeaderDetector implements RosterCheck {
 
         int scanLines = config.getInt(ConfigKeys.HEADER_SCAN_LINES);
         try {
-            String text = TextUtils.normaliseLineEndings(
-                    FileUtils.readText(file));
+            String rawText = FileUtils.readText(file);
+            String text = TextUtils.normaliseLineEndings(rawText);
             String[] lines = text.split(NEW_LINE);
             for (int i = 0; i < lines.length && i < scanLines; i++) {
                 header.add(lines[i]);
@@ -200,8 +208,8 @@ public class CopiedHeaderDetector implements RosterCheck {
         List<String> others = new ArrayList<>();
         String username = submission.getUsername();
 
-        String email = findValueAfter(header,
-                config.getString(ConfigKeys.HEADER_EMAIL_LABEL));
+        String emailLabel = config.getString(ConfigKeys.HEADER_EMAIL_LABEL);
+        String email = findValueAfter(header, emailLabel);
         String emailUser = usernameOf(email);
         boolean otherEmail = emailUser.contains(USERNAME_DOT)
                 && !emailUser.equalsIgnoreCase(username);
@@ -214,8 +222,8 @@ public class CopiedHeaderDetector implements RosterCheck {
             others.add(shown);
         }
 
-        String name = normaliseName(findValueAfter(header,
-                config.getString(ConfigKeys.HEADER_NAME_LABEL)));
+        String nameLabel = config.getString(ConfigKeys.HEADER_NAME_LABEL);
+        String name = normaliseName(findValueAfter(header, nameLabel));
         Student named = findByName(roster, name);
         boolean otherName = named != null
                 && !named.getUsername().equalsIgnoreCase(username)

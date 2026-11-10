@@ -31,7 +31,7 @@ public final class FileUtils {
     // The encoding Excel on Windows uses when it saves a "CSV" file
     private static final String WINDOWS_CHARSET = "windows-1252";
 
-    // How many times a move is tried before giving up
+    // How many times a move or delete is tried before giving up
     private static final int MOVE_ATTEMPTS = 5;
 
     // The Windows file attributes and their read-only flag
@@ -62,8 +62,9 @@ public final class FileUtils {
         Path destination = target.toAbsolutePath().normalize();
         rejectLinks(original);
         rejectLinks(destination);
-        if (destination.startsWith(original)
-                || original.startsWith(destination)) {
+        boolean overlapping = destination.startsWith(original)
+                || original.startsWith(destination);
+        if (overlapping) {
             throw new IOException("Source and copy must not overlap.");
         }
         copyContents(original, destination);
@@ -121,8 +122,9 @@ public final class FileUtils {
     // wait for.
     private static boolean clearReadOnly(Path path) {
         try {
-            if (!Files.getFileStore(path).supportsFileAttributeView(
-                    DOS_VIEW)) {
+            boolean dosDisk = Files.getFileStore(path)
+                    .supportsFileAttributeView(DOS_VIEW);
+            if (!dosDisk) {
                 return false;
             }
             Files.setAttribute(path, DOS_READ_ONLY, false,
@@ -206,9 +208,10 @@ public final class FileUtils {
         try {
             children = Files.newDirectoryStream(directory);
             for (Path child : children) {
-                if (Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS)
-                        && child.getFileName().toString()
-                                .endsWith(extension)) {
+                boolean matching = Files.isRegularFile(child,
+                        LinkOption.NOFOLLOW_LINKS)
+                        && child.getFileName().toString().endsWith(extension);
+                if (matching) {
                     matches.add(child);
                 }
             }
@@ -271,7 +274,8 @@ public final class FileUtils {
         }
     }
 
-    // Waits before the next move; keeps an interrupt for the caller.
+    // Waits before the next move or delete; keeps an interrupt for the
+    // caller.
     private static void waitBeforeRetry() {
         try {
             Thread.sleep(MOVE_WAIT_MILLIS);

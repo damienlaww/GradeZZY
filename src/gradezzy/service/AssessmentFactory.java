@@ -32,6 +32,7 @@ import gradezzy.testcase.TesterMarks;
  */
 public class AssessmentFactory {
 
+    // The file ending of a tester's Java source
     private static final String JAVA_EXTENSION = ".java";
 
     // The end of the old setting that held a question's maximum score
@@ -213,9 +214,10 @@ public class AssessmentFactory {
 
     // Where the tester of a question is, for example Q1aTester.java
     private Path findTesterFile(String questionId, Path testers) {
-        return testers.resolve(questionId
+        String testerName = questionId
                 + config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
-                + JAVA_EXTENSION);
+                + JAVA_EXTENSION;
+        return testers.resolve(testerName);
     }
 
     // The tester's maximum, or UNKNOWN if the file cannot be read

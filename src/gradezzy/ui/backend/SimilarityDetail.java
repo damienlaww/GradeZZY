@@ -15,6 +15,8 @@ import gradezzy.plagiarism.SimilarityPair;
 
 /**
  * The evidence for one similar pair.
+ *
+ * <p>Tier: COULD.
  */
 public class SimilarityDetail {
 

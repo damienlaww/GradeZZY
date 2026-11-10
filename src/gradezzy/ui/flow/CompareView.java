@@ -77,6 +77,18 @@ public class CompareView {
     // Before the spread of a section
     private static final String PLUS_MINUS = "± ";
 
+    // Comes between a section and its assessment in a chip's tip
+    private static final String TIP_SEPARATOR = ": ";
+
+    // The table row of the first section, under the headings
+    private static final int FIRST_ROW = 1;
+
+    // The table column of the first figure, after the section's name
+    private static final int FIRST_FIGURE_COLUMN = 1;
+
+    // Starts the style class of a series; the number counts from 1
+    private static final String SERIES_PREFIX = "series-";
+
     // When the run of a table row was graded, such as "9 Nov, 14:05"
     private static final DateTimeFormatter WHEN =
             DateTimeFormatter.ofPattern("d MMM, HH:mm");
@@ -382,7 +394,7 @@ public class CompareView {
         if (run.getStartedAt() != null) {
             when = run.getStartedAt().format(WHEN_LONG);
         }
-        return code + ": " + assessmentName + ", graded " + when
+        return code + TIP_SEPARATOR + assessmentName + ", graded " + when
                 + ". Click or press Space to show or hide it.";
     }
 
@@ -493,7 +505,7 @@ public class CompareView {
         String hardest = QuestionFigures.hardestId(run.getSubmissions(),
                 run.getAssessment().getQuestions());
 
-        int row = index + 1;
+        int row = index + FIRST_ROW;
         table.add(sectionCell(code, index, run), 0, row);
 
         String[] values = {String.valueOf(one.getCount()),
@@ -507,7 +519,8 @@ public class CompareView {
             if (column == AVERAGE_COLUMN) {
                 value.getStyleClass().add("strong");
             }
-            table.add(value, column + 1, row);
+            int gridColumn = column + FIRST_FIGURE_COLUMN;
+            table.add(value, gridColumn, row);
         }
     }
 
@@ -570,6 +583,7 @@ public class CompareView {
 
     // Returns the style class of the n-th chosen section, from 1.
     private static String seriesClass(int index) {
-        return "series-" + (index + 1);
+        int seriesNumber = index + 1;
+        return SERIES_PREFIX + seriesNumber;
     }
 }

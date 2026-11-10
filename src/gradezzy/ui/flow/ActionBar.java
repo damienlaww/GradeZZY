@@ -18,11 +18,13 @@ import javafx.scene.layout.HBox;
 
 /**
  * The bottom bar of the guided window.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ActionBar extends HBox {
 
     // The gap between the parts of the bar
-    private static final double GAP = 12.0;
+    private static final double GAP = Parts.GAP;
 
     // Goes back one step; does nothing until a screen sets its action
     private final Button backButton = Parts.secondary("Back",
@@ -159,8 +161,9 @@ public class ActionBar extends HBox {
      * shortcut calls this.
      */
     public void firePrimary() {
-        if (primaryAction == null || primaryButton.isDisabled()
-                || !primaryButton.isVisible()) {
+        boolean cannotPress = primaryAction == null
+                || primaryButton.isDisabled() || !primaryButton.isVisible();
+        if (cannotPress) {
             return;
         }
         primaryAction.run();

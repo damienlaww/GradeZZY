@@ -65,11 +65,6 @@ public class ClassFileMatcher {
     // How deep a question file is looked for in an unzipped upload
     private static final int MAX_FOLDER_DEPTH = 4;
 
-    // How many tokens after "static" a method name is looked for. A real
-    // declaration has a few modifiers and a type; the limit keeps a file
-    // made of "static" words from taking long.
-    private static final int MAX_DECLARATION_TOKENS = 40;
-
     // How many unknown method names a problem names
     private static final int MAX_NAMES_SHOWN = 2;
 
@@ -93,19 +88,6 @@ public class ClassFileMatcher {
     // Index of a score sheet's first student row, after the header
     private static final int FIRST_ROW = 1;
 
-    // Length of "/*", which opens a block comment
-    private static final int COMMENT_START_LENGTH = 2;
-
-    // Length of an escape in a string or character, such as \t
-    private static final int ESCAPE_LENGTH = 2;
-
-    // The method every program may declare, which says nothing about the
-    // lab test
-    private static final String MAIN_METHOD = "main";
-
-    // The word in front of a method that belongs to the class
-    private static final String STATIC_KEYWORD = "static";
-
     // Folders that macOS adds to a zip, and the start of hidden names
     private static final String MAC_FOLDER = "__MACOSX";
     private static final String HIDDEN_PREFIX = ".";
@@ -113,10 +95,14 @@ public class ClassFileMatcher {
     // Separator between the folders of a zip entry name
     private static final String ENTRY_SEPARATOR = "/";
 
-    // Words that are followed by "(" but are not method calls
-    private static final String[] NOT_CALLS = {"if", "for", "while",
-        "switch", "catch", "return", "synchronized", "super", "this",
-        "new", "assert", "throw"};
+    // The separator some Windows tools write instead of ENTRY_SEPARATOR
+    private static final String WINDOWS_SEPARATOR = "\\";
+
+    // Ends a sentence of a problem
+    private static final String SENTENCE_END = ".";
+
+    // Separates the words of a list in a problem, such as "A, B and C"
+    private static final String WORD_SEPARATOR = ", ";
 
     // The words in a problem about testers or starter files from another
     // lab test
@@ -264,8 +250,8 @@ public class ClassFileMatcher {
         List<Student> students = new RosterReader(config).readRoster(sheet);
         int count = 0;
         for (Student student : students) {
-            if (wanted.contains(student.getUsername()
-                    .toLowerCase(Locale.ROOT))) {
+            String username = student.getUsername().toLowerCase(Locale.ROOT);
+            if (wanted.contains(username)) {
                 count++;
             }
         }
@@ -285,13 +271,14 @@ public class ClassFileMatcher {
     // Says why a sheet cannot be read, without its full path.
     private String describeRosterProblem(IngestException exception) {
         Throwable cause = exception.getCause();
-        if (!(cause instanceof IllegalArgumentException)
-                || cause.getMessage() == null) {
+        boolean noReason = !(cause instanceof IllegalArgumentException)
+                || cause.getMessage() == null;
+        if (noReason) {
             return "It could not be opened.";
         }
         String reason = cause.getMessage().trim();
-        if (!reason.endsWith(".")) {
-            reason = reason + ".";
+        if (!reason.endsWith(SENTENCE_END)) {
+            reason = reason + SENTENCE_END;
         }
         return reason;
     }
@@ -367,8 +354,9 @@ public class ClassFileMatcher {
             List<String> candidateTested = new ArrayList<>();
             int candidateFitting = countFittingTesters(candidate,
                     candidateTested, new ArrayList<>());
-            if (candidateFitting > bestFitting
-                    && candidateFitting * HALF >= candidateTested.size()) {
+            boolean better = candidateFitting > bestFitting
+                    && candidateFitting * HALF >= candidateTested.size();
+            if (better) {
                 best = candidate;
                 bestTested = candidateTested;
                 bestFitting = candidateFitting;
@@ -397,10 +385,11 @@ public class ClassFileMatcher {
             String source = readSmallFile(tester);
             if (countFilesRead(id) > 0 && source != null) {
                 tested.add(id);
-                List<String> tokens = tokenize(source);
-                List<String> called = findCalls(tokens,
+                List<String> tokens = JavaSourceScanner.tokenize(source);
+                List<String> called = JavaSourceScanner.findCalls(tokens,
                         classNameOf(question));
-                called.removeAll(findStaticMethods(tokens));
+                called.removeAll(
+                        JavaSourceScanner.findStaticMethods(tokens));
                 if (sharesCommonMethod(id, called)) {
                     fitting++;
                 } else {
@@ -486,8 +475,9 @@ public class ClassFileMatcher {
             List<String> candidateChecked = new ArrayList<>();
             int candidateFitting = countFittingStarters(candidate,
                     candidateChecked, new ArrayList<>());
-            if (candidateFitting > bestFitting
-                    && candidateFitting * HALF >= candidateChecked.size()) {
+            boolean better = candidateFitting > bestFitting
+                    && candidateFitting * HALF >= candidateChecked.size();
+            if (better) {
                 best = candidate;
                 bestChecked = candidateChecked;
                 bestFitting = candidateFitting;
@@ -520,7 +510,9 @@ public class ClassFileMatcher {
             String source = readSmallFile(file);
             if (countFilesRead(id) > 0 && source != null) {
                 checked.add(id);
-                List<String> declared = findStaticMethods(tokenize(source));
+                List<String> tokens = JavaSourceScanner.tokenize(source);
+                List<String> declared =
+                        JavaSourceScanner.findStaticMethods(tokens);
                 if (sharesCommonMethod(id, declared)) {
                     fitting++;
                 } else {
@@ -554,8 +546,9 @@ public class ClassFileMatcher {
             for (Question question : assessment.getQuestions()) {
                 String source = sources.get(question.getId());
                 if (source != null) {
+                    List<String> tokens = JavaSourceScanner.tokenize(source);
                     countMethods(question.getId(),
-                            findStaticMethods(tokenize(source)));
+                            JavaSourceScanner.findStaticMethods(tokens));
                 }
             }
         }
@@ -563,7 +556,8 @@ public class ClassFileMatcher {
 
     // Adds one upload's methods for a question to the counts.
     private void countMethods(String questionId, List<String> methods) {
-        filesRead.put(questionId, countFilesRead(questionId) + 1);
+        int read = countFilesRead(questionId) + 1;
+        filesRead.put(questionId, read);
         Map<String, Integer> counts = uploadMethods.get(questionId);
         if (counts == null) {
             counts = new HashMap<>();
@@ -574,7 +568,8 @@ public class ClassFileMatcher {
             if (count == null) {
                 count = 0;
             }
-            counts.put(method, count + 1);
+            int newCount = count + 1;
+            counts.put(method, newCount);
         }
     }
 
@@ -600,9 +595,10 @@ public class ClassFileMatcher {
     // uploads that had the question's file.
     private boolean sharesCommonMethod(String questionId,
             List<String> names) {
+        int read = countFilesRead(questionId);
         for (String name : names) {
-            if (countUploadsWith(questionId, name) * HALF
-                    >= countFilesRead(questionId)) {
+            int withName = countUploadsWith(questionId, name);
+            if (withName * HALF >= read) {
                 return true;
             }
         }
@@ -613,8 +609,9 @@ public class ClassFileMatcher {
     private void addUnknownNames(String questionId, List<String> names,
             List<String> unknownNames) {
         for (String name : names) {
-            if (countUploadsWith(questionId, name) == 0
-                    && !unknownNames.contains(name)) {
+            boolean unknown = countUploadsWith(questionId, name) == 0
+                    && !unknownNames.contains(name);
+            if (unknown) {
                 unknownNames.add(name);
             }
         }
@@ -670,8 +667,8 @@ public class ClassFileMatcher {
     // Says whether a folder holds one of the question folders.
     private boolean holdsQuestionFolder(Path folder) {
         for (Question question : assessment.getQuestions()) {
-            if (Files.isDirectory(folder.resolve(question.getFolderName()),
-                    LinkOption.NOFOLLOW_LINKS)) {
+            Path questionFolder = folder.resolve(question.getFolderName());
+            if (Files.isDirectory(questionFolder, LinkOption.NOFOLLOW_LINKS)) {
                 return true;
             }
         }
@@ -703,10 +700,14 @@ public class ClassFileMatcher {
             Enumeration<? extends ZipEntry> entries = zip.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
-                Question question = findQuestion(lastPart(entry.getName()));
-                if (!entry.isDirectory() && question != null
-                        && !isIgnoredEntry(entry.getName())
-                        && !sources.containsKey(question.getId())) {
+                // Some Windows tools write \ between the folders
+                String entryName = entry.getName().replace(
+                        WINDOWS_SEPARATOR, ENTRY_SEPARATOR);
+                Question question = findQuestion(lastPart(entryName));
+                boolean wanted = !entry.isDirectory() && question != null
+                        && !isIgnoredEntry(entryName)
+                        && !sources.containsKey(question.getId());
+                if (wanted) {
                     sources.put(question.getId(), readEntry(zip, entry));
                 }
             }
@@ -734,14 +735,16 @@ public class ClassFileMatcher {
         for (Path child : listVisibleChildren(folder)) {
             if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
                 if (depth < MAX_FOLDER_DEPTH) {
-                    readFolderSources(child, depth + 1, sources);
+                    int childDepth = depth + 1;
+                    readFolderSources(child, childDepth, sources);
                 }
             } else {
                 Question question = findQuestion(child.getFileName()
                         .toString());
                 String source = readSmallFile(child);
-                if (question != null && source != null
-                        && !sources.containsKey(question.getId())) {
+                boolean wanted = question != null && source != null
+                        && !sources.containsKey(question.getId());
+                if (wanted) {
                     sources.put(question.getId(), source);
                 }
             }
@@ -768,166 +771,18 @@ public class ClassFileMatcher {
     // Returns the part of a zip entry name after its last folder.
     private String lastPart(String entryName) {
         int separator = entryName.lastIndexOf(ENTRY_SEPARATOR);
-        return entryName.substring(separator + 1);
+        int nameStart = separator + 1;
+        return entryName.substring(nameStart);
     }
 
     // ------------------------------------------------------ java source
-
-    // Splits Java source into names and single symbols, leaving out
-    // comments, strings and characters.
-    private List<String> tokenize(String source) {
-        List<String> tokens = new ArrayList<>();
-        int index = 0;
-        int length = source.length();
-        while (index < length) {
-            char current = source.charAt(index);
-            char next = ' ';
-            if (index + 1 < length) {
-                next = source.charAt(index + 1);
-            }
-            if (current == '/' && next == '/') {
-                index = skipPast(source, index, "\n");
-            } else if (current == '/' && next == '*') {
-                index = skipPast(source, index + COMMENT_START_LENGTH,
-                        "*/");
-            } else if (current == '"' || current == '\'') {
-                index = skipQuoted(source, index);
-            } else if (Character.isJavaIdentifierStart(current)) {
-                int end = index + 1;
-                while (end < length
-                        && Character.isJavaIdentifierPart(
-                        source.charAt(end))) {
-                    end++;
-                }
-                tokens.add(source.substring(index, end));
-                index = end;
-            } else {
-                if (!Character.isWhitespace(current)) {
-                    tokens.add(String.valueOf(current));
-                }
-                index++;
-            }
-        }
-        return tokens;
-    }
-
-    // Returns the index just after the next end text, or the length.
-    private int skipPast(String source, int from, String end) {
-        int found = source.indexOf(end, from);
-        if (found < 0) {
-            return source.length();
-        }
-        return found + end.length();
-    }
-
-    // Returns the index just after a quoted string or character.
-    private int skipQuoted(String source, int start) {
-        char quote = source.charAt(start);
-        int index = start + 1;
-        while (index < source.length()) {
-            char current = source.charAt(index);
-            if (current == '\\') {
-                index = index + ESCAPE_LENGTH;
-            } else if (current == quote || current == '\n') {
-                return index + 1;
-            } else {
-                index++;
-            }
-        }
-        return source.length();
-    }
-
-    // Lists the static methods a class declares, except main: the
-    // methods a question asks for, such as getIsogramWords.
-    private List<String> findStaticMethods(List<String> tokens) {
-        List<String> methods = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (int index = 0; index < tokens.size(); index++) {
-            if (tokens.get(index).equals(STATIC_KEYWORD)) {
-                String name = findDeclaredName(tokens, index + 1);
-                if (name != null && !name.equals(MAIN_METHOD)
-                        && seen.add(name)) {
-                    methods.add(name);
-                }
-            }
-        }
-        return methods;
-    }
-
-    // Returns the method name declared after "static", or null when
-    // "static" starts a field, a block or a nested class instead. It
-    // looks at no more than MAX_DECLARATION_TOKENS tokens and stops at
-    // the next "static", so the whole file is read in one pass.
-    private String findDeclaredName(List<String> tokens, int start) {
-        int stop = Math.min(tokens.size(), start + MAX_DECLARATION_TOKENS);
-        for (int index = start; index < stop; index++) {
-            String token = tokens.get(index);
-            if (token.equals(STATIC_KEYWORD)) {
-                return null;
-            }
-            if (token.equals("(")) {
-                String name = tokens.get(index - 1);
-                if (index > start && isName(name)) {
-                    return name;
-                }
-                return null;
-            }
-            if (token.equals("=") || token.equals(";") || token.equals("{")
-                    || token.equals(")")) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    // Lists the methods a tester calls that could be the student's:
-    // calls with no object in front, or with the student's class name in
-    // front, such as Q1a.getIsogramWords(...).
-    private List<String> findCalls(List<String> tokens, String className) {
-        List<String> calls = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        // The two tokens before the current one, empty at the start
-        String twoBefore = "";
-        String before = "";
-        for (int index = 0; index + 1 < tokens.size(); index++) {
-            String name = tokens.get(index);
-            boolean onClass = before.equals(".")
-                    && twoBefore.equals(className);
-            if (tokens.get(index + 1).equals("(") && isName(name)
-                    && !isNotCall(name) && !name.equals(MAIN_METHOD)
-                    && !before.equals("new")
-                    && (!before.equals(".") || onClass)
-                    && seen.add(name)) {
-                calls.add(name);
-            }
-            twoBefore = before;
-            before = name;
-        }
-        return calls;
-    }
-
-    // Says whether a token is a Java name.
-    private boolean isName(String token) {
-        return !token.isEmpty()
-                && Character.isJavaIdentifierStart(token.charAt(0));
-    }
-
-    // Says whether a word before "(" is a keyword, not a method.
-    private boolean isNotCall(String word) {
-        for (String keyword : NOT_CALLS) {
-            if (keyword.equals(word)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     // Returns a question's class name: its file name without ".java".
     private String classNameOf(Question question) {
         String fileName = question.getFileName();
         if (fileName.endsWith(JAVA_EXTENSION)) {
-            return fileName.substring(0,
-                    fileName.length() - JAVA_EXTENSION.length());
+            int nameLength = fileName.length() - JAVA_EXTENSION.length();
+            return fileName.substring(0, nameLength);
         }
         return fileName;
     }
@@ -968,8 +823,10 @@ public class ClassFileMatcher {
         }
         for (Path folder : listSearchFolders(chosen, uploads, false)) {
             for (Path child : listVisibleChildren(folder)) {
-                if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)
-                        && !uploadPaths.contains(normalise(child))) {
+                boolean otherFolder = Files.isDirectory(child,
+                        LinkOption.NOFOLLOW_LINKS)
+                        && !uploadPaths.contains(normalise(child));
+                if (otherFolder) {
                     addCandidate(candidates, child, chosen);
                 }
             }
@@ -1019,9 +876,10 @@ public class ClassFileMatcher {
     private void addCandidate(List<Path> candidates, Path candidate,
             Path chosen) {
         Path normalised = normalise(candidate);
-        if (candidates.size() < MAX_CANDIDATES
+        boolean addable = candidates.size() < MAX_CANDIDATES
                 && !normalised.equals(normalise(chosen))
-                && !candidates.contains(normalised)) {
+                && !candidates.contains(normalised);
+        if (addable) {
             candidates.add(normalised);
         }
     }
@@ -1033,8 +891,9 @@ public class ClassFileMatcher {
         if (folder != null && folder.equals(parentOf(normalise(chosen)))) {
             return "in the same folder";
         }
-        if (configured != null
-                && suggestion.equals(normalise(configured))) {
+        boolean isConfigured = configured != null
+                && suggestion.equals(normalise(configured));
+        if (isConfigured) {
             return "the one in Settings";
         }
         if (folder == null || folder.getFileName() == null) {
@@ -1079,8 +938,9 @@ public class ClassFileMatcher {
             entries = Files.newDirectoryStream(folder);
             for (Path child : entries) {
                 String name = child.getFileName().toString();
-                if (!name.startsWith(HIDDEN_PREFIX)
-                        && !name.equals(MAC_FOLDER)) {
+                boolean visible = !name.startsWith(HIDDEN_PREFIX)
+                        && !name.equals(MAC_FOLDER);
+                if (visible) {
                     children.add(child);
                 }
             }
@@ -1093,8 +953,10 @@ public class ClassFileMatcher {
     // when it is missing, too big or cannot be read.
     private String readSmallFile(Path file) {
         try {
-            if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
-                    || Files.size(file) > MAX_SOURCE_BYTES) {
+            boolean unreadable = !Files.isRegularFile(file,
+                    LinkOption.NOFOLLOW_LINKS)
+                    || Files.size(file) > MAX_SOURCE_BYTES;
+            if (unreadable) {
                 return null;
             }
             return new String(Files.readAllBytes(file),
@@ -1151,7 +1013,7 @@ public class ClassFileMatcher {
     // Joins words with commas and a last joining word, such as " or ".
     private String joinWords(List<String> words, String last) {
         if (words.size() <= 1) {
-            return TextUtils.join(", ", words);
+            return TextUtils.join(WORD_SEPARATOR, words);
         }
 
         int lastIndex = words.size() - 1;
@@ -1159,6 +1021,7 @@ public class ClassFileMatcher {
         for (int index = 0; index < lastIndex; index++) {
             leading.add(words.get(index));
         }
-        return TextUtils.join(", ", leading) + last + words.get(lastIndex);
+        return TextUtils.join(WORD_SEPARATOR, leading) + last
+                + words.get(lastIndex);
     }
 }

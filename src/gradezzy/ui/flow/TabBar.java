@@ -19,6 +19,8 @@ import javafx.scene.layout.HBox;
 
 /**
  * The tabs Grading, Statistics, Runs and Settings.
+ *
+ * <p>Tier: SHOULD.
  */
 public class TabBar extends HBox {
 
@@ -57,7 +59,7 @@ public class TabBar extends HBox {
      * @param page the page on screen
      */
     public void select(Page page) {
-        for (Page other : tabs.keySet()) {
+        for (Page other : Page.values()) {
             Button tab = tabs.get(other);
             tab.getStyleClass().remove("selected");
             if (other == page) {

@@ -27,8 +27,10 @@ public final class ScoreFormatter {
     // What a tiny negative score looks like after rounding
     private static final String NEGATIVE_ZERO = "-0";
 
+    // A trailing zero after the point, and the text of a zero score
     private static final String ZERO = "0";
 
+    // The point that the format always writes
     private static final String DECIMAL_POINT = ".";
 
     // A utility class is never created
@@ -54,10 +56,12 @@ public final class ScoreFormatter {
         // Drop the zeros after the point, then the point itself. The
         // format always writes a point, so the loop stops there.
         while (text.endsWith(ZERO)) {
-            text = text.substring(0, text.length() - 1);
+            int lastIndex = text.length() - 1;
+            text = text.substring(0, lastIndex);
         }
         if (text.endsWith(DECIMAL_POINT)) {
-            text = text.substring(0, text.length() - 1);
+            int lastIndex = text.length() - 1;
+            text = text.substring(0, lastIndex);
         }
 
         if (text.equals(NEGATIVE_ZERO)) {

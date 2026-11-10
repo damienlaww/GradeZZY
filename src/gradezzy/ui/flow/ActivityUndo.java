@@ -20,6 +20,8 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * The deletes that can still be taken back, until GradeZZY closes.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class ActivityUndo {
 
@@ -44,6 +46,9 @@ public final class ActivityUndo {
     /** The log's words for anything put back. */
     public static final String RESTORED = "Restored";
 
+    // Put between a delete's action and detail in its key
+    private static final String KEY_SEPARATOR = "\n";
+
     // How to put back each delete, by its action and detail
     private static final Map<String, Supplier<ActionResult>> RESTORES =
             new HashMap<>();
@@ -67,10 +72,17 @@ public final class ActivityUndo {
             String action, String detail, Supplier<ActionResult> restore) {
         backend.recordActivity(action, detail);
         String key = keyOf(action, detail);
-        Supplier<ActionResult> once = () -> restoreOnce(backend, key,
-                detail, restore);
+        Supplier<ActionResult> once = restoreFor(backend, key, detail,
+                restore);
         RESTORES.put(key, once);
         return once;
+    }
+
+    // What puts a change back the first time only.
+    private static Supplier<ActionResult> restoreFor(
+            DashboardBackend backend, String key, String detail,
+            Supplier<ActionResult> restore) {
+        return () -> restoreOnce(backend, key, detail, restore);
     }
 
     // Puts a change back the first time only, and logs that it was.
@@ -116,6 +128,6 @@ public final class ActivityUndo {
 
     // The key of a delete in the map.
     private static String keyOf(String action, String detail) {
-        return action + "\n" + detail;
+        return action + KEY_SEPARATOR + detail;
     }
 }

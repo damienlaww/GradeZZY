@@ -66,6 +66,9 @@ public class InputDriver {
     // Ends each line of the written source
     private static final String NEW_LINE = "\n";
 
+    // Joins the class name to the method call, as in Q1.compress("aab")
+    private static final String MEMBER_SEPARATOR = ".";
+
     // The parts of the source that are the same for every method: the
     // start of the class, and the helpers that turn any result into one
     // line of text. Arrays print their elements, not their address.
@@ -169,7 +172,7 @@ public class InputDriver {
     // Adds the method that makes one call and reports its result.
     private void addCall(List<String> lines, MethodSignature method,
             List<String> arguments, int number) {
-        String call = method.getClassName() + "."
+        String call = method.getClassName() + MEMBER_SEPARATOR
                 + method.describeCall(arguments);
         lines.add("    private static void " + CALL_METHOD + number
                 + "() {");

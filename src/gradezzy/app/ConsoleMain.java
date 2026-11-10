@@ -60,9 +60,32 @@ public class ConsoleMain {
     // Separates the names in the list of skipped files
     private static final String SKIPPED_SEPARATOR = ", ";
 
-    // The first argument that runs only the tester strength check, and
-    // how many arguments it takes up
+    // Separates the items of the other lists printed, such as the
+    // sections to choose from and the maximum marks
+    private static final String LIST_SEPARATOR = ", ";
+
+    // Position of the module when both the module and the section are
+    // given
+    private static final int MODULE_ARGUMENT = 0;
+
+    // Position of the section when both the module and the section are
+    // given
+    private static final int SECTION_ARGUMENT = 1;
+
+    // Indent of each line under a heading in the summary
+    private static final String LINE_INDENT = "  ";
+
+    // Follows a similarity printed as a percentage
+    private static final String PERCENT_SIGN = "%";
+
+    // The oldest JDK GradeZZY runs on: the testers are started with
+    // options that older versions reject
+    private static final int MIN_JDK_VERSION = 25;
+
+    // The first argument that runs only the tester strength check
     private static final String TESTERS_OPTION = "--testers";
+
+    // How many arguments the tester strength option takes up
     private static final int OPTION_COUNT = 1;
 
     // Put in front of each line of the tester strength results
@@ -82,12 +105,20 @@ public class ConsoleMain {
      * app.module.codes or app.section.codes; a value that is not given
      * is the first one in config.properties. With --testers first, only
      * the testers are checked with broken copies of the model answer,
-     * and nothing is graded.
+     * and nothing is graded. On a JDK older than 25 it says so and ends
+     * at once.
      *
      * @param args optional: --testers, then the section, or the module
      *        and the section
      */
     public static void main(String[] args) {
+        int jdkVersion = Runtime.version().feature();
+        if (jdkVersion < MIN_JDK_VERSION) {
+            System.err.println("GradeZZY needs JDK " + MIN_JDK_VERSION
+                    + " or newer; this is JDK " + jdkVersion + ".");
+            System.exit(EXIT_FAILURE);
+        }
+
         try {
             AppConfig config = AppConfig.loadDefault();
             ApplicationContext context = new ApplicationContext(config);
@@ -128,6 +159,12 @@ public class ConsoleMain {
             // For example a path setting holding a character that is not
             // allowed in a path
             fail("A setting is not valid: " + exception.getMessage());
+        } catch (RuntimeException exception) {
+            // Anything else: one line for the instructor instead of a
+            // stack trace
+            fail("An unexpected problem stopped grading: " + exception
+                    + ". Try again; if it happens again, check the "
+                    + "settings and the uploaded files.");
         }
     }
 
@@ -154,17 +191,17 @@ public class ConsoleMain {
         String requestedSection = "";
 
         if (args.length == MODULE_AND_SECTION) {
-            requestedModule = args[0];
-            requestedSection = args[1];
+            requestedModule = args[MODULE_ARGUMENT];
+            requestedSection = args[SECTION_ARGUMENT];
         } else if (args.length == 1) {
             requestedSection = args[0];
         }
 
-        return new Section(
-                chooseCode(config, ConfigKeys.MODULE_CODES, "module",
-                        requestedModule),
-                chooseCode(config, ConfigKeys.SECTION_CODES, "section",
-                        requestedSection));
+        String moduleCode = chooseCode(config, ConfigKeys.MODULE_CODES,
+                "module", requestedModule);
+        String sectionCode = chooseCode(config, ConfigKeys.SECTION_CODES,
+                "section", requestedSection);
+        return new Section(moduleCode, sectionCode);
     }
 
     // Checks each tester with broken copies of the model answer, prints
@@ -272,7 +309,7 @@ public class ConsoleMain {
         }
 
         throw new ConfigException("Unknown " + kind + " '" + typed
-                + "'. Choose one of: " + TextUtils.join(", ", codes)
+                + "'. Choose one of: " + TextUtils.join(LIST_SEPARATOR, codes)
                 + " (setting '" + key + "').");
     }
 
@@ -290,14 +327,27 @@ public class ConsoleMain {
             marks.add(question.getId() + " " + question.getMaxScore());
         }
         System.out.println("Maximum marks from the testers: "
-                + TextUtils.join(", ", marks) + "; total "
+                + TextUtils.join(LIST_SEPARATOR, marks) + "; total "
                 + assessment.getMaxTotal() + ".");
 
+        printDenominatorWarning(config, section, assessment);
+
+        for (String key : factory.findIgnoredMaxScoreSettings()) {
+            System.out.println("Note: " + key + " in config.properties is "
+                    + "ignored. Each maximum now comes from the tester.");
+        }
+    }
+
+    // Warns when the score sheet's denominator does not match the total
+    // of the questions, or when the sheet gives no single denominator.
+    private static void printDenominatorWarning(AppConfig config,
+            Section section, Assessment assessment) {
         // The sheet startGrading reads: the section's own, else the one
         // for everyone
+        Path scoreSheet = ExportFolders.findScoreSheet(config,
+                section.getModuleCode(), section.getSectionCode());
         double denominator = new RosterReader(config).readDenominator(
-                ExportFolders.findScoreSheet(config, section.getModuleCode(),
-                        section.getSectionCode()));
+                scoreSheet);
         if (denominator < 0) {
             System.out.println("Warning: the score sheet has no single "
                     + "denominator to check this total against.");
@@ -305,11 +355,6 @@ public class ConsoleMain {
             System.out.println("Warning: the score sheet's denominator is "
                     + denominator + ", but the questions add up to "
                     + assessment.getMaxTotal() + ".");
-        }
-
-        for (String key : factory.findIgnoredMaxScoreSettings()) {
-            System.out.println("Note: " + key + " in config.properties is "
-                    + "ignored. Each maximum now comes from the tester.");
         }
     }
 
@@ -320,7 +365,7 @@ public class ConsoleMain {
                 + gradingRun.getAssessment().getName() + ":");
 
         for (Submission submission : gradingRun.getSubmissions()) {
-            System.out.println("  " + submission.getUsername() + ": "
+            System.out.println(LINE_INDENT + submission.getUsername() + ": "
                     + submission.getTotalScore() + " ("
                     + submission.getStatus() + ")");
         }
@@ -347,10 +392,11 @@ public class ConsoleMain {
 
         System.out.println("Similar code (a review aid, not a finding):");
         for (SimilarityPair pair : pairs) {
-            System.out.println("  " + pair.getQuestionId() + ": "
+            long percent = Math.round(pair.getSimilarity() * PERCENT);
+            System.out.println(LINE_INDENT + pair.getQuestionId() + ": "
                     + pair.getFirstUsername() + " and "
-                    + pair.getSecondUsername() + ", "
-                    + Math.round(pair.getSimilarity() * PERCENT) + "%");
+                    + pair.getSecondUsername() + ", " + percent
+                    + PERCENT_SIGN);
         }
     }
 

@@ -193,6 +193,26 @@ public class Submission {
     }
 
     /**
+     * Finds the result of one question.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param questionId the question's id, such as Q1a
+     * @return the result, or null when the question has none
+     */
+    public QuestionResult findResult(String questionId) {
+        for (QuestionResult result : questionResults) {
+            Question graded = result.getQuestion();
+            boolean isQuestion = graded != null
+                    && graded.getId().equals(questionId);
+            if (isQuestion) {
+                return result;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Returns the keys of the fixes the instructor undid. Grading the
      * student again keeps this list, and FixManager does not apply a fix
      * whose key is in it. The database saves the list with the submission
@@ -269,6 +289,7 @@ public class Submission {
             total += questionResult.getScore();
         }
 
-        return Math.round(total * ROUNDING_FACTOR) / ROUNDING_FACTOR;
+        double scaledTotal = total * ROUNDING_FACTOR;
+        return Math.round(scaledTotal) / ROUNDING_FACTOR;
     }
 }

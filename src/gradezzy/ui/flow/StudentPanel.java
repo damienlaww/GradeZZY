@@ -14,6 +14,7 @@ package gradezzy.ui.flow;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
@@ -41,6 +42,7 @@ import gradezzy.model.FixStatus;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
+import gradezzy.model.ScoreAdjustment;
 import gradezzy.model.Submission;
 import gradezzy.model.TestCaseResult;
 import gradezzy.plagiarism.SimilarityPair;
@@ -51,10 +53,11 @@ import gradezzy.ui.backend.RepairItem;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.backend.ReviewRules;
-import gradezzy.model.ScoreAdjustment;
 
 /**
  * Details of one student on the Review step.
+ *
+ * <p>Tier: SHOULD.
  */
 public class StudentPanel extends ScrollPane {
 
@@ -74,13 +77,36 @@ public class StudentPanel extends ScrollPane {
     private static final double ROW_GAP = 10.0;
 
     // The gap between the small parts of a card
-    private static final double TIGHT_GAP = 4.0;
+    private static final double TIGHT_GAP = Parts.GAP_TINY;
 
     // The gap between a title and the line under it
     private static final double LINE_GAP = 2.0;
 
     // The total shown for a student with no marks, as on Review
     private static final String NO_MARK = "-";
+
+    // The separator between the username and the section
+    private static final String DOT = " · ";
+
+    // Put between a mark and the maximum mark
+    private static final String OUT_OF = " / ";
+
+    // Starts a new line in a tip
+    private static final String LINE_END = "\n";
+
+    // Put before a line the student had, and a line the fix wrote
+    private static final String REMOVED_SIGN = "- ";
+    private static final String ADDED_SIGN = "+ ";
+
+    // Put around a quoted name so it only matches as a whole word
+    private static final String WORD_START = "(?s).*\\b";
+    private static final String WORD_END = "\\b.*";
+
+    // Comes between a test's number and whether it passed in its tip
+    private static final String VERDICT_SEPARATOR = ": ";
+
+    // Joins an issue's words and its advice, to search both for a name
+    private static final String WORD_GAP = " ";
 
     // The window, for sheets and notices
     private final FlowWindow window;
@@ -169,8 +195,9 @@ public class StudentPanel extends ScrollPane {
      */
     public void openAdjust(String questionId) {
         QuestionResult result = findResult(questionId);
-        if (submission == null || result == null || !window.getBackend()
-                .supports(Capability.SCORE_ADJUSTMENT)) {
+        boolean cannotAdjust = submission == null || result == null
+                || !window.getBackend().supports(Capability.SCORE_ADJUSTMENT);
+        if (cannotAdjust) {
             return;
         }
         window.showSheet(AdjustMarkSheet.create(window, submission, result,
@@ -206,7 +233,8 @@ public class StudentPanel extends ScrollPane {
             setVvalue(getVmin());
             return;
         }
-        setVvalue(Math.min(getVmax(), offset / hidden));
+        double share = offset / hidden;
+        setVvalue(Math.min(getVmax(), share));
     }
 
     // Builds the panel's contents for the student shown.
@@ -231,7 +259,7 @@ public class StudentPanel extends ScrollPane {
     private HBox createTop() {
         Label name = Parts.strong(Students.name(submission));
         name.getStyleClass().add("panel-name");
-        Label who = Parts.muted(submission.getUsername() + " · "
+        Label who = Parts.muted(submission.getUsername() + DOT
                 + submission.getSection().getLabel());
         who.getStyleClass().add("small-text");
         VBox names = new VBox(name, who);
@@ -316,24 +344,16 @@ public class StudentPanel extends ScrollPane {
 
         Label id = Parts.strong(question.getId());
         fixWidth(id, ID_WIDTH);
-        StackPane bar = Parts.track(score / max, toneOf(score, max,
-                result));
-        Label mark = new Label(Parts.mark(score) + " / " + Parts.mark(max));
+        double share = score / max;
+        StackPane bar = Parts.track(share, toneOf(score, max, result));
+        Label mark = new Label(Parts.mark(score) + OUT_OF + Parts.mark(max));
         mark.getStyleClass().add("question-mark");
         fixWidth(mark, MARK_WIDTH);
         mark.setAlignment(Pos.CENTER_RIGHT);
         HBox top = new HBox(ROW_GAP, id, bar, mark);
         top.setAlignment(Pos.CENTER_LEFT);
         top.getStyleClass().add("question-top");
-        if (result != null && backend.supports(
-                Capability.SCORE_ADJUSTMENT)) {
-            Hyperlink adjust = Parts.link("Adjust",
-                    () -> openAdjust(question.getId()));
-            adjust.getStyleClass().add("small-text");
-            adjust.addEventHandler(MouseEvent.MOUSE_CLICKED,
-                    event -> event.consume());
-            top.getChildren().add(adjust);
-        }
+        addAdjustLink(top, question, result, backend);
 
         VBox details = createDetails(question, result, backend);
         VBox row = new VBox(top, createSummary(result));
@@ -349,6 +369,22 @@ public class StudentPanel extends ScrollPane {
         Parts.tipNode(top, "Show the links to " + question.getId()
                 + "'s code and output, and to grade it again");
         return row;
+    }
+
+    // Adds Adjust to a question's row when its mark can be changed.
+    private void addAdjustLink(HBox top, Question question,
+            QuestionResult result, DashboardBackend backend) {
+        boolean adjustable = result != null
+                && backend.supports(Capability.SCORE_ADJUSTMENT);
+        if (!adjustable) {
+            return;
+        }
+        Hyperlink adjust = Parts.link("Adjust",
+                () -> openAdjust(question.getId()));
+        adjust.getStyleClass().add("small-text");
+        adjust.addEventHandler(MouseEvent.MOUSE_CLICKED,
+                event -> event.consume());
+        top.getChildren().add(adjust);
     }
 
     // Builds the line under a question's bar: a square per test with how
@@ -452,13 +488,15 @@ public class StudentPanel extends ScrollPane {
             }
             Region square = new Region();
             square.getStyleClass().addAll("test-square", verdict);
-            String detail = "Test " + test.getTestNumber() + ": " + verdict;
+            String detail = "Test " + test.getTestNumber()
+                    + VERDICT_SEPARATOR + verdict;
             String output = test.getDetail();
             // The tester's line is shown only when it says more, such as
             // why a test failed
-            if (output != null && !output.trim().isEmpty()
-                    && !output.trim().equalsIgnoreCase(verdict)) {
-                detail = detail + "\n" + output;
+            boolean saysMore = output != null && !output.trim().isEmpty()
+                    && !output.trim().equalsIgnoreCase(verdict);
+            if (saysMore) {
+                detail = detail + LINE_END + output;
             }
             Parts.tipNode(square, detail);
             tests.getChildren().add(square);
@@ -512,8 +550,9 @@ public class StudentPanel extends ScrollPane {
         }
         VBox card = new VBox(Parts.GAP_SMALL);
         card.getStyleClass().add("fix-card");
-        card.getChildren().add(Parts.pill(Parts.plural(changes.size(),
-                "mark") + " changed by hand", Tone.NEUTRAL));
+        String title = Parts.plural(changes.size(), "mark")
+                + " changed by hand";
+        card.getChildren().add(Parts.pill(title, Tone.NEUTRAL));
         for (ScoreAdjustment change : changes) {
             card.getChildren().add(createAdjustment(change, backend));
         }
@@ -532,8 +571,9 @@ public class StudentPanel extends ScrollPane {
         VBox text = new VBox(LINE_GAP, what, why);
         text.setMinWidth(0);
         HBox.setHgrow(text, Priority.ALWAYS);
-        HBox line = new HBox(Parts.GAP, text, Parts.small("Undo",
-                () -> undoAdjustment(backend, change)));
+        Button undo = Parts.small("Undo",
+                () -> undoAdjustment(backend, change));
+        HBox line = new HBox(Parts.GAP, text, undo);
         line.setAlignment(Pos.CENTER_LEFT);
         return line;
     }
@@ -546,9 +586,9 @@ public class StudentPanel extends ScrollPane {
         if (run == null || !backend.supports(Capability.REPAIR_DECISIONS)) {
             return;
         }
+        String username = submission.getUsername();
         for (RepairItem repair : backend.listRepairs(run)) {
-            if (repair.getAnomaly().getUsername().equals(
-                    submission.getUsername())) {
+            if (repair.getAnomaly().getUsername().equals(username)) {
                 body.getChildren().add(createFixCard(repair, backend));
             }
         }
@@ -572,18 +612,36 @@ public class StudentPanel extends ScrollPane {
             tag = Parts.pill("Could not fix", Tone.BAD);
         }
         VBox card = createCard(tag, title, describeFinding(anomaly));
-
-        String before = repair.getOriginalValue();
-        if (backend.supports(Capability.REPAIR_VALUES) && before != null
-                && !before.isEmpty()) {
-            VBox change = new VBox();
-            change.getStyleClass().add("change-diff");
-            addDiffLines(change, before, false);
-            addDiffLines(change, repair.getProposedValue(), true);
-            card.getChildren().add(change);
-        }
-
+        addChange(card, repair, backend);
         HBox buttons = Parts.row(Parts.GAP_SMALL);
+        addFixButtons(card, buttons, repair, backend);
+        addOpenCode(buttons, anomaly);
+        addButtons(card, buttons);
+        return card;
+    }
+
+    // Adds what a fix changed, line by line, when the backend knows it.
+    private void addChange(VBox card, RepairItem repair,
+            DashboardBackend backend) {
+        String before = repair.getOriginalValue();
+        boolean known = backend.supports(Capability.REPAIR_VALUES)
+                && before != null && !before.isEmpty();
+        if (!known) {
+            return;
+        }
+        VBox change = new VBox();
+        change.getStyleClass().add("change-diff");
+        addDiffLines(change, before, false);
+        addDiffLines(change, repair.getProposedValue(), true);
+        card.getChildren().add(change);
+    }
+
+    // Adds the buttons that decide a fix, or the note that says why
+    // there are none yet.
+    private void addFixButtons(VBox card, HBox buttons, RepairItem repair,
+            DashboardBackend backend) {
+        Anomaly anomaly = repair.getAnomaly();
+        FixStatus status = anomaly.getFixStatus();
         if (repair.isBlocked()) {
             Label note = Parts.muted(repair.getNote());
             note.getStyleClass().add("small-text");
@@ -596,13 +654,12 @@ public class StudentPanel extends ScrollPane {
         } else if (isWaitingOnJob(backend, anomaly)) {
             addFixJobNote(card, anomaly);
         } else if (status == FixStatus.APPLIED) {
-            buttons.getChildren().addAll(
-                    Parts.small("Keep fix",
-                    () -> approveRepair(backend, repair), Tone.GOOD),
-                    Parts.small("Reject fix",
-                    () -> rejectRepair(backend, repair), Tone.BAD));
-        } else if (status == FixStatus.UNDONE
-                && UndoFixJob.canApplyAgain(backend, anomaly)) {
+            Button keep = Parts.small("Keep fix",
+                    () -> approveRepair(backend, repair), Tone.GOOD);
+            Button reject = Parts.small("Reject fix",
+                    () -> rejectRepair(backend, repair), Tone.BAD);
+            buttons.getChildren().addAll(keep, reject);
+        } else if (canApplyAgain(backend, status, anomaly)) {
             Button again = Parts.small("Apply fix again",
                     () -> reapplyRepair(backend, repair));
             Parts.tip(again, "Grades the student again with this fix.");
@@ -614,9 +671,13 @@ public class StudentPanel extends ScrollPane {
                     + "you again. The files and marks stay as they are.");
             buttons.getChildren().add(undo);
         }
-        addOpenCode(buttons, anomaly);
-        addButtons(card, buttons);
-        return card;
+    }
+
+    // Says whether a rejected fix can be applied again.
+    private boolean canApplyAgain(DashboardBackend backend, FixStatus status,
+            Anomaly anomaly) {
+        return status == FixStatus.UNDONE
+                && UndoFixJob.canApplyAgain(backend, anomaly);
     }
 
     // Says what a fix did once it is made, such as the folder's new name,
@@ -632,8 +693,9 @@ public class StudentPanel extends ScrollPane {
     // Adds Open code to a card, opening the code sheet on the question
     // the issue is about, or on the first question when it names none.
     private void addOpenCode(HBox buttons, Anomaly anomaly) {
-        if (!window.getBackend().supports(Capability.SOURCE_VIEW)
-                || submission.getQuestionResults().isEmpty()) {
+        boolean noCode = !window.getBackend().supports(Capability.SOURCE_VIEW)
+                || submission.getQuestionResults().isEmpty();
+        if (noCode) {
             return;
         }
         if (buildingForSheet) {
@@ -666,8 +728,9 @@ public class StudentPanel extends ScrollPane {
         buildingForSheet = true;
         try {
             GradingRun run = window.getState().getRun();
-            if (run != null && ReviewRules.isValidationFinding(
-                    anomaly.getType())) {
+            boolean fixFinding = run != null
+                    && ReviewRules.isValidationFinding(anomaly.getType());
+            if (fixFinding) {
                 for (RepairItem repair : backend.listRepairs(run)) {
                     if (repair.getAnomaly().getId().equals(anomaly.getId())) {
                         card = createFixCard(repair, backend);
@@ -681,8 +744,7 @@ public class StudentPanel extends ScrollPane {
             buildingForSheet = false;
         }
         for (Button button : buttonsIn(card)) {
-            EventHandler<ActionEvent> action =
-                    button.getOnAction();
+            EventHandler<ActionEvent> action = button.getOnAction();
             if (action != null) {
                 button.setOnAction(event -> closeThen(action, event));
             }
@@ -704,8 +766,8 @@ public class StudentPanel extends ScrollPane {
         if (node instanceof Button) {
             found.add((Button) node);
         } else if (node instanceof Parent) {
-            for (Node child : ((Parent) node)
-                    .getChildrenUnmodifiable()) {
+            Parent parent = (Parent) node;
+            for (Node child : parent.getChildrenUnmodifiable()) {
                 found.addAll(buttonsIn(child));
             }
         }
@@ -716,7 +778,7 @@ public class StudentPanel extends ScrollPane {
     // as Q2b, or its file or folder name. Longer ids are tried first, so
     // "Q1a" is not taken for "Q1". Returns null when none is named.
     private String questionOf(Anomaly anomaly) {
-        String text = anomaly.getMessage() + " "
+        String text = anomaly.getMessage() + WORD_GAP
                 + anomaly.getSuggestedAction();
         String found = null;
         int foundLength = 0;
@@ -728,17 +790,25 @@ public class StudentPanel extends ScrollPane {
             String[] names = {question.getId(), question.getFileName(),
                 question.getFolderName()};
             for (String name : names) {
-                if (name != null && !name.isEmpty()
-                        && name.length() > foundLength
-                        && text.matches("(?s).*\\b"
-                        + java.util.regex.Pattern.quote(name)
-                        + "\\b.*")) {
+                if (isLongerName(text, name, foundLength)) {
                     found = question.getId();
                     foundLength = name.length();
                 }
             }
         }
         return found;
+    }
+
+    // Says whether a name is longer than the one found so far and is
+    // named in the text as a whole word.
+    private boolean isLongerName(String text, String name, int foundLength) {
+        boolean longer = name != null && !name.isEmpty()
+                && name.length() > foundLength;
+        if (!longer) {
+            return false;
+        }
+        String wholeWord = WORD_START + Pattern.quote(name) + WORD_END;
+        return text.matches(wholeWord);
     }
 
     // Says whether a fix card waits for a fix being undone or applied
@@ -749,8 +819,8 @@ public class StudentPanel extends ScrollPane {
             return false;
         }
         FixStatus status = anomaly.getFixStatus();
-        return status == FixStatus.APPLIED || (status == FixStatus.UNDONE
-                && UndoFixJob.canApplyAgain(backend, anomaly));
+        return status == FixStatus.APPLIED
+                || canApplyAgain(backend, status, anomaly);
     }
 
     // Says, in place of the buttons, that a fix is being undone or
@@ -785,13 +855,13 @@ public class StudentPanel extends ScrollPane {
         if (value == null) {
             return;
         }
-        String sign = "- ";
+        String sign = REMOVED_SIGN;
         String style = "removed";
         if (added) {
-            sign = "+ ";
+            sign = ADDED_SIGN;
             style = "added";
         }
-        String[] lines = value.split("\n");
+        String[] lines = value.split(LINE_END);
         for (String text : lines) {
             Label line = new Label(sign + text);
             line.setWrapText(true);
@@ -809,9 +879,7 @@ public class StudentPanel extends ScrollPane {
             return;
         }
         if (backend.needsReview(anomaly)) {
-            buttons.getChildren().add(Parts.small("Mark as checked",
-                    () -> decide(backend, anomaly,
-                    ReviewDecision.REVIEWED), Tone.GOOD));
+            buttons.getChildren().add(checkedButton(backend, anomaly));
         } else {
             buttons.getChildren().add(undoButton(backend, anomaly));
         }
@@ -846,8 +914,9 @@ public class StudentPanel extends ScrollPane {
     // needs a look before export.
     private void addZeroCard(DashboardBackend backend) {
         ResultState state = Students.state(submission, backend);
-        if (state != ResultState.ZERO
-                || !submission.getAnomalies().isEmpty()) {
+        boolean noZeroCard = state != ResultState.ZERO
+                || !submission.getAnomalies().isEmpty();
+        if (noZeroCard) {
             return;
         }
         boolean checked = backend.isZeroChecked(submission);
@@ -864,20 +933,21 @@ public class StudentPanel extends ScrollPane {
         Label detail = Parts.muted(detailText);
         detail.setWrapText(true);
         detail.getStyleClass().add("small-text");
-        VBox card = new VBox(Parts.GAP_SMALL, tag,
-                new VBox(LINE_GAP, title, detail));
+        VBox text = new VBox(LINE_GAP, title, detail);
+        VBox card = new VBox(Parts.GAP_SMALL, tag, text);
         card.getStyleClass().add("fix-card");
         card.setAlignment(Pos.TOP_LEFT);
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         if (checked) {
-            Button undo = Parts.small("Undo", () -> checkZero(backend,
-                    false));
+            Button undo = Parts.small("Undo",
+                    () -> checkZero(backend, false));
             Parts.tip(undo, "Take it back, so the 0 waits for you again. "
                     + "No mark changes.");
             buttons.getChildren().add(undo);
         } else {
-            buttons.getChildren().add(Parts.small("Mark as checked",
-                    () -> checkZero(backend, true), Tone.GOOD));
+            Button check = Parts.small("Mark as checked",
+                    () -> checkZero(backend, true), Tone.GOOD);
+            buttons.getChildren().add(check);
         }
         addButtons(card, buttons);
         body.getChildren().add(card);
@@ -907,8 +977,9 @@ public class StudentPanel extends ScrollPane {
     // Says whether a problem has the same type and words as a shared one.
     private boolean isShared(Anomaly anomaly) {
         for (Anomaly shared : sharedProblems) {
-            if (shared.getType() == anomaly.getType()
-                    && shared.getMessage().equals(anomaly.getMessage())) {
+            boolean same = shared.getType() == anomaly.getType()
+                    && shared.getMessage().equals(anomaly.getMessage());
+            if (same) {
                 return true;
             }
         }
@@ -940,15 +1011,15 @@ public class StudentPanel extends ScrollPane {
             return card;
         }
         if (open && flag) {
-            buttons.getChildren().addAll(
-                    Parts.small("Looks fine", () -> decide(backend,
-                    anomaly, ReviewDecision.REJECTED), Tone.GOOD),
-                    Parts.small("Keep flagged", () -> decide(backend,
-                    anomaly, ReviewDecision.REVIEWED), Tone.BAD));
+            Button fine = Parts.small("Looks fine",
+                    () -> decide(backend, anomaly, ReviewDecision.REJECTED),
+                    Tone.GOOD);
+            Button keep = Parts.small("Keep flagged",
+                    () -> decide(backend, anomaly, ReviewDecision.REVIEWED),
+                    Tone.BAD);
+            buttons.getChildren().addAll(fine, keep);
         } else if (open) {
-            buttons.getChildren().add(Parts.small("Mark as checked",
-                    () -> decide(backend, anomaly,
-                    ReviewDecision.REVIEWED), Tone.GOOD));
+            buttons.getChildren().add(checkedButton(backend, anomaly));
         } else if (decision != ReviewDecision.OPEN) {
             buttons.getChildren().add(undoButton(backend, anomaly));
         }
@@ -1136,8 +1207,9 @@ public class StudentPanel extends ScrollPane {
     // export of the run itself.
     private void startRegradeJob(RegradeJob job) {
         // The outcome is always told, as the instructor may have moved on
-        if (job.startOnce(window.getState(), result -> apply(result, true),
-                null)) {
+        boolean started = job.startOnce(window.getState(),
+                result -> apply(result, true), null);
+        if (started) {
             changed();
             return;
         }
@@ -1185,10 +1257,11 @@ public class StudentPanel extends ScrollPane {
     private void keepRepair(DashboardBackend backend, RepairItem repair) {
         ActionResult result = backend.approveRepair(repair);
         apply(result, false);
-        if (result.isDone()
-                && backend.supports(Capability.REPAIR_DECISION_UNDO)) {
-            window.notify("Kept the fix for " + repair.getAnomaly()
-                    .getUsername() + ".", "Undo",
+        boolean canUndo = result.isDone()
+                && backend.supports(Capability.REPAIR_DECISION_UNDO);
+        if (canUndo) {
+            String username = repair.getAnomaly().getUsername();
+            window.notify("Kept the fix for " + username + ".", "Undo",
                     () -> undoRepairDecision(backend, repair));
         }
     }
@@ -1198,6 +1271,13 @@ public class StudentPanel extends ScrollPane {
     private boolean canTakeBack(DashboardBackend backend, Anomaly anomaly) {
         return anomaly.getFixStatus() == FixStatus.APPROVED
                 && backend.supports(Capability.REPAIR_DECISION_UNDO);
+    }
+
+    // Returns the Mark as checked button of a flag or problem.
+    private Button checkedButton(DashboardBackend backend, Anomaly anomaly) {
+        return Parts.small("Mark as checked",
+                () -> decide(backend, anomaly, ReviewDecision.REVIEWED),
+                Tone.GOOD);
     }
 
     // Returns the Undo button of a settled flag or problem, which puts it
@@ -1255,8 +1335,9 @@ public class StudentPanel extends ScrollPane {
         FlowState state = window.getState();
         UndoFixJob job = new UndoFixJob(backend, repair, applyAgain);
         // The outcome is always told, as the instructor may have moved on
-        if (job.startOnce(state, state.getRun(),
-                result -> apply(result, true))) {
+        boolean started = job.startOnce(state, state.getRun(),
+                result -> apply(result, true));
+        if (started) {
             refresh();
         }
     }

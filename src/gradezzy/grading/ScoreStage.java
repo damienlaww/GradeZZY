@@ -87,9 +87,10 @@ public class ScoreStage implements GradingStage {
         }
 
         for (Question question : assessment.getQuestions()) {
-            if (TesterFile.findFor(context.getTesters(),
-                    question.getId()) == null
-                    && question.getMaxScore() > 0) {
+            boolean noTester = TesterFile.findFor(context.getTesters(),
+                    question.getId()) == null;
+            boolean worthMarks = question.getMaxScore() > 0;
+            if (noTester && worthMarks) {
                 flagMissingTester(submission, question, context);
             }
 
@@ -128,15 +129,6 @@ public class ScoreStage implements GradingStage {
 
     // Says whether the submission already has a result for a question.
     private boolean hasResult(Submission submission, Question question) {
-        for (QuestionResult questionResult
-                : submission.getQuestionResults()) {
-            Question graded = questionResult.getQuestion();
-
-            if (graded != null && graded.getId().equals(question.getId())) {
-                return true;
-            }
-        }
-
-        return false;
+        return submission.findResult(question.getId()) != null;
     }
 }

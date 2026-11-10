@@ -165,8 +165,8 @@ public class HistoryService {
 
         String problem = "";
         Path safetyBackup = null;
-        Path heldCopy = backupFile.resolveSibling(backupFile.getFileName()
-                + HELD_COPY_SUFFIX);
+        String heldName = backupFile.getFileName() + HELD_COPY_SUFFIX;
+        Path heldCopy = backupFile.resolveSibling(heldName);
 
         // Every repository method locks the repository, so holding the
         // same lock here stops other threads from using it while closed
@@ -187,21 +187,7 @@ public class HistoryService {
                         + "restored: " + exception.getMessage());
             }
 
-            repository.close();
-
-            try {
-                backupManager.restore(heldCopy, databaseFile);
-            } catch (PersistenceException exception) {
-                problem = exception.getMessage();
-            }
-            deleteQuietly(heldCopy);
-
-            try {
-                repository.open();
-            } catch (PersistenceException exception) {
-                problem = problem + " The database could not be opened "
-                        + "again: " + exception.getMessage();
-            }
+            problem = replaceDatabase(heldCopy);
 
             if (problem.isEmpty()) {
                 auditService.record(BACKUP_RESTORED, describeRestore(
@@ -212,6 +198,30 @@ public class HistoryService {
         if (!problem.isEmpty()) {
             throw new IllegalStateException(problem.trim());
         }
+    }
+
+    // Closes the database, copies the held copy of the backup over it,
+    // deletes the held copy and opens the database again, even when the
+    // copy failed. Returns what went wrong, or "" when nothing did.
+    // The caller holds the repository's lock.
+    private String replaceDatabase(Path heldCopy) {
+        String problem = "";
+        repository.close();
+
+        try {
+            backupManager.restore(heldCopy, databaseFile);
+        } catch (PersistenceException exception) {
+            problem = exception.getMessage();
+        }
+        deleteQuietly(heldCopy);
+
+        try {
+            repository.open();
+        } catch (PersistenceException exception) {
+            problem = problem + " The database could not be opened "
+                    + "again: " + exception.getMessage();
+        }
+        return problem;
     }
 
     // Backs up the database before a restore. Returns null when there is

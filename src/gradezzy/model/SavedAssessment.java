@@ -53,6 +53,8 @@ public class SavedAssessment {
 
     /**
      * Returns a copy whose lists can be changed without changing this one.
+     * The Question objects in the question list are shared, not copied,
+     * so a change to a question's extra file names shows in both.
      *
      * @return the copy
      */

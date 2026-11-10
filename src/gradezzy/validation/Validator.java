@@ -16,6 +16,8 @@ import gradezzy.model.Submission;
 
 /**
  * One check of a submission against the rules of the assessment.
+ *
+ * <p>Tier: MUST. Owner: Seth.
  */
 public interface Validator {
 

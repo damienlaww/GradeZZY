@@ -49,6 +49,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * The Statistics tab.
+ *
+ * <p>Tier: SHOULD.
  */
 public class StatisticsScreen extends FlowScreen {
 
@@ -75,6 +77,9 @@ public class StatisticsScreen extends FlowScreen {
 
     // Separates the parts of the subtitle
     private static final String DOT = " · ";
+
+    // Separates the maximums listed in a sentence
+    private static final String LIST_SEPARATOR = ", ";
 
     // Two maximums closer than this are the same
     private static final double SAME_MAXIMUM = 1e-9;
@@ -241,13 +246,8 @@ public class StatisticsScreen extends FlowScreen {
 
     // ------------------------------------------------------------ build
 
-    /**
-     * Follows a click on One section or Compare sections. Clicking the
-     * button that is already on would turn both off, so it stays on.
-     *
-     * @param before the button that was on
-     * @param after the button that is on now, or null for none
-     */
+    // Follows a click on One section or Compare sections. Clicking the
+    // button that is already on would turn both off, so it stays on.
     private void switchView(Toggle before, Toggle after) {
         if (after == null) {
             before.setSelected(true);
@@ -678,10 +678,10 @@ public class StatisticsScreen extends FlowScreen {
         for (double max : maximums) {
             marks.add(Parts.mark(max));
         }
+        String markList = TextUtils.join(LIST_SEPARATOR, marks);
         return "These runs of " + assessmentName + " have different "
-                + "maximums (" + TextUtils.join(", ", marks) + "), so each "
-                + "total is shown as a percentage of its own run's "
-                + "maximum.";
+                + "maximums (" + markList + "), so each total is shown as a "
+                + "percentage of its own run's maximum.";
     }
 
     // Returns the empty state shown in place of the chart when fewer

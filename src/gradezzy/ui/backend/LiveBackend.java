@@ -13,12 +13,14 @@ package gradezzy.ui.backend;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -79,6 +81,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * The backend that calls the real services.
+ *
+ * <p>Tier: MUST.
  */
 public class LiveBackend implements DashboardBackend {
 
@@ -104,14 +108,23 @@ public class LiveBackend implements DashboardBackend {
     // Shown for a student or question that has no mark
     private static final String NOT_GRADED = "not graded";
 
-    // Separates the questions in a list of kept marks
+    // Separates the items of a list in a message, such as kept marks
     private static final String LIST_SEPARATOR = ", ";
-
-    // Every service of the application
-    private final ServiceRegistry services;
 
     // Comes between two sentences of a notice
     private static final String SENTENCE_GAP = " ";
+
+    // The extension of a Java source file
+    private static final String JAVA_EXTENSION = ".java";
+
+    // The name of the thread that grades in the background
+    private static final String GRADING_THREAD_NAME = "gradezzy-grading";
+
+    // Separates the username from the anomaly id in a decision key
+    private static final String DECISION_KEY_SEPARATOR = "/";
+
+    // Every service of the application
+    private final ServiceRegistry services;
 
     // The application settings
     private final AppConfig config;
@@ -200,8 +213,9 @@ public class LiveBackend implements DashboardBackend {
         if (config.hasKey(ConfigKeys.OWN_SECTIONS_ONLY_MODULES)) {
             ownOnly = config.getString(ConfigKeys.OWN_SECTIONS_ONLY_MODULES);
         }
-        return ModuleSections.forModule(config.getString(
-                ConfigKeys.SECTION_CODES), byModule, ownOnly, moduleCode);
+        String allSections = config.getString(ConfigKeys.SECTION_CODES);
+        return ModuleSections.forModule(allSections, byModule, ownOnly,
+                moduleCode);
     }
 
     /**
@@ -322,7 +336,7 @@ public class LiveBackend implements DashboardBackend {
         }
         try {
             return Paths.get(getScoreSheet(gradingRun.getSection()));
-        } catch (java.nio.file.InvalidPathException exception) {
+        } catch (InvalidPathException exception) {
             return configuredPath(InputKind.ROSTER);
         }
     }
@@ -356,7 +370,7 @@ public class LiveBackend implements DashboardBackend {
                 return unreadable(kind, path);
             }
             String name = String.valueOf(path.getFileName());
-            if (!name.toLowerCase().endsWith(CSV_EXTENSION)) {
+            if (!name.toLowerCase(Locale.ROOT).endsWith(CSV_EXTENSION)) {
                 return new ImportItem(kind, path, "", ImportState.INVALID,
                         "Choose the score sheet CSV file.");
             }
@@ -399,8 +413,9 @@ public class LiveBackend implements DashboardBackend {
             return problems;
         }
 
-        CompileStage stage = new CompileStage(new SourceCompiler(config,
-                new ProcessRunner(config)), starterDirectory);
+        SourceCompiler compiler = new SourceCompiler(config,
+                new ProcessRunner(config));
+        CompileStage stage = new CompileStage(compiler, starterDirectory);
         List<String> found = new ArrayList<>();
         try {
             found = stage.checkTesterFolder(config, assessment,
@@ -491,9 +506,9 @@ public class LiveBackend implements DashboardBackend {
     // Says whether a folder holds at least one tester file.
     private boolean holdsTester(Path folder) {
         String ending = config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
-                + ".java";
+                + JAVA_EXTENSION;
         try {
-            for (Path file : FileUtils.listFiles(folder, ".java")) {
+            for (Path file : FileUtils.listFiles(folder, JAVA_EXTENSION)) {
                 if (file.getFileName().toString().endsWith(ending)) {
                     return true;
                 }
@@ -507,7 +522,7 @@ public class LiveBackend implements DashboardBackend {
     // Returns the first question's tester file name, such as Q1aTester.java.
     private String firstTesterName() {
         String suffix = config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
-                + ".java";
+                + JAVA_EXTENSION;
         if (assessment == null || assessment.getQuestions().isEmpty()) {
             return suffix;
         }
@@ -660,8 +675,10 @@ public class LiveBackend implements DashboardBackend {
 
         ScoreAdjustmentService adjustments =
                 services.getScoreAdjustmentService();
-        List<ScoreAdjustment> handMarks = findHandMark(
-                adjustments.listNewest(run, submission), questionId);
+        List<ScoreAdjustment> allHandMarks = adjustments.listNewest(run,
+                submission);
+        List<ScoreAdjustment> handMarks = findHandMark(allHandMarks,
+                questionId);
         String markBefore = describeMark(submission, questionId);
         String totalBefore = describeTotal(submission);
         try {
@@ -725,8 +742,8 @@ public class LiveBackend implements DashboardBackend {
 
         String totalAfter = describeTotal(submission);
         String keptWords = describeKept(kept);
-        String change = submission.getUsername() + ": " + totalBefore
-                + " to " + totalAfter + "." + keptWords;
+        String change = submission.getUsername() + ACTIVITY_DETAIL_SEPARATOR
+                + totalBefore + " to " + totalAfter + "." + keptWords;
         recordActivity(STUDENT_GRADED_AGAIN,
                 AuditEntry.withReference(change, run.getId()));
         return ActionResult.done("Graded " + submission.getUsername()
@@ -852,9 +869,10 @@ public class LiveBackend implements DashboardBackend {
         // Every decision is in the activity log, so it can be undone
         // there; the id tells it apart from the same flag in another run
         if (before != decision) {
+            String flag = anomaly.getUsername() + ACTIVITY_DETAIL_SEPARATOR
+                    + anomaly.getMessage();
             services.getAuditService().record(decision.getAuditAction(),
-                    AuditEntry.withReference(anomaly.getUsername() + ": "
-                    + anomaly.getMessage(), anomaly.getId()));
+                    AuditEntry.withReference(flag, anomaly.getId()));
         }
         String message = "Marked the flag for " + anomaly.getUsername()
                 + " as " + decision.getLabel().toLowerCase()
@@ -891,8 +909,9 @@ public class LiveBackend implements DashboardBackend {
             if (checked) {
                 action = ReviewDecision.AUDIT_CHECKED;
             }
-            recordActivity(action, AuditEntry.withReference(
-                    submission.getUsername() + ": " + ZERO_CHECK_WORDS,
+            String zeroCheck = submission.getUsername()
+                    + ACTIVITY_DETAIL_SEPARATOR + ZERO_CHECK_WORDS;
+            recordActivity(action, AuditEntry.withReference(zeroCheck,
                     runId));
         }
         String message = "The 0 of " + submission.getUsername()
@@ -997,7 +1016,7 @@ public class LiveBackend implements DashboardBackend {
         if (undone == null) {
             return "Undid the fix. " + putBack;
         }
-        return undone.getMessage() + " " + putBack;
+        return undone.getMessage() + SENTENCE_GAP + putBack;
     }
 
     /**
@@ -1163,15 +1182,16 @@ public class LiveBackend implements DashboardBackend {
     // student, as grading finds it. Links are never followed.
     private Path findSourceFile(Path folder, String relativePath,
             boolean ignoreCase, int depth) throws IOException {
-        Path match = matchPath(folder, relativePath.split(FOLDER_SEPARATOR),
-                ignoreCase);
+        String[] parts = relativePath.split(FOLDER_SEPARATOR);
+        Path match = matchPath(folder, parts, ignoreCase);
         if (match != null || depth == 0) {
             return match;
         }
+        int childDepth = depth - 1;
         for (Path child : listChildren(folder)) {
             if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) {
                 Path found = findSourceFile(child, relativePath, ignoreCase,
-                        depth - 1);
+                        childDepth);
                 if (found != null) {
                     return found;
                 }
@@ -1238,7 +1258,7 @@ public class LiveBackend implements DashboardBackend {
         try {
             ScoreAdjustment change = services.getScoreAdjustmentService()
                     .adjust(run, submission, questionId, newScore, reason);
-            return ActionResult.done(adjustmentSaved("Saved.") + " "
+            return ActionResult.done(adjustmentSaved("Saved.") + SENTENCE_GAP
                     + questionId + " for " + submission.getUsername()
                     + " changed from "
                     + ScoreFormatter.format(change.getPreviousScore())
@@ -1261,8 +1281,8 @@ public class LiveBackend implements DashboardBackend {
         }
         try {
             services.getScoreAdjustmentService().undo(run, adjustment);
-            return ActionResult.done(adjustmentSaved("Undone.") + " "
-                    + adjustment.getQuestionId() + " for "
+            return ActionResult.done(adjustmentSaved("Undone.")
+                    + SENTENCE_GAP + adjustment.getQuestionId() + " for "
                     + adjustment.getUsername() + " is "
                     + ScoreFormatter.format(adjustment.getPreviousScore())
                     + " again.");
@@ -1324,8 +1344,8 @@ public class LiveBackend implements DashboardBackend {
                     + "yet. Grade a batch first.");
         }
 
-        Path outputFolder = Paths.get(getExportFolder(
-                gradingRun.getSection()));
+        String exportFolder = getExportFolder(gradingRun.getSection());
+        Path outputFolder = Paths.get(exportFolder);
         try {
             Path written = services.getExportService().export(gradingRun,
                     scope, formatName, outputFolder);
@@ -1335,9 +1355,10 @@ public class LiveBackend implements DashboardBackend {
             }
 
             String note = "";
-            if (scope.size() < gradingRun.getSubmissions().size()) {
-                note = " It holds " + scope.size() + " of "
-                        + gradingRun.getSubmissions().size()
+            int chosenCount = scope.size();
+            int runCount = gradingRun.getSubmissions().size();
+            if (chosenCount < runCount) {
+                note = " It holds " + chosenCount + " of " + runCount
                         + " students.";
             }
             return ActionResult.saved("Exported " + formatName
@@ -1550,8 +1571,9 @@ public class LiveBackend implements DashboardBackend {
             return ActionResult.failed(exception.getMessage());
         }
         assessment = new AssessmentFactory(config).create();
-        recordAudit("Assessment saved", draft.getName().trim());
-        return ActionResult.done("Saved " + draft.getName().trim() + ".");
+        String savedName = draft.getName().trim();
+        recordAudit("Assessment saved", savedName);
+        return ActionResult.done("Saved " + savedName + ".");
     }
 
     /**
@@ -1688,7 +1710,8 @@ public class LiveBackend implements DashboardBackend {
                 pair.getFirstUsername());
         Submission second = findSubmission(gradingRun,
                 pair.getSecondUsername());
-        if (question == null || first == null || second == null) {
+        boolean anyGone = question == null || first == null || second == null;
+        if (anyGone) {
             return null;
         }
 
@@ -1701,9 +1724,10 @@ public class LiveBackend implements DashboardBackend {
         }
 
         String starterCode = readStarterCode(gradingRun, question);
+        List<String> leftOut = listLeftOut(gradingRun, question,
+                starterCode);
         return new SimilarityDetail(pair, file, file, firstCode,
-                secondCode, starterCode,
-                listLeftOut(gradingRun, question, starterCode));
+                secondCode, starterCode, leftOut);
     }
 
     // Returns where a question's starter file is, whether or not it
@@ -1931,7 +1955,8 @@ public class LiveBackend implements DashboardBackend {
         }
 
         Path configured = configuredPath(InputKind.STARTER);
-        if (inspect(InputKind.STARTER, configured).getState().isUsable()) {
+        ImportItem settingsItem = inspect(InputKind.STARTER, configured);
+        if (settingsItem.getState().isUsable()) {
             return configured;
         }
         return null;
@@ -1949,7 +1974,7 @@ public class LiveBackend implements DashboardBackend {
         }
         if (kind == InputKind.STARTER) {
             message = "GradeZZY could not read this, "
-                    + describeStarterFallback(path) + " " + message;
+                    + describeStarterFallback(path) + SENTENCE_GAP + message;
         }
         CapabilityStatus checks = Capability.INPUT_CHECKS.getStatus();
         if (checks != CapabilityStatus.WORKS_NOW) {
@@ -1966,8 +1991,8 @@ public class LiveBackend implements DashboardBackend {
                     batch.getSinglePath(InputKind.TESTERS), config);
         }
 
-        Path outputFolder = Paths.get(config.getString(
-                ConfigKeys.OUTPUT_DIR), GENERATED_TESTERS_FOLDER);
+        String outputDir = config.getString(ConfigKeys.OUTPUT_DIR);
+        Path outputFolder = Paths.get(outputDir, GENERATED_TESTERS_FOLDER);
         TypedTestCaseSource source = new TypedTestCaseSource(
                 new TesterGenerator(config), outputFolder);
         for (TestCase testCase : batch.getTypedTestCases()) {
@@ -1985,7 +2010,7 @@ public class LiveBackend implements DashboardBackend {
             task.checkSimilarityAfter(services.getPlagiarismService());
         }
 
-        Thread worker = new Thread(task, "gradezzy-grading");
+        Thread worker = new Thread(task, GRADING_THREAD_NAME);
         worker.setDaemon(true);
         worker.start();
     }
@@ -2104,8 +2129,8 @@ public class LiveBackend implements DashboardBackend {
                     ZeroChecks.set(submission, true);
                 }
                 for (Anomaly anomaly : submission.getAnomalies()) {
-                    ReviewDecision decision = decisionNamed(
-                            savedDecisions.get(anomaly.getId()));
+                    String savedName = savedDecisions.get(anomaly.getId());
+                    ReviewDecision decision = decisionNamed(savedName);
                     if (decision != null) {
                         decisions.putIfAbsent(decisionKey(anomaly),
                                 decision);
@@ -2168,8 +2193,9 @@ public class LiveBackend implements DashboardBackend {
             return saved;
         }
         GradingRun recent = runsBySection.get(saved.getSection().getLabel());
-        if (recent == null || isGradedAgainNow(recent)
-                || !saved.getId().equals(recent.getId())) {
+        boolean sameRunNow = recent != null && !isGradedAgainNow(recent)
+                && saved.getId().equals(recent.getId());
+        if (!sameRunNow) {
             return saved;
         }
         return recent;
@@ -2178,8 +2204,9 @@ public class LiveBackend implements DashboardBackend {
     // Says whether getRun shows this run for its section now.
     private boolean isShownNow(GradingRun run) {
         GradingRun shown = getRun(run.getSection());
-        return shown != null && shown.getId() != null
+        boolean sameRun = shown != null && shown.getId() != null
                 && shown.getId().equals(run.getId());
+        return sameRun;
     }
 
     // Records which run is being graded again, or null for none.
@@ -2196,7 +2223,8 @@ public class LiveBackend implements DashboardBackend {
     // not repeat (most end in a random UUID, as PIPELINE-<UUID> does), so
     // the username only makes the key easier to read.
     private String decisionKey(Anomaly anomaly) {
-        return anomaly.getUsername() + "/" + anomaly.getId();
+        return anomaly.getUsername() + DECISION_KEY_SEPARATOR
+                + anomaly.getId();
     }
 
     // Says a fix status in words, for a message.
@@ -2268,14 +2296,16 @@ public class LiveBackend implements DashboardBackend {
             return "";
         }
 
-        String text = words.get(0);
         int last = words.size() - 1;
-        for (int index = 1; index < last; index++) {
-            text += ", " + words.get(index);
+        if (last == 0) {
+            return words.get(0);
         }
-        if (last > 0) {
-            text += " and " + words.get(last);
+
+        List<String> allButLast = new ArrayList<>();
+        for (int index = 0; index < last; index++) {
+            allButLast.add(words.get(index));
         }
-        return text;
+        return TextUtils.join(LIST_SEPARATOR, allButLast) + " and "
+                + words.get(last);
     }
 }

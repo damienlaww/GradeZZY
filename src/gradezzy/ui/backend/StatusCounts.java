@@ -18,6 +18,8 @@ import gradezzy.model.Submission;
 
 /**
  * How many students are in each state, and how many need a look.
+ *
+ * <p>Tier: MUST.
  */
 public final class StatusCounts {
 
@@ -56,22 +58,6 @@ public final class StatusCounts {
         return counts;
     }
 
-    // Counts one student.
-    private void add(Submission submission, DashboardBackend backend) {
-        ResultState state = countedState(submission, backend);
-        stateCounts.put(state, count(state) + 1);
-        total++;
-
-        if (ResultState.isSkippedFile(submission)) {
-            couldNotOpenCount++;
-        } else if (isNotFullyGraded(state)) {
-            notFullyGradedCount++;
-        }
-        if (needsLook(submission, backend)) {
-            needsLookCount++;
-        }
-    }
-
     /**
      * Returns the state a student is counted under: their state, except
      * that a 0 someone checked, or whose flags are all settled, counts
@@ -84,8 +70,9 @@ public final class StatusCounts {
     public static ResultState countedState(Submission submission,
             DashboardBackend backend) {
         ResultState state = ResultState.of(submission, backend);
-        if (state == ResultState.ZERO
-                && !isUncheckedZero(submission, state, backend)) {
+        boolean settledZero = state == ResultState.ZERO
+                && !isUncheckedZero(submission, state, backend);
+        if (settledZero) {
             return ResultState.COMPLETED;
         }
         return state;
@@ -107,8 +94,9 @@ public final class StatusCounts {
             return false;
         }
         ResultState state = ResultState.of(submission, backend);
-        if (state == ResultState.UNGRADED
-                || state == ResultState.NO_SUBMISSION) {
+        boolean notGradedYet = state == ResultState.UNGRADED
+                || state == ResultState.NO_SUBMISSION;
+        if (notGradedYet) {
             return false;
         }
         return hasOpenItem(submission, backend)
@@ -143,17 +131,6 @@ public final class StatusCounts {
         return state == ResultState.COMPILE_ERROR
                 || state == ResultState.TIMED_OUT
                 || state == ResultState.COULD_NOT_GRADE;
-    }
-
-    // Says whether a fix or flag of the student still waits for review.
-    private static boolean hasOpenItem(Submission submission,
-            DashboardBackend backend) {
-        for (Anomaly anomaly : submission.getAnomalies()) {
-            if (backend.needsReview(anomaly)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -205,5 +182,33 @@ public final class StatusCounts {
      */
     public int getTotal() {
         return total;
+    }
+
+    // Counts one student.
+    private void add(Submission submission, DashboardBackend backend) {
+        ResultState state = countedState(submission, backend);
+        int newCount = count(state) + 1;
+        stateCounts.put(state, newCount);
+        total++;
+
+        if (ResultState.isSkippedFile(submission)) {
+            couldNotOpenCount++;
+        } else if (isNotFullyGraded(state)) {
+            notFullyGradedCount++;
+        }
+        if (needsLook(submission, backend)) {
+            needsLookCount++;
+        }
+    }
+
+    // Says whether a fix or flag of the student still waits for review.
+    private static boolean hasOpenItem(Submission submission,
+            DashboardBackend backend) {
+        for (Anomaly anomaly : submission.getAnomalies()) {
+            if (backend.needsReview(anomaly)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

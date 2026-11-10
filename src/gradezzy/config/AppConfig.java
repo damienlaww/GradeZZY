@@ -214,8 +214,22 @@ public class AppConfig {
      * @throws ConfigException if the setting is missing
      */
     public List<String> getList(String key) {
+        return splitList(getString(key));
+    }
+
+    /**
+     * Splits a comma separated value into a list, the way every list
+     * setting is read. Empty items are left out, so empty text gives an
+     * empty list.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param text the value, such as "Q1a, Q1b,Q2"
+     * @return the items, with spaces around each one removed
+     */
+    public static List<String> splitList(String text) {
         List<String> items = new ArrayList<>();
-        String[] parts = getString(key).split(LIST_SEPARATOR);
+        String[] parts = text.split(LIST_SEPARATOR);
 
         for (String part : parts) {
             String item = part.trim();
