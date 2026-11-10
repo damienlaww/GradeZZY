@@ -51,6 +51,7 @@ import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
+import gradezzy.modelanswer.QuestionStrength;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.report.ExportException;
 import gradezzy.report.ScoreFormatter;
@@ -145,12 +146,9 @@ public class LiveBackend implements DashboardBackend {
     // again after anything that changes them; null until first needed
     private List<GradingRun> savedRuns = null;
 
-    // The id of the run being graded again in the background, or null
-    private String runGradedAgainId = null;
-
-    // The last run this session started or resumed, the only run whose
-    // testers GradingService keeps for Retry; null until one finishes
-    private GradingRun lastRunStarted = null;
+    // The ids of the runs being graded again in the background; several
+    // sections can be graded at once
+    private final List<String> runsGradedAgain = new ArrayList<>();
 
     // The review decisions, by student and anomaly id: those made in this
     // session and those read back with the saved runs
@@ -432,6 +430,42 @@ public class LiveBackend implements DashboardBackend {
     }
 
     /**
+     * Calls TesterStrengthService.hasModelAnswers.
+     */
+    @Override
+    public boolean hasModelAnswers() {
+        return services.getTesterStrengthService().hasModelAnswers();
+    }
+
+    /**
+     * Calls TesterStrengthService.checkTesters for the section's module.
+     */
+    @Override
+    public List<QuestionStrength> checkTesterStrength(Section section,
+            Path testersDirectory, Path starterDirectory) {
+        return services.getTesterStrengthService().checkTesters(
+                section.getModuleCode(), testersDirectory,
+                starterDirectory);
+    }
+
+    /**
+     * Calls TesterStrengthService.writeReport.
+     */
+    @Override
+    public String saveTesterStrengthReport(Section section,
+            List<QuestionStrength> results) {
+        try {
+            Path report = services.getTesterStrengthService().writeReport(
+                    results, section.getModuleCode(),
+                    section.getSectionCode());
+            return "Saved to " + report + ".";
+        } catch (IOException exception) {
+            return "The report could not be saved: "
+                    + exception.getMessage();
+        }
+    }
+
+    /**
      * Calls ClassFileMatcher with the uploads' paths and usernames, for
      * the assessment in use.
      */
@@ -503,6 +537,27 @@ public class LiveBackend implements DashboardBackend {
         }
     }
 
+    /**
+     * Calls GradingService.matchStudent.
+     */
+    @Override
+    public ActionResult matchStudent(GradingRun gradingRun,
+            Submission submission, Student student) {
+        try {
+            services.getGradingService().matchStudent(gradingRun, submission,
+                    student);
+            forgetSavedRuns();
+        } catch (GradingException exception) {
+            return ActionResult.failed(exception.getMessage());
+        }
+        if (student == null) {
+            return ActionResult.done(submission.getUsername() + " is no "
+                    + "longer matched to the score sheet.");
+        }
+        return ActionResult.done(submission.getUsername() + " now fills the "
+                + "score sheet row of " + student.getUsername() + ".");
+    }
+
     // Says whether a folder holds at least one tester file.
     private boolean holdsTester(Path folder) {
         String ending = config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
@@ -558,10 +613,15 @@ public class LiveBackend implements DashboardBackend {
         return missing;
     }
 
-    // Says whether the run has a submission of a username.
+    // Says whether the run has a submission of a username: one named so,
+    // or one matched to that student on the score sheet by hand.
     private boolean hasSubmission(GradingRun gradingRun, String username) {
         for (Submission submission : gradingRun.getSubmissions()) {
-            if (submission.getUsername().equalsIgnoreCase(username)) {
+            boolean matched = submission.getStudent() != null
+                    && submission.getStudent().getUsername()
+                    .equalsIgnoreCase(username);
+            if (matched || submission.getUsername().equalsIgnoreCase(
+                    username)) {
                 return true;
             }
         }
@@ -581,7 +641,7 @@ public class LiveBackend implements DashboardBackend {
                 createTestCaseSource(batch), listener,
                 batch.getSinglePath(InputKind.ROSTER),
                 findUsableStarter(batch));
-        runInBackground(task, callback, Capability.IMPORT_AND_GRADE);
+        runInBackground(task, callback, Capability.IMPORT_AND_GRADE, null);
     }
 
     /**
@@ -612,16 +672,18 @@ public class LiveBackend implements DashboardBackend {
                 gradingRun, batch.getSubmissionPaths(),
                 createTestCaseSource(batch), listener,
                 batch.getSinglePath(InputKind.ROSTER));
-        setRunGradedAgain(gradingRun.getId());
-        runInBackground(task, callback, Capability.LATE_BATCH);
+        startGradingAgain(gradingRun.getId());
+        runInBackground(task, callback, Capability.LATE_BATCH,
+                gradingRun.getId());
     }
 
     /**
-     * Calls GradingService.cancel.
+     * Calls GradingService.cancel for the section, so the other sections
+     * keep grading.
      */
     @Override
-    public void cancelGrading() {
-        services.getGradingService().cancel();
+    public void cancelGrading(Section section) {
+        services.getGradingService().cancel(section);
     }
 
     /**
@@ -632,8 +694,9 @@ public class LiveBackend implements DashboardBackend {
             ProgressListener listener, RunCallback callback) {
         GradingTask task = new GradingTask(services.getGradingService(),
                 GradingTaskKind.RESUME, gradingRun, listener);
-        setRunGradedAgain(gradingRun.getId());
-        runInBackground(task, callback, Capability.RESUME_RUN);
+        startGradingAgain(gradingRun.getId());
+        runInBackground(task, callback, Capability.RESUME_RUN,
+                gradingRun.getId());
     }
 
     /**
@@ -644,18 +707,18 @@ public class LiveBackend implements DashboardBackend {
             ProgressListener listener, RunCallback callback) {
         GradingTask task = new GradingTask(services.getGradingService(),
                 GradingTaskKind.RETRY_FAILED, gradingRun, listener);
-        setRunGradedAgain(gradingRun.getId());
-        runInBackground(task, callback, Capability.RETRY_FAILED);
+        startGradingAgain(gradingRun.getId());
+        runInBackground(task, callback, Capability.RETRY_FAILED,
+                gradingRun.getId());
     }
 
     /**
-     * Says whether the run is the last one this session started or
-     * resumed. GradingService.retryFailed refuses any other run, because
-     * its testers are not loaded.
+     * Calls GradingService.canRetry: a run started, resumed or added to
+     * in this session, whose testers are loaded.
      */
     @Override
-    public synchronized boolean canRetryFailed(GradingRun gradingRun) {
-        return gradingRun != null && gradingRun == lastRunStarted;
+    public boolean canRetryFailed(GradingRun gradingRun) {
+        return services.getGradingService().canRetry(gradingRun);
     }
 
     /**
@@ -1635,6 +1698,7 @@ public class LiveBackend implements DashboardBackend {
                 || key.equals(ConfigKeys.ASSESSMENT_NAME)
                 || key.equals(ConfigKeys.TESTERS_DIR)
                 || key.equals(ConfigKeys.STARTER_DIR)
+                || key.equals(ConfigKeys.MODEL_ANSWERS_DIR)
                 || key.equals(ConfigKeys.PROVIDED_CLASS_FILES)
                 || key.equals(ConfigKeys.TESTER_DATA_FILES)
                 || key.equals(ConfigKeys.PLACEHOLDER_FOLDER_NAMES);
@@ -2002,10 +2066,13 @@ public class LiveBackend implements DashboardBackend {
     }
 
     // Runs a grading task on a daemon thread and reports how it ended.
+    // gradedAgainId names the run it grades again, or is null for a new
+    // run.
     private void runInBackground(GradingTask task, RunCallback callback,
-            Capability capability) {
-        task.setOnSucceeded(event -> finishTask(task, callback, capability));
-        task.setOnFailed(event -> failTask(task, callback));
+            Capability capability, String gradedAgainId) {
+        task.setOnSucceeded(event -> finishTask(task, callback, capability,
+                gradedAgainId));
+        task.setOnFailed(event -> failTask(task, callback, gradedAgainId));
         if (isSimilarityEnabled()) {
             task.checkSimilarityAfter(services.getPlagiarismService());
         }
@@ -2017,9 +2084,9 @@ public class LiveBackend implements DashboardBackend {
 
     // Stores and reports the run a finished task returned.
     private void finishTask(GradingTask task, RunCallback callback,
-            Capability capability) {
+            Capability capability, String gradedAgainId) {
         GradingRun run = task.getValue();
-        endTask();
+        endTask(gradedAgainId);
         if (run == null) {
             callback.onFailed(waitingMessage(capability));
             return;
@@ -2029,30 +2096,25 @@ public class LiveBackend implements DashboardBackend {
             recordActivity("Similar code not checked",
                     task.getSimilarityProblem());
         }
-        if (capability != Capability.RETRY_FAILED) {
-            setLastRunStarted(run);
-        }
         if (run.getSection() != null) {
             runsBySection.put(run.getSection().getLabel(), run);
         }
         callback.onFinished(run);
     }
 
-    // Records the last run started or resumed, which Retry can grade.
-    private synchronized void setLastRunStarted(GradingRun run) {
-        lastRunStarted = run;
-    }
-
     // Reports a task that stopped with an exception.
-    private void failTask(GradingTask task, RunCallback callback) {
-        endTask();
+    private void failTask(GradingTask task, RunCallback callback,
+            String gradedAgainId) {
+        endTask(gradedAgainId);
         callback.onFailed(describeFailure(task.getException()));
     }
 
     // Clears what a task held while it ran. A task may have saved runs,
     // so the saved runs are read again when next needed.
-    private void endTask() {
-        setRunGradedAgain(null);
+    private void endTask(String gradedAgainId) {
+        if (gradedAgainId != null) {
+            endGradingAgain(gradedAgainId);
+        }
         forgetSavedRuns();
     }
 
@@ -2209,14 +2271,19 @@ public class LiveBackend implements DashboardBackend {
         return sameRun;
     }
 
-    // Records which run is being graded again, or null for none.
-    private synchronized void setRunGradedAgain(String runId) {
-        runGradedAgainId = runId;
+    // Records that a run is being graded again in the background.
+    private synchronized void startGradingAgain(String runId) {
+        runsGradedAgain.add(runId);
+    }
+
+    // Records that a run is no longer graded again.
+    private synchronized void endGradingAgain(String runId) {
+        runsGradedAgain.remove(runId);
     }
 
     // Says whether the grading threads are changing this run now.
     private synchronized boolean isGradedAgainNow(GradingRun run) {
-        return run.getId() != null && run.getId().equals(runGradedAgainId);
+        return run.getId() != null && runsGradedAgain.contains(run.getId());
     }
 
     // Keys a review decision by student and anomaly id. Anomaly ids do

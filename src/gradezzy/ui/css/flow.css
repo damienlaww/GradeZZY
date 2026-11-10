@@ -531,6 +531,12 @@
     -fx-fill: -color-fg-subtle;
 }
 
+/* History: a run's cell opens its settings, so hovering it underlines
+   its View settings link */
+.run-cell:hover .flow-link {
+    -fx-underline: true;
+}
+
 /* ---- marking: set up, grade, export ---- */
 
 /* Set up: labels above the class fields */
@@ -2485,4 +2491,107 @@
 
 .contained-file {
     -fx-padding: 3px 10px;
+}
+
+/* ---- review: the Errors view ---- */
+
+/* A card of errors of one question, or of similar code clusters */
+.errors-card {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 12px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 12px;
+}
+
+.errors-card.similar-clusters {
+    -fx-padding: 16px 18px;
+    -fx-border-color: -color-warning-muted;
+}
+
+/* One error: a line above every row but the first */
+.error-row {
+    -fx-border-color: -color-border-muted transparent transparent
+        transparent;
+}
+
+.error-row.first {
+    -fx-border-color: transparent;
+}
+
+/* The header of an error opens and closes it, so it shows a hand and
+   lights up under the pointer and when it has the keyboard */
+.error-header {
+    -fx-padding: 12px 16px;
+    -fx-cursor: hand;
+    -fx-background-radius: 12px;
+}
+
+.error-header:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.error-header:focused {
+    -fx-border-color: -color-accent-emphasis;
+    -fx-border-radius: 8px;
+}
+
+.error-chevron {
+    -fx-opacity: 0.7;
+}
+
+/* The students of an open error, indented under its title */
+.error-students {
+    -fx-padding: 0 16px 8px 44px;
+}
+
+.error-student {
+    -fx-padding: 8px 0;
+    -fx-alignment: center-left;
+    -fx-border-color: -color-border-muted transparent transparent
+        transparent;
+    -fx-border-style: dashed solid solid solid;
+}
+
+/* A cluster of similar code: its students as tick boxes */
+.cluster-block {
+    -fx-padding: 10px 0 2px 0;
+    -fx-border-color: -color-border-muted transparent transparent
+        transparent;
+}
+
+.cluster-student {
+    -fx-padding: 2px 0;
+}
+
+/* The Similar code warning beside a student's name */
+.similar-warning {
+    -fx-padding: 0 6px;
+}
+
+/* Grade: the other sections being graded now, as links */
+.other-batches {
+    -fx-padding: 6px 0 0 0;
+    -fx-alignment: center-left;
+}
+
+/* The student panel's Compare with list looks like its small buttons */
+.student-panel .menu-button.compare-with {
+    -fx-background-color: -color-border-default, -color-bg-default;
+    -fx-background-insets: 0, 1px;
+    -fx-background-radius: 7px, 6px;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+    -fx-font-size: 12px;
+}
+
+.student-panel .menu-button.compare-with > .label {
+    -fx-padding: 4px 4px 4px 10px;
+}
+
+.student-panel .menu-button.compare-with > .arrow-button {
+    -fx-padding: 4px 10px 4px 2px;
+}
+
+.student-panel .menu-button.compare-with:hover {
+    -fx-background-color: -color-border-default, -color-bg-subtle;
 }

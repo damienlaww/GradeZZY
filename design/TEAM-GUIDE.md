@@ -26,7 +26,7 @@ sh compile.sh            # compile everything into classes/
 sh run.sh                # open the window
 sh run.sh --demo         # the same window with synthetic data only
 sh run.sh --check        # open every tab, step and sheet once and exit
-sh run.sh --selftest     # run the eight demo flows, print PASS or FAIL
+sh run.sh --selftest     # run the eleven demo flows, print PASS or FAIL
 sh run.sh console        # grade from the terminal, without JavaFX
 sh run.sh console G2     # the same, for section G2
 sh run.sh console CS102 G2   # the same, for module CS102
@@ -610,8 +610,9 @@ How the flags work (never a change of mark):
   check could not run; it never fails a submission.
 
 How the similarity check works: `plagiarism.algorithm` picks the
-detector in `ApplicationContext`. `WinnowingSimilarityDetector`
-(`plagiarism.algorithm=winnowing`) splits each answer into tokens, ignoring spacing and comments, turns
+detector in `ApplicationContext`. The default,
+`WinnowingSimilarityDetector`
+(`plagiarism.algorithm=winnowing`), splits each answer into tokens, ignoring spacing and comments, turns
 every name into `ID` and every text literal into `STR`, so renaming
 changes nothing, and hashes every run of 5 such tokens. Winnowing
 (`Winnowing.selectFingerprints`) keeps the smallest hash of every 4 in a
@@ -621,7 +622,7 @@ students are compared with the Jaccard measure (shared fingerprints
 divided by all fingerprints). A pair is only compared when both answers
 have at least 25 fingerprints of their own (`MIN_OWN_FINGERPRINTS`):
 short correct answers look alike even when written separately. The
-first version and the default, `TokenSimilarityDetector`
+first version, `TokenSimilarityDetector`
 (`plagiarism.algorithm=trigrams`), compares runs of three tokens as written instead, with at least 50 of
 them (`MIN_OWN_TRIGRAMS`), so renaming variables lowers its score. Pairs
 at or above `plagiarism.similarity.threshold` are reported. The starter
@@ -929,7 +930,7 @@ by this section.
 | One-line lambdas `event -> exportResults()` | 26 files in `ui` | Button handlers, table cells and callbacks. | Short for a small class that implements the handler interface (like `AgeComparator implements Comparator`) and whose one method calls `exportResults()`. Every lambda is one line that calls one method. |
 | `Runnable`, `Consumer` | `ui.flow` (`ActionBar`, `Parts`, `StepBar`, `TabBar`, ...), `exec.TrustedFrameCheck` | The type of a lambda parameter, for example "what to do when this button is pressed". | Interfaces with one method, so a screen can pass "run this later" to another class. |
 | `java.nio.file` (`Path`, `Paths`, `Files`, `DirectoryStream`, `StandardCopyOption`, `LinkOption`, `FileTime`) | About 60 files | Every file and folder the system reads, copies, moves or writes. | `Path` is a file or folder location (like `File`); `Files` has static methods to read, copy, move and list them, and can refuse to follow links. |
-| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.UndoFixJob`, `ui.flow.RegradeJob`, `ui.flow.SetUpScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.StudentPanel`, `ui.flow.RunsScreen`, `ui.flow.CodeSheet`, `ui.flow.HomeScreen`, `ui.flow.ScoreSheetSearch`, `ui.flow.ScoreSheetChange` | Grading (with the similar code check at the end of `GradingTask`), checking chosen files, the class files and the tester folder, reading the score sheet for students with no submission, grading a question again, grading one student, one question or the ticked students again, exports, backups, and undoing a fix or applying a rejected one again (each grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
+| `javafx.concurrent.Task`, `new Thread`, `Platform.runLater` | `ui.GradingTask`, `ui.backend.LiveBackend`, `ui.flow.GradeScreen`, `ui.flow.SimilarityCheck`, `ui.flow.FileInspection`, `ui.flow.ExportJob`, `ui.flow.TesterCheck`, `ui.flow.TesterStrengthCheck`, `ui.flow.MissingStudentsLookup`, `ui.flow.UndoFixJob`, `ui.flow.RegradeJob`, `ui.flow.SetUpScreen`, `ui.flow.ExportScreen`, `ui.flow.FlowWindow`, `ui.flow.StudentPanel`, `ui.flow.RunsScreen`, `ui.flow.CodeSheet`, `ui.flow.HomeScreen`, `ui.flow.ScoreSheetSearch`, `ui.flow.ScoreSheetChange` | Grading (with the similar code check at the end of `GradingTask`), checking chosen files, the class files and the tester folder, checking how strong each tester is, reading the score sheet for students with no submission, grading a question again, grading one student, one question or the ticked students again, exports, backups, and undoing a fix or applying a rejected one again (each grades the student again) run off the window's thread so the window does not freeze. | The slow work runs on a second thread; `Platform.runLater` hands each screen update back to the window's thread. |
 | `ConcurrentHashMap` | `ui.backend.LiveBackend` | The last run of each section, which a restore clears from a background thread, and the review decisions on flags. | A `HashMap` that two threads can use at the same time. |
 | `javafx.animation` (`PauseTransition`, `Timeline`) | `ui.flow.FlowWindow`, `ui.flow.ReviewScreen`, `ui.demo.DemoGrader` | How long a notice stays, the pause before a code search, the demo grader's pace. | Timers that call a method after a delay. |
 | Parallel grading: `Thread`, `Runnable`, `synchronized`, `Thread.join` | `grading.GradingPipeline`, `GradingWorker`, `SubmissionHandout`, `SynchronizedProgressListener`, `CancellationToken`, `fix.FixManager`, `persistence.SqliteResultRepository`, `service.HistoryService`, `service.GradingService`, `app.ConsoleProgressListener`, `exec.TrustedPrintStream`, `modelanswer.TesterStrengthChecker`, `MutantWorker`, `MutantBatch`, `RandomInputChecker` | Grades `exec.thread.count` submissions at the same time, and runs that many broken copies of the model answer at once in the tester strength check. | Each `GradingWorker` takes the next submission from the `SubmissionHandout` (each `MutantWorker` the next copy from the `MutantBatch`); `synchronized` lets only one thread at a time touch shared data; `join` waits for a thread to finish. |

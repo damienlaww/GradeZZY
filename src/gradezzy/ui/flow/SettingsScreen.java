@@ -109,8 +109,14 @@ public class SettingsScreen extends FlowScreen {
 
     // The names shown for the values of plagiarism.algorithm, in the
     // same order
-    private static final String[] ALGORITHM_NAMES = {"Rename-proof",
-        "Exact tokens (first version)"};
+    private static final String[] ALGORITHM_NAMES = {
+        "Winnowing: also catches renamed copies",
+        "Trigrams: only copies that keep the names"};
+
+    // The values plagiarism.min.lines offers, and the one recommended
+    static final String[] MIN_LINES = {"10", "15", "20", "25", "30", "40",
+        "50", "60"};
+    private static final String RECOMMENDED_MIN_LINES = "40";
 
     // The values each number setting offers in its list. A value set by
     // hand that is not here is kept as one more choice.
@@ -537,16 +543,14 @@ public class SettingsScreen extends FlowScreen {
                 " characters"));
     }
 
-    // Adds the model answers folder and the checks that use it to the
-    // group being built.
+    // Adds the checks that use the model answers to the group being
+    // built. The folder itself belongs to each assessment.
     private void addModelAnswerRows() {
-        folder(ConfigKeys.MODEL_ANSWERS_DIR, "Model answers folder",
-                "Laid out like the starter folder. Leave it empty to skip "
-                + "the checks below.");
+        addModelAnswersFolderNote();
         toggle(ConfigKeys.TESTER_STRENGTH_ENABLED,
                 "Check testers before grading",
-                "In the console, each tester is run on broken copies of "
-                + "the model answer. A copy with full marks shows a gap.");
+                "Set up runs each tester on broken copies of the model "
+                + "answer. A copy with full marks shows a gap.");
         listed(ConfigKeys.TESTER_STRENGTH_MAX_COPIES,
                 "Broken copies per question",
                 "More finds more gaps, but takes longer.", COPY_COUNTS, "");
@@ -569,9 +573,14 @@ public class SettingsScreen extends FlowScreen {
                 "How alike two answers must be to be flagged.",
                 SIMILARITIES).showChoicesAs(similarityNames());
         choice(ConfigKeys.PLAGIARISM_ALGORITHM, "How code is compared",
-                "Rename-proof also matches renamed names and moved "
-                + "methods, and honest answers with the same structure.",
-                ALGORITHMS).showChoicesAs(ALGORITHM_NAMES);
+                "Winnowing ignores names, so it finds copies with renamed "
+                + "variables, but can also flag honest answers built the "
+                + "same way.", ALGORITHMS).showChoicesAs(ALGORITHM_NAMES);
+        choice(ConfigKeys.PLAGIARISM_MIN_LINES, "Shortest answer compared",
+                "Lines of new code each answer needs, not counting blank "
+                + "lines, comments, braces or starter code. Short answers "
+                + "to easy questions look alike even when written alone.",
+                MIN_LINES).showChoicesAs(minLineNames());
     }
 
     // Adds the pass mark and the band width to the group being built.
@@ -712,6 +721,19 @@ public class SettingsScreen extends FlowScreen {
         return names;
     }
 
+    // Names each minimum as a number of lines, marking the recommended
+    // one, such as "40 lines (recommended)".
+    private static String[] minLineNames() {
+        String[] names = new String[MIN_LINES.length];
+        for (int index = 0; index < MIN_LINES.length; index++) {
+            names[index] = MIN_LINES[index] + " lines";
+            if (MIN_LINES[index].equals(RECOMMENDED_MIN_LINES)) {
+                names[index] += " (recommended)";
+            }
+        }
+        return names;
+    }
+
     // Names each similarity as a percentage, such as "80% alike".
     private static String[] similarityNames() {
         String[] names = new String[SIMILARITIES.length];
@@ -762,6 +784,29 @@ public class SettingsScreen extends FlowScreen {
     private void add(SettingField field) {
         fields.add(field);
         building.addRow(field.getRow(), field);
+    }
+
+    // Adds the row that says where the model answers folder is set: each
+    // assessment has its own, as each lab test has its own answers.
+    private void addModelAnswersFolderNote() {
+        VBox names = nameColumn("Model answers folder", "Each assessment "
+                + "has its own. Choose it under Assessment, beside the "
+                + "tester and starter folders.");
+        String folder = getBackend().getSetting(
+                ConfigKeys.MODEL_ANSWERS_DIR).trim();
+        String shown = "None for the assessment in use, so the checks "
+                + "below are off.";
+        if (!folder.isEmpty()) {
+            shown = "In use: " + folder;
+        }
+        Label value = Parts.muted(shown);
+        value.setWrapText(true);
+        value.setMinWidth(0);
+        HBox.setHgrow(value, Priority.ALWAYS);
+        HBox row = new HBox(SettingField.COLUMN_GAP, names, value);
+        row.setAlignment(Pos.TOP_LEFT);
+        row.getStyleClass().add("setting-row");
+        building.addRow(row, null);
     }
 
     // Adds the row that lists each section with its score sheet.
@@ -1350,11 +1395,20 @@ public class SettingsScreen extends FlowScreen {
                 "Delete module", () -> deleteModule(module));
     }
 
+    // Says whether any section of a module is being graded now.
+    private boolean isModuleGrading(String module) {
+        for (GradingJob job : getState().getRunningJobs()) {
+            if (module.equalsIgnoreCase(job.getSection().getModuleCode())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Deletes a module with its own sections and folders, then offers
     // Undo.
     private void deleteModule(String module) {
-        boolean beingGraded = getState().isGrading()
-                && module.equalsIgnoreCase(getState().getModuleCode());
+        boolean beingGraded = isModuleGrading(module);
         if (beingGraded) {
             getWindow().notify("Wait until " + module + " has finished "
                     + "grading.");
@@ -1600,8 +1654,8 @@ public class SettingsScreen extends FlowScreen {
         row.getStyleClass().add("setting-row");
         building.addRow(row, null);
         building.setQuestionsText("assessment name questions marks tester "
-                + "starter score sheet class files data files unrenamed "
-                + "folder names");
+                + "starter model answers score sheet class files data files "
+                + "unrenamed folder names");
         showAssessment(getState().getSettingsAssessment());
     }
 

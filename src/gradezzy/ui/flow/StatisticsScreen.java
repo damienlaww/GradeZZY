@@ -3,11 +3,13 @@
  *
  * Purpose: The Statistics tab: the figures and charts of one graded
  * section, or the bell curves and figures of up to three sections side
- * by side. Module and Section pickers and a "One section | Compare
- * sections" switch sit on the header row. A Run picker appears when the
- * section has earlier runs. In Compare sections an Assessment picker
- * takes the place of Section and Run, and each section's latest run of
- * that assessment is compared, so two assessments never share a chart.
+ * by side. Module, Assessment and Section pickers and a "One section |
+ * Compare sections" switch sit on the header row. In One section the
+ * charts are of the section's runs of the assessment picked, and a Run
+ * picker appears when it has more than one. In Compare sections the
+ * Assessment picker stays and Section and Run hide: each section's latest
+ * run of that assessment is compared, so two assessments never share a
+ * chart.
  *
  * Where it fits: FlowWindow shows it when the Statistics tab is picked,
  * and openStatistics (from Export and Runs) points it at one section
@@ -161,6 +163,9 @@ public class StatisticsScreen extends FlowScreen {
     // True when the window is too narrow for one header row
     private boolean narrow = false;
 
+    // The id of the run to pick when the runs are next listed, or null
+    private String wantedRunId = null;
+
     /**
      * Creates the screen.
      *
@@ -190,6 +195,23 @@ public class StatisticsScreen extends FlowScreen {
         moduleCode = newModuleCode;
         sectionCode = newSectionCode;
         runIndex = 0;
+        // Show the assessment the section was graded with last
+        getState().setStatisticsAssessment(null);
+        oneButton.setSelected(true);
+    }
+
+    /**
+     * Points the screen at one run, even an earlier one: its section and
+     * assessment, with the run picked, in One section.
+     *
+     * @param run the run, which has a section and an assessment
+     */
+    public void selectRun(GradingRun run) {
+        moduleCode = run.getSection().getModuleCode();
+        sectionCode = run.getSection().getSectionCode();
+        runIndex = 0;
+        wantedRunId = run.getId();
+        getState().setStatisticsAssessment(run.getAssessment().getName());
         oneButton.setSelected(true);
     }
 
@@ -409,15 +431,20 @@ public class StatisticsScreen extends FlowScreen {
         filling = false;
     }
 
-    // Fills the Run picker with the run in use and the section's earlier
-    // runs. The picker is hidden when there is no earlier run.
-    private void fillRuns() {
+    // Fills the Run picker with the section's runs of an assessment: the
+    // run in use first when it is of that assessment, then the earlier
+    // ones, newest first. The picker is hidden when there is only one.
+    private void fillRuns(String assessmentName) {
         runChoices.clear();
         GradingRun current = runOf(sectionCode);
         if (current != null) {
             runChoices.add(current);
             addEarlierRuns(current);
         }
+        if (assessmentName != null) {
+            keepRunsOf(assessmentName);
+        }
+        pickWantedRun();
         if (runIndex >= runChoices.size()) {
             runIndex = 0;
         }
@@ -454,6 +481,33 @@ public class StatisticsScreen extends FlowScreen {
         }
     }
 
+    // Picks the run asked for by selectRun, once.
+    private void pickWantedRun() {
+        if (wantedRunId == null) {
+            return;
+        }
+        for (int index = 0; index < runChoices.size(); index++) {
+            if (runChoices.get(index).getId().equals(wantedRunId)) {
+                runIndex = index;
+            }
+        }
+        wantedRunId = null;
+    }
+
+    // Leaves only the runs graded with one assessment in the Run picker.
+    private void keepRunsOf(String assessmentName) {
+        List<GradingRun> kept = new ArrayList<>();
+        for (GradingRun run : runChoices) {
+            boolean fits = run.getAssessment() != null
+                    && run.getAssessment().getName().equals(assessmentName);
+            if (fits) {
+                kept.add(run);
+            }
+        }
+        runChoices.clear();
+        runChoices.addAll(kept);
+    }
+
     // Puts an earlier run after the run in use, newest first.
     private void insertByDate(GradingRun run) {
         int at = 1;
@@ -483,12 +537,18 @@ public class StatisticsScreen extends FlowScreen {
 
     // ------------------------------------------------------ one section
 
-    // Shows the figures and charts of the section and run picked.
+    // Shows the figures and charts of the section, assessment and run
+    // picked.
     private void showSection() {
         sectionField.setVisible(true);
         sectionField.setManaged(true);
-        setShown(assessmentField, false);
-        fillRuns();
+        List<String> sections = getBackend().getSectionCodes(moduleCode);
+        ModuleRuns moduleRuns = new ModuleRuns(getBackend(), moduleCode,
+                sections);
+        List<String> assessments = moduleRuns.getAssessmentNames();
+        preferSectionAssessment(assessments);
+        String assessmentName = fillAssessments(assessments);
+        fillRuns(assessmentName);
         GradingRun run = null;
         if (!runChoices.isEmpty()) {
             run = runChoices.get(runIndex);
@@ -499,9 +559,12 @@ public class StatisticsScreen extends FlowScreen {
         if (run != null && run.getAssessment() != null) {
             assessment = run.getAssessment();
         }
+        String shownName = assessment.getName();
+        if (run == null && assessmentName != null) {
+            shownName = assessmentName;
+        }
 
-        String text = moduleCode + DOT + sectionCode + DOT
-                + assessment.getName();
+        String text = moduleCode + DOT + sectionCode + DOT + shownName;
         if (run != null && run.getStartedAt() != null) {
             text += DOT + "graded " + when(run);
         } else if (run == null) {
@@ -510,13 +573,17 @@ public class StatisticsScreen extends FlowScreen {
         subtitle.setText(text);
 
         if (!isGraded(run)) {
-            body.getChildren().setAll(notGradedState());
+            body.getChildren().setAll(notGradedState(assessmentName));
             return;
         }
         MarkStats stats = MarkStats.of(run.getSubmissions(),
                 assessment.getMaxTotal(), passPercent());
+        // The backend's summary is of the run in use only
         StatisticsSummary summary = null;
-        if (runIndex == 0) {
+        GradingRun current = runOf(sectionCode);
+        boolean isCurrent = current != null
+                && current.getId().equals(run.getId());
+        if (isCurrent) {
             summary = getBackend().summarise(moduleCode, sectionCode);
         }
         sectionView.show(run, summary, stats, assessment);
@@ -528,8 +595,14 @@ public class StatisticsScreen extends FlowScreen {
         }
     }
 
-    // Returns the empty state of a section without marks.
-    private VBox notGradedState() {
+    // Returns the empty state of a section without marks for the
+    // assessment picked, or null for any assessment.
+    private VBox notGradedState(String assessmentName) {
+        if (assessmentName != null && isGraded(runOf(sectionCode))) {
+            return emptyState(sectionCode + " has no graded run of "
+                    + assessmentName, "Choose another assessment or "
+                    + "section above, or grade this one in Grading.");
+        }
         for (String code : getBackend().getSectionCodes(moduleCode)) {
             if (isGraded(runOf(code))) {
                 return emptyState(sectionCode + " has not been graded yet",
@@ -579,6 +652,22 @@ public class StatisticsScreen extends FlowScreen {
         compareView.show(sections, runs, stats, assessmentName,
                 sectionCode);
         body.getChildren().setAll(compareView.getView());
+    }
+
+    // Picks the assessment the section's run in use was graded with, when
+    // none is picked yet, so a section opens on its latest results.
+    private void preferSectionAssessment(List<String> names) {
+        if (names.contains(getState().getStatisticsAssessment())) {
+            return;
+        }
+        GradingRun current = runOf(sectionCode);
+        boolean hasAssessment = current != null
+                && current.getAssessment() != null
+                && names.contains(current.getAssessment().getName());
+        if (hasAssessment) {
+            getState().setStatisticsAssessment(
+                    current.getAssessment().getName());
+        }
     }
 
     // Fills the Assessment picker and returns the assessment picked: the
@@ -731,13 +820,15 @@ public class StatisticsScreen extends FlowScreen {
         refresh();
     }
 
-    // Compares the sections' runs of another assessment.
+    // Shows another assessment: its runs of the section, or each
+    // section's latest run of it in Compare sections.
     private void chooseAssessment() {
         boolean ignored = filling || assessmentBox.getValue() == null;
         if (ignored) {
             return;
         }
         getState().setStatisticsAssessment(assessmentBox.getValue());
+        runIndex = 0;
         refresh();
     }
 

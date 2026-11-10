@@ -47,6 +47,10 @@ public class GradingRun {
     // The tester folder chosen for the batch, or null if unknown
     private Path testersDirectory = null;
 
+    // The grading settings the batch started with, one key=value a line,
+    // or "" for a run graded before they were kept
+    private String gradingSettings = "";
+
     /**
      * Creates a new grading run.
      *
@@ -236,5 +240,33 @@ public class GradingRun {
      */
     public void setTestersDirectory(Path testersDirectory) {
         this.testersDirectory = testersDirectory;
+    }
+
+    /**
+     * Returns the grading settings the batch started with, such as the
+     * time limit and how similar code was compared, written by
+     * RunSettings.
+     *
+     * <p>Tier: COULD.
+     *
+     * @return one key=value a line, or "" when they were not kept
+     */
+    public String getGradingSettings() {
+        return gradingSettings;
+    }
+
+    /**
+     * Sets the grading settings the batch started with.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param gradingSettings one key=value a line, or null for none
+     */
+    public void setGradingSettings(String gradingSettings) {
+        if (gradingSettings == null) {
+            this.gradingSettings = "";
+        } else {
+            this.gradingSettings = gradingSettings;
+        }
     }
 }

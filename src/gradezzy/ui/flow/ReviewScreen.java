@@ -39,6 +39,7 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -82,8 +83,9 @@ public class ReviewScreen extends FlowScreen {
     // The width of a question column
     private static final double QUESTION_WIDTH = 52.0;
 
-    // Below this width the question columns hide while the panel is open
-    private static final double NARROW_WIDTH = 1100.0;
+    // Below this width the question columns hide while the panel is
+    // open, so the table keeps its status column beside the panel
+    private static final double NARROW_WIDTH = 1280.0;
 
     // The width of the tick column
     private static final double TICK_WIDTH = 40.0;
@@ -311,11 +313,14 @@ public class ReviewScreen extends FlowScreen {
 
     // The Students | Mistakes switch: the table, or the answer groups
     private final ToggleButton studentsButton = new ToggleButton("Students");
-    private final ToggleButton mistakesButton = new ToggleButton("Mistakes");
+    private final ToggleButton mistakesButton = new ToggleButton("Errors");
     private final HBox modeBar = new HBox(studentsButton, mistakesButton);
 
-    // The filters, search and the switch above the table
-    private final HBox tools = Parts.row(Parts.GAP);
+    // The filters, search and the switch above the table. The row wraps,
+    // so beside the student panel the search goes under the filters
+    // instead of being cut off.
+    private final FlowPane tools = new FlowPane(Parts.GAP,
+            Parts.GAP_SMALL);
 
     // The filter buttons side by side
     private HBox filterBar = null;
@@ -490,7 +495,7 @@ public class ReviewScreen extends FlowScreen {
     // another in the left part.
     private void createMain() {
         filterBar = createFilterBar();
-        tools.getChildren().setAll(modeBar, filterBar, Parts.grow(), search);
+        tools.getChildren().setAll(modeBar, filterBar, search);
         tools.setAlignment(Pos.CENTER_LEFT);
         VBox.setMargin(tools, new Insets(Parts.GAP_TINY, 0, 0, 0));
 
@@ -675,7 +680,7 @@ public class ReviewScreen extends FlowScreen {
         applyFilter();
     }
 
-    // Builds the Students | Mistakes switch.
+    // Builds the Students | Errors switch.
     private void createModeBar() {
         ToggleGroup group = new ToggleGroup();
         studentsButton.setToggleGroup(group);
@@ -684,15 +689,16 @@ public class ReviewScreen extends FlowScreen {
         studentsButton.getStyleClass().add("left-pill");
         mistakesButton.getStyleClass().add("right-pill");
         Parts.tip(studentsButton, "Every student, one row each.");
-        Parts.tip(mistakesButton, "The students who lost marks the same "
-                + "way on a question, so you decide each mistake once.");
+        Parts.tip(mistakesButton, "Each error on each question with the "
+                + "students who made it, and the clusters of similar code, "
+                + "so you decide each error once.");
         modeBar.getStyleClass().add("segmented");
         modeBar.setMinWidth(HBox.USE_PREF_SIZE);
         group.selectedToggleProperty().addListener((observable, before,
                 after) -> modeClicked(before, after));
     }
 
-    // Follows a click on Students or Mistakes; clicking the one that is
+    // Follows a click on Students or Errors; clicking the one that is
     // on keeps it on.
     private void modeClicked(Toggle before, Toggle after) {
         if (after == null) {
@@ -724,7 +730,7 @@ public class ReviewScreen extends FlowScreen {
     // the filters, at a place of the page.
     private void showGroupsAt(int place) {
         closePanel();
-        tools.getChildren().setAll(modeBar, mistakesSummary, Parts.grow());
+        tools.getChildren().setAll(modeBar, mistakesSummary);
         main.getChildren().set(place, mistakes.getView());
         VBox.setVgrow(mistakes.getView(), Priority.ALWAYS);
         refreshMistakes();
@@ -732,7 +738,7 @@ public class ReviewScreen extends FlowScreen {
 
     // Puts the table and the filters back, at a place of the page.
     private void showTableAt(int place) {
-        tools.getChildren().setAll(modeBar, filterBar, Parts.grow(), search);
+        tools.getChildren().setAll(modeBar, filterBar, search);
         main.getChildren().set(place, tableFrame);
     }
 
@@ -812,7 +818,8 @@ public class ReviewScreen extends FlowScreen {
         student.setPrefWidth(STUDENT_WIDTH);
         student.setMaxWidth(STUDENT_MAX_WIDTH);
         student.setCellValueFactory(cell -> studentOf(cell));
-        student.setCellFactory(column -> new ReviewStudentCell());
+        student.setCellFactory(column -> new ReviewStudentCell(
+                getBackend()));
         student.setComparator(new StudentNameComparator());
 
         TableColumn<Submission, Double> total = totalColumn;
@@ -1441,7 +1448,7 @@ public class ReviewScreen extends FlowScreen {
         List<Anomaly> flags = openFlags();
         if (!flags.isEmpty()) {
             actions.addSecondary(Parts.secondary("Mark all "
-                    + Parts.plural(flags.size(), "flag") + " as checked",
+                    + Parts.plural(countFlags(flags), "flag") + " as checked",
                     () -> askCheckAll(flags)));
         }
         List<Submission> regradable = tickedToRegrade();
@@ -1596,6 +1603,23 @@ public class ReviewScreen extends FlowScreen {
                 () -> approveAll(open));
     }
 
+    // Counts flags as the student panel shows them: each student's
+    // Similar code flags, with however many students, are one.
+    private int countFlags(List<Anomaly> flags) {
+        int count = 0;
+        List<String> similarStudents = new ArrayList<>();
+        for (Anomaly anomaly : flags) {
+            boolean similar = anomaly.getType() == AnomalyType.SIMILAR_CODE;
+            if (!similar) {
+                count++;
+            } else if (!similarStudents.contains(anomaly.getUsername())) {
+                similarStudents.add(anomaly.getUsername());
+                count++;
+            }
+        }
+        return count;
+    }
+
     // Returns the open flags that are not fixes, for the ticked students
     // or all, that may be checked together: compile errors, timeouts,
     // unknown students and the like are checked one at a time.
@@ -1638,12 +1662,16 @@ public class ReviewScreen extends FlowScreen {
         content.getChildren().add(about);
         List<String> entries = new ArrayList<>();
         for (Anomaly anomaly : flags) {
-            entries.add(anomaly.getUsername() + ITEM_SEPARATOR
-                    + Problems.title(anomaly.getType()));
+            // A student's Similar code flags are listed once
+            String entry = anomaly.getUsername() + ITEM_SEPARATOR
+                    + Problems.title(anomaly.getType());
+            if (!entries.contains(entry)) {
+                entries.add(entry);
+            }
         }
         addLines(content, entries, MAX_LISTED_FIXES);
         getWindow().confirm("Mark all "
-                + Parts.plural(flags.size(), "flag") + " as checked?",
+                + Parts.plural(countFlags(flags), "flag") + " as checked?",
                 content, "Mark all as checked", () -> checkAll(flags));
     }
 
@@ -1659,7 +1687,7 @@ public class ReviewScreen extends FlowScreen {
         }
         panel.refresh();
         refreshStatuses();
-        getWindow().notify("Marked " + Parts.plural(done.size(), "item")
+        getWindow().notify("Marked " + Parts.plural(countFlags(done), "item")
                 + " as checked.", "Undo", () -> uncheckAll(done));
     }
 

@@ -172,6 +172,7 @@ public class ExportService {
         part.setScoreSheetFile(gradingRun.getScoreSheetFile());
         part.setStarterDirectory(gradingRun.getStarterDirectory());
         part.setTestersDirectory(gradingRun.getTestersDirectory());
+        part.setGradingSettings(gradingRun.getGradingSettings());
         for (Submission submission : gradingRun.getSubmissions()) {
             if (scope.contains(submission)) {
                 part.addSubmission(submission);

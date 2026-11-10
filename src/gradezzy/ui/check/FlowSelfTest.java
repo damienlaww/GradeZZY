@@ -33,6 +33,7 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.VBox;
 
 import gradezzy.config.ConfigKeys;
 import gradezzy.model.Anomaly;
@@ -44,6 +45,7 @@ import gradezzy.model.QuestionResult;
 import gradezzy.model.SavedAssessment;
 import gradezzy.model.TestCaseResult;
 import gradezzy.model.ScoreAdjustment;
+import gradezzy.model.Section;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
@@ -70,6 +72,7 @@ import gradezzy.ui.flow.Parts;
 import gradezzy.ui.flow.StatisticsScreen;
 import gradezzy.ui.flow.Step;
 import gradezzy.ui.flow.ReviewScreen;
+import gradezzy.ui.flow.SetUpScreen;
 import gradezzy.ui.flow.StudentPanel;
 import gradezzy.ui.flow.Students;
 
@@ -126,6 +129,17 @@ public class FlowSelfTest {
 
     // A section without a run, for flow 6
     private static final String EMPTY_SECTION = "G2";
+
+    // How many flows the self-test runs
+    private static final int FLOW_COUNT = 11;
+
+    // The second section graded at the same time as the sample one
+    private static final String PARALLEL_SECTION = "G3";
+
+    // The error of the demo's Q3 test 3, failed by learner.charlie and
+    // learner.echo, and the end of a Did not compile error's key
+    private static final String Q3_TEST_3 = "Q3|F:3";
+    private static final String COMPILE_PATTERN = "|COMPILE";
 
     // The students ticked for export in flow 6
     private static final int TICKED_COUNT = 2;
@@ -220,12 +234,14 @@ public class FlowSelfTest {
                 + "end it with Done, Esc and Skip tour", () -> flowTour());
         failed += runFlow(10, "Answer groups: name, change the mark, undo, "
                 + "check, compare", () -> flowAnswerGroups());
+        failed += runFlow(FLOW_COUNT, "Grade two sections at once, cancel "
+                + "one, finish the other", () -> flowParallel());
 
         if (failed == 0) {
-            System.out.println("All 10 flows passed.");
+            System.out.println("All " + FLOW_COUNT + " flows passed.");
             return 0;
         }
-        System.out.println(failed + " of 10 flows failed.");
+        System.out.println(failed + " of " + FLOW_COUNT + " flows failed.");
         return 1;
     }
 
@@ -1382,10 +1398,10 @@ public class FlowSelfTest {
     private void checkCommonMistakes() {
         check(SceneFinder.shows(root(), "Common mistakes"),
                 "Statistics shows Common mistakes");
-        Node row = rowOf("Failed tests 3 and 4", "plain-row");
+        Node row = rowOf("Failed test 3", "plain-row");
         check(row != null && SceneFinder.label(row, "Q3") != null
-                && SceneFinder.label(row, "2") != null,
-                "Common mistakes lists Q3, failed tests 3 and 4, 2 students");
+                && SceneFinder.label(row, "3") != null,
+                "Common mistakes lists Q3, failed test 3, 3 students");
         StatisticsScreen statistics =
                 (StatisticsScreen) window.getPageScreen(Page.STATISTICS);
         statistics.setCompare(true);
@@ -1412,10 +1428,13 @@ public class FlowSelfTest {
         settle();
         Submission charlie = submissionOf(run, "learner.charlie");
         Submission echo = submissionOf(run, "learner.echo");
-        Node row = rowOf("Failed tests 3 and 4", "plain-row");
+        // learner.delta failed every Q3 test, so it is in the test 3
+        // error too
+        Submission delta = submissionOf(run, "learner.delta");
+        Node row = errorRow(Q3_TEST_3);
         check(row != null && SceneFinder.shows(row, Students.name(charlie))
                 && SceneFinder.shows(row, Students.name(echo)),
-                "Mistakes lists the Q3 group of learner.charlie and "
+                "Errors lists the Q3 test 3 error of learner.charlie and "
                 + "learner.echo");
         if (row == null) {
             return;
@@ -1425,14 +1444,14 @@ public class FlowSelfTest {
         ((TextField) sheet().lookup("#group-name")).setText(
                 "misses the last case");
         press(SceneFinder.button(sheet(), "Save name"), "Save name");
-        row = rowOf("Failed tests 3 and 4", "plain-row");
+        row = errorRow(Q3_TEST_3);
         check(row != null && SceneFinder.shows(row, "misses the last case"),
                 "the group shows its name");
 
         changeGroupMark("3");
         check(q3(charlie) == 3.0 && q3(echo) == 3.0, "both Q3 marks are 3 ("
                 + q3(charlie) + ", " + q3(echo) + ")");
-        check(noticeText().equals("Changed the mark of 2 students."),
+        check(noticeText().equals("Changed the mark of 3 students."),
                 "notice: " + noticeText());
         press(noticeAction(), "Undo in the notice");
         check(q3(charlie) == 2.0 && q3(echo) == 2.0,
@@ -1442,7 +1461,7 @@ public class FlowSelfTest {
         QuestionResult echoQ3 = resultOf(echo, "Q3");
         List<TestCaseResult> echoTests = new ArrayList<>(
                 echoQ3.getTestCaseResults());
-        press(SceneFinder.button(rowOf("Failed tests 3 and 4", "plain-row"),
+        press(SceneFinder.button(errorRow(Q3_TEST_3),
                 "Change mark"), "Change mark");
         fillMarkSheet("3");
         echoQ3.getTestCaseResults().clear();
@@ -1451,8 +1470,8 @@ public class FlowSelfTest {
                     "Passed"));
         }
         echoQ3.setScore(4.0);
-        press(SceneFinder.button(sheet(), "Change 2 marks"),
-                "Change 2 marks");
+        press(SceneFinder.button(sheet(), "Change 3 marks"),
+                "Change 3 marks");
         check(q3(charlie) == 3.0 && q3(echo) == 4.0, "only the student "
                 + "still in the group changed (" + q3(charlie) + ", "
                 + q3(echo) + ")");
@@ -1472,7 +1491,7 @@ public class FlowSelfTest {
         press(noticeAction(), "Undo in the notice");
         check(q3(charlie) == 1.0 && q3(echo) == 2.0, "Undo left the later "
                 + "change (" + q3(charlie) + ", " + q3(echo) + ")");
-        check(noticeText().equals("Put back 1 mark. 1 was changed again "
+        check(noticeText().equals("Put back 2 marks. 1 was changed again "
                 + "since and was left."), "notice: " + noticeText());
         undoAllChanges(run, charlie);
         check(q3(charlie) == 2.0, "charlie's Q3 is back to 2");
@@ -1485,16 +1504,16 @@ public class FlowSelfTest {
         QuestionResult alphaQ3 = resultOf(alpha, "Q3");
         List<TestCaseResult> alphaTests = new ArrayList<>(
                 alphaQ3.getTestCaseResults());
-        press(SceneFinder.button(rowOf("Failed tests 3 and 4", "plain-row"),
+        press(SceneFinder.button(errorRow(Q3_TEST_3),
                 "Mark as checked"), "Mark as checked");
         alphaQ3.getTestCaseResults().clear();
         for (int number = 1; number <= 4; number++) {
             alphaQ3.addTestCaseResult(new TestCaseResult(number, number <= 2,
                     "case " + number));
         }
-        press(SceneFinder.button(sheet(), "Mark 2 as checked"),
-                "Mark 2 as checked");
-        row = rowOf("Failed tests 3 and 4", "plain-row");
+        press(SceneFinder.button(sheet(), "Mark 3 as checked"),
+                "Mark 3 as checked");
+        row = errorRow(Q3_TEST_3);
         check(row != null && SceneFinder.texts(row, "pill").contains("1 new"),
                 "a student who joined before Confirm shows as 1 new (pills: "
                 + (row == null ? "none"
@@ -1505,7 +1524,7 @@ public class FlowSelfTest {
         }
         window.refreshScreen();
         settle();
-        row = rowOf("Failed tests 3 and 4", "plain-row");
+        row = errorRow(Q3_TEST_3);
         check(row != null && SceneFinder.texts(row, "pill").contains(
                 "Checked"), "the group shows Checked");
         Anomaly compileError = null;
@@ -1514,14 +1533,7 @@ public class FlowSelfTest {
                 compileError = anomaly;
             }
         }
-        Node compileRow = null;
-        for (Label label : SceneFinder.ofType(root(), Label.class)) {
-            Node candidate = SceneFinder.ancestor(label, "plain-row");
-            if ("Did not compile".equals(label.getText()) && candidate != null
-                    && SceneFinder.shows(candidate, Students.name(charlie))) {
-                compileRow = candidate;
-            }
-        }
+        Node compileRow = compileRowOf(charlie);
         check(compileRow != null && compileError != null,
                 "a Did not compile group lists learner.charlie");
         if (compileRow != null && compileError != null) {
@@ -1549,28 +1561,135 @@ public class FlowSelfTest {
                     + "check");
         }
 
-        // Compare code steps through the group
-        press(SceneFinder.button(rowOf("Failed tests 3 and 4", "plain-row"),
-                "Compare code"), "Compare code");
-        check(sheet() != null && SceneFinder.shows(sheet(), "Student 1 of 2"),
-                "the code sheet says Student 1 of 2");
+        // Open code steps through the error's students
+        press(SceneFinder.button(errorRow(Q3_TEST_3),
+                "Open code"), "Open code");
+        check(sheet() != null && SceneFinder.shows(sheet(), "Student 1 of 3"),
+                "the code sheet says Student 1 of 3");
         press(SceneFinder.button(sheet(), "Next"), "Next");
-        check(sheet() != null && SceneFinder.shows(sheet(), "Student 2 of 2")
-                && SceneFinder.shows(sheet(), Students.name(echo)),
-                "Next shows learner.echo");
+        check(sheet() != null && SceneFinder.shows(sheet(), "Student 2 of 3")
+                && SceneFinder.shows(sheet(), Students.name(delta)),
+                "Next shows learner.delta");
         window.closeSheet();
         review.showStudents();
         settle();
     }
 
-    // Returns the Did not compile group row that lists a student.
+    // ----------------------------------------------------------- flow 11
+
+    // Two sections at once: start the sample section, choose another
+    // and start it too while the first grades, see both on Home, cancel
+    // only the second on its Grade step, then finish both.
+    private void flowParallel() {
+        Section first = new Section(DemoData.MODULE_CODE,
+                DemoData.SAMPLE_SECTION);
+        Section second = new Section(DemoData.MODULE_CODE,
+                PARALLEL_SECTION);
+        startSectionBatch(first);
+        check(window.getState().isGrading(first),
+                "the first section is grading");
+        startSectionBatch(second);
+        check(window.getState().isGrading(first)
+                && window.getState().isGrading(second),
+                "both sections grade at once");
+        check(window.getState().getRunningJobs().size() == 2,
+                "two batches are running");
+
+        window.showPage(Page.HOME);
+        settle();
+        check(SceneFinder.shows(root(), first.getLabel() + " and "
+                + second.getLabel() + " are being graded now"),
+                "Home says both sections are being graded");
+
+        window.watchGrading(second);
+        settle();
+        check(SceneFinder.shows(root(), second.getLabel()),
+                "Grade shows the second section");
+        press(SceneFinder.button(window.getActionBar(), "Cancel"), "Cancel");
+        Node cancelSheet = sheet();
+        check(cancelSheet != null && SceneFinder.shows(cancelSheet,
+                "Other sections keep grading"), "the Cancel sheet says "
+                + "other sections keep grading");
+        if (cancelSheet != null) {
+            press(SceneFinder.button(cancelSheet, "Cancel grading"),
+                    "Cancel grading");
+        }
+        backend.finishGrading();
+        settle();
+
+        check(!window.getState().isAnyGrading(), "nothing grades any more");
+        GradingRun firstRun = backend.getRun(first);
+        GradingRun secondRun = backend.getRun(second);
+        check(firstRun != null && count(firstRun, SubmissionStatus.GRADED)
+                == firstRun.getSubmissions().size(),
+                "the first section was graded in full");
+        check(secondRun != null
+                && count(secondRun, SubmissionStatus.CANCELLED) > 0,
+                "only the second section was cancelled");
+    }
+
+    // Chooses a section, adds the sample zip files on Set up, leaves out
+    // the one that cannot be used and starts grading it.
+    private void startSectionBatch(Section section) {
+        window.chooseSection(section.getModuleCode(),
+                section.getSectionCode());
+        window.showPage(Page.MARKING);
+        window.show(Step.SET_UP);
+        settle();
+        SetUpScreen setUp = (SetUpScreen) window.getScreen(Step.SET_UP);
+        setUp.addFiles(backend.getSampleFiles(InputKind.SUBMISSION));
+        settle();
+        ImportBatch batch = window.getState().getBatch();
+        for (ImportItem item : batch.getItems(InputKind.SUBMISSION)) {
+            if (batch.getEffectiveState(item) == ImportState.INVALID) {
+                batch.remove(item);
+            }
+        }
+        window.startGrading();
+        settle();
+    }
+
+    // Returns the Did not compile error row that lists a student, opening
+    // each such row to see its students.
     private Node compileRowOf(Submission submission) {
-        for (Label label : SceneFinder.ofType(root(), Label.class)) {
-            Node candidate = SceneFinder.ancestor(label, "plain-row");
-            if ("Did not compile".equals(label.getText()) && candidate != null
-                    && SceneFinder.shows(candidate,
+        List<String> keys = new ArrayList<>();
+        for (VBox box : SceneFinder.ofType(root(), VBox.class)) {
+            boolean compileRow = box.getStyleClass().contains("error-row")
+                    && String.valueOf(box.getUserData()).endsWith(
+                    COMPILE_PATTERN);
+            if (compileRow) {
+                keys.add((String) box.getUserData());
+            }
+        }
+        for (String key : keys) {
+            Node row = errorRow(key);
+            if (row != null && SceneFinder.shows(row,
                     Students.name(submission))) {
-                return candidate;
+                return row;
+            }
+        }
+        return null;
+    }
+
+    // Returns the row of an error on the Errors view, opened so its
+    // students show, or null when the view has no such error.
+    private Node errorRow(String key) {
+        Node row = findErrorRow(key);
+        if (row != null && !row.getStyleClass().contains("open")) {
+            SceneFinder.click(row.lookup(".error-header"));
+            settle();
+            row = findErrorRow(key);
+        }
+        return row;
+    }
+
+    // Returns the row of an error by its key, or null.
+    private Node findErrorRow(String key) {
+        for (VBox box : SceneFinder.ofType(root(), VBox.class)) {
+            boolean match = box.getStyleClass().contains("error-row")
+                    && key.equals(box.getUserData());
+            if (match) {
+                return box;
             }
         }
         return null;
@@ -1578,11 +1697,11 @@ public class FlowSelfTest {
 
     // Opens the Q3 group's mark sheet and changes both marks.
     private void changeGroupMark(String mark) {
-        press(SceneFinder.button(rowOf("Failed tests 3 and 4", "plain-row"),
+        press(SceneFinder.button(errorRow(Q3_TEST_3),
                 "Change mark"), "Change mark");
         fillMarkSheet(mark);
-        press(SceneFinder.button(sheet(), "Change 2 marks"),
-                "Change 2 marks");
+        press(SceneFinder.button(sheet(), "Change 3 marks"),
+                "Change 3 marks");
     }
 
     // Types a mark and a reason into the open mark sheet.

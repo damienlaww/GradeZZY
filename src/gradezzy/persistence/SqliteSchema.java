@@ -28,6 +28,7 @@ final class SqliteSchema {
     static final String SCORE_SHEET_COLUMN = "score_sheet_file";
     static final String TESTERS_DIR_COLUMN = "testers_dir";
     static final String STARTER_DIR_COLUMN = "starter_dir";
+    static final String GRADING_SETTINGS_COLUMN = "grading_settings";
     static final String DECISION_COLUMN = "decision";
     static final String REJECTED_FIXES_COLUMN = "rejected_fixes";
 
@@ -44,7 +45,8 @@ final class SqliteSchema {
                 + "placeholder_folders TEXT, "
                 + "score_sheet_file TEXT, "
                 + "testers_dir TEXT, "
-                + "starter_dir TEXT)",
+                + "starter_dir TEXT, "
+                + "grading_settings TEXT)",
         "CREATE TABLE IF NOT EXISTS run_questions ("
                 + "run_id TEXT NOT NULL, "
                 + "position INTEGER NOT NULL, "
@@ -151,6 +153,10 @@ final class SqliteSchema {
     private static final String ADD_STARTER_DIR_COLUMN = "ALTER TABLE runs "
             + "ADD COLUMN starter_dir TEXT";
 
+    // The grading settings a run started with
+    private static final String ADD_GRADING_SETTINGS_COLUMN = "ALTER TABLE "
+            + "runs ADD COLUMN grading_settings TEXT";
+
     // The review decision of an anomaly
     private static final String ADD_DECISION_COLUMN = "ALTER TABLE "
             + "anomalies ADD COLUMN decision TEXT";
@@ -197,6 +203,8 @@ final class SqliteSchema {
                     TESTERS_DIR_COLUMN, ADD_TESTERS_DIR_COLUMN);
             addColumnIfMissing(statement, LIST_RUN_COLUMNS,
                     STARTER_DIR_COLUMN, ADD_STARTER_DIR_COLUMN);
+            addColumnIfMissing(statement, LIST_RUN_COLUMNS,
+                    GRADING_SETTINGS_COLUMN, ADD_GRADING_SETTINGS_COLUMN);
             addColumnIfMissing(statement, LIST_ANOMALY_COLUMNS,
                     DECISION_COLUMN, ADD_DECISION_COLUMN);
             addColumnIfMissing(statement, LIST_SUBMISSION_COLUMNS,

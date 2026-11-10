@@ -2,9 +2,11 @@
  * File: AnswerGrouper.java
  *
  * Purpose: Groups the students of a run who lost marks the same way on
- * a question: the same tests failed, or the same "did not compile", "no
- * answer", "ran too long" or "crashed". Inside a group it notes which
- * students wrote code of the same shape (the same code but for names).
+ * a question: one group for each failed test, so a student who failed
+ * tests 1 and 3 is in the groups of test 1 and of test 3, or the same
+ * "did not compile", "no answer", "ran too long" or "crashed". Inside a
+ * group it notes which students wrote code of the same shape (the same
+ * code but for names).
  *
  * Where it fits: AnswerGroupService lists these groups with the
  * marker's names and checks. The groups are worked out from the results
@@ -49,6 +51,9 @@ public final class AnswerGrouper {
 
     /** Starts the pattern of a tester the student's code crashed. */
     public static final String CRASH_PREFIX = "X:";
+
+    /** The start of the pattern of one failed test, such as F:3. */
+    public static final String FAILED_TEST_PREFIX = "F:";
 
     // One passed test in a pattern
     private static final char PASSED = 'P';
@@ -172,6 +177,10 @@ public final class AnswerGrouper {
      *         before test 1"
      */
     public static String titleOf(String pattern) {
+        if (pattern.startsWith(FAILED_TEST_PREFIX)) {
+            return FAILED_ONE
+                    + pattern.substring(FAILED_TEST_PREFIX.length());
+        }
         if (MISSING.equals(pattern)) {
             return "No answer handed in";
         }
@@ -234,7 +243,8 @@ public final class AnswerGrouper {
         return noFile || noFolder;
     }
 
-    // Groups the answers of one question by pattern, in the run's order.
+    // Groups the answers of one question, in the run's order: one group
+    // for each failed test, and one for each other way of losing marks.
     // The patterns are kept in a list beside the map so the groups come
     // out in the order they were first seen.
     private static List<AnswerGroup> groupQuestion(GradingRun run,
@@ -243,17 +253,16 @@ public final class AnswerGrouper {
         Map<String, AnswerGroup> byPattern = new HashMap<>();
         for (Submission submission : run.getSubmissions()) {
             String pattern = gradedPattern(submission, question);
-            if (pattern == null) {
-                continue;
+            for (String groupPattern : splitPattern(pattern)) {
+                AnswerGroup group = byPattern.get(groupPattern);
+                if (group == null) {
+                    group = new AnswerGroup(question.getId(), groupPattern,
+                            titleOf(groupPattern));
+                    patterns.add(groupPattern);
+                    byPattern.put(groupPattern, group);
+                }
+                group.addUsername(submission.getUsername());
             }
-            AnswerGroup group = byPattern.get(pattern);
-            if (group == null) {
-                group = new AnswerGroup(question.getId(), pattern,
-                        titleOf(pattern));
-                patterns.add(pattern);
-                byPattern.put(pattern, group);
-            }
-            group.addUsername(submission.getUsername());
         }
 
         List<AnswerGroup> groups = new ArrayList<>();
@@ -261,6 +270,33 @@ public final class AnswerGrouper {
             groups.add(byPattern.get(pattern));
         }
         return groups;
+    }
+
+    // Returns the groups an answer's pattern puts it in: one F:<test> for
+    // each failed test of a pattern of tests, such as F:3 and F:5 for
+    // PPFPF; the pattern itself for any other way of losing marks; none
+    // for an answer that is not grouped.
+    private static List<String> splitPattern(String pattern) {
+        List<String> groupPatterns = new ArrayList<>();
+        if (pattern == null) {
+            return groupPatterns;
+        }
+        if (!isTestPattern(pattern)) {
+            groupPatterns.add(pattern);
+            return groupPatterns;
+        }
+        for (String number : failedNumbers(pattern)) {
+            groupPatterns.add(FAILED_TEST_PREFIX + number);
+        }
+        return groupPatterns;
+    }
+
+    // Says whether a pattern is only the P and F of each test.
+    private static boolean isTestPattern(String pattern) {
+        boolean special = MISSING.equals(pattern) || COMPILE.equals(pattern)
+                || pattern.startsWith(TIMEOUT_PREFIX)
+                || pattern.startsWith(CRASH_PREFIX);
+        return !special;
     }
 
     // Returns the pattern of a graded student's answer to a question, or

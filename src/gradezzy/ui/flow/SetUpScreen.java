@@ -52,6 +52,7 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.SavedAssessment;
 import gradezzy.model.Submission;
+import gradezzy.modelanswer.QuestionStrength;
 import gradezzy.service.ChosenSubmissionsStore;
 import gradezzy.service.ClassFileMatch;
 import gradezzy.ui.DragDropHandler;
@@ -141,6 +142,14 @@ public class SetUpScreen extends FlowScreen {
     private static final String DEFAULT_CHOSEN_FILE =
             "workspace/chosen-submissions.properties";
 
+    // The file beside it that keeps the score sheet, tester and starter
+    // folder chosen for each module, section and assessment
+    private static final String CLASS_FILES_NAME =
+            "chosen-class-files.properties";
+    private static final String CLASS_FILES_COMMENT = "Score sheet, tester "
+            + "and starter folder chosen on Set up, by "
+            + "module/section/assessment|kind. Written by GradeZZY.";
+
     // The most submissions listed on the page; Show all opens the rest
     private static final int MAX_FILE_ROWS = 5;
 
@@ -196,11 +205,19 @@ public class SetUpScreen extends FlowScreen {
     private static final String INSPECT_THREAD = "gradezzy-inspect";
     private static final String REOPEN_THREAD = "gradezzy-reopen";
     private static final String TESTERS_THREAD = "gradezzy-testers";
+    private static final String STRENGTH_THREAD = "gradezzy-strength";
     private static final String MATCH_THREAD = "gradezzy-match";
 
     // Keeps the files chosen for each section between uses, or null
     // until first needed
     private ChosenSubmissionsStore chosenStore = null;
+
+    // Keeps the class files chosen for each module, section and
+    // assessment between uses, or null until first needed, and what it
+    // holds, by key such as CS102/G1/Lab Test 2|ROSTER
+    private ChosenSubmissionsStore classFileStore = null;
+    private final Map<String, List<Path>> chosenClassFiles =
+            new HashMap<>();
 
     // The sheet that lists every chosen submission, made when first
     // opened
@@ -242,6 +259,10 @@ public class SetUpScreen extends FlowScreen {
 
     // The students found in more than one chosen file or folder
     private final Label duplicateNote = Parts.muted("");
+
+    // Warns that some chosen students are being graded in another
+    // section now, so this batch cannot start yet
+    private final Label overlapNote = new Label();
 
     // The score sheet, tester and starter rows
     private final VBox classFiles = new VBox();
@@ -285,6 +306,21 @@ public class SetUpScreen extends FlowScreen {
 
     // The problems found in that tester folder
     private final List<String> testerProblems = new ArrayList<>();
+
+    // The tester strength check still running, or null. Only one runs at
+    // a time, as every check uses the same work folder.
+    private TesterStrengthCheck strengthCheck = null;
+
+    // The tester, starter and model answers folders the strength results
+    // below are for, or null when none have been found yet
+    private String strengthFolders = null;
+
+    // The result of each question from the last tester strength check
+    private final List<QuestionStrength> strengthResults =
+            new ArrayList<>();
+
+    // Where that check saved its report, or why it could not run
+    private String strengthReport = "";
 
     // The check of the class files against the uploads still running,
     // or null
@@ -359,7 +395,8 @@ public class SetUpScreen extends FlowScreen {
      * Notes that another assessment is in use, so its tester and starter
      * folders replace the ones chosen for the last one when this step is
      * next shown. Typed test cases are for the last one's questions, so
-     * they are dropped.
+     * they are dropped. FlowState has already swapped the zip files for
+     * the ones chosen for this assessment.
      */
     public void assessmentChanged() {
         assessmentChanged = true;
@@ -449,8 +486,13 @@ public class SetUpScreen extends FlowScreen {
         duplicateNote.setWrapText(true);
         HBox top = Parts.row(Parts.GAP, new Node[] {
                 Parts.title("Submissions"), Parts.grow(), fileSummary});
+        overlapNote.getStyleClass().addAll("small-text", "match-suggestion",
+                "overlap-warning");
+        overlapNote.setWrapText(true);
+        overlapNote.setMaxWidth(Double.MAX_VALUE);
+        showOverlap("");
         VBox card = Parts.card(null, new Node[] {top, dropArea, fileList,
-            duplicateNote});
+            duplicateNote, overlapNote});
         return card;
     }
 
@@ -586,10 +628,10 @@ public class SetUpScreen extends FlowScreen {
         if (assessment != null) {
             assessmentBox.setValue(assessment.getName());
         }
-        assessmentBox.setDisable(getState().isGrading());
-        // The batch being graded keeps its module and section
-        moduleBox.setDisable(getState().isGrading());
-        sectionBox.setDisable(getState().isGrading());
+        // Grading reads the assessment from the settings, so it stays
+        // while any section grades; another section can be chosen and
+        // graded at the same time
+        assessmentBox.setDisable(getState().isAnyGrading());
     }
 
     // Switches the assessment in use.
@@ -709,10 +751,10 @@ public class SetUpScreen extends FlowScreen {
         }
     }
 
-    // Checks again the files saved for this section when GradeZZY was
-    // last closed, and lists the ones still there. They are added to the
-    // section they were chosen for, even if another is open by the time
-    // the check ends.
+    // Checks again the files saved for this section and assessment when
+    // GradeZZY was last closed, and lists the ones still there. They are
+    // added to the section and assessment they were chosen for, even if
+    // another is open by the time the check ends.
     private void bringBackSavedFiles() {
         if (chosenStore() == null || getState().isGrading()) {
             return;
@@ -732,7 +774,7 @@ public class SetUpScreen extends FlowScreen {
             }
         }
         // A section graded before its files were kept gets the files of
-        // its last run, once, when it is first opened
+        // its last run of this assessment, once, when it is first opened
         boolean empty = getState().getBatch().getItems(
                 InputKind.SUBMISSION).isEmpty();
         boolean useLastRun = paths.isEmpty() && firstVisit && !kept
@@ -744,7 +786,8 @@ public class SetUpScreen extends FlowScreen {
             return;
         }
 
-        String label = sectionLabel();
+        String label = sectionLabel() + ", "
+                + getState().getAssessmentName();
         FileInspection inspection = new FileInspection(getBackend(), paths);
         inspection.setOnSucceeded(event -> savedFilesChecked(inspection,
                 key, label));
@@ -757,15 +800,16 @@ public class SetUpScreen extends FlowScreen {
     }
 
     // Returns the uploads the section's last run graded that are still
-    // there. Copies GradeZZY unpacked from a zip of student zips are
-    // left out. When the uploads all sit in one folder that was chosen
-    // as a whole, which is so when some came from a zip of student zips
-    // in it or it holds no other zip files, that folder is returned as
-    // the one upload.
+    // there, when that run graded the assessment in use: another lab
+    // test's zip files do not belong to this one. Copies GradeZZY
+    // unpacked from a zip of student zips are left out. When the uploads
+    // all sit in one folder that was chosen as a whole, which is so when
+    // some came from a zip of student zips in it or it holds no other zip
+    // files, that folder is returned as the one upload.
     private List<Path> findLastRunUploads() {
         List<Path> uploads = new ArrayList<>();
         GradingRun run = getBackend().getRun(getState().getSection());
-        if (run == null) {
+        if (run == null || !gradedAssessmentInUse(run)) {
             return uploads;
         }
 
@@ -794,6 +838,14 @@ public class SetUpScreen extends FlowScreen {
         }
 
         return uploads;
+    }
+
+    // Says whether a run graded the assessment in use.
+    private boolean gradedAssessmentInUse(GradingRun run) {
+        Assessment graded = run.getAssessment();
+        return graded != null
+                && graded.getName().equalsIgnoreCase(
+                        getState().getAssessmentName());
     }
 
     // Says whether a path is inside a folder, such as a copy GradeZZY
@@ -946,11 +998,26 @@ public class SetUpScreen extends FlowScreen {
     // it changed. Typed test cases are for the last one's questions.
     private void refillAssessmentFolders() {
         ImportBatch batch = getState().getBatch();
-        batch.clear(InputKind.TESTERS);
-        batch.clear(InputKind.STARTER);
         batch.getTypedTestCases().clear();
         batch.setUsingTypedTestCases(false);
-        addDefault(InputKind.TESTERS);
+        refillClassFiles();
+    }
+
+    // Puts back the score sheet, tester and starter folder chosen for the
+    // module, section and assessment now open, or their defaults.
+    private void refillClassFiles() {
+        if (getBackend().isDemo()) {
+            return;
+        }
+        ImportBatch batch = getState().getBatch();
+        batch.clear(InputKind.ROSTER);
+        addDefault(InputKind.ROSTER);
+        // Typed test cases stay: they belong to the assessment
+        if (!batch.isUsingTypedTestCases()) {
+            batch.clear(InputKind.TESTERS);
+            addDefault(InputKind.TESTERS);
+        }
+        batch.clear(InputKind.STARTER);
         addDefault(InputKind.STARTER);
     }
 
@@ -983,8 +1050,17 @@ public class SetUpScreen extends FlowScreen {
         }
     }
 
-    // Adds the configured path of a kind, or the demo sample.
+    // Adds the class file chosen earlier for this module, section and
+    // assessment; else the configured path of a kind, or the demo sample.
     private void addDefault(InputKind kind) {
+        Path remembered = findRememberedClassFile(kind);
+        if (remembered != null && kind == InputKind.ROSTER) {
+            keepMissingSectionSheet(remembered);
+        }
+        if (remembered != null) {
+            inspectClassFile(kind, remembered);
+            return;
+        }
         Path path = getBackend().getConfiguredPath(kind);
         // Each section has its own score sheet
         if (kind == InputKind.ROSTER && !getBackend().isDemo()) {
@@ -1013,20 +1089,72 @@ public class SetUpScreen extends FlowScreen {
             return;
         }
         useChosenClassFile(kind, path);
-        if (kind == InputKind.ROSTER) {
-            rememberScoreSheet(path);
-        }
     }
 
     // Shows the score sheet of the section chosen now, in place of the
     // last section's.
     private void useSectionScoreSheet() {
         scoreSheetSection = sectionLabel();
+        refillClassFiles();
+    }
+
+    // Returns the store of the class files chosen for each module,
+    // section and assessment, or null in the demo, which keeps nothing.
+    // It sits beside the file of chosen zip files.
+    private ChosenSubmissionsStore classFileStore() {
         if (getBackend().isDemo()) {
+            return null;
+        }
+        if (classFileStore == null) {
+            String chosenFile = getBackend().getSetting(
+                    ConfigKeys.CHOSEN_SUBMISSIONS_FILE);
+            if (chosenFile.trim().isEmpty()) {
+                chosenFile = DEFAULT_CHOSEN_FILE;
+            }
+            Path beside = Paths.get(chosenFile.trim()).toAbsolutePath()
+                    .resolveSibling(CLASS_FILES_NAME);
+            classFileStore = new ChosenSubmissionsStore(beside,
+                    CLASS_FILES_COMMENT);
+            chosenClassFiles.putAll(classFileStore.load());
+        }
+        return classFileStore;
+    }
+
+    // Names one kind of class file of the module, section and assessment
+    // open now, such as CS102/G1/Lab Test 2|ROSTER.
+    private String classFileKey(InputKind kind) {
+        return getState().getSectionKey() + KEY_SEPARATOR + kind.name();
+    }
+
+    // Returns the class file of a kind chosen earlier for the module,
+    // section and assessment open now, or null when none was chosen or
+    // it is gone.
+    private Path findRememberedClassFile(InputKind kind) {
+        if (classFileStore() == null) {
+            return null;
+        }
+        List<Path> paths = chosenClassFiles.get(classFileKey(kind));
+        if (paths == null || paths.isEmpty()) {
+            return null;
+        }
+        Path path = paths.get(0);
+        if (!Files.exists(path)) {
+            return null;
+        }
+        return path;
+    }
+
+    // Keeps a class file chosen on Set up for the module, section and
+    // assessment open now, so it is used for them every time after.
+    private void rememberClassFile(InputKind kind, Path path) {
+        ChosenSubmissionsStore store = classFileStore();
+        if (store == null) {
             return;
         }
-        getState().getBatch().clear(InputKind.ROSTER);
-        addDefault(InputKind.ROSTER);
+        List<Path> paths = new ArrayList<>();
+        paths.add(path.toAbsolutePath());
+        chosenClassFiles.put(classFileKey(kind), paths);
+        store.save(chosenClassFiles);
     }
 
     // Names the section chosen now, such as "CS102 G1", or "".
@@ -1058,9 +1186,35 @@ public class SetUpScreen extends FlowScreen {
         }
     }
 
+    // Writes a score sheet chosen on Set up into Settings for its section
+    // when Settings has none for it yet, quietly, as for a sheet chosen
+    // before Set up wrote them there.
+    private void keepMissingSectionSheet(Path path) {
+        if (getBackend().isDemo() || getState().getSection() == null) {
+            return;
+        }
+        String who = ExportFolders.keyOf(getState().getModuleCode(),
+                getState().getSectionCode());
+        String sheets = getBackend().getSetting(
+                ConfigKeys.SCORE_SHEET_BY_SECTION);
+        if (!ExportFolders.exact(sheets, who).isEmpty()) {
+            return;
+        }
+        Map<String, String> changes = new HashMap<>();
+        changes.put(ConfigKeys.SCORE_SHEET_BY_SECTION,
+                ExportFolders.put(sheets, who, Parts.configPath(path)));
+        getBackend().saveSettings(changes);
+    }
+
     // Uses a score sheet, tester or starter folder the instructor chose,
     // or one a suggestion offered instead of the chosen one.
     private void useChosenClassFile(InputKind kind, Path path) {
+        rememberClassFile(kind, path);
+        // Settings lists each section's score sheet, so one chosen here,
+        // with Change or Use this file instead, shows there too
+        if (kind == InputKind.ROSTER) {
+            rememberScoreSheet(path);
+        }
         if (kind == InputKind.TESTERS) {
             getState().getBatch().setUsingTypedTestCases(false);
         }
@@ -1480,6 +1634,7 @@ public class SetUpScreen extends FlowScreen {
     // Redraws the score sheet, tester and starter rows.
     private void refreshClassFiles() {
         checkTestersIfChanged();
+        checkStrengthIfChanged();
         checkMatchesIfChanged();
         HBox[] rows = {
             createClassFileRow(InputKind.ROSTER, ROSTER_TITLE, null),
@@ -1752,6 +1907,160 @@ public class SetUpScreen extends FlowScreen {
         testerProblems.addAll(problems);
     }
 
+    // ------------------------------------------------- tester strength
+
+    // Names the tester, starter and model answers folders a tester
+    // strength check would use, or returns null when it cannot run: no
+    // usable tester folder, typed test cases, or no model answers.
+    private String findStrengthFolders() {
+        Path testers = findUsableTesters();
+        if (testers == null || !getBackend().hasModelAnswers()) {
+            return null;
+        }
+        String modelAnswers = getBackend().getSetting(
+                ConfigKeys.MODEL_ANSWERS_DIR).trim();
+        return describeFolders(testers, findUsableStarter())
+                + KEY_SEPARATOR + modelAnswers;
+    }
+
+    // Starts the tester strength check by itself when the setting asks
+    // for it, the tester folder check found nothing wrong, and the
+    // folders are new to it.
+    private void checkStrengthIfChanged() {
+        String folders = findStrengthFolders();
+        boolean wanted = folders != null
+                && isOn(ConfigKeys.TESTER_STRENGTH_ENABLED)
+                && !folders.equals(strengthFolders);
+        if (!wanted || strengthCheck != null) {
+            return;
+        }
+        String testerFolders = describeFolders(findUsableTesters(),
+                findUsableStarter());
+        boolean testersFine = testerFolders.equals(checkedFolders)
+                && testerProblems.isEmpty();
+        if (testersFine) {
+            startStrengthCheck(folders);
+        }
+    }
+
+    // Starts the tester strength check, unless one is running already.
+    private void startStrengthCheck(String folders) {
+        if (strengthCheck != null || getState().getSection() == null) {
+            return;
+        }
+        TesterStrengthCheck check = new TesterStrengthCheck(getBackend(),
+                getState().getSection(), findUsableTesters(),
+                findUsableStarter(), folders);
+        check.setOnSucceeded(event -> strengthCheckDone(check));
+        check.setOnFailed(event -> strengthCheckFailed(check));
+        strengthCheck = check;
+        // Not a daemon: when GradeZZY closes, Java waits for the check to
+        // end, so it deletes its broken copies
+        Thread worker = new Thread(check, STRENGTH_THREAD);
+        worker.setDaemon(false);
+        worker.start();
+    }
+
+    // Starts the check when the instructor asks for it.
+    private void checkStrengthNow() {
+        String folders = findStrengthFolders();
+        if (folders != null) {
+            startStrengthCheck(folders);
+            refreshClassFiles();
+        }
+    }
+
+    // Keeps what a finished check found, then redraws the rows, which
+    // starts a new check if the folders changed while it ran.
+    private void strengthCheckDone(TesterStrengthCheck check) {
+        strengthCheck = null;
+        strengthFolders = check.getFolders();
+        strengthResults.clear();
+        strengthResults.addAll(check.getValue());
+        strengthReport = check.getReportMessage();
+        refreshClassFiles();
+        if (strengthFolders.equals(findStrengthFolders())) {
+            getWindow().notify("Checked how strong each tester is: "
+                    + describeStrength() + ".");
+        }
+    }
+
+    // Says that the check stopped before it finished.
+    private void strengthCheckFailed(TesterStrengthCheck check) {
+        strengthCheck = null;
+        strengthFolders = check.getFolders();
+        strengthResults.clear();
+        strengthReport = "The testers could not be checked with the model "
+                + "answers" + describeError(check.getException());
+        refreshClassFiles();
+    }
+
+    // Sums up the strength results, such as "2 of 5 testers miss some
+    // broken copies".
+    private String describeStrength() {
+        int weak = 0;
+        int checked = 0;
+        for (QuestionStrength result : strengthResults) {
+            if (result.countTried() > 0) {
+                checked++;
+            }
+            if (result.countSurvived() > 0) {
+                weak++;
+            }
+        }
+        if (checked == 0) {
+            return "no tester could be checked";
+        }
+        if (weak == 0) {
+            return "every tester caught every broken copy";
+        }
+        return weak + " of " + Parts.plural(checked, "tester")
+                + " miss some broken copies of the model answer";
+    }
+
+    // Adds the tester strength line to the tester row: running, its
+    // results with a link to the details, or a link to run it.
+    private void addStrengthNotes(VBox notes) {
+        String folders = findStrengthFolders();
+        if (folders == null) {
+            return;
+        }
+        if (strengthCheck != null) {
+            notes.getChildren().add(smallNote("Checking how strong each "
+                    + "tester is with the model answers. This takes a "
+                    + "minute or two."));
+            return;
+        }
+        if (folders.equals(strengthFolders) && strengthResults.isEmpty()) {
+            HBox line = detailLine(strengthReport);
+            line.getChildren().add(smallLink("Try again",
+                    () -> checkStrengthNow()));
+            notes.getChildren().add(line);
+            return;
+        }
+        if (folders.equals(strengthFolders)) {
+            HBox line = detailLine("Tester strength: " + describeStrength()
+                    + ".");
+            line.getChildren().add(smallLink("See details",
+                    () -> openStrengthSheet()));
+            notes.getChildren().add(line);
+            return;
+        }
+        if (!isOn(ConfigKeys.TESTER_STRENGTH_ENABLED)) {
+            HBox line = detailLine("Model answers are set for this "
+                    + "assessment.");
+            line.getChildren().add(smallLink("Check how strong each "
+                    + "tester is", () -> checkStrengthNow()));
+            notes.getChildren().add(line);
+        }
+    }
+
+    // Shows the questions and the broken copies each tester missed.
+    private void openStrengthSheet() {
+        getWindow().showSheet(TesterStrengthSheet.create(getWindow(),
+                strengthResults, strengthReport));
+    }
+
     // Starts checking the class files against the uploads when either
     // changed. Until it ends, the rows show no match problem.
     private void checkMatchesIfChanged() {
@@ -1962,6 +2271,7 @@ public class SetUpScreen extends FlowScreen {
             if (warning != null) {
                 status = warning;
             }
+            addStrengthNotes(details);
         }
         Hyperlink change = changeLink(kind);
         return classFileRow(iconPath, title, details, status, change);
@@ -2164,11 +2474,19 @@ public class SetUpScreen extends FlowScreen {
         // so grading cannot start until it is fixed
         readMarksIfChanged();
         List<String> unknownMarks = findMarkProblems();
+        String overlap = describeOverlap(batch);
+        showOverlap(overlap);
         boolean ready = batch.isReady() && !getState().isGrading()
-                && filesBeingChecked == 0 && unknownMarks.isEmpty();
+                && filesBeingChecked == 0 && unknownMarks.isEmpty()
+                && overlap.isEmpty();
         actions.setPrimary("Start grading", () -> confirmStart(), ready);
-        if (getState().isGrading()) {
-            actions.setStatus("A batch is being graded. See step 2.");
+        if (!overlap.isEmpty() && !getState().isGrading()) {
+            actions.setStatus("Some of these students are being graded in "
+                    + "another section now. See Submissions.");
+        } else if (getState().isGrading()) {
+            actions.setStatus("This section is being graded. See step 2, "
+                    + "or choose another section to grade at the same "
+                    + "time.");
         } else if (filesBeingChecked > 0) {
             actions.setStatus("Checking " + Parts.plural(filesBeingChecked,
                     "file") + "...");
@@ -2191,6 +2509,39 @@ public class SetUpScreen extends FlowScreen {
             actions.setStatus(students + " ready to grade in "
                     + getState().getSection().getLabel() + "." + skipped);
         }
+    }
+
+    // Says which chosen students another section is grading now, such as
+    // "65 of these students are being graded in CS102 G2 now, such as
+    // ray.tan.2025. ...", or "" when none are. A student can be graded in
+    // one section at a time, as both batches would use the same working
+    // folder, named after the student.
+    private String describeOverlap(ImportBatch batch) {
+        List<String> students = batch.listStudents();
+        for (GradingJob job : getState().getRunningJobs()) {
+            List<String> shared = job.findShared(students);
+            boolean other = !job.isOf(getState().getSection());
+            if (other && !shared.isEmpty()) {
+                String who = job.getSection().getLabel();
+                String count = shared.size() + " of these students are";
+                if (shared.size() == 1) {
+                    count = "1 of these students is";
+                }
+                return count + " being graded in " + who + " now, such as "
+                        + shared.get(0) + ". A student can be graded in "
+                        + "one section at a time, as both would use the "
+                        + "same working folder. Wait until " + who
+                        + " finishes, or remove those files.";
+            }
+        }
+        return "";
+    }
+
+    // Shows the warning about students graded elsewhere, or hides it.
+    private void showOverlap(String text) {
+        overlapNote.setText(text);
+        overlapNote.setVisible(!text.isEmpty());
+        overlapNote.setManaged(!text.isEmpty());
     }
 
     // Returns the plain words for a file's state.

@@ -95,7 +95,7 @@ public class CommonMistakesSection {
     public void show(GradingRun run) {
         view.getChildren().setAll(Parts.title("Common mistakes"),
                 Parts.muted("Students who lost marks the same way on a "
-                + "question. Name them on Review, under Mistakes."));
+                + "question. Name them on Review, under Errors."));
         List<AnswerGroup> listed = window.getBackend().listAnswerGroups(run);
         List<AnswerGroup> groups = largestFirst(listed);
         if (groups.isEmpty()) {
@@ -171,7 +171,7 @@ public class CommonMistakesSection {
             return clickHint;
         }
         return "And " + Parts.plural(hidden, "more group", "more groups")
-                + ", all on Review under Mistakes. " + clickHint;
+                + ", all on Review under Errors. " + clickHint;
     }
 
     // Orders the groups largest first; equal sizes keep their order.

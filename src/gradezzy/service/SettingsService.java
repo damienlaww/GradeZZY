@@ -122,7 +122,8 @@ public class SettingsService {
         ConfigKeys.WINDOW_HEIGHT,
         ConfigKeys.TESTER_STRENGTH_MAX_COPIES,
         ConfigKeys.TESTER_STRENGTH_TIMEOUT_SECONDS,
-        ConfigKeys.RANDOM_INPUTS_COUNT
+        ConfigKeys.RANDOM_INPUTS_COUNT,
+        ConfigKeys.PLAGIARISM_MIN_LINES
     };
 
     // Settings that hold a whole number of 0 or more, where 0 means none
@@ -241,6 +242,7 @@ public class SettingsService {
         ConfigKeys.PLAGIARISM_ENABLED,
         ConfigKeys.PLAGIARISM_THRESHOLD,
         ConfigKeys.PLAGIARISM_ALGORITHM,
+        ConfigKeys.PLAGIARISM_MIN_LINES,
         ConfigKeys.CSV_LINE_ENDING,
         ConfigKeys.CSV_ID_PREFIX,
         ConfigKeys.CSV_END_OF_LINE_MARKER,

@@ -1,29 +1,29 @@
 /*
  * File: GradeScreen.java
  *
- * Purpose: Step 2. Shows grading as it happens: how many students are
- * done, about how long is left, what is happening now, a small bell
- * curve of the marks so far and a count of each result. Offers Cancel,
- * Resume after a cancel, and the way back to Set up when grading could
- * not run.
+ * Purpose: Step 2. Shows grading as it happens for the section on
+ * screen: how many students are done, about how long is left, what is
+ * happening now, a small bell curve of the marks so far and a count of
+ * each result. Offers Cancel, Resume after a cancel, and the way back to
+ * Set up when grading could not run. Other sections can be graded at the
+ * same time; each has its own batch, shown here when its section is
+ * chosen.
  *
- * Where it fits: Replaces the old Grading Progress screen. It is the
- * ProgressListener and RunCallback of every run it starts, and moves to
- * Review when a run ends.
+ * Where it fits: Replaces the old Grading Progress screen. It starts a
+ * GradingJob for each batch, which the backend tells about progress;
+ * FlowWindow hands each change of the section on screen back here, and
+ * moves to Review when its batch ends.
  */
 package gradezzy.ui.flow;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
-import javafx.application.Platform;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.geometry.Pos;
@@ -40,14 +40,12 @@ import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 
 import gradezzy.config.ConfigKeys;
-import gradezzy.grading.ProgressListener;
 import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
+import gradezzy.model.Section;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
-import gradezzy.ui.backend.PipelineStages;
 import gradezzy.ui.backend.ResultState;
-import gradezzy.ui.backend.RunCallback;
 import gradezzy.ui.backend.StatusCounts;
 
 /**
@@ -55,8 +53,7 @@ import gradezzy.ui.backend.StatusCounts;
  *
  * <p>Tier: SHOULD.
  */
-public class GradeScreen extends FlowScreen
-        implements ProgressListener, RunCallback {
+public class GradeScreen extends FlowScreen {
 
     // The five steps shown under the bar, and which of them each stage
     // of grading belongs to
@@ -173,32 +170,12 @@ public class GradeScreen extends FlowScreen
     // The count of each row of "So far"
     private final Label[] counts = new Label[ROW_COUNT];
 
-    // Every student of the run that has a result, by username
-    private final Map<String, Submission> results = new HashMap<>();
+    // The batch shown: the section's batch being graded or just ended,
+    // or one made to show a run as it ended; null when there is none
+    private GradingJob shown = null;
 
-    // The usernames in results, in the order they first got a result
-    private final List<String> resultOrder = new ArrayList<>();
-
-    // How many students this run grades
-    private int total = 0;
-
-    // How many of them are finished
-    private int finished = 0;
-
-    // When the run started, in milliseconds
-    private long startedAt = 0;
-
-    // True after Cancel was pressed
-    private boolean cancelling = false;
-
-    // True once the run has finished, stopped or failed
-    private boolean ended = false;
-
-    // The section and assessment, such as "CS102 G1 · Lab Test"
-    private String about = "";
-
-    // The message of the last failure, or null
-    private String failure = null;
+    // The other sections being graded now, each a link to its batch
+    private final HBox otherBatches = Parts.row(Parts.GAP_SMALL);
 
     /**
      * Creates the Grade step.
@@ -212,7 +189,8 @@ public class GradeScreen extends FlowScreen
         cards.getColumnConstraints().addAll(half(), half());
         cards.add(createMarksCard(), 0, 0);
         cards.add(createSoFarCard(), 1, 0);
-        VBox header = new VBox(heading, subtitle);
+        otherBatches.getStyleClass().add("other-batches");
+        VBox header = new VBox(heading, subtitle, otherBatches);
         header.getStyleClass().add("screen-header");
         view = Parts.narrowPage(
                 new Node[] {header, createProgressCard(), cards});
@@ -227,56 +205,27 @@ public class GradeScreen extends FlowScreen
     }
 
     /**
-     * When nothing is being graded, fills the screen again from the run
-     * on screen, as it ended: one opened from Home or Runs, or one graded
-     * and resumed here, so the count always covers every student. With no
-     * run, says how to start. Then shows the buttons that fit: Cancel
-     * while it grades, Resume when it stopped early, Review results when
-     * it is done.
+     * Shows the batch of the section on screen: the one being graded or
+     * the one that just failed; else the run on screen as it ended; else
+     * how to start. Then shows the buttons that fit: Cancel while it
+     * grades, Resume when it stopped early, Review results when it is
+     * done.
      */
     @Override
     public void onShow() {
+        GradingJob job = getState().getJob(getState().getSection());
+        boolean liveJob = job != null
+                && (!job.isEnded() || job.getFailure() != null);
         GradingRun run = getState().getRun();
-        if (!getState().isGrading() && failure == null) {
-            if (run != null) {
-                showEndedRun(run);
-            } else {
-                showNothingYet();
-            }
+        if (liveJob) {
+            render(job, false);
+        } else if (run != null && run.getSection() != null) {
+            render(GradingJob.ofEndedRun(run, describeAbout(run)), false);
+        } else {
+            shown = null;
+            showNothingYet();
         }
         refreshActions();
-    }
-
-    // Fills the screen from a run that is not being graded: how many were
-    // graded, the marks so far and each result, as when it ended.
-    private void showEndedRun(GradingRun run) {
-        prepare(run.getSection().getLabel());
-        if (run.getAssessment() != null) {
-            about = run.getSection().getLabel() + DOT
-                    + run.getAssessment().getName();
-        }
-        for (Submission submission : run.getSubmissions()) {
-            if (!isUnfinished(submission)) {
-                finished++;
-                addResult(submission);
-            }
-        }
-        total = run.getSubmissions().size();
-        ended = true;
-        String when = "";
-        if (run.getStartedAt() != null) {
-            when = DOT + "graded " + run.getStartedAt().format(WHEN);
-        }
-        subtitle.setText(about + when + ".");
-        if (hasUnfinished(run)) {
-            heading.setText("Grading stopped");
-            showMessage("The rest are waiting; press Resume to grade "
-                    + "them.");
-        } else {
-            heading.setText("Grading finished");
-            showMessage("");
-        }
-        updateCount();
     }
 
     // Says how to start when no batch was graded in this window yet.
@@ -285,25 +234,37 @@ public class GradeScreen extends FlowScreen
         subtitle.setText("Choose the students' zip files on Set up and "
                 + "press Start grading. Progress shows here.");
         showMessage("");
-        updateCount();
+        reason.setVisible(false);
+        reason.setManaged(false);
+        done.setText("0");
+        ofTotal.setText("of 0 students");
+        percent.setText("0" + Parts.PERCENT_SIGN);
+        shownProgress.set(0);
         timeLeft.setText("");
+        chart.setStats(null);
+        noMarks.setVisible(true);
+        for (Label count : counts) {
+            count.setText("0");
+        }
     }
 
     /**
-     * Starts grading the batch chosen on Set up.
+     * Starts grading the batch chosen on Set up for the section on
+     * screen. Other sections may be grading at the same time.
      */
     public void start() {
-        prepare(getState().getSection().getLabel());
+        GradingJob job = newJob(getState().getSection());
         // Students, not files: a bulk zip or a folder holds several
-        total = getState().getBatch().countStudents();
-        updateCount();
-        getState().setGrading(true);
+        job.setTotal(getState().getBatch().countStudents());
+        job.addUsernames(getState().getBatch().listStudents());
         // Review shows the files grading skips as "Could not open"
-        getState().setSkippedFiles(
+        job.getSkippedFiles().addAll(
                 getState().getBatch().getUnusableSubmissions());
+        getState().startJob(job);
+        render(job, false);
         // The backend records "Grading started" with the real count
         getBackend().startGrading(getState().getBatch(),
-                getState().getSection(), this, this);
+                getState().getSection(), job, job);
         refreshActions();
     }
 
@@ -314,13 +275,14 @@ public class GradeScreen extends FlowScreen
      * @param run the run the batch joins
      */
     public void startAdding(GradingRun run) {
-        prepare(getState().getSection().getLabel());
-        total = getState().getBatch().countStudents();
-        updateCount();
-        getState().setGrading(true);
-        getState().setSkippedFiles(
+        GradingJob job = newJob(getState().getSection());
+        job.setTotal(getState().getBatch().countStudents());
+        job.addUsernames(getState().getBatch().listStudents());
+        job.getSkippedFiles().addAll(
                 getState().getBatch().getUnusableSubmissions());
-        getBackend().addToRun(run, getState().getBatch(), this, this);
+        getState().startJob(job);
+        render(job, false);
+        getBackend().addToRun(run, getState().getBatch(), job, job);
         refreshActions();
     }
 
@@ -332,24 +294,199 @@ public class GradeScreen extends FlowScreen
      * @param retryFailed true to grade failed submissions again too
      */
     public void continueRun(GradingRun run, boolean retryFailed) {
-        prepare(run.getSection().getLabel());
+        GradingJob job = newJob(run.getSection());
+        int total = 0;
         for (Submission submission : run.getSubmissions()) {
             boolean again = retryFailed
                     && submission.getStatus() == SubmissionStatus.FAILED;
-            if (isUnfinished(submission) || again) {
+            if (GradingJob.isUnfinished(submission) || again) {
                 total++;
+                List<String> one = new ArrayList<>();
+                one.add(submission.getUsername());
+                job.addUsernames(one);
             } else {
-                addResult(submission);
+                job.addResult(submission);
             }
         }
-        updateCount();
-        getState().setGrading(true);
+        job.setTotal(total);
+        getState().startJob(job);
+        render(job, false);
         if (retryFailed) {
-            getBackend().retryFailedSubmissions(run, this, this);
+            getBackend().retryFailedSubmissions(run, job, job);
         } else {
-            getBackend().resumeGrading(run, this, this);
+            getBackend().resumeGrading(run, job, job);
         }
         refreshActions();
+    }
+
+    /**
+     * Shows a batch's progress when it is the one on screen. FlowWindow
+     * calls it each time the batch of the section on screen changes.
+     *
+     * @param job the batch
+     */
+    public void progressed(GradingJob job) {
+        if (job == shown) {
+            render(job, true);
+        } else {
+            renderOtherBatches();
+        }
+    }
+
+    /**
+     * Shows how the batch of the section on screen ended. FlowWindow
+     * calls it once the window's state has the run. A finished batch
+     * opens Review when the instructor is still on this step.
+     *
+     * @param job the batch, ended
+     */
+    public void ended(GradingJob job) {
+        if (job.getFailure() == null && !job.hasUnfinished()
+                && isOnScreen()) {
+            getWindow().show(Step.REVIEW);
+            return;
+        }
+        if (job == shown || isOnScreen()) {
+            render(job, true);
+        }
+        if (isOnScreen()) {
+            refreshActions();
+        } else {
+            getWindow().refreshScreen();
+        }
+    }
+
+    // Makes the batch of a section, named with the assessment it grades.
+    private GradingJob newJob(Section section) {
+        String about = section.getLabel();
+        Assessment assessment = getBackend().getAssessment();
+        if (assessment != null) {
+            about = about + DOT + assessment.getName();
+        }
+        return new GradingJob(getWindow(), section, about);
+    }
+
+    // Names a run's section and assessment, such as "CS102 G1 · Lab
+    // Test 2".
+    private String describeAbout(GradingRun run) {
+        String about = run.getSection().getLabel();
+        if (run.getAssessment() != null) {
+            about = about + DOT + run.getAssessment().getName();
+        }
+        return about;
+    }
+
+    // Fills the screen from a batch: the heading and the line under it,
+    // the count, the bar, the time left, who is graded now, the chart
+    // and the rows. animate is false when another batch was shown before,
+    // so the bar jumps instead of gliding from the other one.
+    private void render(GradingJob job, boolean animate) {
+        boolean another = job != shown;
+        shown = job;
+        renderHeading(job);
+        renderOtherBatches();
+        renderNow(job);
+        done.setText(String.valueOf(job.getFinished()));
+        ofTotal.setText("of " + Parts.plural(job.getTotal(), "student"));
+        double share = 0;
+        if (job.getTotal() > 0) {
+            share = (double) job.getFinished() / job.getTotal();
+        }
+        long shownPercent = Math.round(share * PERCENT);
+        percent.setText(shownPercent + Parts.PERCENT_SIGN);
+        if (another || !animate) {
+            shownProgress.set(share);
+        } else {
+            glideTo(share);
+        }
+        updateTimeLeft(job);
+        updateChart(job);
+        updateRows(job);
+    }
+
+    // Shows the heading, the line under it and why grading failed.
+    private void renderHeading(GradingJob job) {
+        boolean failed = job.getFailure() != null;
+        reason.setVisible(failed);
+        reason.setManaged(failed);
+        if (failed) {
+            heading.setText("Grading could not run");
+            subtitle.setText(job.getAbout() + ".");
+            reason.setText(job.getFailure());
+            return;
+        }
+        if (!job.isEnded()) {
+            heading.setText("Grading");
+            subtitle.setText(job.getAbout() + ". You can leave this tab or "
+                    + "grade another section; grading carries on.");
+            return;
+        }
+        String when = "";
+        GradingRun run = job.getRun();
+        if (run != null && run.getStartedAt() != null) {
+            when = DOT + "graded " + run.getStartedAt().format(WHEN);
+        }
+        subtitle.setText(job.getAbout() + when + ".");
+        if (job.hasUnfinished()) {
+            heading.setText("Grading stopped");
+        } else {
+            heading.setText("Grading finished");
+        }
+    }
+
+    // Lists the other sections being graded now, each with how far it has
+    // got and a link that shows it, such as "Also grading: CS102 G1, 12
+    // of 65". Hidden when only one section grades.
+    private void renderOtherBatches() {
+        otherBatches.getChildren().clear();
+        for (GradingJob job : getState().getRunningJobs()) {
+            if (job != shown) {
+                Section section = job.getSection();
+                String text = section.getLabel() + ", " + job.getFinished()
+                        + " of " + job.getTotal();
+                otherBatches.getChildren().add(Parts.link(text,
+                        () -> getWindow().watchGrading(section)));
+            }
+        }
+        boolean any = !otherBatches.getChildren().isEmpty();
+        if (any) {
+            Label also = Parts.muted("Also grading:");
+            also.setMinWidth(Region.USE_PREF_SIZE);
+            otherBatches.getChildren().add(0, also);
+        }
+        otherBatches.setVisible(any);
+        otherBatches.setManaged(any);
+    }
+
+    // Shows who is being graded now and at which step, or a message.
+    private void renderNow(GradingJob job) {
+        if (job.isEnded() && job.hasUnfinished()) {
+            showMessage("The rest are waiting; press Resume to grade "
+                    + "them.");
+        } else if (job.isEnded()) {
+            showMessage("");
+        } else if (job.getNowSubmission() == null) {
+            showMessage("Starting");
+        } else {
+            showNow(job.getNowSubmission(), stageWords(job),
+                    job.getNowStage());
+        }
+    }
+
+    // Says what is being done to the student now, such as "Compiling",
+    // or "" before the first step.
+    private String stageWords(GradingJob job) {
+        if (job.getNowStageName().isEmpty()) {
+            return "";
+        }
+        int index = job.getNowStage();
+        String words = "Working";
+        if (index >= 0 && index < STAGE_WORDS.length) {
+            words = STAGE_WORDS[index];
+            words = Character.toUpperCase(words.charAt(0))
+                    + words.substring(FIRST_LETTER_END);
+        }
+        return words;
     }
 
     // ------------------------------------------------------------ build
@@ -509,227 +646,6 @@ public class GradeScreen extends FlowScreen
         return card;
     }
 
-    // ------------------------------------------------ progress listener
-
-    /**
-     * Shows how many submissions the run will grade.
-     */
-    @Override
-    public void onRunStarted(int totalSubmissions) {
-        Platform.runLater(() -> showTotal(totalSubmissions));
-    }
-
-    /**
-     * Shows which student is being graded now.
-     */
-    @Override
-    public void onSubmissionStarted(Submission submission) {
-        Platform.runLater(() -> showStudent(submission));
-    }
-
-    /**
-     * Shows what is happening to the student now.
-     */
-    @Override
-    public void onStageStarted(Submission submission, String stageName) {
-        Platform.runLater(() -> showStage(submission, stageName));
-    }
-
-    /**
-     * Counts the student as done and updates the bar and the chart.
-     */
-    @Override
-    public void onSubmissionFinished(Submission submission) {
-        Platform.runLater(() -> countFinished(submission));
-    }
-
-    /**
-     * Does nothing: onFinished, called after it, moves on.
-     */
-    @Override
-    public void onRunFinished(GradingRun gradingRun) {
-        // The callback below moves on; nothing to do here
-    }
-
-    /**
-     * Shows how many students the run grades. Runs on the JavaFX thread.
-     *
-     * @param totalSubmissions the number of students
-     */
-    private void showTotal(int totalSubmissions) {
-        total = totalSubmissions;
-        updateCount();
-    }
-
-    /**
-     * Shows which student is being graded. Runs on the JavaFX thread.
-     *
-     * @param submission the student
-     */
-    private void showStudent(Submission submission) {
-        showNow(submission, "", -1);
-    }
-
-    /**
-     * Shows which student is being graded and what is being done.
-     * Runs on the JavaFX thread.
-     *
-     * @param submission the student
-     * @param stageName the name of the step of grading
-     */
-    private void showStage(Submission submission, String stageName) {
-        int index = PipelineStages.indexOf(stageName);
-        String words = "Working";
-        if (index >= 0 && index < STAGE_WORDS.length) {
-            words = STAGE_WORDS[index];
-            words = Character.toUpperCase(words.charAt(0))
-                    + words.substring(FIRST_LETTER_END);
-        }
-        showNow(submission, words, index);
-    }
-
-    /**
-     * Counts a finished student and keeps its result. Runs on the
-     * JavaFX thread.
-     *
-     * @param submission the student
-     */
-    private void countFinished(Submission submission) {
-        finished++;
-        addResult(submission);
-        updateCount();
-    }
-
-    // ----------------------------------------------------- run callback
-
-    /**
-     * Keeps the run and shows every result. A run that stopped early
-     * waits for Resume; a finished one opens Review if the instructor
-     * is still on this step.
-     */
-    @Override
-    public void onFinished(GradingRun gradingRun) {
-        getState().setGrading(false);
-        getState().setRun(gradingRun);
-        getState().attachSkippedFiles(gradingRun);
-        // A late batch adds students, so who has no submission changes
-        getState().forgetMissingStudents();
-        end();
-        if (gradingRun != null) {
-            for (Submission submission : gradingRun.getSubmissions()) {
-                if (!isUnfinished(submission)) {
-                    addResult(submission);
-                }
-            }
-            updateCount();
-        }
-        if (gradingRun != null && hasUnfinished(gradingRun)) {
-            heading.setText("Grading stopped");
-            showMessage("The rest are waiting; press Resume to grade "
-                    + "them.");
-            refreshAfterGrading();
-            return;
-        }
-        heading.setText("Grading finished");
-        showMessage("");
-        getWindow().notify("Grading finished.");
-        getState().reach(Step.REVIEW);
-        if (isOnScreen()) {
-            getWindow().show(Step.REVIEW);
-            return;
-        }
-        refreshAfterGrading();
-    }
-
-    /**
-     * Says that grading could not run and why.
-     */
-    @Override
-    public void onFailed(String message) {
-        getState().setGrading(false);
-        // No run ended, so the skipped files belong to none
-        getState().attachSkippedFiles(null);
-        failure = message;
-        end();
-        heading.setText("Grading could not run");
-        showMessage("");
-        reason.setText(message);
-        reason.setVisible(true);
-        reason.setManaged(true);
-        updateCount();
-        if (!isOnScreen()) {
-            getWindow().notify("Grading could not run. See step 2.");
-        }
-        refreshAfterGrading();
-    }
-
-    // ---------------------------------------------------------- helpers
-
-    // Keeps a student's result; a student who already has one keeps
-    // their place in the order.
-    private void addResult(Submission submission) {
-        String username = submission.getUsername();
-        if (!results.containsKey(username)) {
-            resultOrder.add(username);
-        }
-        results.put(username, submission);
-    }
-
-    // Returns every kept result, in the order they first arrived.
-    private List<Submission> resultsInOrder() {
-        List<Submission> inOrder = new ArrayList<>();
-        for (String username : resultOrder) {
-            inOrder.add(results.get(username));
-        }
-        return inOrder;
-    }
-
-    // Empties the screen for a new run.
-    private void prepare(String sectionLabel) {
-        results.clear();
-        resultOrder.clear();
-        total = 0;
-        finished = 0;
-        cancelling = false;
-        ended = false;
-        failure = null;
-        startedAt = System.currentTimeMillis();
-        heading.setText("Grading");
-        about = sectionLabel;
-        Assessment assessment = getBackend().getAssessment();
-        if (assessment != null) {
-            about = about + DOT + assessment.getName();
-        }
-        subtitle.setText(about + ". You can leave this tab; grading "
-                + "carries on.");
-        showMessage("Starting");
-        timeLeft.setText("");
-        reason.setVisible(false);
-        reason.setManaged(false);
-    }
-
-    // Marks the run as over, so the screen no longer says it carries on.
-    private void end() {
-        ended = true;
-        subtitle.setText(about + ".");
-    }
-
-    // Updates the count, the bar, the time left, the chart and the rows.
-    private void updateCount() {
-        done.setText(String.valueOf(finished));
-        ofTotal.setText("of " + Parts.plural(total, "student"));
-        double share = 0;
-        if (total > 0) {
-            share = (double) finished / total;
-        }
-        long shownPercent = Math.round(share * PERCENT);
-        percent.setText(shownPercent + Parts.PERCENT_SIGN);
-        glideTo(share);
-        updateTimeLeft();
-        updateChart();
-        updateRows();
-    }
-
     // Moves the bar to a new share. With Subtle animations on, it glides
     // there at a steady speed from where it is, taking about as long as
     // one student takes, so it is still moving when the next one ends.
@@ -754,11 +670,11 @@ public class GradeScreen extends FlowScreen
     // Returns how long the bar glides: the time one student has taken so
     // far, kept between MIN_GLIDE_MILLIS and MAX_GLIDE_MILLIS.
     private double findGlideMillis() {
-        if (finished <= 0) {
+        if (shown == null || shown.getFinished() <= 0) {
             return MIN_GLIDE_MILLIS;
         }
-        double each = (System.currentTimeMillis() - startedAt)
-                / (double) finished;
+        double each = (System.currentTimeMillis() - shown.getStartedAt())
+                / (double) shown.getFinished();
         return Math.max(MIN_GLIDE_MILLIS, Math.min(MAX_GLIDE_MILLIS, each));
     }
 
@@ -769,12 +685,14 @@ public class GradeScreen extends FlowScreen
     }
 
     // Works out about how long is left from the time taken so far.
-    private void updateTimeLeft() {
+    private void updateTimeLeft(GradingJob job) {
+        int total = job.getTotal();
+        int finished = job.getFinished();
         if (total > 0 && finished >= total) {
             timeLeft.setText("Done");
             return;
         }
-        if (ended) {
+        if (job.isEnded()) {
             timeLeft.setText("Stopped");
             return;
         }
@@ -782,7 +700,7 @@ public class GradeScreen extends FlowScreen
             timeLeft.setText("Working out the time left");
             return;
         }
-        double elapsed = (System.currentTimeMillis() - startedAt)
+        double elapsed = (System.currentTimeMillis() - job.getStartedAt())
                 / MILLIS_PER_SECOND;
         int remaining = total - finished;
         double secondsLeft = elapsed / finished * remaining;
@@ -791,18 +709,18 @@ public class GradeScreen extends FlowScreen
     }
 
     // Redraws the bell curve of the graded students.
-    private void updateChart() {
+    private void updateChart(GradingJob job) {
         // The run's own marks, read from its testers; the assessment in
         // Settings only until the run is known
         Assessment assessment = getBackend().getAssessment();
-        GradingRun run = getState().getRun();
+        GradingRun run = job.getRun();
         if (run != null && run.getAssessment() != null) {
             assessment = run.getAssessment();
         }
         if (assessment == null) {
             return;
         }
-        List<Submission> graded = resultsInOrder();
+        List<Submission> graded = job.getResults();
         String passSetting = getBackend().getSetting(
                 ConfigKeys.PASS_MARK_PERCENT);
         double passPercent = MarkStats.parsePassPercent(passSetting);
@@ -818,8 +736,8 @@ public class GradeScreen extends FlowScreen
     }
 
     // Counts each kind of result, the same way Review and Statistics do.
-    private void updateRows() {
-        StatusCounts counted = StatusCounts.of(resultsInOrder(),
+    private void updateRows(GradingJob job) {
+        StatusCounts counted = StatusCounts.of(job.getResults(),
                 getBackend());
         int[] tally = new int[ROW_COUNT];
         tally[GRADED] = counted.count(ResultState.COMPLETED);
@@ -831,8 +749,8 @@ public class GradeScreen extends FlowScreen
         tally[COULD_NOT] = counted.count(ResultState.COULD_NOT_GRADE);
         tally[WAITING] = counted.count(ResultState.UNGRADED);
         // After a failure nobody is waiting: the rest are not graded
-        if (failure == null) {
-            int notStarted = total - finished;
+        if (job.getFailure() == null) {
+            int notStarted = job.getTotal() - job.getFinished();
             tally[WAITING] += Math.max(0, notStarted);
         }
         for (int index = 0; index < tally.length; index++) {
@@ -851,41 +769,15 @@ public class GradeScreen extends FlowScreen
         return Parts.plural((int) minutes, "minute");
     }
 
-    // Says whether a submission still has to be graded.
-    private boolean isUnfinished(Submission submission) {
-        return submission.getStatus() == SubmissionStatus.CANCELLED
-                || submission.getStatus() == SubmissionStatus.PENDING;
-    }
-
     // Grades the rest of a run, unless a fix job still grades a student.
     private void resume(GradingRun run) {
         if (getWindow().blockedByFix()) {
             return;
         }
-        continueRun(run, false);
+        getWindow().resumeRun(run);
     }
 
-    // Says whether any submission of a run still has to be graded.
-    private boolean hasUnfinished(GradingRun run) {
-        for (Submission submission : run.getSubmissions()) {
-            if (isUnfinished(submission)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Redraws the action bar here, or the screen on display when the
-    // instructor is elsewhere, so no screen shows what it was before.
-    private void refreshAfterGrading() {
-        if (isOnScreen()) {
-            refreshActions();
-        } else {
-            getWindow().refreshScreen();
-        }
-    }
-
-    // Fills the action bar for the current situation.
+    // Fills the action bar for the batch on screen.
     private void refreshActions() {
         if (!isOnScreen()) {
             return;
@@ -893,11 +785,12 @@ public class GradeScreen extends FlowScreen
         ActionBar actions = getActions();
         actions.reset();
         GradingRun run = getState().getRun();
-        if (getState().isGrading()) {
+        if (shown != null && !shown.isEnded()) {
             // Cancel sits beside the main button, where the eye already is
+            GradingJob job = shown;
             actions.addSecondary(Parts.secondary("Cancel",
-                    () -> askCancel()));
-            if (cancelling) {
+                    () -> askCancel(job)));
+            if (job.isCancelling()) {
                 actions.setStatus("Stopping after the current student.");
             } else {
                 actions.setStatus("Results open in Review when grading "
@@ -906,14 +799,16 @@ public class GradeScreen extends FlowScreen
             actions.setPrimary("Review results", () -> doNothing(), false);
             return;
         }
-        if (failure != null) {
+        if (shown != null && shown.getFailure() != null) {
             actions.setStatus("Check the files on Set up and try again.");
             actions.setPrimary("Back to Set up",
                     () -> getWindow().show(Step.SET_UP), true);
             return;
         }
         actions.setBack(() -> getWindow().show(Step.SET_UP));
-        if (run != null && hasUnfinished(run)) {
+        boolean stopped = run != null && shown != null
+                && shown.hasUnfinished();
+        if (stopped) {
             actions.setStatus("Students already graded keep their marks.");
             actions.setPrimary("Resume", () -> resume(run), true);
             return;
@@ -924,20 +819,19 @@ public class GradeScreen extends FlowScreen
         }
     }
 
-    // Asks before cancelling.
-    private void askCancel() {
-        getWindow().confirm("Cancel grading?", "Students already graded "
-                + "keep their marks. You can resume the rest later.",
-                "Cancel grading", () -> cancelGrading());
+    // Asks before cancelling a batch.
+    private void askCancel(GradingJob job) {
+        getWindow().confirm("Cancel grading " + job.getSection().getLabel()
+                + "?", "Students already graded keep their marks. You can "
+                + "resume the rest later. Other sections keep grading.",
+                "Cancel grading", () -> cancelGrading(job));
     }
 
-    /**
-     * Asks the backend to stop after the current student, once the
-     * instructor has confirmed.
-     */
-    private void cancelGrading() {
-        cancelling = true;
-        getBackend().cancelGrading();
+    // Asks the backend to stop a batch after the current student, once
+    // the instructor has confirmed.
+    private void cancelGrading(GradingJob job) {
+        job.markCancelling();
+        getBackend().cancelGrading(job.getSection());
         getActions().setStatus("Stopping after the current student.");
     }
 

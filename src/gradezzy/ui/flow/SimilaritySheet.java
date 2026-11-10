@@ -109,6 +109,13 @@ public final class SimilaritySheet {
      * @return the pill
      */
     public static Label similarityPill(SimilarityPair pair) {
+        // Two students picked from a cluster that were not a flagged pair
+        if (Double.isNaN(pair.getSimilarity())) {
+            Label pill = Parts.pill("Not flagged as a pair", Tone.NEUTRAL);
+            Parts.tip(pill, "The check linked these two through other "
+                    + "students in the cluster, not to each other.");
+            return pill;
+        }
         long percent = Math.round(pair.getSimilarity() * PERCENT);
         Tone tone = Tone.WARN;
         if (percent > RED_ABOVE_PERCENT) {

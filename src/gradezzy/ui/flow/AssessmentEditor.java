@@ -2,8 +2,8 @@
  * File: AssessmentEditor.java
  *
  * Purpose: A sheet that creates or edits one assessment: its name, its
- * questions with their folders, files and maximum marks, its tester and
- * starter folders, and the files that come with them.
+ * questions with their folders, files and maximum marks, its tester,
+ * starter and model answers folders, and the files that come with them.
  *
  * Where it fits: Opened with FlowWindow.editAssessment, and from
  * AssessmentsSheet for a copy. It checks each folder with the same check
@@ -36,6 +36,7 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.model.Assessment;
 import gradezzy.model.Question;
 import gradezzy.model.SavedAssessment;
+import gradezzy.modelanswer.ModelAnswerCopy;
 import gradezzy.service.AssessmentFolderScanner;
 import gradezzy.testcase.TesterMarks;
 import gradezzy.ui.backend.ActionResult;
@@ -115,6 +116,11 @@ public final class AssessmentEditor {
     // Whether each folder can be used
     private final HBox testersStatus = Parts.row(0);
     private final HBox starterStatus = Parts.row(0);
+
+    // The model answers folder, which may be left empty, and whether it
+    // holds the questions' answers
+    private final TextField modelAnswers = new TextField();
+    private final HBox modelAnswersStatus = Parts.row(0);
 
     // The lists that come with the folders
     private final TextField classFiles = new TextField();
@@ -250,9 +256,16 @@ public final class AssessmentEditor {
                 + "to supply the provided class files. Choosing it fills in "
                 + "the class files and unrenamed folder names.",
                 folderField(starter, starterStatus, InputKind.STARTER));
+        HBox modelAnswersRow = formRow("Model answers", "Optional. A "
+                + "folder laid out like the starter folder, with a correct "
+                + "answer to each question. With it, GradeZZY checks how "
+                + "strong each tester is and tries random inputs on the "
+                + "students' answers. Leave it empty to skip both checks.",
+                modelAnswersField());
         return section("1", "Files", "Choose these first. The questions, "
                 + "their marks and the lists below fill in from them.",
-                new Node[] {testersRow, starterRow, filledNote});
+                new Node[] {testersRow, starterRow, modelAnswersRow,
+                    filledNote});
     }
 
     // Builds section 3: the lists filled in from the folders.
@@ -321,6 +334,8 @@ public final class AssessmentEditor {
         updateTotal();
         testers.setText(start.getTestersDirectory());
         starter.setText(start.getStarterDirectory());
+        modelAnswers.setText(start.getModelAnswersDirectory());
+        modelAnswers.setPromptText("Leave empty for none");
 
         classFiles.setText(joinList(start.getProvidedClassFiles()));
         dataFiles.setText(joinList(start.getTesterDataFiles()));
@@ -331,6 +346,7 @@ public final class AssessmentEditor {
         opening = true;
         checkFolder(testers, testersStatus, InputKind.TESTERS);
         checkFolder(starter, starterStatus, InputKind.STARTER);
+        checkModelAnswers();
 
         opening = false;
         lastFilled.put(InputKind.TESTERS, testers.getText().trim());
@@ -420,6 +436,78 @@ public final class AssessmentEditor {
         return new VBox(Parts.GAP_TINY, line, status);
     }
 
+    // Builds the model answers field with its Choose button and status.
+    private VBox modelAnswersField() {
+        modelAnswers.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(modelAnswers, Priority.ALWAYS);
+        modelAnswers.focusedProperty().addListener((seen, before, now) ->
+                modelAnswersFocusChanged(now));
+        Button choose = Parts.small("Choose", () -> chooseModelAnswers());
+        HBox line = Parts.row(Parts.GAP_SMALL,
+                new Node[] {modelAnswers, choose});
+        return new VBox(Parts.GAP_TINY, line, modelAnswersStatus);
+    }
+
+    // Checks the model answers field once the cursor leaves it.
+    private void modelAnswersFocusChanged(boolean focused) {
+        if (!focused) {
+            checkModelAnswers();
+        }
+    }
+
+    // Asks for the model answers folder, then checks it.
+    private void chooseModelAnswers() {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Choose the model answers folder");
+        Choosers.prepare(chooser);
+        File folder = chooser.showDialog(window.getWindow());
+        Choosers.remember(folder);
+        if (folder != null) {
+            modelAnswers.setText(Parts.configPath(folder.toPath()));
+            checkModelAnswers();
+        }
+    }
+
+    // Shows whether the model answers folder can be used, and for how
+    // many of the questions in the form it holds an answer.
+    private void checkModelAnswers() {
+        String cleaned = Parts.cleanPath(modelAnswers.getText());
+        if (!cleaned.equals(modelAnswers.getText())) {
+            modelAnswers.setText(cleaned);
+        }
+        modelAnswersStatus.getChildren().clear();
+        modelAnswersStatus.setSpacing(Parts.GAP_SMALL);
+        String text = modelAnswers.getText().trim();
+        if (text.isEmpty()) {
+            modelAnswersStatus.getChildren().add(smallMuted("None. The "
+                    + "tester strength and random inputs checks are off."));
+            return;
+        }
+        Path folder = existingFolder(text);
+        if (folder == null) {
+            modelAnswersStatus.getChildren().addAll(
+                    Parts.pill("Cannot be used", Tone.BAD),
+                    smallMuted("This folder could not be found."));
+            return;
+        }
+        List<Question> filled = formQuestions();
+        int found = 0;
+        for (Question question : filled) {
+            if (ModelAnswerCopy.findAnswerFile(folder, question) != null) {
+                found++;
+            }
+        }
+        Label pill = Parts.pill("Ready", Tone.GOOD);
+        if (found < filled.size()) {
+            pill = Parts.pill("Ready, check note", Tone.WARN);
+        }
+        Label note = smallMuted("Has an answer for " + found + " of "
+                + Parts.plural(filled.size(), "question") + ".");
+        note.setWrapText(true);
+        note.setMinWidth(0);
+        modelAnswersStatus.getChildren().addAll(pill, note);
+    }
+
     // Checks a folder field once the cursor leaves it.
     private void focusChanged(boolean focused, TextField field,
             HBox status, InputKind kind) {
@@ -466,6 +554,7 @@ public final class AssessmentEditor {
     // so its status is right before the assessment is saved.
     private void checkStarterAgain() {
         checkFolder(starter, starterStatus, InputKind.STARTER);
+        checkModelAnswers();
     }
 
     // Returns the questions in the form that have an id, folder and
@@ -902,7 +991,7 @@ public final class AssessmentEditor {
     // Reads the form, checks it, saves it and closes the sheet.
     private void save() {
         SavedAssessment draft = readDraft();
-        if (window.getState().isGrading() && isInUse()) {
+        if (window.getState().isAnyGrading() && isInUse()) {
             showProblem("A batch is being graded with this assessment. Save "
                     + "after it finishes.");
             return;
@@ -940,6 +1029,7 @@ public final class AssessmentEditor {
         }
         draft.setTestersDirectory(testers.getText().trim());
         draft.setStarterDirectory(starter.getText().trim());
+        draft.setModelAnswersDirectory(modelAnswers.getText().trim());
 
         draft.getProvidedClassFiles().addAll(splitList(
                 classFiles.getText()));
@@ -961,6 +1051,13 @@ public final class AssessmentEditor {
                     + "in use did not change.");
         } else {
             window.notify(result.getMessage());
+            // A renamed assessment in use keeps the zip files listed
+            boolean renamedInUse = originalName.equalsIgnoreCase(
+                    window.getState().getAssessmentName())
+                    && !originalName.equals(draft.getName());
+            if (renamedInUse) {
+                window.getState().renameAssessment(draft.getName());
+            }
             window.assessmentChanged();
         }
     }

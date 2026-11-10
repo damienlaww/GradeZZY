@@ -95,6 +95,9 @@ public class IngestRegressionTest {
                     + "First Name,Email\r\n"
                     + "#1,#ALIce,Example,Alice,alice@example.com\r\n");
             config.setString(ConfigKeys.SCORE_SHEET_FILE, roster.toString());
+            // A score sheet chosen for a section in the instructor's own
+            // settings would win over this roster, so the checks set none
+            config.setString(ConfigKeys.SCORE_SHEET_BY_SECTION, "");
             SubmissionLoader loader = new SubmissionLoader(config);
 
             Path alice = checkNestedZips(root, loader);

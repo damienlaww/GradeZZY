@@ -306,19 +306,24 @@ public class AnswerGroupsTest {
         run.addSubmission(failed);
 
         List<AnswerGroup> groups = AnswerGrouper.group(run);
-        // The Q2b group and the Q3 group
-        int expectedGroups = 2;
-        check(groups.size() == expectedGroups, "two groups: "
-                + groups.size());
+        // One group per failed test: Q2b tests 3 and 5, Q3 tests 2, 3, 4
+        int expectedGroups = 5;
+        check(groups.size() == expectedGroups, "one group per failed "
+                + "test: " + groups.size());
         AnswerGroup first = groups.get(0);
         boolean q2bFirst = first.getQuestionId().equals("Q2b")
-                && first.getPattern().equals("PPFPF")
-                && first.getTitle().equals("Failed tests 3 and 5");
+                && first.getPattern().equals("F:3")
+                && first.getTitle().equals("Failed test 3");
         check(q2bFirst, "Q2b comes before Q3 in question order");
+        AnswerGroup second = groups.get(1);
+        boolean sameStudents = second.getTitle().equals("Failed test 5")
+                && second.getUsernames().equals(first.getUsernames());
+        check(sameStudents, "a student is in the group of each test "
+                + "failed: " + second.getTitle());
         check(first.getUsernames().equals(Arrays.asList("amy", "ben",
                 "cat")), "usernames in run order, not graded left out: "
                 + first.getUsernames());
-        check(first.getKey().equals("Q2b|PPFPF"), "key");
+        check(first.getKey().equals("Q2b|F:3"), "key");
         check(first.getLabel().equals("") && !first.isChecked(),
                 "starts unnamed");
 
@@ -337,7 +342,9 @@ public class AnswerGroupsTest {
                         .equals(Arrays.asList("amy", "ben"));
         check(oneShape,
                 "amy and ben share a shape: " + shaped.getSameShapes());
-        AnswerGroup q3 = AnswerGrouper.group(run).get(1);
+        // After the two Q2b groups
+        int q3Index = 2;
+        AnswerGroup q3 = AnswerGrouper.group(run).get(q3Index);
         boolean noShape = q3.getUsernames().equals(Arrays.asList("q3only"))
                 && q3.getSameShapes().isEmpty();
         check(noShape, "a student without a file is grouped with no shape");
@@ -454,11 +461,11 @@ public class AnswerGroupsTest {
         check(lines.get(0).equals("Module,Section,Question,Mistake,Pattern,"
                 + "Label,Students,Same code shape,Checked,Usernames"),
                 "header: " + lines.get(0));
-        // The header and the row of the one group
-        int expectedLines = 2;
+        // The header and a row for each failed test, 3 and 5
+        int expectedLines = 3;
         boolean oneRow = lines.size() == expectedLines
                 && lines.get(1).contains("Q2b")
-                && lines.get(1).contains("Failed tests 3 and 5")
+                && lines.get(1).contains("Failed test 3")
                 && lines.get(1).contains("uses < instead of <=")
                 && lines.get(1).contains("amy ben")
                 && lines.get(1).contains(",2,");
@@ -482,7 +489,7 @@ public class AnswerGroupsTest {
         String text = Files.readString(json);
         boolean mistakeNamed = text.contains("\"mistake\"")
                 && text.contains("a, \\\"b\\\"")
-                && text.contains("Failed tests 3 and 5");
+                && text.contains("Failed test 3");
         check(mistakeNamed, "the JSON names the mistake");
         check(count(text, '{') == count(text, '}'),
                 "the JSON stays balanced");

@@ -25,6 +25,8 @@ import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.MouseEvent;
@@ -43,9 +45,11 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
 import gradezzy.model.ScoreAdjustment;
+import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.TestCaseResult;
 import gradezzy.plagiarism.SimilarityPair;
+import gradezzy.service.StudentMatcher;
 import gradezzy.ui.backend.ActionResult;
 import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
@@ -53,6 +57,7 @@ import gradezzy.ui.backend.RepairItem;
 import gradezzy.ui.backend.ResultState;
 import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.backend.ReviewRules;
+import gradezzy.util.TextUtils;
 
 /**
  * Details of one student on the Review step.
@@ -61,8 +66,9 @@ import gradezzy.ui.backend.ReviewRules;
  */
 public class StudentPanel extends ScrollPane {
 
-    // The width of the panel
-    private static final double WIDTH = 360.0;
+    // The width of the panel: wide enough for a card's four buttons on
+    // one line and a long status pill beside the total
+    private static final double WIDTH = 440.0;
 
     // The size of the close icon
     private static final double CLOSE_SIZE = 16.0;
@@ -93,6 +99,17 @@ public class StudentPanel extends ScrollPane {
 
     // Starts a new line in a tip
     private static final String LINE_END = "\n";
+
+    // Starts each line of the Similar code card
+    private static final String BULLET = "\u2022 ";
+
+    // Turns a similarity share into a percentage
+    private static final double PERCENT = 100.0;
+
+    // How many matches the Similar code card lists before Show all, and
+    // the link that hides the rest again
+    private static final int SHOWN_SIMILAR_LINES = 5;
+    private static final String SHOW_FEWER = "Show fewer";
 
     // Put before a line the student had, and a line the fix wrote
     private static final String REMOVED_SIGN = "- ";
@@ -263,6 +280,13 @@ public class StudentPanel extends ScrollPane {
                 + submission.getSection().getLabel());
         who.getStyleClass().add("small-text");
         VBox names = new VBox(name, who);
+        addMatchLine(names);
+        Label warning = Students.similarWarning(submission,
+                window.getBackend());
+        if (warning != null) {
+            names.getChildren().add(warning);
+            VBox.setMargin(warning, new Insets(Parts.GAP_TINY, 0, 0, 0));
+        }
         names.setMinWidth(0);
         HBox.setHgrow(names, Priority.ALWAYS);
 
@@ -887,18 +911,36 @@ public class StudentPanel extends ScrollPane {
 
     // ---------------------------------------------------------- problems
 
-    // Adds a card for each flag and problem that is not a fix.
+    // Adds a card for each flag and problem that is not a fix. Some
+    // kinds share one card, where the first of them would be: a
+    // student's Similar code flags, and the questions that did not
+    // compile, crashed or ran too long, as each is one thing to look at.
     private void addProblems(DashboardBackend backend) {
         addZeroCard(backend);
         int shared = 0;
+        // The kinds that share a card, in the order they first appear,
+        // with their flags and the place of their card
+        List<AnomalyType> groupedTypes = new ArrayList<>();
+        List<List<Anomaly>> groups = new ArrayList<>();
+        List<Integer> places = new ArrayList<>();
         for (Anomaly anomaly : submission.getAnomalies()) {
-            boolean finding = ReviewRules.isValidationFinding(
-                    anomaly.getType());
-            if (!finding && isShared(anomaly)) {
+            AnomalyType type = anomaly.getType();
+            boolean finding = ReviewRules.isValidationFinding(type);
+            boolean similar = type == AnomalyType.SIMILAR_CODE;
+            if (similar) {
+                addToGroup(anomaly, groupedTypes, groups, places);
+            } else if (!finding && isShared(anomaly)) {
                 shared++;
+            } else if (isGroupedType(type)) {
+                addToGroup(anomaly, groupedTypes, groups, places);
             } else if (!finding) {
                 body.getChildren().add(createProblemCard(anomaly, backend));
             }
+        }
+        // The last card first, so the places of earlier ones still hold
+        for (int index = groups.size() - 1; index >= 0; index--) {
+            body.getChildren().add(places.get(index), createGroupCard(
+                    groupedTypes.get(index), groups.get(index), backend));
         }
         if (shared > 0) {
             Label note = Parts.muted("Also " + Parts.plural(shared,
@@ -907,6 +949,158 @@ public class StudentPanel extends ScrollPane {
             note.setWrapText(true);
             body.getChildren().add(note);
         }
+    }
+
+    // Says whether a kind of problem shares one card for all questions.
+    private static boolean isGroupedType(AnomalyType type) {
+        return type == AnomalyType.SIMILAR_CODE
+                || type == AnomalyType.COMPILE_ERROR
+                || type == AnomalyType.RUNTIME_ERROR
+                || type == AnomalyType.TIMEOUT;
+    }
+
+    // Adds a flag to the group of its kind, starting the group, at the
+    // place its card goes, when it is the first of its kind.
+    private void addToGroup(Anomaly anomaly, List<AnomalyType> types,
+            List<List<Anomaly>> groups, List<Integer> places) {
+        int index = types.indexOf(anomaly.getType());
+        if (index < 0) {
+            types.add(anomaly.getType());
+            groups.add(new ArrayList<>());
+            places.add(body.getChildren().size());
+            index = types.size() - 1;
+        }
+        groups.get(index).add(anomaly);
+    }
+
+    // Builds the one card of a group: Similar code, one problem's own
+    // card, or the questions of one kind of problem together.
+    private VBox createGroupCard(AnomalyType type, List<Anomaly> group,
+            DashboardBackend backend) {
+        if (type == AnomalyType.SIMILAR_CODE) {
+            return createSimilarCard(group, backend);
+        }
+        if (group.size() == 1) {
+            return createProblemCard(group.get(0), backend);
+        }
+        return createQuestionsCard(type, group, backend);
+    }
+
+    // Builds one card for the questions that had the same problem, such
+    // as "Q1a and Q1b did not compile": each question's words, one a
+    // line, Mark all as checked, and Open code for each question.
+    private VBox createQuestionsCard(AnomalyType type, List<Anomaly> group,
+            DashboardBackend backend) {
+        List<Anomaly> open = new ArrayList<>();
+        for (Anomaly anomaly : group) {
+            if (backend.needsReview(anomaly)) {
+                open.add(anomaly);
+            }
+        }
+        Label tag = Parts.pill("Problem", Tone.BAD);
+        if (open.isEmpty()) {
+            ReviewDecision decision = backend.getDecision(group.get(0));
+            tag = Parts.pill(decisionWords(decision, false), Tone.NEUTRAL);
+        }
+        List<String> lines = new ArrayList<>();
+        for (Anomaly anomaly : group) {
+            lines.add(BULLET + anomaly.getMessage());
+        }
+        VBox card = createCard(tag, questionTitle(type,
+                questionsOf(group)), TextUtils.join(LINE_END, lines));
+        if (!open.isEmpty()) {
+            addAdvice(card, group.get(0));
+        }
+
+        HBox buttons = Parts.row(Parts.GAP_SMALL);
+        if (backend.supports(Capability.FLAG_REVIEW) && !open.isEmpty()) {
+            buttons.getChildren().add(Parts.small("Mark all as checked",
+                    () -> decideAll(backend, open, ReviewDecision.REVIEWED),
+                    Tone.GOOD));
+        } else if (backend.supports(Capability.FLAG_REVIEW)) {
+            Button undo = Parts.small("Undo", () -> decideAll(backend,
+                    group, ReviewDecision.OPEN));
+            Parts.tip(undo, "Take back this decision, so they wait for you "
+                    + "again. No mark changes.");
+            buttons.getChildren().add(undo);
+        }
+        addOpenCodeChoices(buttons, group);
+        addButtons(card, buttons);
+        return card;
+    }
+
+    // Lists the questions a group of problems is about, in order, each
+    // once.
+    private List<String> questionsOf(List<Anomaly> group) {
+        List<String> questions = new ArrayList<>();
+        for (Anomaly anomaly : group) {
+            String questionId = questionOf(anomaly);
+            if (questionId != null && !questions.contains(questionId)) {
+                questions.add(questionId);
+            }
+        }
+        return questions;
+    }
+
+    // Names a problem with its questions, such as "Q1a and Q1b did not
+    // compile"; the plain title when it names no question.
+    private String questionTitle(AnomalyType type, List<String> questions) {
+        if (questions.isEmpty()) {
+            return Problems.title(type);
+        }
+        String names = joinWithAnd(questions);
+        boolean one = questions.size() == 1;
+        if (type == AnomalyType.COMPILE_ERROR) {
+            return names + " did not compile";
+        } else if (type == AnomalyType.RUNTIME_ERROR && one) {
+            return names + " crashed during a test";
+        } else if (type == AnomalyType.RUNTIME_ERROR) {
+            return names + " crashed during tests";
+        } else if (type == AnomalyType.TIMEOUT && one) {
+            return names + " ran too long and was stopped";
+        } else if (type == AnomalyType.TIMEOUT) {
+            return names + " ran too long and were stopped";
+        }
+        return Problems.title(type) + DOT + names;
+    }
+
+    // Joins names as "A", "A and B" or "A, B and C".
+    private static String joinWithAnd(List<String> names) {
+        int lastIndex = names.size() - 1;
+        if (lastIndex <= 0) {
+            return TextUtils.join("", names);
+        }
+        return TextUtils.join(", ", names.subList(0, lastIndex)) + " and "
+                + names.get(lastIndex);
+    }
+
+    // Adds Open code for the one question of a group, or a list of its
+    // questions when there are several.
+    private void addOpenCodeChoices(HBox buttons, List<Anomaly> group) {
+        boolean noCode = !window.getBackend().supports(Capability.SOURCE_VIEW)
+                || submission.getQuestionResults().isEmpty()
+                || buildingForSheet;
+        if (noCode) {
+            return;
+        }
+        List<String> questions = questionsOf(group);
+        if (questions.size() <= 1) {
+            addOpenCode(buttons, group.get(0));
+            return;
+        }
+        MenuButton openCode = new MenuButton("Open code");
+        openCode.getStyleClass().addAll("button", "small", "compare-with");
+        for (Anomaly anomaly : group) {
+            String questionId = questionOf(anomaly);
+            if (questionId != null) {
+                MenuItem item = new MenuItem(questionId);
+                item.setOnAction(event -> openCodeFor(anomaly, questionId));
+                openCode.getItems().add(item);
+            }
+        }
+        Parts.tip(openCode, "Pick a question to read its code and test "
+                + "output.");
+        buttons.getChildren().add(openCode);
     }
 
     // Adds a card for a 0 that nothing flagged, so the instructor can
@@ -986,6 +1180,341 @@ public class StudentPanel extends ScrollPane {
         return false;
     }
 
+    // Builds the one card of a student's Similar code flags: who the
+    // check found alike and how alike, one a line, with Looks fine and
+    // Keep flagged deciding every open one at once, Compare for each
+    // other student, and Open code.
+    private VBox createSimilarCard(List<Anomaly> flags,
+            DashboardBackend backend) {
+        List<Anomaly> open = new ArrayList<>();
+        for (Anomaly flag : flags) {
+            if (backend.needsReview(flag)) {
+                open.add(flag);
+            }
+        }
+        Label tag = Parts.pill("Flag", Tone.WARN);
+        if (open.isEmpty()) {
+            ReviewDecision decision = backend.getDecision(flags.get(0));
+            tag = Parts.pill(decisionWords(decision, true), Tone.NEUTRAL);
+        }
+        List<String> lines = describeSimilar(flags, backend);
+        int students = countOtherStudents(flags, backend);
+        String title = "Very similar to another student's code";
+        if (students > 1) {
+            title = "Very similar to " + students + " other students' "
+                    + "code";
+        }
+        Label detail = detailLabel("");
+        VBox card = createCard(tag, title, detail);
+        showSimilarLines(detail, lines, false);
+        if (lines.size() > SHOWN_SIMILAR_LINES) {
+            Hyperlink more = new Hyperlink("Show all " + lines.size()
+                    + " matches");
+            more.getStyleClass().addAll("flow-link", "small-text");
+            more.setOnAction(event -> toggleSimilarLines(more, detail,
+                    lines));
+            card.getChildren().add(more);
+        }
+        if (!open.isEmpty()) {
+            Label advice = Parts.muted("Similar is not proof of copying. "
+                    + "Compare to read both answers side by side; your "
+                    + "decision covers every student listed.");
+            advice.setWrapText(true);
+            advice.getStyleClass().add("small-text");
+            card.getChildren().add(advice);
+        }
+
+        HBox buttons = Parts.row(Parts.GAP_SMALL);
+        if (backend.supports(Capability.FLAG_REVIEW) && !open.isEmpty()) {
+            Button fine = Parts.small("Looks fine", () -> decideAll(backend,
+                    open, ReviewDecision.REJECTED), Tone.GOOD);
+            Button keep = Parts.small("Keep flagged", () -> decideAll(
+                    backend, open, ReviewDecision.REVIEWED), Tone.BAD);
+            buttons.getChildren().addAll(fine, keep);
+        } else if (backend.supports(Capability.FLAG_REVIEW)) {
+            Button undo = Parts.small("Undo", () -> decideAll(backend,
+                    flags, ReviewDecision.OPEN));
+            Parts.tip(undo, "Take back this decision, so it waits for you "
+                    + "again. No mark changes.");
+            buttons.getChildren().add(undo);
+        }
+        addCompareChoices(buttons, flags, backend);
+        addOpenCode(buttons, flags.get(0));
+        addButtons(card, buttons);
+        return card;
+    }
+
+    // Shows the first matches of the Similar code card, or all of them.
+    private void showSimilarLines(Label detail, List<String> lines,
+            boolean all) {
+        int shown = lines.size();
+        if (!all) {
+            shown = Math.min(shown, SHOWN_SIMILAR_LINES);
+        }
+        detail.setText(TextUtils.join(LINE_END, lines.subList(0, shown)));
+    }
+
+    // Shows all the matches, or the first few again.
+    private void toggleSimilarLines(Hyperlink link, Label detail,
+            List<String> lines) {
+        boolean showAll = !link.getText().equals(SHOW_FEWER);
+        showSimilarLines(detail, lines, showAll);
+        if (showAll) {
+            link.setText(SHOW_FEWER);
+        } else {
+            link.setText("Show all " + lines.size() + " matches");
+        }
+    }
+
+    // Counts the other students the check found alike, each once, though
+    // one may be alike on several questions.
+    private int countOtherStudents(List<Anomaly> flags,
+            DashboardBackend backend) {
+        GradingRun run = window.getState().getRun();
+        List<String> others = new ArrayList<>();
+        for (Anomaly flag : flags) {
+            SimilarityPair pair = null;
+            if (run != null) {
+                pair = backend.findSimilarPair(run, flag);
+            }
+            String other = flag.getId();
+            if (pair != null) {
+                other = otherOf(pair);
+            }
+            if (!others.contains(other)) {
+                others.add(other);
+            }
+        }
+        return others.size();
+    }
+
+    // Lists who the check found alike, one a line, such as "Q2b: 100%
+    // alike to RAY TAN (ray.tan.2025)", or a flag's own words when its
+    // pair cannot be read.
+    private List<String> describeSimilar(List<Anomaly> flags,
+            DashboardBackend backend) {
+        GradingRun run = window.getState().getRun();
+        List<String> lines = new ArrayList<>();
+        for (Anomaly flag : flags) {
+            SimilarityPair pair = null;
+            if (run != null) {
+                pair = backend.findSimilarPair(run, flag);
+            }
+            if (pair == null) {
+                lines.add(BULLET + flag.getMessage());
+            } else {
+                long percent = Math.round(pair.getSimilarity() * PERCENT);
+                lines.add(BULLET + pair.getQuestionId() + ": " + percent
+                        + Parts.PERCENT_SIGN + " alike to "
+                        + describeStudent(run, otherOf(pair)));
+            }
+        }
+        return lines;
+    }
+
+    // Returns the other student of a pair this student is in.
+    private String otherOf(SimilarityPair pair) {
+        if (pair.getFirstUsername().equals(submission.getUsername())) {
+            return pair.getSecondUsername();
+        }
+        return pair.getFirstUsername();
+    }
+
+    // Names a student by name and email ID, such as RAY TAN
+    // (ray.tan.2025), or by email ID alone when not in the run.
+    private String describeStudent(GradingRun run, String username) {
+        for (Submission other : run.getSubmissions()) {
+            boolean named = other.getUsername().equals(username)
+                    && !Students.name(other).equals(username);
+            if (named) {
+                return Students.name(other) + " (" + username + ")";
+            }
+        }
+        return username;
+    }
+
+    // Adds Compare for a single pair, or Compare with, a list of the
+    // other students, for several.
+    private void addCompareChoices(HBox buttons, List<Anomaly> flags,
+            DashboardBackend backend) {
+        GradingRun run = window.getState().getRun();
+        boolean canCompare = run != null
+                && backend.supports(Capability.SIMILARITY_DETAIL);
+        if (!canCompare) {
+            return;
+        }
+        List<SimilarityPair> pairs = new ArrayList<>();
+        for (Anomaly flag : flags) {
+            SimilarityPair pair = backend.findSimilarPair(run, flag);
+            if (pair != null) {
+                pairs.add(pair);
+            }
+        }
+        if (pairs.size() == 1) {
+            SimilarityPair pair = pairs.get(0);
+            Button compare = Parts.small("Compare",
+                    () -> openCompare(run, pair));
+            Parts.tip(compare, "Show " + pair.getQuestionId() + " of both "
+                    + "students side by side, with the same lines marked.");
+            buttons.getChildren().add(compare);
+            return;
+        }
+        if (pairs.isEmpty()) {
+            return;
+        }
+        MenuButton compareWith = new MenuButton("Compare with");
+        compareWith.getStyleClass().addAll("button", "small",
+                "compare-with");
+        for (SimilarityPair pair : pairs) {
+            MenuItem item = new MenuItem(pair.getQuestionId() + ": "
+                    + describeStudent(run, otherOf(pair)));
+            item.setOnAction(event -> openCompare(run, pair));
+            compareWith.getItems().add(item);
+        }
+        Parts.tip(compareWith, "Pick a student to read both answers side "
+                + "by side, with the same lines marked.");
+        buttons.getChildren().add(compareWith);
+    }
+
+    // Decides several flags at once, with one Undo that puts each back.
+    private void decideAll(DashboardBackend backend, List<Anomaly> flags,
+            ReviewDecision decision) {
+        List<ReviewDecision> before = new ArrayList<>();
+        ActionResult result = null;
+        for (Anomaly flag : flags) {
+            before.add(backend.getDecision(flag));
+            result = backend.setDecision(flag, decision);
+        }
+        apply(result, false);
+        boolean done = result.isDone() && decision != ReviewDecision.OPEN;
+        if (done) {
+            window.notify(decisionNotice(decision), "Undo",
+                    () -> restoreAll(backend, flags, before));
+        }
+    }
+
+    // Puts several flags back to the decisions they had.
+    private void restoreAll(DashboardBackend backend, List<Anomaly> flags,
+            List<ReviewDecision> before) {
+        ActionResult result = null;
+        for (int index = 0; index < flags.size(); index++) {
+            result = backend.setDecision(flags.get(index),
+                    before.get(index));
+        }
+        apply(result, false);
+    }
+
+    // Names a flag or problem with its question when it has one, such
+    // as "Q1a did not compile" or "The header names another student ·
+    // Q3".
+    private String cardTitle(Anomaly anomaly) {
+        String questionId = questionOf(anomaly);
+        String title = Problems.title(anomaly.getType());
+        if (questionId == null || title.contains(questionId)) {
+            return title;
+        }
+        List<String> questions = new ArrayList<>();
+        questions.add(questionId);
+        return questionTitle(anomaly.getType(), questions);
+    }
+
+    // Says under the student's name who they were matched to on the
+    // score sheet by hand, such as "Matched to tina.goh.2025 on the score
+    // sheet", with a link that takes the match back.
+    private void addMatchLine(VBox names) {
+        Student student = submission.getStudent();
+        boolean byHand = student != null && !student.getUsername()
+                .equalsIgnoreCase(submission.getUsername());
+        if (!byHand) {
+            return;
+        }
+        Label matched = Parts.muted("Matched to " + student.getUsername()
+                + " on the score sheet");
+        matched.getStyleClass().add("small-text");
+        HBox line = Parts.row(Parts.GAP_SMALL, new Node[] {matched});
+        if (window.getBackend().supports(Capability.SETTINGS)) {
+            Hyperlink undo = Parts.link("Undo match",
+                    () -> matchTo(null, student));
+            undo.getStyleClass().add("small-text");
+            line.getChildren().add(undo);
+        }
+        names.getChildren().add(line);
+    }
+
+    // Offers to match a student who is not on the score sheet to one of
+    // its students who has no submission: the closest name first, as
+    // "Did you mean ...?" when it looks like a typo, and a list of the
+    // rest, closest first. Live mode reads the score sheet in the
+    // background the first time, then shows the panel again.
+    private void addScoreSheetMatch(VBox card) {
+        GradingRun run = window.getState().getRun();
+        if (run == null || buildingForSheet) {
+            return;
+        }
+        List<Student> missing = window.findMissingStudents(run,
+                () -> refresh());
+        if (missing.isEmpty()) {
+            return;
+        }
+        List<Student> ranked = StudentMatcher.rankByCloseness(missing,
+                submission.getUsername());
+        Student closest = ranked.get(0);
+        boolean typo = StudentMatcher.isLikelyTypo(closest.getUsername(),
+                submission.getUsername());
+        HBox buttons = Parts.row(Parts.GAP_SMALL);
+        if (typo) {
+            Label guess = Parts.strong("Did you mean " + describe(closest)
+                    + "? They are on the score sheet with no submission.");
+            guess.setWrapText(true);
+            guess.getStyleClass().add("small-text");
+            card.getChildren().add(guess);
+            Button match = Parts.small("Match to " + closest.getUsername(),
+                    () -> matchTo(closest, null), Tone.GOOD);
+            Parts.tip(match, "Their marks fill " + closest.getUsername()
+                    + "'s row of the score sheet. You can undo it.");
+            buttons.getChildren().add(match);
+        }
+        MenuButton others = new MenuButton("Match to...");
+        others.getStyleClass().addAll("button", "small", "compare-with");
+        for (Student student : ranked) {
+            MenuItem item = new MenuItem(describe(student));
+            item.setOnAction(event -> matchTo(student, null));
+            others.getItems().add(item);
+        }
+        Parts.tip(others, "Pick the student on the score sheet this upload "
+                + "belongs to, closest names first.");
+        buttons.getChildren().add(others);
+        addButtons(card, buttons);
+    }
+
+    // Names a score sheet student, such as TINA GOH (tina.goh.2025).
+    private static String describe(Student student) {
+        String name = student.getFullName();
+        if (name.isEmpty()) {
+            return student.getUsername();
+        }
+        return name + " (" + student.getUsername() + ")";
+    }
+
+    // Matches the student to a score sheet student, or takes the match
+    // back with null, and offers Undo. previous is the student to go back
+    // to, or null for not on the score sheet.
+    private void matchTo(Student student, Student previous) {
+        GradingRun run = window.getState().getRun();
+        if (run == null) {
+            return;
+        }
+        ActionResult result = window.getBackend().matchStudent(run,
+                submission, student);
+        // Who has no submission changed
+        window.getState().forgetMissingStudents();
+        apply(result, false);
+        if (result.isDone()) {
+            window.notify(result.getMessage(), "Undo",
+                    () -> matchTo(previous, student));
+        }
+    }
+
     // Builds the card of one flag or problem.
     private VBox createProblemCard(Anomaly anomaly,
             DashboardBackend backend) {
@@ -998,10 +1527,13 @@ public class StudentPanel extends ScrollPane {
         } else if (flag) {
             tag = Parts.pill("Flag", Tone.WARN);
         }
-        VBox card = createCard(tag, Problems.title(anomaly.getType()),
+        VBox card = createCard(tag, cardTitle(anomaly),
                 anomaly.getMessage());
         if (open) {
             addAdvice(card, anomaly);
+        }
+        if (anomaly.getType() == AnomalyType.UNKNOWN_STUDENT) {
+            addScoreSheetMatch(card);
         }
         HBox buttons = Parts.row(Parts.GAP_SMALL);
         if (!backend.supports(Capability.FLAG_REVIEW)) {
@@ -1058,12 +1590,23 @@ public class StudentPanel extends ScrollPane {
 
     // Builds a card with its tag, title and detail.
     private VBox createCard(Label tag, String titleText, String detailText) {
-        Label title = Parts.strong(titleText);
-        title.setWrapText(true);
+        return createCard(tag, titleText, detailLabel(detailText));
+    }
+
+    // Returns the small grey words under a card's title.
+    private Label detailLabel(String detailText) {
         Label detail = Parts.muted(Problems.shortenPaths(detailText,
                 submission));
         detail.setWrapText(true);
         detail.getStyleClass().add("small-text");
+        return detail;
+    }
+
+    // Builds a card with its tag, title and a detail label to change
+    // later.
+    private VBox createCard(Label tag, String titleText, Label detail) {
+        Label title = Parts.strong(titleText);
+        title.setWrapText(true);
         VBox text = new VBox(LINE_GAP, title, detail);
         VBox card = new VBox(Parts.GAP_SMALL, tag, text);
         card.getStyleClass().add("fix-card");
@@ -1084,11 +1627,19 @@ public class StudentPanel extends ScrollPane {
     }
 
     // Adds a row of buttons to a card, unless it is empty.
+    // The buttons are moved into a row that wraps, so a card with many
+    // buttons never makes the panel wider than it is.
     private void addButtons(VBox card, HBox buttons) {
-        if (!buttons.getChildren().isEmpty()) {
-            buttons.getStyleClass().add("card-buttons");
-            card.getChildren().add(buttons);
+        if (buttons.getChildren().isEmpty()) {
+            return;
         }
+        List<Node> buttonNodes = new ArrayList<>(buttons.getChildren());
+        buttons.getChildren().clear();
+        FlowPane wrapping = new FlowPane(buttons.getSpacing(),
+                Parts.GAP_SMALL);
+        wrapping.getChildren().addAll(buttonNodes);
+        wrapping.getStyleClass().add("card-buttons");
+        card.getChildren().add(wrapping);
     }
 
     // Returns the words for a settled flag or problem.

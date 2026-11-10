@@ -471,7 +471,7 @@ public class FlowCheck {
         window.show(Step.SET_UP);
         window.startGrading();
         shoot(scene, tag, "3-grade");
-        backend.cancelGrading();
+        backend.cancelGrading(window.getState().getSection());
     }
 
     // Returns the first student with something to check, or null.

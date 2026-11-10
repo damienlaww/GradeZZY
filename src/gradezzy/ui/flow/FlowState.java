@@ -33,7 +33,8 @@ import gradezzy.ui.backend.InputKind;
  */
 public class FlowState {
 
-    // Separates the module and section in a key such as CS102/G2
+    // Separates the module, section and assessment in a key such as
+    // CS102/G2/Lab Test 2
     private static final String KEY_SEPARATOR = "/";
 
     // The chosen module, such as CS102
@@ -42,17 +43,20 @@ public class FlowState {
     // The chosen section, such as G2
     private String sectionCode = "";
 
+    // The name of the assessment in use, such as Lab Test 2
+    private String assessmentName = "";
+
     // The files chosen on Set up
     private final ImportBatch batch = new ImportBatch();
 
-    // The submissions chosen for the sections not open now, by module
-    // and section such as CS102/G2, so they come back when the instructor
-    // opens that section again
+    // The submissions chosen for the sections and assessments not open
+    // now, by module, section and assessment such as CS102/G2/Lab Test 2,
+    // so they come back when the instructor opens them again
     private final Map<String, List<ImportItem>> submissionsBySection =
             new HashMap<>();
 
-    // The paths saved for each section when GradeZZY was last closed,
-    // until Set up checks them again and lists them
+    // The paths saved for each section and assessment when GradeZZY was
+    // last closed, until Set up checks them again and lists them
     private final Map<String, List<Path>> savedPaths = new HashMap<>();
 
     // The sections whose submissions list was cleared on purpose, so
@@ -65,8 +69,9 @@ public class FlowState {
     // The furthest step the instructor may open
     private Step furthest = Step.SET_UP;
 
-    // True while a batch is being graded
-    private boolean grading = false;
+    // The latest batch of each section, being graded or just ended.
+    // Several sections can be graded at once.
+    private final List<GradingJob> jobs = new ArrayList<>();
 
     // The fixes being undone or applied again on a background thread,
     // the one running now first, or none. Only one job runs at a time,
@@ -100,12 +105,6 @@ public class FlowState {
 
     // Whether Export fills in only the chosen students
     private boolean exportOnlyPicked = false;
-
-    // The chosen files the grading now running skips, until it ends
-    private final List<ImportItem> pendingSkipped = new ArrayList<>();
-
-    // True from the start of grading until the skipped files have a run
-    private boolean skippedWaiting = false;
 
     // The skipped files of each run graded since GradeZZY opened, by run
     // id, so a run opened again from Runs still has them
@@ -167,15 +166,59 @@ public class FlowState {
         swapSubmissions(before);
     }
 
-    // Names the chosen module and section, such as CS102/G2.
+    /**
+     * Returns the name of the assessment in use.
+     *
+     * @return the name, or an empty string
+     */
+    public String getAssessmentName() {
+        return assessmentName;
+    }
+
+    /**
+     * Notes the assessment in use. The zip files chosen for the one
+     * before are put away and the ones chosen earlier for this one come
+     * back, as for a change of section, because each lab test has its
+     * own zip files.
+     *
+     * @param assessmentName the name, or null for none
+     */
+    public void setAssessmentName(String assessmentName) {
+        String before = sectionKey();
+        this.assessmentName = "";
+        if (assessmentName != null) {
+            this.assessmentName = assessmentName;
+        }
+        swapSubmissions(before);
+    }
+
+    /**
+     * Notes a new name for the assessment in use, after it was renamed.
+     * The zip files listed now stay, as they belong to the same lab test.
+     *
+     * @param assessmentName the new name
+     */
+    public void renameAssessment(String assessmentName) {
+        this.assessmentName = assessmentName;
+    }
+
+    // Names the chosen module, section and assessment, such as
+    // CS102/G2/Lab Test 2.
     private String sectionKey() {
+        return sectionOnlyKey() + KEY_SEPARATOR + assessmentName;
+    }
+
+    // Names the chosen module and section only, such as CS102/G2, as the
+    // chosen files were kept by before each assessment had its own.
+    private String sectionOnlyKey() {
         return moduleCode + KEY_SEPARATOR + sectionCode;
     }
 
-    // Keeps each section's chosen submissions apart: after the module or
-    // section changes, the files chosen for the one before are put away
-    // and the files chosen earlier for this one come back, so they are
-    // never graded as the wrong section and are still listed on return.
+    // Keeps the chosen submissions of each section and assessment apart:
+    // after the module, section or assessment changes, the files chosen
+    // for the one before are put away and the files chosen earlier for
+    // this one come back, so they are never graded as the wrong section
+    // or lab test and are still listed on return.
     private void swapSubmissions(String before) {
         String now = sectionKey();
         if (now.equals(before)) {
@@ -242,23 +285,24 @@ public class FlowState {
     }
 
     /**
-     * Says whether files are kept for the chosen section: saved when
-     * GradeZZY was last closed, put away while another section was open,
-     * or cleared on purpose. Only a section with none of these gets the
+     * Says whether files are kept for the chosen section and assessment:
+     * saved when GradeZZY was last closed, put away while another was
+     * open, or cleared on purpose. Only one with none of these gets the
      * files of its last run back.
      *
-     * @return true when files are kept for the section
+     * @return true when files are kept for the section and assessment
      */
     public boolean hasKeptFiles() {
         String key = sectionKey();
         return savedPaths.containsKey(key)
+                || savedPaths.containsKey(sectionOnlyKey())
                 || submissionsBySection.containsKey(key)
                 || clearedSections.contains(key);
     }
 
     /**
-     * Returns the chosen module and section as one name, such as
-     * CS102/G2, as the chosen files are kept by.
+     * Returns the chosen module, section and assessment as one name, such
+     * as CS102/G2/Lab Test 2, as the chosen files are kept by.
      *
      * @return the name
      */
@@ -268,9 +312,11 @@ public class FlowState {
 
     /**
      * Keeps the paths saved when GradeZZY was last closed, until each
-     * section is opened on Set up.
+     * section and assessment is opened on Set up.
      *
-     * @param paths the paths by section, such as CS102/G2
+     * @param paths the paths by section and assessment, such as
+     *        CS102/G2/Lab Test 2, or by section only when saved by an
+     *        older version, such as CS102/G2
      */
     public void setSavedPaths(Map<String, List<Path>> paths) {
         savedPaths.clear();
@@ -278,8 +324,10 @@ public class FlowState {
     }
 
     /**
-     * Takes the saved paths of the chosen section when its list is
-     * empty, so Set up can check them again and list them.
+     * Takes the saved paths of the chosen section and assessment when its
+     * list is empty, so Set up can check them again and list them. Paths
+     * an older version saved for the section only go to the first
+     * assessment it is opened with.
      *
      * @return the paths, or an empty list when there are none to bring
      *         back
@@ -291,6 +339,9 @@ public class FlowState {
 
         List<Path> paths = savedPaths.remove(sectionKey());
         if (paths == null) {
+            paths = savedPaths.remove(sectionOnlyKey());
+        }
+        if (paths == null) {
             return new ArrayList<>();
         }
 
@@ -298,10 +349,10 @@ public class FlowState {
     }
 
     /**
-     * Adds files checked again for a section to that section: to the
-     * list when it is open, else to the files kept for it.
+     * Adds files checked again for a section and assessment to them: to
+     * the list when they are open, else to the files kept for them.
      *
-     * @param key the section, such as CS102/G2
+     * @param key the section and assessment, such as CS102/G2/Lab Test 2
      * @param items the checked files
      */
     public void addSubmissionsTo(String key, List<ImportItem> items) {
@@ -322,12 +373,12 @@ public class FlowState {
     }
 
     /**
-     * Lists the paths chosen for every section, to save them: the open
-     * section's list, the files kept for the others, paths saved earlier
-     * that have not been listed yet, and an empty list for each section
-     * cleared on purpose.
+     * Lists the paths chosen for every section and assessment, to save
+     * them: the open list, the files kept for the others, paths saved
+     * earlier that have not been listed yet, and an empty list for each
+     * one cleared on purpose.
      *
-     * @return the paths by section
+     * @return the paths by section and assessment
      */
     public Map<String, List<Path>> listChosenPaths() {
         Map<String, List<Path>> chosen = new HashMap<>();
@@ -433,32 +484,18 @@ public class FlowState {
     }
 
     /**
-     * Keeps the chosen files grading is about to skip, until the run they
-     * belong to ends.
-     *
-     * @param files the files that cannot be used
-     */
-    public void setSkippedFiles(List<ImportItem> files) {
-        pendingSkipped.clear();
-        pendingSkipped.addAll(files);
-        skippedWaiting = true;
-    }
-
-    /**
-     * Ties the skipped files to the run that has just ended. Only the
-     * first run to end after grading started gets them. A late batch
-     * added to an earlier run adds its skipped files to that run's.
-     * The run was graded again, so an earlier export of it is forgotten.
+     * Ties the files a batch skipped to the run that has just ended. A
+     * late batch added to an earlier run adds its skipped files to that
+     * run's. The run was graded again, so an earlier export of it is
+     * forgotten.
      *
      * @param gradingRun the run, or null when grading failed
+     * @param skipped the files the batch skipped
      */
-    public void attachSkippedFiles(GradingRun gradingRun) {
+    public void attachSkippedFiles(GradingRun gradingRun,
+            List<ImportItem> skipped) {
         forgetExport(gradingRun);
-        if (!skippedWaiting) {
-            return;
-        }
-        skippedWaiting = false;
-        if (gradingRun == null || pendingSkipped.isEmpty()) {
+        if (gradingRun == null || skipped.isEmpty()) {
             return;
         }
         List<ImportItem> files = skippedByRun.get(gradingRun.getId());
@@ -466,7 +503,7 @@ public class FlowState {
             files = new ArrayList<>();
             skippedByRun.put(gradingRun.getId(), files);
         }
-        files.addAll(pendingSkipped);
+        files.addAll(skipped);
     }
 
     /**
@@ -523,24 +560,79 @@ public class FlowState {
     }
 
     /**
-     * Says whether a batch is being graded.
+     * Says whether the section chosen now is being graded.
      *
-     * @return true while grading
+     * @return true while its batch grades
      */
     public boolean isGrading() {
-        return grading;
+        return isGrading(getSection());
     }
 
     /**
-     * Records whether a batch is being graded.
+     * Says whether a section is being graded.
      *
-     * @param grading true while grading
+     * @param section the section
+     * @return true while its batch grades
      */
-    public void setGrading(boolean grading) {
-        this.grading = grading;
-        if (grading) {
-            gradingCount++;
-            // A resume or retry grades the run shown again
+    public boolean isGrading(Section section) {
+        GradingJob job = getJob(section);
+        return job != null && !job.isEnded();
+    }
+
+    /**
+     * Says whether any section is being graded.
+     *
+     * @return true while any batch grades
+     */
+    public boolean isAnyGrading() {
+        return !getRunningJobs().isEmpty();
+    }
+
+    /**
+     * Returns the latest batch of a section, being graded or ended.
+     *
+     * @param section the section
+     * @return the job, or null when none was started in this session
+     */
+    public GradingJob getJob(Section section) {
+        for (GradingJob job : jobs) {
+            if (job.isOf(section)) {
+                return job;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Lists the batches being graded now, oldest first.
+     *
+     * @return the jobs that have not ended
+     */
+    public List<GradingJob> getRunningJobs() {
+        List<GradingJob> running = new ArrayList<>();
+        for (GradingJob job : jobs) {
+            if (!job.isEnded()) {
+                running.add(job);
+            }
+        }
+        return running;
+    }
+
+    /**
+     * Keeps a batch that starts grading, in place of the section's
+     * earlier one.
+     *
+     * @param job the job
+     */
+    public void startJob(GradingJob job) {
+        GradingJob earlier = getJob(job.getSection());
+        if (earlier != null) {
+            jobs.remove(earlier);
+        }
+        jobs.add(job);
+        gradingCount++;
+        // A resume or retry grades the run shown again
+        if (job.isOf(getSection())) {
             forgetExport(run);
         }
     }

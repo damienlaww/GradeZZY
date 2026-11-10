@@ -37,8 +37,9 @@ final class RunTables {
     private static final String INSERT_RUN = "INSERT OR REPLACE INTO runs "
             + "(run_id, started_at, module_code, section_code, "
             + "assessment_name, assessment_module, placeholder_folders, "
-            + "score_sheet_file, testers_dir, starter_dir) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            + "score_sheet_file, testers_dir, starter_dir, "
+            + "grading_settings) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     // Saves one question of a run
     private static final String INSERT_QUESTION = "INSERT INTO "
@@ -53,7 +54,8 @@ final class RunTables {
     private static final String SELECT_RUN = "SELECT started_at, "
             + "module_code, section_code, assessment_name, "
             + "assessment_module, placeholder_folders, score_sheet_file, "
-            + "testers_dir, starter_dir FROM runs WHERE run_id = ?";
+            + "testers_dir, starter_dir, grading_settings FROM runs "
+            + "WHERE run_id = ?";
 
     // Newest first; a run without a start time comes last
     private static final String SELECT_RUN_IDS = "SELECT run_id FROM runs "
@@ -122,6 +124,7 @@ final class RunTables {
                     JdbcSupport.textOf(gradingRun.getTestersDirectory()));
             statement.setString(10,
                     JdbcSupport.textOf(gradingRun.getStarterDirectory()));
+            statement.setString(11, gradingRun.getGradingSettings());
             statement.executeUpdate();
         } finally {
             JdbcSupport.closeStatement(statement);
@@ -198,6 +201,7 @@ final class RunTables {
         Path scoreSheetFile = null;
         Path testersDirectory = null;
         Path starterDirectory = null;
+        String gradingSettings = null;
         PreparedStatement statement = null;
         ResultSet rows = null;
         try {
@@ -221,6 +225,8 @@ final class RunTables {
                     rows.getString(SqliteSchema.TESTERS_DIR_COLUMN));
             starterDirectory = JdbcSupport.toPath(
                     rows.getString(SqliteSchema.STARTER_DIR_COLUMN));
+            gradingSettings = rows.getString(
+                    SqliteSchema.GRADING_SETTINGS_COLUMN);
         } finally {
             JdbcSupport.closeQuery(rows, statement);
         }
@@ -231,6 +237,7 @@ final class RunTables {
         gradingRun.setScoreSheetFile(scoreSheetFile);
         gradingRun.setTestersDirectory(testersDirectory);
         gradingRun.setStarterDirectory(starterDirectory);
+        gradingRun.setGradingSettings(gradingSettings);
         return gradingRun;
     }
 
