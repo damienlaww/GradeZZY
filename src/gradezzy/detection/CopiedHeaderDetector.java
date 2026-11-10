@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
+import gradezzy.ingest.RosterReader;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
@@ -79,6 +80,9 @@ public class CopiedHeaderDetector implements RosterCheck {
     // The application settings, which name the header labels
     private final AppConfig config;
 
+    // Finds a roster student by username, in any case
+    private final RosterReader rosterReader;
+
     /**
      * Creates the check.
      *
@@ -88,6 +92,7 @@ public class CopiedHeaderDetector implements RosterCheck {
      */
     public CopiedHeaderDetector(AppConfig config) {
         this.config = config;
+        this.rosterReader = new RosterReader(config);
     }
 
     /**
@@ -154,7 +159,8 @@ public class CopiedHeaderDetector implements RosterCheck {
     private String explainReason(Submission submission,
             List<Student> roster) {
         boolean offRoster = !roster.isEmpty()
-                && findByUsername(roster, submission.getUsername()) == null;
+                && rosterReader.findByUsername(roster,
+                        submission.getUsername()) == null;
         if (offRoster) {
             return submission.getUsername() + " is not on the score "
                     + "sheet, so the zip file's name may be wrong.";
@@ -196,7 +202,9 @@ public class CopiedHeaderDetector implements RosterCheck {
                 header.add(lines[i]);
             }
         } catch (IOException exception) {
-            // An unreadable file has no header to check
+            // An unreadable file has no header to check: the file is read
+            // before any line is added, so the header is still empty
+            return header;
         }
         return header;
     }
@@ -214,7 +222,7 @@ public class CopiedHeaderDetector implements RosterCheck {
         boolean otherEmail = emailUser.contains(USERNAME_DOT)
                 && !emailUser.equalsIgnoreCase(username);
         if (otherEmail) {
-            Student owner = findByUsername(roster, emailUser);
+            Student owner = rosterReader.findByUsername(roster, emailUser);
             String shown = emailUser;
             if (owner != null) {
                 shown = describe(owner);
@@ -238,16 +246,6 @@ public class CopiedHeaderDetector implements RosterCheck {
     // (alicia.tan.2025)".
     private String describe(Student student) {
         return student.getFullName() + " (" + student.getUsername() + ")";
-    }
-
-    // Finds the roster student with a username, in any case, or null.
-    private Student findByUsername(List<Student> roster, String username) {
-        for (Student student : roster) {
-            if (username.equalsIgnoreCase(student.getUsername())) {
-                return student;
-            }
-        }
-        return null;
     }
 
     // Returns the text after a label on the first line holding it,

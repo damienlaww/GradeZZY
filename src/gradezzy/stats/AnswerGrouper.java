@@ -13,10 +13,6 @@
  */
 package gradezzy.stats;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -33,8 +29,6 @@ import gradezzy.model.QuestionResult;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
 import gradezzy.model.TestCaseResult;
-import gradezzy.plagiarism.JavaTokenizer;
-import gradezzy.testcase.QuestionFolderFinder;
 import gradezzy.util.TextUtils;
 
 /**
@@ -78,12 +72,6 @@ public final class AnswerGrouper {
 
     // Tests are numbered from 1, one more than their index
     private static final int FIRST_TEST_NUMBER = 1;
-
-    // Comes between a flag's message and its suggested action
-    private static final String TEXT_SEPARATOR = " ";
-
-    // The one character other than letters and digits a word can hold
-    private static final char UNDERSCORE = '_';
 
     // Only static methods; never created
     private AnswerGrouper() {
@@ -213,24 +201,7 @@ public final class AnswerGrouper {
      * @return the question id, or null when it names none
      */
     public static String questionOf(Anomaly anomaly, Submission submission) {
-        String text = textOf(anomaly);
-        String found = null;
-        int foundLength = 0;
-        for (QuestionResult result : submission.getQuestionResults()) {
-            Question question = result.getQuestion();
-            if (question == null) {
-                continue;
-            }
-            String[] names = {question.getId(), question.getFileName(),
-                question.getFolderName()};
-            for (String name : names) {
-                if (namesLonger(text, name, foundLength)) {
-                    found = question.getId();
-                    foundLength = name.length();
-                }
-            }
-        }
-        return found;
+        return FlagQuestionMatcher.questionOf(anomaly, submission);
     }
 
     /**
@@ -248,14 +219,7 @@ public final class AnswerGrouper {
      */
     public static boolean isAbout(Anomaly anomaly, Submission submission,
             Question question) {
-        String text = textOf(anomaly);
-        if (namesQuestion(text, question)) {
-            return true;
-        }
-        if (!namesWord(text, question.getFolderName())) {
-            return false;
-        }
-        return !namesOtherQuestion(text, submission, question);
+        return FlagQuestionMatcher.isAbout(anomaly, submission, question);
     }
 
     // Says whether a student's question is missing: a missing file or
@@ -268,19 +232,6 @@ public final class AnswerGrouper {
         boolean noFolder = hasUnfixedFlag(submission, question,
                 AnomalyType.MISSING_QUESTION_FOLDER);
         return noFile || noFolder;
-    }
-
-    // Says whether a text names a name longer than the longest found so
-    // far as a whole word. A null name names nothing.
-    private static boolean namesLonger(String text, String name,
-            int foundLength) {
-        if (name == null) {
-            return false;
-        }
-        if (name.length() <= foundLength) {
-            return false;
-        }
-        return namesWord(text, name);
     }
 
     // Groups the answers of one question by pattern, in the run's order.
@@ -375,7 +326,8 @@ public final class AnswerGrouper {
         Map<String, List<String>> byShape = new HashMap<>();
         for (String username : group.getUsernames()) {
             Submission submission = findSubmission(run, username);
-            String shape = readShape(run, submission, question);
+            String shape = CodeShapeReader.readShape(run, submission,
+                    question);
             if (shape == null) {
                 continue;
             }
@@ -394,31 +346,6 @@ public final class AnswerGrouper {
             if (same.size() > 1) {
                 group.addSameShape(same);
             }
-        }
-    }
-
-    // Returns the shape of a student's file for a question, or null.
-    private static String readShape(GradingRun run, Submission submission,
-            Question question) {
-        if (submission == null) {
-            return null;
-        }
-        try {
-            Assessment assessment = run.getAssessment();
-            Path folder = QuestionFolderFinder.find(submission, assessment,
-                    question);
-            if (folder == null) {
-                return null;
-            }
-            Path file = folder.resolve(question.getFileName());
-            if (!Files.isRegularFile(file)) {
-                return null;
-            }
-            byte[] bytes = Files.readAllBytes(file);
-            String source = new String(bytes, StandardCharsets.UTF_8);
-            return JavaTokenizer.shapeOf(source);
-        } catch (IOException exception) {
-            return null;
         }
     }
 
@@ -526,80 +453,6 @@ public final class AnswerGrouper {
         boolean applied = status == FixStatus.APPLIED;
         boolean approved = status == FixStatus.APPROVED;
         return applied || approved;
-    }
-
-    // Says whether a text names a question's id or file name.
-    private static boolean namesQuestion(String text, Question question) {
-        boolean namesId = namesWord(text, question.getId());
-        boolean namesFile = namesWord(text, question.getFileName());
-        return namesId || namesFile;
-    }
-
-    // Says whether a text names another question than the one given.
-    private static boolean namesOtherQuestion(String text,
-            Submission submission, Question question) {
-        for (QuestionResult result : submission.getQuestionResults()) {
-            Question other = result.getQuestion();
-            if (other == null) {
-                continue;
-            }
-            if (other.getId().equals(question.getId())) {
-                continue;
-            }
-            if (namesQuestion(text, other)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Returns a flag's message and suggested action as one text.
-    private static String textOf(Anomaly anomaly) {
-        return anomaly.getMessage() + TEXT_SEPARATOR
-                + anomaly.getSuggestedAction();
-    }
-
-    // Says whether a text holds a name as a whole word: no letter, digit
-    // or underscore right before or after it.
-    private static boolean namesWord(String text, String name) {
-        boolean nothing = text == null || name == null;
-        if (nothing) {
-            return false;
-        }
-        if (name.isEmpty()) {
-            return false;
-        }
-        int start = text.indexOf(name);
-        while (start >= 0) {
-            int end = start + name.length();
-            if (isWholeWord(text, start, end)) {
-                return true;
-            }
-            int next = start + 1;
-            start = text.indexOf(name, next);
-        }
-        return false;
-    }
-
-    // Says whether the text from start up to end is a whole word: no
-    // word character right before or after it.
-    private static boolean isWholeWord(String text, int start, int end) {
-        if (start > 0) {
-            int before = start - 1;
-            if (isWordChar(text.charAt(before))) {
-                return false;
-            }
-        }
-        if (end < text.length()) {
-            return !isWordChar(text.charAt(end));
-        }
-        return true;
-    }
-
-    // Says whether a character can be part of a word.
-    private static boolean isWordChar(char character) {
-        boolean letterOrDigit = Character.isLetterOrDigit(character);
-        return letterOrDigit || character == UNDERSCORE;
     }
 
     // Returns a student's result for a question, or null.
