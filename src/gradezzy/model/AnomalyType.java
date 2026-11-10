@@ -106,6 +106,13 @@ public enum AnomalyType {
     SIMILAR_CODE,
 
     /**
+     * Called with random inputs, the student's method gives a different
+     * answer from the model answer's for some of them. Flag only, never
+     * penalise.
+     */
+    DIFFERENT_FROM_MODEL_ANSWER,
+
+    /**
      * The grader itself failed on this submission.
      */
     INTERNAL_ERROR

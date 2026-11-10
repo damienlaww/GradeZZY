@@ -36,6 +36,10 @@ public class ImportItem {
     // zip, several for a folder of zips or a zip of student zips
     private final List<String> students = new ArrayList<>();
 
+    // The files inside a folder or zip of student zips, graded or not;
+    // empty for a single student's file
+    private final List<ContainedFile> files = new ArrayList<>();
+
     /**
      * Creates an import item for one student's file, or for a file that
      * holds no student when the username is empty.
@@ -70,12 +74,31 @@ public class ImportItem {
      */
     public ImportItem(InputKind kind, Path path, ImportState state,
             String message, List<String> students) {
+        this(kind, path, state, message, students,
+                new ArrayList<ContainedFile>());
+    }
+
+    /**
+     * Creates an import item for a folder or zip that holds several
+     * students, with the files found inside it.
+     *
+     * @param kind the group of the file
+     * @param path the chosen file or folder
+     * @param state whether the file can be used
+     * @param message why the file has this state
+     * @param students the usernames of the students inside, in order
+     * @param files the files found inside, graded or not
+     */
+    public ImportItem(InputKind kind, Path path, ImportState state,
+            String message, List<String> students,
+            List<ContainedFile> files) {
         this.kind = kind;
         this.path = path;
         this.username = "";
         this.state = state;
         this.message = message;
         this.students.addAll(students);
+        this.files.addAll(files);
     }
 
     /**
@@ -153,5 +176,14 @@ public class ImportItem {
      */
     public int getStudentCount() {
         return students.size();
+    }
+
+    /**
+     * Returns the files found inside a folder or zip of student zips.
+     *
+     * @return a copy of the files, empty for a single student's file
+     */
+    public List<ContainedFile> getFiles() {
+        return new ArrayList<>(files);
     }
 }

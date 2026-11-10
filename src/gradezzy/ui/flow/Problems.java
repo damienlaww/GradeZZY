@@ -66,6 +66,8 @@ public final class Problems {
             return "The header names another student";
         } else if (type == AnomalyType.SIMILAR_CODE) {
             return "Very similar to another student's code";
+        } else if (type == AnomalyType.DIFFERENT_FROM_MODEL_ANSWER) {
+            return "Some random inputs give a different answer";
         } else if (type == AnomalyType.DUPLICATE_SUBMISSION) {
             return "More than one file for this student";
         } else if (type == AnomalyType.INTERNAL_ERROR) {
@@ -148,6 +150,7 @@ public final class Problems {
                 || type == AnomalyType.EMPTY_ANSWER
                 || type == AnomalyType.HARD_CODED_ANSWER
                 || type == AnomalyType.COPIED_HEADER
-                || type == AnomalyType.SIMILAR_CODE;
+                || type == AnomalyType.SIMILAR_CODE
+                || type == AnomalyType.DIFFERENT_FROM_MODEL_ANSWER;
     }
 }

@@ -61,7 +61,7 @@ public class GradeScreen extends FlowScreen
     // of grading belongs to
     private static final String[] STEP_NAMES = {"Unzip", "Check",
         "Compile", "Test", "Save"};
-    private static final int[] STAGE_STEP = {0, 1, 1, 1, 2, 2, 3, 4, 4};
+    private static final int[] STAGE_STEP = {0, 1, 1, 1, 2, 2, 3, 3, 4, 4};
 
     // Turns a share into a percentage
     private static final double PERCENT = 100.0;
@@ -69,7 +69,8 @@ public class GradeScreen extends FlowScreen
     private static final String[] STAGE_WORDS = {"unzipping",
         "checking the folders and files", "fixing small mistakes",
         "looking for answers to flag", "copying the testers",
-        "compiling", "running the tests", "adding up the marks",
+        "compiling", "running the tests", "trying random inputs",
+        "adding up the marks",
         "saving"};
 
     // The shortest and longest glide of the bar to a new share, in

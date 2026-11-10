@@ -11,6 +11,7 @@
  */
 package gradezzy.ui.flow;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,6 +24,7 @@ import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.ui.backend.ImportBatch;
 import gradezzy.ui.backend.ImportItem;
+import gradezzy.ui.backend.InputKind;
 
 /**
  * The shared state of the guided window.
@@ -37,6 +39,20 @@ public class FlowState {
 
     // The files chosen on Set up
     private final ImportBatch batch = new ImportBatch();
+
+    // The submissions chosen for the sections not open now, by module
+    // and section such as CS102/G2, so they come back when the instructor
+    // opens that section again
+    private final Map<String, List<ImportItem>> submissionsBySection =
+            new HashMap<>();
+
+    // The paths saved for each section when GradeZZY was last closed,
+    // until Set up checks them again and lists them
+    private final Map<String, List<Path>> savedPaths = new HashMap<>();
+
+    // The sections whose submissions list was cleared on purpose, so
+    // nothing is brought back for them
+    private final List<String> clearedSections = new ArrayList<>();
 
     // The run shown on Review and Export, or null
     private GradingRun run = null;
@@ -121,7 +137,9 @@ public class FlowState {
      * @param moduleCode the module code
      */
     public void setModuleCode(String moduleCode) {
+        String before = sectionKey();
         this.moduleCode = moduleCode;
+        swapSubmissions(before);
     }
 
     /**
@@ -139,7 +157,203 @@ public class FlowState {
      * @param sectionCode the section code
      */
     public void setSectionCode(String sectionCode) {
+        String before = sectionKey();
         this.sectionCode = sectionCode;
+        swapSubmissions(before);
+    }
+
+    // Names the chosen module and section, such as CS102/G2.
+    private String sectionKey() {
+        return moduleCode + "/" + sectionCode;
+    }
+
+    // Keeps each section's chosen submissions apart: after the module or
+    // section changes, the files chosen for the one before are put away
+    // and the files chosen earlier for this one come back, so they are
+    // never graded as the wrong section and are still listed on return.
+    private void swapSubmissions(String before) {
+        String now = sectionKey();
+        if (now.equals(before)) {
+            return;
+        }
+
+        // An empty list keeps the files put away earlier for that section
+        List<ImportItem> chosen = batch.getItems(InputKind.SUBMISSION);
+        if (!chosen.isEmpty()) {
+            submissionsBySection.put(before, chosen);
+        }
+
+        batch.clear(InputKind.SUBMISSION);
+        restoreSubmissions();
+    }
+
+    /**
+     * Empties the submissions list, keeping its files for this section,
+     * so they come back when Set up is opened on this section again.
+     * Used when the instructor moves on to grade another section.
+     */
+    public void putAwaySubmissions() {
+        List<ImportItem> chosen = batch.getItems(InputKind.SUBMISSION);
+        if (!chosen.isEmpty()) {
+            submissionsBySection.put(sectionKey(), chosen);
+        }
+
+        batch.clear(InputKind.SUBMISSION);
+    }
+
+    /**
+     * Brings back the files put away for the chosen section, when the
+     * submissions list is empty.
+     *
+     * @return true when files came back
+     */
+    public boolean restoreSubmissions() {
+        if (!batch.getItems(InputKind.SUBMISSION).isEmpty()) {
+            return false;
+        }
+
+        List<ImportItem> kept = submissionsBySection.remove(sectionKey());
+        if (kept == null) {
+            return false;
+        }
+
+        for (ImportItem item : kept) {
+            batch.add(item);
+        }
+        return true;
+    }
+
+    /**
+     * Empties the submissions list for good, so nothing put away for
+     * this section comes back. Used by Clear all.
+     */
+    public void forgetSubmissions() {
+        batch.clear(InputKind.SUBMISSION);
+        submissionsBySection.remove(sectionKey());
+        savedPaths.remove(sectionKey());
+        if (!clearedSections.contains(sectionKey())) {
+            clearedSections.add(sectionKey());
+        }
+    }
+
+    /**
+     * Says whether files are kept for the chosen section: saved when
+     * GradeZZY was last closed, put away while another section was open,
+     * or cleared on purpose. Only a section with none of these gets the
+     * files of its last run back.
+     *
+     * @return true when files are kept for the section
+     */
+    public boolean hasKeptFiles() {
+        String key = sectionKey();
+        return savedPaths.containsKey(key)
+                || submissionsBySection.containsKey(key)
+                || clearedSections.contains(key);
+    }
+
+    /**
+     * Returns the chosen module and section as one name, such as
+     * CS102/G2, as the chosen files are kept by.
+     *
+     * @return the name
+     */
+    public String getSectionKey() {
+        return sectionKey();
+    }
+
+    /**
+     * Keeps the paths saved when GradeZZY was last closed, until each
+     * section is opened on Set up.
+     *
+     * @param paths the paths by section, such as CS102/G2
+     */
+    public void setSavedPaths(Map<String, List<Path>> paths) {
+        savedPaths.clear();
+        savedPaths.putAll(paths);
+    }
+
+    /**
+     * Takes the saved paths of the chosen section when its list is
+     * empty, so Set up can check them again and list them.
+     *
+     * @return the paths, or an empty list when there are none to bring
+     *         back
+     */
+    public List<Path> takeSavedPaths() {
+        if (!batch.getItems(InputKind.SUBMISSION).isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Path> paths = savedPaths.remove(sectionKey());
+        if (paths == null) {
+            return new ArrayList<>();
+        }
+
+        return paths;
+    }
+
+    /**
+     * Adds files checked again for a section to that section: to the
+     * list when it is open, else to the files kept for it.
+     *
+     * @param key the section, such as CS102/G2
+     * @param items the checked files
+     */
+    public void addSubmissionsTo(String key, List<ImportItem> items) {
+        if (key.equals(sectionKey())) {
+            for (ImportItem item : items) {
+                batch.add(item);
+            }
+            return;
+        }
+
+        List<ImportItem> kept = submissionsBySection.get(key);
+        if (kept == null) {
+            kept = new ArrayList<>();
+            submissionsBySection.put(key, kept);
+        }
+
+        kept.addAll(items);
+    }
+
+    /**
+     * Lists the paths chosen for every section, to save them: the open
+     * section's list, the files kept for the others, paths saved earlier
+     * that have not been listed yet, and an empty list for each section
+     * cleared on purpose.
+     *
+     * @return the paths by section
+     */
+    public Map<String, List<Path>> listChosenPaths() {
+        Map<String, List<Path>> chosen = new HashMap<>();
+        for (String key : clearedSections) {
+            chosen.put(key, new ArrayList<>());
+        }
+
+        for (String key : savedPaths.keySet()) {
+            chosen.put(key, new ArrayList<>(savedPaths.get(key)));
+        }
+
+        for (String key : submissionsBySection.keySet()) {
+            chosen.put(key, pathsOf(submissionsBySection.get(key)));
+        }
+
+        List<ImportItem> open = batch.getItems(InputKind.SUBMISSION);
+        if (!open.isEmpty()) {
+            chosen.put(sectionKey(), pathsOf(open));
+        }
+
+        return chosen;
+    }
+
+    // Returns the paths of chosen files.
+    private List<Path> pathsOf(List<ImportItem> items) {
+        List<Path> paths = new ArrayList<>();
+        for (ImportItem item : items) {
+            paths.add(item.getPath());
+        }
+
+        return paths;
     }
 
     /**

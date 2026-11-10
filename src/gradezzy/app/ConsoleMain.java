@@ -7,7 +7,9 @@
  * the grading core (ingest, validation, fix, exec, grading, report) can
  * be compiled, run and tested before any screen exists. Run it with
  * "run.sh console" or "run.bat console". With the similar code check on,
- * the similar pairs are printed after the summary.
+ * the similar pairs are printed after the summary. When a model answers
+ * folder is set, each tester is first checked with broken copies of the
+ * model answer; "run.sh console --testers" runs only that check.
  */
 package gradezzy.app;
 
@@ -30,9 +32,11 @@ import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.Section;
 import gradezzy.model.Submission;
+import gradezzy.modelanswer.QuestionStrength;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.testcase.TestCaseSource;
 import gradezzy.service.AssessmentFactory;
+import gradezzy.service.TesterStrengthService;
 import gradezzy.testcase.UploadedTesterSource;
 import gradezzy.util.TextUtils;
 
@@ -56,6 +60,14 @@ public class ConsoleMain {
     // Separates the names in the list of skipped files
     private static final String SKIPPED_SEPARATOR = ", ";
 
+    // The first argument that runs only the tester strength check, and
+    // how many arguments it takes up
+    private static final String TESTERS_OPTION = "--testers";
+    private static final int OPTION_COUNT = 1;
+
+    // Put in front of each line of the tester strength results
+    private static final String RESULT_INDENT = "  ";
+
     /**
      * Not used: this class only holds the main method.
      */
@@ -68,16 +80,40 @@ public class ConsoleMain {
      * example G2); with two they are the module and the section (for
      * example CS102 G2). Any case is accepted. Each must be listed in
      * app.module.codes or app.section.codes; a value that is not given
-     * is the first one in config.properties.
+     * is the first one in config.properties. With --testers first, only
+     * the testers are checked with broken copies of the model answer,
+     * and nothing is graded.
      *
-     * @param args optional: the section, or the module and the section
+     * @param args optional: --testers, then the section, or the module
+     *        and the section
      */
     public static void main(String[] args) {
         try {
             AppConfig config = AppConfig.loadDefault();
             ApplicationContext context = new ApplicationContext(config);
-            GradingRun gradingRun = gradeBatch(config, context, args);
+            boolean testersOnly = args.length > 0
+                    && args[0].equals(TESTERS_OPTION);
+            String[] codes = args;
+            if (testersOnly) {
+                codes = dropFirst(args);
+            }
+            Section section = chooseSection(config, codes);
+            Path testersDirectory = Paths.get(config.getString(
+                    ConfigKeys.TESTERS_DIR));
+            System.out.println("GradeZZY console, section "
+                    + section.getLabel());
 
+            if (testersOnly) {
+                checkTesters(context, section, testersDirectory, true);
+                context.close();
+                return;
+            }
+            if (config.getBoolean(ConfigKeys.TESTER_STRENGTH_ENABLED)) {
+                checkTesters(context, section, testersDirectory, false);
+            }
+
+            GradingRun gradingRun = gradeBatch(config, context, section,
+                    testersDirectory);
             printSummary(gradingRun);
             printSimilarPairs(config, context, gradingRun);
             context.close();
@@ -95,14 +131,23 @@ public class ConsoleMain {
         }
     }
 
-    // Starts grading with the folders named in the configuration.
-    private static GradingRun gradeBatch(AppConfig config,
-            ApplicationContext context, String[] args)
-            throws GradingException {
+    // Returns the arguments after the option.
+    private static String[] dropFirst(String[] args) {
+        String[] rest = new String[args.length - OPTION_COUNT];
+        for (int index = 0; index < rest.length; index++) {
+            int argumentIndex = index + OPTION_COUNT;
+            rest[index] = args[argumentIndex];
+        }
+        return rest;
+    }
+
+    // Returns the section the arguments name: the section, or the module
+    // and the section, or the first ones in the settings.
+    private static Section chooseSection(AppConfig config, String[] args) {
         if (args.length > MODULE_AND_SECTION) {
             throw new ConfigException("Too many arguments. Use: run.sh "
-                    + "console [module] [section], for example run.sh "
-                    + "console CS102 G2.");
+                    + "console [--testers] [module] [section], for example "
+                    + "run.sh console CS102 G2.");
         }
 
         String requestedModule = "";
@@ -115,23 +160,61 @@ public class ConsoleMain {
             requestedSection = args[0];
         }
 
-        Section section = new Section(
+        return new Section(
                 chooseCode(config, ConfigKeys.MODULE_CODES, "module",
                         requestedModule),
                 chooseCode(config, ConfigKeys.SECTION_CODES, "section",
                         requestedSection));
+    }
 
+    // Checks each tester with broken copies of the model answer, prints
+    // the results and saves the report. When there are no model answers
+    // it says so only if the check was asked for on its own.
+    private static void checkTesters(ApplicationContext context,
+            Section section, Path testersDirectory, boolean asked) {
+        TesterStrengthService service = context.getServices()
+                .getTesterStrengthService();
+        if (!service.hasModelAnswers()) {
+            if (asked) {
+                System.out.println("No model answers to check the testers "
+                        + "with: set paths.model.answers.dir to a folder "
+                        + "laid out like the starter folder.");
+            }
+            return;
+        }
+
+        System.out.println("Checking each tester with broken copies of "
+                + "the model answer. This compiles and runs the tester "
+                + "once per copy, so it takes a minute or two.");
+        List<QuestionStrength> results = service.checkTesters(
+                section.getModuleCode(), testersDirectory, null);
+        System.out.println("Tester strength:");
+        for (String line : service.describe(results)) {
+            System.out.println(RESULT_INDENT + line);
+        }
+
+        try {
+            Path report = service.writeReport(results,
+                    section.getModuleCode(), section.getSectionCode());
+            System.out.println("Saved to " + report + ".");
+        } catch (IOException exception) {
+            System.out.println("The report could not be saved: "
+                    + exception.getMessage());
+        }
+        System.out.println();
+    }
+
+    // Starts grading with the folders named in the configuration.
+    private static GradingRun gradeBatch(AppConfig config,
+            ApplicationContext context, Section section,
+            Path testersDirectory) throws GradingException {
         List<Path> inputPaths = new ArrayList<>();
         inputPaths.add(Paths.get(
                 config.getString(ConfigKeys.SUBMISSIONS_DIR)));
 
-        Path testersDirectory = Paths.get(config.getString(
-                ConfigKeys.TESTERS_DIR));
         TestCaseSource testCaseSource = new UploadedTesterSource(
                 testersDirectory, config);
 
-        System.out.println("GradeZZY console, section "
-                + section.getLabel());
         printMarks(config, section, testersDirectory);
         printSkipped(config, inputPaths);
 

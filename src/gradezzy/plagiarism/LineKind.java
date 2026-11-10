@@ -16,7 +16,8 @@ package gradezzy.plagiarism;
  */
 public enum LineKind {
     /**
-     * The same line is in the other student's file.
+     * The same line is in the other student's file, or the same code
+     * apart from names.
      */
     SAME,
 
