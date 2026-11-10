@@ -39,6 +39,8 @@ public class StatisticsService {
      * Creates a new statistics service that also counts the runs of this
      * session.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param statisticsCalculator the helper that does the calculations
      * @param repository the store results are saved to
      * @param gradingService the service that knows this session's runs,
@@ -56,6 +58,8 @@ public class StatisticsService {
      * runs of this session. A run of this session replaces its saved copy,
      * because it holds the newest results, and a run that could not be
      * saved (or any run while the database is off) is still counted.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param filter the filter
      * @return the summary for the Statistics tab; it holds empty values when

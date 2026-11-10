@@ -39,6 +39,8 @@ public class ScoreAdjustment {
     /**
      * Creates a score adjustment.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param username the student whose mark changed
      * @param questionId the question whose mark changed
      * @param previousScore the mark before the change
@@ -60,6 +62,8 @@ public class ScoreAdjustment {
     /**
      * Returns the student whose mark changed.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the username
      */
     public String getUsername() {
@@ -68,6 +72,8 @@ public class ScoreAdjustment {
 
     /**
      * Returns the question whose mark changed.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the question id
      */
@@ -78,6 +84,8 @@ public class ScoreAdjustment {
     /**
      * Returns the mark before the change.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the earlier score
      */
     public double getPreviousScore() {
@@ -86,6 +94,8 @@ public class ScoreAdjustment {
 
     /**
      * Returns the mark after the change.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the new score
      */
@@ -96,6 +106,8 @@ public class ScoreAdjustment {
     /**
      * Returns why the instructor changed the mark.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the reason
      */
     public String getReason() {
@@ -104,6 +116,8 @@ public class ScoreAdjustment {
 
     /**
      * Returns when the change was saved.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the time
      */

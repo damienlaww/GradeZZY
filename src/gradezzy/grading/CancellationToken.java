@@ -28,6 +28,8 @@ public class CancellationToken {
 
     /**
      * Creates a token that is not cancelled.
+     *
+     * <p>Tier: SHOULD.
      */
     public CancellationToken() {
         // nothing to set up
@@ -35,6 +37,8 @@ public class CancellationToken {
 
     /**
      * Asks the running batch to stop.
+     *
+     * <p>Tier: SHOULD.
      */
     public synchronized void cancel() {
         cancelled = true;
@@ -42,6 +46,8 @@ public class CancellationToken {
 
     /**
      * Clears the flag so a new batch can start.
+     *
+     * <p>Tier: SHOULD.
      */
     public synchronized void reset() {
         cancelled = false;
@@ -49,6 +55,8 @@ public class CancellationToken {
 
     /**
      * Says whether cancellation has been requested.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return true if the batch should stop
      */

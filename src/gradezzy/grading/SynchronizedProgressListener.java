@@ -39,6 +39,8 @@ class SynchronizedProgressListener implements ProgressListener {
     /**
      * Passes the event on while holding this wrapper's lock.
      *
+     * <p>Tier: MUST.
+     *
      * @param totalSubmissions the total submissions
      */
     @Override
@@ -49,6 +51,8 @@ class SynchronizedProgressListener implements ProgressListener {
     /**
      * Passes the event on while holding this wrapper's lock.
      *
+     * <p>Tier: MUST.
+     *
      * @param submission the submission
      */
     @Override
@@ -58,6 +62,8 @@ class SynchronizedProgressListener implements ProgressListener {
 
     /**
      * Passes the event on while holding this wrapper's lock.
+     *
+     * <p>Tier: MUST.
      *
      * @param submission the submission
      * @param stageName the name of the stage
@@ -71,6 +77,8 @@ class SynchronizedProgressListener implements ProgressListener {
     /**
      * Passes the event on while holding this wrapper's lock.
      *
+     * <p>Tier: MUST.
+     *
      * @param submission the submission
      */
     @Override
@@ -80,6 +88,8 @@ class SynchronizedProgressListener implements ProgressListener {
 
     /**
      * Passes the event on while holding this wrapper's lock.
+     *
+     * <p>Tier: MUST.
      *
      * @param gradingRun the run
      */

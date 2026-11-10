@@ -84,6 +84,8 @@ public class ApplicationContext {
      * naming all the bad settings, rather than failing later when that
      * setting is first read.
      *
+     * <p>Tier: MUST.
+     *
      * @param config the application settings
      * @throws ConfigException if a setting in config.properties is not
      *         valid
@@ -145,6 +147,8 @@ public class ApplicationContext {
     /**
      * Returns the application settings.
      *
+     * <p>Tier: MUST.
+     *
      * @return the application settings
      */
     public AppConfig getConfig() {
@@ -153,6 +157,8 @@ public class ApplicationContext {
 
     /**
      * Returns every service of the application.
+     *
+     * <p>Tier: MUST.
      *
      * @return the service registry
      */
@@ -179,6 +185,8 @@ public class ApplicationContext {
     /**
      * Releases what the application holds open, such as the database.
      * Call this once when the application ends.
+     *
+     * <p>Tier: MUST.
      */
     public void close() {
         repository.close();

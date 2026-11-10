@@ -66,6 +66,8 @@ public class GradingPipeline {
     /**
      * Creates an empty pipeline.
      *
+     * <p>Tier: MUST.
+     *
      * @param cancellationToken the flag that stops the batch when set
      */
     public GradingPipeline(CancellationToken cancellationToken) {
@@ -74,6 +76,8 @@ public class GradingPipeline {
 
     /**
      * Adds a stage to the end of the pipeline.
+     *
+     * <p>Tier: MUST.
      *
      * @param stage the stage to add
      */
@@ -87,6 +91,8 @@ public class GradingPipeline {
      * number of submissions graded at the same time comes from
      * {@code exec.thread.count}; a value of one, a single submission, or a
      * bad value all grade the submissions in order.
+     *
+     * <p>Tier: MUST.
      *
      * @param gradingRun the batch to grade
      * @param context the shared information the stages need

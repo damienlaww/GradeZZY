@@ -37,6 +37,8 @@ public class Question {
     /**
      * Creates a new question.
      *
+     * <p>Tier: MUST.
+     *
      * @param id the question id, for example Q1a
      * @param folderName the folder the file must be in, such as Q1
      * @param fileName the required source file, such as Q1a.java
@@ -53,6 +55,8 @@ public class Question {
     /**
      * Returns the question id, for example Q1a.
      *
+     * <p>Tier: MUST.
+     *
      * @return the question id, for example Q1a
      */
     public String getId() {
@@ -61,6 +65,8 @@ public class Question {
 
     /**
      * Returns the folder the file must be in, such as Q1.
+     *
+     * <p>Tier: MUST.
      *
      * @return the folder the file must be in, such as Q1
      */
@@ -71,6 +77,8 @@ public class Question {
     /**
      * Returns the required source file, such as Q1a.java.
      *
+     * <p>Tier: MUST.
+     *
      * @return the required source file, such as Q1a.java
      */
     public String getFileName() {
@@ -79,6 +87,8 @@ public class Question {
 
     /**
      * Returns the most marks this question can earn.
+     *
+     * <p>Tier: MUST.
      *
      * @return the most marks this question can earn
      */
@@ -92,6 +102,8 @@ public class Question {
      * starter's other .java files in the question's folder, filled in
      * when a batch is graded; the list is empty when there are none or no
      * starter folder is known. The list can be changed.
+     *
+     * <p>Tier: MUST.
      *
      * @return the other source file names
      */

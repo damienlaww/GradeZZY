@@ -41,6 +41,8 @@ public class AuditEntry {
     /**
      * Creates a new audit entry.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param timestamp the time of the action
      * @param action a short name for the action
      * @param detail the full description of the action
@@ -54,6 +56,8 @@ public class AuditEntry {
     /**
      * Returns the time of the action.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the time of the action
      */
     public LocalDateTime getTimestamp() {
@@ -62,6 +66,8 @@ public class AuditEntry {
 
     /**
      * Returns a short name for the action.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return a short name for the action
      */
@@ -72,6 +78,8 @@ public class AuditEntry {
     /**
      * Returns the full description of the action.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the full description of the action
      */
     public String getDetail() {
@@ -81,6 +89,8 @@ public class AuditEntry {
     /**
      * Returns the description without the reference at its end, as the
      * window shows it.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the description to show
      */
@@ -95,6 +105,8 @@ public class AuditEntry {
     /**
      * Returns the id of the flag or run the line is about, as added by
      * withReference.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the id, or an empty text for a line with no reference
      */
@@ -111,6 +123,8 @@ public class AuditEntry {
     /**
      * Adds a reference to the end of a description, such as the id of
      * the flag the line is about.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param detail the description
      * @param reference the id; null or empty adds nothing

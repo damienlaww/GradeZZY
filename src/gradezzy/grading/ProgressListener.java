@@ -21,6 +21,8 @@ public interface ProgressListener {
     /**
      * Called once before the first submission.
      *
+     * <p>Tier: MUST.
+     *
      * @param totalSubmissions the total submissions
      */
     void onRunStarted(int totalSubmissions);
@@ -28,12 +30,16 @@ public interface ProgressListener {
     /**
      * Called when grading of a submission begins.
      *
+     * <p>Tier: MUST.
+     *
      * @param submission the submission
      */
     void onSubmissionStarted(Submission submission);
 
     /**
      * Called when a stage begins for a submission.
+     *
+     * <p>Tier: MUST.
      *
      * @param submission the submission
      * @param stageName the stage name
@@ -43,12 +49,16 @@ public interface ProgressListener {
     /**
      * Called when a submission is done, whatever its status.
      *
+     * <p>Tier: MUST.
+     *
      * @param submission the submission
      */
     void onSubmissionFinished(Submission submission);
 
     /**
      * Called once after the last submission.
+     *
+     * <p>Tier: MUST.
      *
      * @param gradingRun the grading run
      */

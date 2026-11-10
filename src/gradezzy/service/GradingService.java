@@ -174,6 +174,8 @@ public class GradingService {
     /**
      * Creates a new grading service.
      *
+     * <p>Tier: MUST.
+     *
      * @param config the application settings
      * @param pipelineFactory the helper that builds the pipeline
      * @param assessmentFactory the helper that reads the assessment
@@ -185,6 +187,8 @@ public class GradingService {
 
     /**
      * Creates a new grading service that saves each run.
+     *
+     * <p>Tier: MUST.
      *
      * @param config the application settings
      * @param pipelineFactory the helper that builds the pipeline
@@ -202,6 +206,8 @@ public class GradingService {
     /**
      * Creates a new grading service that saves each run and writes its
      * actions to the given audit log.
+     *
+     * <p>Tier: MUST.
      *
      * @param config the application settings
      * @param pipelineFactory the helper that builds the pipeline
@@ -240,6 +246,8 @@ public class GradingService {
      * score sheet: the section's own in paths.score.sheet.by.section, else
      * paths.score.sheet.file. A submission that fails is marked FAILED and
      * does not stop the others.
+     *
+     * <p>Tier: MUST.
      *
      * @param inputPaths the zip files or folders the instructor chose
      * @param section the section the batch belongs to

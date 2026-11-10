@@ -20,6 +20,8 @@ public class ReapplyResult extends RegradeResult {
     /**
      * Creates the result of applying a fix again.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param username the student whose fix was applied again
      * @param totalBefore the total before the fix was applied again
      * @param totalAfter the total after grading again
@@ -35,6 +37,8 @@ public class ReapplyResult extends RegradeResult {
      * Returns the sentence for the card, for example "Fix applied again.
      * Marks 16 to 20." When the fix could not be applied again, it says
      * why and that the marks have not changed.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the sentence for the card
      */

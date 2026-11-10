@@ -53,6 +53,8 @@ public class TesterStrengthService {
     /**
      * Creates the service.
      *
+     * <p>Tier: COULD.
+     *
      * @param config the settings
      */
     public TesterStrengthService(AppConfig config) {

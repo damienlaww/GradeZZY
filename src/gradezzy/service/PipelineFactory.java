@@ -72,6 +72,8 @@ public class PipelineFactory {
     /**
      * Creates a new pipeline factory.
      *
+     * <p>Tier: MUST.
+     *
      * @param config the application settings
      * @param fixManager the fix manager shared with the anomaly log
      * @param repository the store results are saved to
@@ -86,6 +88,8 @@ public class PipelineFactory {
     /**
      * Creates a pipeline with every stage in grading order.
      *
+     * <p>Tier: MUST.
+     *
      * @param cancellationToken the flag that stops the batch when set
      * @return the pipeline, ready to run
      */
@@ -97,6 +101,8 @@ public class PipelineFactory {
     /**
      * Creates a pipeline whose checks compare answers with the starter
      * folder chosen for the batch.
+     *
+     * <p>Tier: MUST.
      *
      * @param cancellationToken the flag that stops the batch when set
      * @param starterDirectory the starter folder, or null to use

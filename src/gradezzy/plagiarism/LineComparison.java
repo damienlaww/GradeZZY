@@ -76,6 +76,8 @@ public class LineComparison {
     /**
      * Compares two files.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param firstCode the first student's code
      * @param secondCode the second student's code
      * @param starterCode the starter file's code, or "" when there is none
@@ -107,6 +109,8 @@ public class LineComparison {
     /**
      * Returns the first file's lines.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the lines, without line endings
      */
     public List<String> getFirstLines() {
@@ -115,6 +119,8 @@ public class LineComparison {
 
     /**
      * Returns the second file's lines.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the lines, without line endings
      */
@@ -125,6 +131,8 @@ public class LineComparison {
     /**
      * Returns the kind of each of the first file's lines.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return one kind per line
      */
     public List<LineKind> getFirstKinds() {
@@ -134,6 +142,8 @@ public class LineComparison {
     /**
      * Returns the kind of each of the second file's lines.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return one kind per line
      */
     public List<LineKind> getSecondKinds() {
@@ -142,6 +152,8 @@ public class LineComparison {
 
     /**
      * Counts the lines of one kind, leaving out lines of brackets only.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param lines a file's lines
      * @param kinds the kind of each of those lines
@@ -165,6 +177,8 @@ public class LineComparison {
     /**
      * Finds where each part of same lines starts: a same line whose last
      * line with something on it is not the same.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param kinds the kinds of a file's lines
      * @return the line indexes, from the top

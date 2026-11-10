@@ -131,6 +131,8 @@ public class ClassFileMatcher {
     /**
      * Creates a matcher for the lab test being graded.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param config the application settings
      * @param assessment the questions of the lab test
      */

@@ -74,6 +74,8 @@ public class PlagiarismService {
      * Creates a new plagiarism service that saves the run after each
      * check.
      *
+     * <p>Tier: COULD.
+     *
      * @param config the application settings
      * @param similarityDetector the algorithm used to compare submissions
      * @param repository the store the run is saved to, or null to save
@@ -97,6 +99,8 @@ public class PlagiarismService {
      * unchanged. One check runs at a time, so two checks of a run at once
      * cannot both add their anomalies. The run is then saved when the
      * database is switched on, so the flags are kept after a restart.
+     *
+     * <p>Tier: COULD.
      *
      * @param gradingRun the grading run
      * @return the similar pairs found, most similar first, or an empty

@@ -43,6 +43,8 @@ class RetryProgressListener implements ProgressListener {
     /**
      * Passes on the number of submissions being retried.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param totalSubmissions the number of submissions being retried
      */
     @Override
@@ -53,6 +55,8 @@ class RetryProgressListener implements ProgressListener {
     /**
      * Passes on the start of a submission.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param submission the submission
      */
     @Override
@@ -62,6 +66,8 @@ class RetryProgressListener implements ProgressListener {
 
     /**
      * Passes on the start of a stage.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param submission the submission
      * @param stageName the stage name
@@ -74,6 +80,8 @@ class RetryProgressListener implements ProgressListener {
     /**
      * Passes on the end of a submission.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param submission the submission
      */
     @Override
@@ -83,6 +91,8 @@ class RetryProgressListener implements ProgressListener {
 
     /**
      * Reports the whole run instead of the temporary one.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param gradingRun the temporary run, not passed on
      */

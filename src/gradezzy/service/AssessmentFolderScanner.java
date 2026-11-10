@@ -74,6 +74,8 @@ public final class AssessmentFolderScanner {
      * so each file is checked once. Earlier names are replaced, and
      * nothing is added when the starter folder cannot be read.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param assessment the assessment whose questions are filled in
      * @param starterFolder the starter folder, or null
      */
@@ -138,6 +140,8 @@ public final class AssessmentFolderScanner {
      * tester's source. When no tester names any, every such file except a
      * readme is listed.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param testersFolder the tester folder
      * @return the file names, sorted; empty when the folder cannot be read
      */
@@ -187,6 +191,8 @@ public final class AssessmentFolderScanner {
      * Lists the class files in a starter folder that have no Java source
      * beside them, such as DataException.class.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param starterFolder the starter folder
      * @return the file names, sorted, each once; empty when the folder
      *         cannot be read
@@ -222,6 +228,8 @@ public final class AssessmentFolderScanner {
      * Lists the starter folder names a student may forget to rename: the
      * starter folder's own name, or, when it holds just one folder that
      * is not a question folder, that folder's name.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param starterFolder the starter folder
      * @param questionFolders the question folder names, such as Q1
@@ -268,6 +276,8 @@ public final class AssessmentFolderScanner {
      * marks read from the tester. The answer's folder is the one that
      * holds Q1a.java in the starter folder, or else the id without its
      * last letters, so Q1a is in Q1 and Q3 in Q3.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param testersFolder the tester folder
      * @param testerSuffix the end of a tester's class name, such as Tester

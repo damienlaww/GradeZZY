@@ -68,6 +68,8 @@ public class AnomalyService {
      * Creates a new anomaly service that logs every approve and undo and
      * grades a student again when one of their fixes is undone.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param fixManager the helper that applies and undoes fixes
      * @param repository the store results are saved to
      * @param auditService the log of instructor actions, or null to log
@@ -85,6 +87,8 @@ public class AnomalyService {
 
     /**
      * Collects the anomalies of every submission in a run.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param gradingRun the grading run
      * @return all anomalies of the run, in submission order, or an empty
@@ -111,6 +115,8 @@ public class AnomalyService {
      * <p>A run loaded from the database after a restart has no fix
      * records in memory, so its fix is approved by changing the status
      * alone. Approving changes no file, so nothing else is needed.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param anomaly the anomaly
      */
@@ -141,6 +147,8 @@ public class AnomalyService {
      * Takes back the approval of a fix, so it waits for a decision again.
      * The fixed files stay as they are and the marks do not change; only
      * an APPROVED fix is changed.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param anomaly the anomaly whose fix was approved
      * @return true when the fix waits for a decision again
@@ -315,6 +323,8 @@ public class AnomalyService {
     /**
      * Returns why the automatic fix for an anomaly failed.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param anomaly the anomaly
      * @return the reason, or null if no fix failed for it
      */
@@ -325,6 +335,8 @@ public class AnomalyService {
     /**
      * Returns the fix made for an anomaly in this session, which says
      * what it changed before and after.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param anomaly the anomaly
      * @return the fix record, or null if none is kept for it
@@ -338,6 +350,8 @@ public class AnomalyService {
 
     /**
      * Approves the fixes of all selected anomalies.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param anomalies the anomalies
      */
@@ -355,6 +369,8 @@ public class AnomalyService {
      * Undoes the fixes of all selected anomalies. Each student is graded
      * again once, without all of their selected fixes, rather than once
      * per fix. A fix that cannot be undone does not stop the others.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param anomalies the anomalies
      * @return one result for each student whose fixes were undone, in
@@ -643,6 +659,8 @@ public class AnomalyService {
      * Saves the instructor's review decision on a flag, so it is kept
      * after GradeZZY closes. A decision never changes a mark.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param anomaly the flag
      * @param decision the decision name, or null when the flag is open
      *        again
@@ -664,6 +682,8 @@ public class AnomalyService {
     /**
      * Loads the saved review decisions of a run.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param gradingRun the run
      * @return the decision names by anomaly id; empty when there are none
      *         or the database cannot be read
@@ -682,6 +702,8 @@ public class AnomalyService {
     /**
      * Saves that the instructor checked a student's 0 that nothing
      * flagged, or takes that back. It never changes a mark.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param gradingRun the run the student is in
      * @param submission the student
@@ -707,6 +729,8 @@ public class AnomalyService {
 
     /**
      * Lists the students of a run whose 0 the instructor checked.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param gradingRun the run
      * @return the usernames; empty when there are none or the database

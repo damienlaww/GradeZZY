@@ -58,6 +58,8 @@ public class ExportService {
 
     /**
      * Creates a new export service with no exporters yet.
+     *
+     * <p>Tier: MUST.
      */
     public ExportService() {
         // the exporters are added with registerExporter
@@ -65,6 +67,8 @@ public class ExportService {
 
     /**
      * Makes one more export format available.
+     *
+     * <p>Tier: MUST.
      *
      * @param exporter the exporter
      */
@@ -78,6 +82,8 @@ public class ExportService {
      * sheet". When no name matches, the first exporter registered with
      * that file extension is used, so the screens' "csv" finds the score
      * sheet exporter, which ApplicationContext registers first.
+     *
+     * <p>Tier: MUST.
      *
      * @param formatName the format name or file extension
      * @return the exporter, or null if the format is unknown or null

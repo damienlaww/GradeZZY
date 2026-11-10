@@ -52,6 +52,8 @@ class GradingWorker implements Runnable {
     /**
      * Takes submissions from the handout and grades each one, until there
      * are none left.
+     *
+     * <p>Tier: MUST.
      */
     @Override
     public void run() {

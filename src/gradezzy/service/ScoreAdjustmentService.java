@@ -63,6 +63,8 @@ public class ScoreAdjustmentService {
     /**
      * Creates the service.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param repository the store results are saved to, or null
      * @param config the application settings
      */
@@ -74,6 +76,8 @@ public class ScoreAdjustmentService {
 
     /**
      * Changes one question's mark of one student and keeps the change.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param run the run the student is in
      * @param submission the student
@@ -119,6 +123,8 @@ public class ScoreAdjustmentService {
      * Takes a change back: the question gets its earlier mark again. Only
      * the newest change of a question can be taken back, so the marks
      * stay in order.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param run the run the student is in
      * @param change the change
@@ -177,6 +183,8 @@ public class ScoreAdjustmentService {
 
     /**
      * Lists one student's changes in a run, oldest first.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param run the run
      * @param username the student
@@ -292,6 +300,8 @@ public class ScoreAdjustmentService {
      * Forgets every change read so far, so each run's changes are read
      * from the store again. Called after a backup is put back, because
      * the store then holds other changes.
+     *
+     * <p>Tier: SHOULD.
      */
     public synchronized void forgetAll() {
         byRun.clear();
@@ -300,6 +310,8 @@ public class ScoreAdjustmentService {
 
     /**
      * Says why the last change or undo could not be saved.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the reason, or "" when it was saved or saving is off
      */
@@ -310,6 +322,8 @@ public class ScoreAdjustmentService {
     /**
      * Says whether changes are saved with the results, so they are kept
      * after a restart.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return true when results are saved
      */
