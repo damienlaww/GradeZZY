@@ -161,8 +161,9 @@ public final class AssessmentFolderScanner {
         for (Path file : files) {
             String name = file.getFileName().toString();
             String lower = name.toLowerCase(Locale.ROOT);
-            if (!Files.isRegularFile(file)
-                    || name.startsWith(HIDDEN_PREFIX)) {
+            boolean skipped = !Files.isRegularFile(file)
+                    || name.startsWith(HIDDEN_PREFIX);
+            if (skipped) {
                 continue;
             }
             if (lower.endsWith(JAVA)) {
@@ -217,7 +218,9 @@ public final class AssessmentFolderScanner {
             }
             int baseLength = name.length() - CLASS.length();
             String base = name.substring(0, baseLength);
-            if (!Files.exists(file.resolveSibling(base + JAVA))) {
+            String sourceName = base + JAVA;
+            Path source = file.resolveSibling(sourceName);
+            if (!Files.exists(source)) {
                 found.add(name);
             }
         }
@@ -252,18 +255,21 @@ public final class AssessmentFolderScanner {
         }
         List<Path> folders = new ArrayList<>();
         for (Path child : children) {
+            String childName = child.getFileName().toString();
             boolean visibleFolder = Files.isDirectory(child)
-                    && !child.getFileName().toString()
-                    .startsWith(HIDDEN_PREFIX);
+                    && !childName.startsWith(HIDDEN_PREFIX);
             if (visibleFolder) {
                 folders.add(child);
             }
         }
-        boolean oneOtherFolder = folders.size() == ONLY_FOLDER
-                && !isQuestionFolder(folders.get(0).getFileName()
-                        .toString(), questionFolders);
+        String onlyName = null;
+        if (folders.size() == ONLY_FOLDER) {
+            onlyName = folders.get(0).getFileName().toString();
+        }
+        boolean oneOtherFolder = onlyName != null
+                && !isQuestionFolder(onlyName, questionFolders);
         if (oneOtherFolder) {
-            found.add(folders.get(0).getFileName().toString());
+            found.add(onlyName);
         } else {
             found.add(starterFolder.getFileName().toString());
         }
@@ -314,9 +320,11 @@ public final class AssessmentFolderScanner {
         }
         for (String id : ids) {
             String folderName = folderOf(id, starterFolder);
-            Path tester = testersFolder.resolve(id + ending);
+            String testerName = id + ending;
+            String answerFile = id + JAVA;
+            Path tester = testersFolder.resolve(testerName);
             double maxScore = readMaxScore(tester);
-            found.add(new Question(id, folderName, id + JAVA, maxScore));
+            found.add(new Question(id, folderName, answerFile, maxScore));
         }
         return found;
     }
@@ -334,10 +342,11 @@ public final class AssessmentFolderScanner {
     // Finds the folder that holds a question's answer in the starter
     // folder, or guesses it from the id.
     private static String folderOf(String id, Path starterFolder) {
+        String answerFile = id + JAVA;
         for (Path file : listOrEmpty(starterFolder)) {
             Path parent = file.getParent();
             String name = file.getFileName().toString();
-            boolean isAnswerInFolder = name.equalsIgnoreCase(id + JAVA)
+            boolean isAnswerInFolder = name.equalsIgnoreCase(answerFile)
                     && parent != null && !parent.equals(starterFolder);
             if (isAnswerInFolder) {
                 return parent.getFileName().toString();

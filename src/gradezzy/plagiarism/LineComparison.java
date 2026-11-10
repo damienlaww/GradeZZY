@@ -91,8 +91,9 @@ public class LineComparison {
 
         List<JavaToken> firstTokens = tokenize(firstCode);
         List<JavaToken> secondTokens = tokenize(secondCode);
-        Set<Integer> starterKGrams = new HashSet<>(hashWrittenKGrams(
-                tokenize(starterCode)));
+        List<JavaToken> starterTokens = tokenize(starterCode);
+        List<Integer> starterHashes = hashWrittenKGrams(starterTokens);
+        Set<Integer> starterKGrams = new HashSet<>(starterHashes);
         Set<Integer> firstKGrams = new HashSet<>(hashKGrams(firstTokens));
         Set<Integer> secondKGrams = new HashSet<>(hashKGrams(secondTokens));
         Set<Integer> firstShared = findSharedLines(firstTokens,

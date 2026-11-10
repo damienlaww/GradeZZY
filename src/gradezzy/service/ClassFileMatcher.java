@@ -374,15 +374,17 @@ public class ClassFileMatcher {
         int fitting = 0;
         for (Question question : assessment.getQuestions()) {
             String id = question.getId();
-            Path tester = folder.resolve(id + suffix + JAVA_EXTENSION);
+            String testerName = id + suffix + JAVA_EXTENSION;
+            Path tester = folder.resolve(testerName);
             String source = readSmallFile(tester);
             if (countFilesRead(id) > 0 && source != null) {
                 tested.add(id);
                 List<String> tokens = JavaSourceScanner.tokenize(source);
                 List<String> called = JavaSourceScanner.findCalls(tokens,
                         classNameOf(question));
-                called.removeAll(
-                        JavaSourceScanner.findStaticMethods(tokens));
+                List<String> declared =
+                        JavaSourceScanner.findStaticMethods(tokens);
+                called.removeAll(declared);
                 if (sharesCommonMethod(id, called)) {
                     fitting++;
                 } else {
@@ -719,8 +721,8 @@ public class ClassFileMatcher {
                     readFolderSources(child, childDepth, sources);
                 }
             } else {
-                Question question = findQuestion(child.getFileName()
-                        .toString());
+                String childName = child.getFileName().toString();
+                Question question = findQuestion(childName);
                 String source = readSmallFile(child);
                 boolean wanted = question != null && source != null
                         && !sources.containsKey(question.getId());
@@ -744,7 +746,8 @@ public class ClassFileMatcher {
 
     // Says whether a zip entry is macOS metadata or a hidden file.
     private boolean isIgnoredEntry(String entryName) {
-        return entryName.contains(MAC_FOLDER + ENTRY_SEPARATOR)
+        String macFolderStart = MAC_FOLDER + ENTRY_SEPARATOR;
+        return entryName.contains(macFolderStart)
                 || lastPart(entryName).startsWith(HIDDEN_PREFIX);
     }
 

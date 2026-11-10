@@ -423,9 +423,9 @@ public class AnomalyService {
         if (gradingRun != null) {
             runId = gradingRun.getId();
         }
-        return runId + GROUP_SEPARATOR
-                + fixRecord.getAnomaly().getUsername().toLowerCase(
-                        Locale.ROOT);
+        String username = fixRecord.getAnomaly().getUsername();
+        String lowerUsername = username.toLowerCase(Locale.ROOT);
+        return runId + GROUP_SEPARATOR + lowerUsername;
     }
 
     // Undoes some fixes of one student, then grades the student again

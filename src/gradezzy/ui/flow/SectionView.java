@@ -81,6 +81,10 @@ public class SectionView {
     // How many grid columns the bell curve spans on a narrow window
     private static final int BOTH_COLUMNS = 2;
 
+    // The grid row of the question and compile error cards on a narrow
+    // window, under the bell curve row and the ring row
+    private static final int NARROW_LAST_ROW = 2;
+
     // Starts the second line of a tip
     private static final String LINE_END = "\n";
 
@@ -278,8 +282,8 @@ public class SectionView {
             grid.add(spreadCard, 0, 0, BOTH_COLUMNS, 1);
             grid.add(ringCard, 0, 1);
             grid.add(failedCard, 1, 1);
-            grid.add(questionCard, 0, 2);
-            grid.add(errorCard, 1, 2);
+            grid.add(questionCard, 0, NARROW_LAST_ROW);
+            grid.add(errorCard, 1, NARROW_LAST_ROW);
             return;
         }
         double rightPercent = PERCENT - LEFT_PERCENT;

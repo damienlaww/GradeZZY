@@ -103,8 +103,9 @@ final class LateBatch {
                 if (!containsIgnoringCase(replacedUsernames,
                         older.getUsername())) {
                     replacedUsernames.add(older.getUsername());
-                    oldTotals.add(describeTotal(gradingRun.findLoaded(
-                            older.getUsername())));
+                    Submission loaded = gradingRun.findLoaded(
+                            older.getUsername());
+                    oldTotals.add(describeTotal(loaded));
                 }
                 gradingRun.removeSubmission(older);
                 removedOlder.add(older);

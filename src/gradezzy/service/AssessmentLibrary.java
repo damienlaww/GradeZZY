@@ -148,10 +148,10 @@ public class AssessmentLibrary {
                 ConfigKeys.TESTERS_DIR));
         for (String id : config.getList(ConfigKeys.QUESTION_IDS)) {
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
-            String folder = config.getString(prefix
-                    + ConfigKeys.QUESTION_FOLDER_SUFFIX);
-            String file = config.getString(prefix
-                    + ConfigKeys.QUESTION_FILE_SUFFIX);
+            String folderKey = prefix + ConfigKeys.QUESTION_FOLDER_SUFFIX;
+            String fileKey = prefix + ConfigKeys.QUESTION_FILE_SUFFIX;
+            String folder = config.getString(folderKey);
+            String file = config.getString(fileKey);
             double maxScore = readMaxScore(current.getTestersDirectory(), id);
             current.getQuestions().add(new Question(id, folder, file,
                     maxScore));
@@ -307,9 +307,10 @@ public class AssessmentLibrary {
 
     // Returns where a question's tester is, such as Q1aTester.java.
     private Path testerFile(String testersDirectory, String questionId) {
-        return Paths.get(testersDirectory).resolve(questionId
+        String testerName = questionId
                 + config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
-                + JAVA_EXTENSION);
+                + JAVA_EXTENSION;
+        return Paths.get(testersDirectory).resolve(testerName);
     }
 
     /**
@@ -493,11 +494,11 @@ public class AssessmentLibrary {
         for (Question question : assessment.getQuestions()) {
             String id = question.getId().trim();
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
-            putSetting(keys, values, prefix
-                    + ConfigKeys.QUESTION_FOLDER_SUFFIX,
+            String folderKey = prefix + ConfigKeys.QUESTION_FOLDER_SUFFIX;
+            String fileKey = prefix + ConfigKeys.QUESTION_FILE_SUFFIX;
+            putSetting(keys, values, folderKey,
                     question.getFolderName().trim());
-            putSetting(keys, values, prefix
-                    + ConfigKeys.QUESTION_FILE_SUFFIX,
+            putSetting(keys, values, fileKey,
                     question.getFileName().trim());
             ids.add(id);
         }
@@ -575,13 +576,13 @@ public class AssessmentLibrary {
         assessment.setName(required(values, ConfigKeys.ASSESSMENT_NAME));
         assessment.setTestersDirectory(values.getProperty(
                 ConfigKeys.TESTERS_DIR, ""));
-        for (String id : AppConfig.splitList(required(values,
-                ConfigKeys.QUESTION_IDS))) {
+        String idList = required(values, ConfigKeys.QUESTION_IDS);
+        for (String id : AppConfig.splitList(idList)) {
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
-            String folder = required(values, prefix
-                    + ConfigKeys.QUESTION_FOLDER_SUFFIX);
-            String questionFile = required(values, prefix
-                    + ConfigKeys.QUESTION_FILE_SUFFIX);
+            String folderKey = prefix + ConfigKeys.QUESTION_FOLDER_SUFFIX;
+            String fileKey = prefix + ConfigKeys.QUESTION_FILE_SUFFIX;
+            String folder = required(values, folderKey);
+            String questionFile = required(values, fileKey);
             double maxScore = readMaxScore(assessment.getTestersDirectory(),
                     id);
             assessment.getQuestions().add(new Question(id, folder,
@@ -650,8 +651,9 @@ public class AssessmentLibrary {
     // name, so its file can be kept.
     private boolean sameFileName(String originalName,
             SavedAssessment assessment) {
-        return baseName(originalName).equals(baseName(
-                assessment.getName()));
+        String originalBase = baseName(originalName);
+        String newBase = baseName(assessment.getName());
+        return originalBase.equals(newBase);
     }
 
     // Returns a free file for a name, such as lab-test-2.properties, or
@@ -659,11 +661,13 @@ public class AssessmentLibrary {
     private Path fileFor(String name) {
         Path folder = getFolder();
         String base = baseName(name);
-        Path file = folder.resolve(base + FILE_EXTENSION);
+        String fileName = base + FILE_EXTENSION;
+        Path file = folder.resolve(fileName);
         int number = FIRST_EXTRA_NUMBER;
         while (Files.exists(file) && !belongsTo(file, name)) {
-            file = folder.resolve(base + FILE_NAME_JOIN + number
-                    + FILE_EXTENSION);
+            String numberedName = base + FILE_NAME_JOIN + number
+                    + FILE_EXTENSION;
+            file = folder.resolve(numberedName);
             number++;
         }
         return file;

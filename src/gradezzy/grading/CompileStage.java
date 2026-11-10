@@ -632,9 +632,9 @@ public class CompileStage implements GradingStage {
         int index = source.indexOf(name);
         while (index >= 0) {
             int end = index + name.length();
+            int before = index - 1;
             boolean startsWord = index == 0
-                    || !Character.isJavaIdentifierPart(
-                            source.charAt(index - 1));
+                    || !Character.isJavaIdentifierPart(source.charAt(before));
             boolean endsWord = end == source.length()
                     || !Character.isJavaIdentifierPart(source.charAt(end));
             if (startsWord && endsWord) {

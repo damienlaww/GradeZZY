@@ -111,6 +111,28 @@ public class BellCurveChart extends Region {
     // two pi
     private static final double ROOT_TWO_PI = Math.sqrt(2 * Math.PI);
 
+    // The SVG path command that starts a bar's outline at a point
+    private static final String PATH_MOVE = "M";
+
+    // The SVG path command for an upright line, after a space
+    private static final String PATH_VERTICAL = " V";
+
+    // The SVG path command for a curve with one control point, after a
+    // space
+    private static final String PATH_CURVE = " Q";
+
+    // The SVG path command for a level line, after a space
+    private static final String PATH_HORIZONTAL = " H";
+
+    // The SVG path command that closes the outline, after a space
+    private static final String PATH_CLOSE = " Z";
+
+    // Comes between the x and the y of a point in an SVG path
+    private static final String PATH_COMMA = ",";
+
+    // Comes between two points of one SVG path command
+    private static final String PATH_SPACE = " ";
+
     // True for the small chart without lines and labels
     private final boolean small;
 
@@ -187,41 +209,14 @@ public class BellCurveChart extends Region {
         double max = stats.getMaxTotal();
         boolean single = !small && max <= MOST_SINGLE_BARS
                 && max == Math.rint(max);
-        int binCount = GROUPED_BINS;
-        if (small) {
-            binCount = SMALL_BINS;
-        }
-        int[] counts = null;
-        double binMarks = 0.0;
-        double lowMark = 0.0;
-        double highMark = 0.0;
-        if (single) {
-            int markCount = (int) max + 1;
-            counts = countSingle(markCount);
-            binMarks = 1.0;
-            lowMark = -HALF_MARK;
-            highMark = max + HALF_MARK;
-        } else {
-            counts = stats.countBins(binCount);
-            binMarks = max / binCount;
-            lowMark = 0.0;
-            highMark = max;
-        }
+        int[] counts = countBars(single, max);
+        double binMarks = binMarks(single, max);
+        double lowMark = lowMark(single);
+        double highMark = highMark(single, max);
         ChartScale xScale = new ChartScale(lowMark, highMark, left, right);
 
-        double tallest = 0;
-        for (int count : counts) {
-            tallest = Math.max(tallest, count);
-        }
-        // The curve's peak meets the tallest bar, so its shape shows even
-        // when a few students are spread over many marks
-        double peak = curveHeight(stats.getMean(), binMarks);
-        double curveScale = 1.0;
-        if (peak > 0 && tallest > 0) {
-            curveScale = tallest / peak;
-        }
-        tallest = Math.max(tallest, peak * curveScale);
-        double roomyTop = tallest * HEADROOM;
+        double curveScale = curveScale(counts, binMarks);
+        double roomyTop = roomyTop(counts, binMarks, curveScale);
         int gridStep = gridStep(roomyTop);
         double gridLines = Math.ceil(roomyTop / gridStep);
         double yMax = Math.max(gridStep, gridLines * gridStep);
@@ -240,6 +235,80 @@ public class BellCurveChart extends Region {
             drawMarkers(xScale, top, bottom);
             drawAxisNames(left, plotWidth, top, plotHeight, height);
         }
+    }
+
+    // Counts the students of each bar: one bar per whole mark, or the
+    // marks grouped into bins.
+    private int[] countBars(boolean single, double max) {
+        if (single) {
+            int markCount = (int) max + 1;
+            return countSingle(markCount);
+        }
+        return stats.countBins(binCount());
+    }
+
+    // Returns how many bins the grouped marks of this chart use.
+    private int binCount() {
+        if (small) {
+            return SMALL_BINS;
+        }
+        return GROUPED_BINS;
+    }
+
+    // Returns how many marks one bar spans.
+    private double binMarks(boolean single, double max) {
+        if (single) {
+            return 1.0;
+        }
+        return max / binCount();
+    }
+
+    // Returns the mark at the left end of the x-axis: half a mark below
+    // 0 when each whole mark has its own bar.
+    private static double lowMark(boolean single) {
+        if (single) {
+            return -HALF_MARK;
+        }
+        return 0.0;
+    }
+
+    // Returns the mark at the right end of the x-axis.
+    private static double highMark(boolean single, double max) {
+        if (single) {
+            return max + HALF_MARK;
+        }
+        return max;
+    }
+
+    // Returns the stretch that makes the curve's peak meet the tallest
+    // bar, so its shape shows even when a few students are spread over
+    // many marks.
+    private double curveScale(int[] counts, double binMarks) {
+        double tallest = tallestCount(counts);
+        double peak = curveHeight(stats.getMean(), binMarks);
+        if (peak > 0 && tallest > 0) {
+            return tallest / peak;
+        }
+        return 1.0;
+    }
+
+    // Returns how high the y-axis must reach: the tallest bar or the
+    // stretched curve, with room above it.
+    private double roomyTop(int[] counts, double binMarks,
+            double curveScale) {
+        double tallest = tallestCount(counts);
+        double peak = curveHeight(stats.getMean(), binMarks);
+        double highest = Math.max(tallest, peak * curveScale);
+        return highest * HEADROOM;
+    }
+
+    // Returns the count of the tallest bar.
+    private static int tallestCount(int[] counts) {
+        int tallest = 0;
+        for (int count : counts) {
+            tallest = Math.max(tallest, count);
+        }
+        return tallest;
     }
 
     // Counts how many students got each whole mark, rounding halves up.
@@ -460,14 +529,14 @@ public class BellCurveChart extends Region {
         double rightX = leftX + width;
         double leftCornerEnd = leftX + radius;
         double rightCornerStart = rightX - radius;
-        return "M" + leftX + "," + bottom
-                + " V" + cornerBottom
-                + " Q" + leftX + "," + barTop + " "
-                + leftCornerEnd + "," + barTop
-                + " H" + rightCornerStart
-                + " Q" + rightX + "," + barTop + " "
-                + rightX + "," + cornerBottom
-                + " V" + bottom + " Z";
+        return PATH_MOVE + leftX + PATH_COMMA + bottom
+                + PATH_VERTICAL + cornerBottom
+                + PATH_CURVE + leftX + PATH_COMMA + barTop + PATH_SPACE
+                + leftCornerEnd + PATH_COMMA + barTop
+                + PATH_HORIZONTAL + rightCornerStart
+                + PATH_CURVE + rightX + PATH_COMMA + barTop + PATH_SPACE
+                + rightX + PATH_COMMA + cornerBottom
+                + PATH_VERTICAL + bottom + PATH_CLOSE;
     }
 
     // Adds a line with a style class.

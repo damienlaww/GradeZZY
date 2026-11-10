@@ -18,6 +18,9 @@ public class Student {
     // What the roster puts in a name column that has no name
     private static final String EMPTY_NAME_PART = "_";
 
+    // Goes between the first and the last name
+    private static final String NAME_SEPARATOR = " ";
+
     // The id from the OrgDefinedId column
     private final String orgDefinedId;
 
@@ -121,7 +124,7 @@ public class Student {
         boolean hasLast = isName(lastName);
 
         if (hasFirst && hasLast) {
-            return firstName.trim() + " " + lastName.trim();
+            return firstName.trim() + NAME_SEPARATOR + lastName.trim();
         } else if (hasFirst) {
             return firstName.trim();
         } else if (hasLast) {

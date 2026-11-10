@@ -41,8 +41,9 @@ import gradezzy.model.Submission;
  * rolls back every transaction, and turns database errors into
  * PersistenceException. The SQL is in SqliteSchema (tables and columns
  * added later), RunTables, SubmissionTables, ReviewTables (fix status,
- * decisions and checked 0s), AdjustmentTable and AuditTable. They work on
- * the connection they are given and never commit or close it.
+ * decisions and checked 0s), AdjustmentTable, AnswerGroupNoteTable and
+ * AuditTable. They work on the connection they are given and never commit
+ * or close it.
  *
  * <p>Tier: SHOULD. Owner: Huxley.
  */

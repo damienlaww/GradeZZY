@@ -204,10 +204,10 @@ public class AssessmentFactory {
     // from its tester.
     private Question createQuestion(String questionId, Path testers) {
         String prefix = ConfigKeys.QUESTION_PREFIX + questionId;
-        String folderName = config.getString(prefix
-                + ConfigKeys.QUESTION_FOLDER_SUFFIX);
-        String fileName = config.getString(prefix
-                + ConfigKeys.QUESTION_FILE_SUFFIX);
+        String folderKey = prefix + ConfigKeys.QUESTION_FOLDER_SUFFIX;
+        String fileKey = prefix + ConfigKeys.QUESTION_FILE_SUFFIX;
+        String folderName = config.getString(folderKey);
+        String fileName = config.getString(fileKey);
 
         double maxScore = TesterMarks.UNKNOWN;
         Path testerFile = findTesterFile(questionId, testers);

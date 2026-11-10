@@ -45,7 +45,7 @@ public class MainApp extends Application {
     /** Command line argument that shows synthetic demo data. */
     public static final String DEMO_ARGUMENT = "--demo";
 
-    /** Command line argument that runs the eight demo flows and exits. */
+    /** Command line argument that runs the ten demo flows and exits. */
     public static final String SELF_TEST_ARGUMENT = "--selftest";
 
     /** Command line argument that saves a picture of every screen. */

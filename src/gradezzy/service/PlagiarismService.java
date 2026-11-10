@@ -326,7 +326,8 @@ public class PlagiarismService {
         String id = ID_PREFIX + gradingRun.getId() + ID_SEPARATOR
                 + username + ID_SEPARATOR + otherUsername + ID_SEPARATOR
                 + pair.getQuestionId();
-        long percent = Math.round(pair.getSimilarity() * PERCENT);
+        double exactPercent = pair.getSimilarity() * PERCENT;
+        long percent = Math.round(exactPercent);
         // listPairs reads the question and percentage back from the start
         String message = pair.getQuestionId() + MESSAGE_MIDDLE + percent
                 + PERCENT_SIGN + " similar to " + otherUsername + ". This is "

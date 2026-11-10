@@ -201,9 +201,7 @@ public class ExecuteStage implements GradingStage {
         QuestionResult parsed = scoreParser.parse(question, run);
         int stoppedCase = findStoppedCase(run, parsed, skippedCases);
         while (stoppedCase != NO_CASE && skippedCases.size() < maxReruns) {
-            int runNumber = runLogs.size() + FIRST_NUMBER;
-            runLogs.add(labelRun(runNumber, run, stoppedCase,
-                    parsed.getOutput()));
+            addRunLog(runLogs, run, stoppedCase, parsed.getOutput());
             skippedCases.add(stoppedCase);
             putBackFiles(snapshot, question);
             run = runTester(folder, tester.getClassName(), skippedCases);
@@ -215,16 +213,8 @@ public class ExecuteStage implements GradingStage {
         }
 
         result.setTimedOut(firstRun.isTimedOut());
-        if (runLogs.isEmpty()) {
-            result.setOutput(parsed.getOutput());
-        } else {
-            int runNumber = runLogs.size() + FIRST_NUMBER;
-            runLogs.add(labelRun(runNumber, run, stoppedCase,
-                    parsed.getOutput()));
-            int maxCharacters = context.getConfig().getInt(
-                    ConfigKeys.MAX_OUTPUT_CHARACTERS);
-            result.setOutput(fitRunLogs(runLogs, maxCharacters));
-        }
+        storeOutput(result, context, runLogs, run, stoppedCase,
+                parsed.getOutput());
         copyCases(parsed, skippedCases, result);
         Double printedTotal = scoreParser.readTotal(run);
         result.setScore(scoreOf(submission, tester, question, parsed,
@@ -233,6 +223,46 @@ public class ExecuteStage implements GradingStage {
                 skippedCases, stoppedCase, outOfMemory);
         reportUnrecognised(submission, context, question, run, result,
                 printedTotal, skippedCases);
+    }
+
+    /**
+     * Adds the labelled log of one finished run to the logs kept so far.
+     *
+     * @param runLogs the labelled log of each earlier run, in order
+     * @param run the finished run
+     * @param stoppedCase the case that stopped the run, or NO_CASE
+     * @param log the log of the run
+     */
+    private void addRunLog(List<String> runLogs, ProcessResult run,
+            int stoppedCase, String log) {
+        int runNumber = runLogs.size() + FIRST_NUMBER;
+        runLogs.add(labelRun(runNumber, run, stoppedCase, log));
+    }
+
+    /**
+     * Stores the output of a question's runs: the last run's log when the
+     * tester ran once, else the labelled log of every run, fitted to the
+     * output limit.
+     *
+     * @param result the result of the question, filled in here
+     * @param context the context
+     * @param runLogs the labelled log of each earlier run, in order
+     * @param lastRun the last run of the tester
+     * @param stoppedCase the case that stopped the last run, or NO_CASE
+     * @param lastLog the log of the last run
+     */
+    private void storeOutput(QuestionResult result, GradingContext context,
+            List<String> runLogs, ProcessResult lastRun, int stoppedCase,
+            String lastLog) {
+        if (runLogs.isEmpty()) {
+            result.setOutput(lastLog);
+            return;
+        }
+
+        addRunLog(runLogs, lastRun, stoppedCase, lastLog);
+        int maxCharacters = context.getConfig().getInt(
+                ConfigKeys.MAX_OUTPUT_CHARACTERS);
+        result.setOutput(fitRunLogs(runLogs, maxCharacters));
     }
 
     /**
