@@ -96,8 +96,15 @@ public class TesterGenerator {
         List<String> source = new ArrayList<>();
         addLine(source, "import java.util.*;");
         addLine(source, "");
+        // The student's class is named by its file (Alpha.java holds
+        // Alpha), which is not always the question id
+        String studentClass = question.getFileName();
+        if (studentClass.endsWith(SOURCE_EXTENSION)) {
+            studentClass = studentClass.substring(0,
+                    studentClass.length() - SOURCE_EXTENSION.length());
+        }
         addLine(source, "public class " + getClassName(question)
-                + " extends " + question.getId() + " {");
+                + " extends " + studentClass + " {");
         addLine(source, "");
         addLine(source, "    private static double score;");
         addLine(source, "");
