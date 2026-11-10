@@ -12,6 +12,8 @@ package gradezzy.ui.backend;
 
 /**
  * One file inside a chosen folder or zip.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ContainedFile {
 

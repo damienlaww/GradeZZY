@@ -18,6 +18,8 @@ import javafx.scene.text.Font;
 
 /**
  * Loads the bundled fonts once.
+ *
+ * <p>Tier: COULD.
  */
 public final class AppFonts {
 

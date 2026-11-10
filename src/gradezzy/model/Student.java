@@ -36,6 +36,8 @@ public class Student {
     /**
      * Creates a new student.
      *
+     * <p>Tier: MUST.
+     *
      * @param orgDefinedId the id from the OrgDefinedId column
      * @param username the student's username, such as ping.lee.2023
      * @param lastName the value of the Last Name column
@@ -54,6 +56,8 @@ public class Student {
     /**
      * Returns the id from the OrgDefinedId column.
      *
+     * <p>Tier: MUST.
+     *
      * @return the id from the OrgDefinedId column
      */
     public String getOrgDefinedId() {
@@ -62,6 +66,8 @@ public class Student {
 
     /**
      * Returns the student's username, such as ping.lee.2023.
+     *
+     * <p>Tier: MUST.
      *
      * @return the student's username, such as ping.lee.2023
      */
@@ -72,6 +78,8 @@ public class Student {
     /**
      * Returns the value of the Last Name column.
      *
+     * <p>Tier: MUST.
+     *
      * @return the value of the Last Name column
      */
     public String getLastName() {
@@ -80,6 +88,8 @@ public class Student {
 
     /**
      * Returns the value of the First Name column.
+     *
+     * <p>Tier: MUST.
      *
      * @return the value of the First Name column
      */
@@ -90,6 +100,8 @@ public class Student {
     /**
      * Returns the student's email address.
      *
+     * <p>Tier: MUST.
+     *
      * @return the student's email address
      */
     public String getEmail() {
@@ -99,6 +111,8 @@ public class Student {
     /**
      * Returns the first and last name, leaving out a part that is blank
      * or the roster's "_".
+     *
+     * <p>Tier: MUST.
      *
      * @return the full name, or an empty string when there is none
      */

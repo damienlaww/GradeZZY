@@ -21,8 +21,8 @@ import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
-import javafx.scene.control.Label;
 import javafx.scene.control.Control;
+import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
@@ -37,6 +37,8 @@ import javafx.util.Duration;
 
 /**
  * Factory methods for the shared pieces of the guided window.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class Parts {
 
@@ -164,6 +166,30 @@ public final class Parts {
 
     // The style class the window's root has in the dark theme
     private static final String DARK_CLASS = "dark";
+
+    // Goes between a count and its word, such as "3 files"
+    private static final String COUNT_GAP = " ";
+
+    // Added to a word to make its regular plural
+    private static final String PLURAL_ENDING = "s";
+
+    // The system property that names the operating system
+    private static final String OS_NAME_PROPERTY = "os.name";
+
+    // Part of the operating system name of a Mac, in lower case
+    private static final String MAC_NAME = "mac";
+
+    // The quote Windows Explorer's "Copy as path" puts at each end
+    private static final String QUOTE = "\"";
+
+    // The shortest text that can hold an opening and a closing quote
+    private static final int QUOTED_MIN_LENGTH = 2;
+
+    // The path separator of Windows
+    private static final char WINDOWS_SEPARATOR = '\\';
+
+    // The path separator config.properties uses
+    private static final char CONFIG_SEPARATOR = '/';
 
     // The folders of an absolute path, such as "/Users/me/Test Data/". A
     // path only starts at the start of the text or after a space, "=", a
@@ -429,18 +455,12 @@ public final class Parts {
         return pane;
     }
 
-    /**
-     * Pads the left of a narrow page by the width of its scroll bar, so
-     * the column is centred on the window.
-     *
-     * @param pane the scrolling page
-     * @param centre the box that centres the column
-     * @param bounds the new bounds of the visible part of the page
-     */
+    // Pads the left of a narrow page by the width of its scroll bar, so
+    // the column is centred on the window.
     private static void centreColumn(ScrollPane pane, StackPane centre,
             Bounds bounds) {
-        double scrollBarWidth = Math.max(0,
-                pane.getWidth() - bounds.getWidth());
+        double spareWidth = pane.getWidth() - bounds.getWidth();
+        double scrollBarWidth = Math.max(0, spareWidth);
         centre.setPadding(new Insets(0, 0, 0, scrollBarWidth));
     }
 
@@ -513,9 +533,9 @@ public final class Parts {
      */
     public static String plural(int count, String word) {
         if (count == 1) {
-            return count + " " + word;
+            return count + COUNT_GAP + word;
         }
-        return count + " " + word + "s";
+        return count + COUNT_GAP + word + PLURAL_ENDING;
     }
 
     /**
@@ -528,9 +548,9 @@ public final class Parts {
      */
     public static String plural(int count, String word, String words) {
         if (count == 1) {
-            return count + " " + word;
+            return count + COUNT_GAP + word;
         }
-        return count + " " + words;
+        return count + COUNT_GAP + words;
     }
 
     /**
@@ -572,8 +592,8 @@ public final class Parts {
         boolean percent = value.endsWith(PERCENT_SIGN);
         String number = value;
         if (percent) {
-            number = value.substring(0, value.length()
-                    - PERCENT_SIGN.length());
+            int numberEnd = value.length() - PERCENT_SIGN.length();
+            number = value.substring(0, numberEnd);
         }
         Label digits = styled(new Label(number), "figure-value");
         digits.setMinWidth(Region.USE_PREF_SIZE);
@@ -622,8 +642,8 @@ public final class Parts {
      * @return the shortcut in words
      */
     public static String shortcut(String key) {
-        String os = System.getProperty("os.name", "").toLowerCase();
-        if (os.contains("mac")) {
+        String os = System.getProperty(OS_NAME_PROPERTY, "").toLowerCase();
+        if (os.contains(MAC_NAME)) {
             return "\u2318 " + key;
         }
         return "Ctrl + " + key;
@@ -725,8 +745,8 @@ public final class Parts {
         }
         Bounds bounds = mark.localToScreen(mark.getBoundsInLocal());
         if (bounds != null) {
-            popup.show(mark, bounds.getMinX(), bounds.getMaxY()
-                    + EXPLAIN_OFFSET);
+            double popupTop = bounds.getMaxY() + EXPLAIN_OFFSET;
+            popup.show(mark, bounds.getMinX(), popupTop);
         }
     }
 
@@ -760,9 +780,11 @@ public final class Parts {
             return "";
         }
         String path = text.trim();
-        if (path.length() >= 2 && path.startsWith("\"")
-                && path.endsWith("\"")) {
-            path = path.substring(1, path.length() - 1).trim();
+        boolean quoted = path.length() >= QUOTED_MIN_LENGTH
+                && path.startsWith(QUOTE) && path.endsWith(QUOTE);
+        if (quoted) {
+            int closingQuote = path.length() - 1;
+            path = path.substring(1, closingQuote).trim();
         }
         return path;
     }
@@ -800,6 +822,6 @@ public final class Parts {
         if (absolute.startsWith(home)) {
             shown = home.relativize(absolute);
         }
-        return shown.toString().replace('\\', '/');
+        return shown.toString().replace(WINDOWS_SEPARATOR, CONFIG_SEPARATOR);
     }
 }

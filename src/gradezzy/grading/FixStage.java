@@ -30,6 +30,8 @@ import gradezzy.validation.ValidationRunner;
 
 /**
  * Applies automatic corrections to the working copy.
+ *
+ * <p>Tier: MUST. Owner: Jun Sheng.
  */
 public class FixStage implements GradingStage {
 
@@ -140,8 +142,10 @@ public class FixStage implements GradingStage {
     private boolean movedOrRenamed(List<FixRecord> applied) {
         for (FixRecord fixRecord : applied) {
             AnomalyType type = fixRecord.getAnomaly().getType();
-            if (type != AnomalyType.MISSING_HEADER_NAME
-                    && type != AnomalyType.WRONG_ENCODING) {
+            // The header and encoding fixes only change inside a file
+            boolean insideFileOnly = type == AnomalyType.MISSING_HEADER_NAME
+                    || type == AnomalyType.WRONG_ENCODING;
+            if (!insideFileOnly) {
                 return true;
             }
         }
@@ -210,8 +214,9 @@ public class FixStage implements GradingStage {
     private List<Anomaly> checkFilesAgain(Submission submission,
             GradingContext context) {
         List<Anomaly> newAnomalies = new ArrayList<>();
-        for (Anomaly found : fileChecks.runAll(submission,
-                context.getAssessment())) {
+        List<Anomaly> foundNow = fileChecks.runAll(submission,
+                context.getAssessment());
+        for (Anomaly found : foundNow) {
             if (!isKnown(submission, found)) {
                 submission.addAnomaly(found);
                 newAnomalies.add(found);
@@ -224,8 +229,9 @@ public class FixStage implements GradingStage {
     private boolean isKnown(Submission submission, Anomaly found) {
         String foundText = cutAtPath(submission, found);
         for (Anomaly known : submission.getAnomalies()) {
-            if (known.getType() == found.getType()
-                    && cutAtPath(submission, known).equals(foundText)) {
+            boolean sameProblem = known.getType() == found.getType()
+                    && cutAtPath(submission, known).equals(foundText);
+            if (sameProblem) {
                 return true;
             }
         }
@@ -235,8 +241,8 @@ public class FixStage implements GradingStage {
     // Returns the message up to its first path in the working copy.
     private String cutAtPath(Submission submission, Anomaly anomaly) {
         String message = anomaly.getMessage();
-        int pathStart = message.indexOf(
-                submission.getWorkingCopyPath().toString());
+        String workingCopy = submission.getWorkingCopyPath().toString();
+        int pathStart = message.indexOf(workingCopy);
         if (pathStart < 0) {
             return message;
         }

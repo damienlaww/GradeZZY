@@ -26,6 +26,7 @@ import gradezzy.model.ScoreAdjustment;
  */
 final class AdjustmentTable {
 
+    // Saves one mark changed by hand
     private static final String INSERT_ADJUSTMENT = "INSERT INTO "
             + "score_adjustments (run_id, username, question_id, "
             + "previous_score, new_score, reason, saved_at) "
@@ -39,6 +40,7 @@ final class AdjustmentTable {
             + "AND question_id = ? AND saved_at = ? "
             + "AND previous_score = ? AND new_score = ? LIMIT 1)";
 
+    // Lists the marks changed by hand in a run, oldest first
     private static final String SELECT_ADJUSTMENTS = "SELECT username, "
             + "question_id, previous_score, new_score, reason, saved_at "
             + "FROM score_adjustments WHERE run_id = ? ORDER BY saved_at";

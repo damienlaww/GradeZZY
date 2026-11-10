@@ -26,6 +26,8 @@ import gradezzy.ui.backend.InputKind;
 
 /**
  * A background task that checks chosen submission files.
+ *
+ * <p>Tier: SHOULD.
  */
 public class FileInspection extends Task<List<ImportItem>> {
 

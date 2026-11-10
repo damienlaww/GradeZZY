@@ -22,6 +22,8 @@ import javafx.scene.layout.StackPane;
 
 /**
  * Shows where the instructor is among the four steps.
+ *
+ * <p>Tier: SHOULD.
  */
 public class StepBar extends HBox {
 
@@ -30,6 +32,9 @@ public class StepBar extends HBox {
 
     // The size of the tick inside a done step
     private static final double TICK_SIZE = 14.0;
+
+    // Comes between a step's name and what it is for in its tip
+    private static final String NAME_SEPARATOR = ": ";
 
     // Called with the step the instructor clicked
     private final Consumer<Step> onPick;
@@ -121,12 +126,14 @@ public class StepBar extends HBox {
             purpose = "save the score sheet and reports.";
             locked = "Open results on Review first.";
         }
+        int keyNumber = step.ordinal() + 1;
         String keys = " Shortcut: " + Parts.shortcut(String.valueOf(
-                step.ordinal() + 1)) + ".";
+                keyNumber)) + ".";
         if (isCurrent) {
             return "You are here: " + purpose + keys;
         } else if (canOpen) {
-            return "Open " + step.getLabel() + ": " + purpose + keys;
+            return "Open " + step.getLabel() + NAME_SEPARATOR + purpose
+                    + keys;
         }
         return locked;
     }

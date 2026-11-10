@@ -23,6 +23,9 @@ import gradezzy.model.Submission;
  */
 public class ConsoleProgressListener implements ProgressListener {
 
+    // Indent of each problem line under a finished submission
+    private static final String PROBLEM_INDENT = "       ";
+
     // How many submissions the run has
     private int totalSubmissions = 0;
 
@@ -31,6 +34,8 @@ public class ConsoleProgressListener implements ProgressListener {
 
     /**
      * Creates a new console progress listener.
+     *
+     * <p>Tier: MUST.
      */
     public ConsoleProgressListener() {
         // nothing to set up
@@ -38,6 +43,8 @@ public class ConsoleProgressListener implements ProgressListener {
 
     /**
      * Prints the size of the batch.
+     *
+     * <p>Tier: MUST.
      *
      * @param totalSubmissions the number of submissions in the run
      */
@@ -52,6 +59,8 @@ public class ConsoleProgressListener implements ProgressListener {
     /**
      * Prints nothing: the submission is printed when it finishes.
      *
+     * <p>Tier: MUST.
+     *
      * @param submission the submission being started
      */
     @Override
@@ -61,6 +70,8 @@ public class ConsoleProgressListener implements ProgressListener {
 
     /**
      * Prints nothing: the submission is printed when it finishes.
+     *
+     * <p>Tier: MUST.
      *
      * @param submission the submission being graded
      * @param stageName the name of the stage
@@ -77,6 +88,8 @@ public class ConsoleProgressListener implements ProgressListener {
      * counter and the block stay whole when several workers finish at
      * once.
      *
+     * <p>Tier: MUST.
+     *
      * @param submission the submission that is done
      */
     @Override
@@ -89,13 +102,15 @@ public class ConsoleProgressListener implements ProgressListener {
                 + submission.getAnomalies().size() + " problem(s)");
 
         for (Anomaly anomaly : submission.getAnomalies()) {
-            System.out.println("       " + anomaly.getType() + ": "
+            System.out.println(PROBLEM_INDENT + anomaly.getType() + ": "
                     + anomaly.getMessage());
         }
     }
 
     /**
      * Prints a closing line for the run.
+     *
+     * <p>Tier: MUST.
      *
      * @param gradingRun the run that has finished
      */

@@ -53,6 +53,8 @@ public class TesterStrengthService {
     /**
      * Creates the service.
      *
+     * <p>Tier: COULD.
+     *
      * @param config the settings
      */
     public TesterStrengthService(AppConfig config) {
@@ -162,8 +164,8 @@ public class TesterStrengthService {
         lines.addAll(describe(results));
 
         Path file = folder.resolve(REPORT_FILE_NAME);
-        FileUtils.writeText(file, TextUtils.join(LINE_END, lines)
-                + LINE_END);
+        String text = TextUtils.join(LINE_END, lines) + LINE_END;
+        FileUtils.writeText(file, text);
         return file;
     }
 }

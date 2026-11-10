@@ -35,6 +35,8 @@ import gradezzy.ui.backend.ImportBatch;
 
 /**
  * Builds the typed test cases sheet.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class TestCasesSheet {
 
@@ -58,6 +60,10 @@ public final class TestCasesSheet {
 
     // The style class of code text
     private static final String CODE = "code-text";
+
+    // The brackets around the arguments of a method call
+    private static final String CALL_OPEN = "(";
+    private static final String CALL_CLOSE = ")";
 
     // The window that shows the sheet
     private final FlowWindow window;
@@ -289,8 +295,8 @@ public final class TestCasesSheet {
         Label questionLabel = Parts.strong(testCase.getQuestionId());
         questionLabel.setMinWidth(QUESTION_COLUMN);
         questionLabel.setPrefWidth(QUESTION_COLUMN);
-        Label call = new Label(testCase.getMethodName() + "("
-                + testCase.getArgumentExpressions() + ")");
+        Label call = new Label(testCase.getMethodName() + CALL_OPEN
+                + testCase.getArgumentExpressions() + CALL_CLOSE);
         call.getStyleClass().add(CODE);
         call.setMinWidth(0);
         Label gives = Parts.muted("gives");

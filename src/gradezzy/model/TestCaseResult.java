@@ -26,6 +26,8 @@ public class TestCaseResult {
     /**
      * Creates a new test case result.
      *
+     * <p>Tier: MUST.
+     *
      * @param testNumber the position of the test, from 1
      * @param passed whether the test case passed
      * @param detail the tester output for this test case
@@ -39,6 +41,8 @@ public class TestCaseResult {
     /**
      * Returns the position of the test, from 1.
      *
+     * <p>Tier: MUST.
+     *
      * @return the position of the test, from 1
      */
     public int getTestNumber() {
@@ -48,6 +52,8 @@ public class TestCaseResult {
     /**
      * Returns whether the test case passed.
      *
+     * <p>Tier: MUST.
+     *
      * @return whether the test case passed
      */
     public boolean isPassed() {
@@ -56,6 +62,8 @@ public class TestCaseResult {
 
     /**
      * Returns the tester output for this test case.
+     *
+     * <p>Tier: MUST.
      *
      * @return the tester output for this test case
      */

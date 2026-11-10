@@ -13,6 +13,8 @@ import gradezzy.model.Submission;
 
 /**
  * Fills in the simulated results of one finished submission.
+ *
+ * <p>Tier: COULD.
  */
 public interface DemoOutcome {
 

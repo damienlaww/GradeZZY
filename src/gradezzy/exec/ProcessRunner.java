@@ -167,16 +167,20 @@ public class ProcessRunner {
         try {
             while (process.isAlive() && !timedOut) {
                 rememberChildren(process, children);
+                // Whether this pass finds output waiting in either pipe
+                boolean outputWaiting = output.available() > 0;
+                boolean errorWaiting = error.available() > 0;
                 outputText = readAvailable(output, outputText, maxCharacters);
                 errorText = readAvailable(error, errorText, maxCharacters);
 
                 if (System.currentTimeMillis() > deadlineMillis) {
                     stopKeepingOutput(process);
                     timedOut = true;
-                } else if (output.available() == 0
-                        && error.available() == 0) {
-                    // Sleeping with output waiting would slow a program
-                    // that prints a lot to one pipe buffer per pause
+                } else if (!outputWaiting && !errorWaiting) {
+                    // Pause only when both pipes were empty. Pausing after
+                    // a read, when the pipe was only drained for a moment,
+                    // would let a program that prints a lot fill one pipe
+                    // buffer per pause and run far slower than it should
                     Thread.sleep(POLL_INTERVAL_MILLIS);
                 }
             }
@@ -228,8 +232,8 @@ public class ProcessRunner {
         process.destroyForcibly();
         // On Windows a stopping java.exe holds its working folder, so
         // wait a moment for it to end before the folder is reused
-        waitForExit(process.toHandle(), System.currentTimeMillis()
-                + EXIT_WAIT_MILLIS);
+        long deadline = System.currentTimeMillis() + EXIT_WAIT_MILLIS;
+        waitForExit(process.toHandle(), deadline);
     }
 
     // Waits until a stopped process has ended or the deadline, in
@@ -440,6 +444,7 @@ public class ProcessRunner {
         // shortcut: a character split across two reads may be garbled;
         // fine for the ASCII tester output, upgrade to a Reader if not
         String chunk = new String(buffer, 0, count);
-        return text + chunk.substring(0, Math.min(room, chunk.length()));
+        int kept = Math.min(room, chunk.length());
+        return text + chunk.substring(0, kept);
     }
 }

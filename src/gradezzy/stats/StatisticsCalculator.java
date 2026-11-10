@@ -141,7 +141,8 @@ public class StatisticsCalculator {
         if (sorted.size() % HALF == 1) {
             return sorted.get(middle);
         }
-        return (sorted.get(middle - 1) + sorted.get(middle)) / HALF;
+        int beforeMiddle = middle - 1;
+        return (sorted.get(beforeMiddle) + sorted.get(middle)) / HALF;
     }
 
     /**
@@ -152,7 +153,9 @@ public class StatisticsCalculator {
      * @return the pass rate, from 0 to 1
      */
     public double passRate(List<Double> scores, double maxScore) {
-        if (scores == null || scores.isEmpty() || maxScore <= 0.0) {
+        boolean nothingToRate = scores == null || scores.isEmpty()
+                || maxScore <= 0.0;
+        if (nothingToRate) {
             return 0.0;
         }
 
@@ -179,13 +182,16 @@ public class StatisticsCalculator {
         List<MarkBand> bands = new ArrayList<>();
         double bandWidth =
                 config.getDouble(ConfigKeys.MARK_BAND_WIDTH_PERCENT);
-        if (scores == null || maxScore <= 0.0 || bandWidth <= 0.0) {
+        boolean nothingToBand = scores == null || maxScore <= 0.0
+                || bandWidth <= 0.0;
+        if (nothingToBand) {
             return bands;
         }
 
         // Counting bands with a whole number avoids adding up rounding
         // errors, for example when the width is 33.3
-        int bandCount = (int) Math.ceil(FULL_PERCENT / bandWidth);
+        double bandsNeeded = FULL_PERCENT / bandWidth;
+        int bandCount = (int) Math.ceil(bandsNeeded);
         if (bandCount < 1) {
             return bands;
         }
@@ -193,14 +199,16 @@ public class StatisticsCalculator {
         int lastIndex = bandCount - 1;
         for (int bandIndex = 0; bandIndex < lastIndex; bandIndex++) {
             double lower = bandIndex * bandWidth;
-            double upper = Math.min(lower + bandWidth, FULL_PERCENT);
+            double nextLower = lower + bandWidth;
+            double upper = Math.min(nextLower, FULL_PERCENT);
             int studentCount = countBelow(scores, maxScore, lower, upper);
             bands.add(new MarkBand(lower, upper, studentCount));
         }
 
         // The last band also holds the full mark
         double lastLower = lastIndex * bandWidth;
-        double lastUpper = Math.min(lastLower + bandWidth, FULL_PERCENT);
+        double pastLast = lastLower + bandWidth;
+        double lastUpper = Math.min(pastLast, FULL_PERCENT);
         int lastCount = countUpTo(scores, maxScore, lastLower, lastUpper);
         bands.add(new MarkBand(lastLower, lastUpper, lastCount));
         return bands;
@@ -239,8 +247,9 @@ public class StatisticsCalculator {
         Map<String, GradingRun> newestBySection = new HashMap<>();
         List<String> sectionOrder = new ArrayList<>();
         for (GradingRun run : gradingRuns) {
-            if (run != null && run.getAssessment() != null
-                    && run.getSection() != null && matches(run, filter)) {
+            boolean counted = run != null && run.getAssessment() != null
+                    && run.getSection() != null && matches(run, filter);
+            if (counted) {
                 String key = run.getSection().getLabel();
                 GradingRun newest = newestBySection.get(key);
                 if (newest == null) {
@@ -266,9 +275,11 @@ public class StatisticsCalculator {
         }
 
         Section section = run.getSection();
-        return matchesCode(filter.getModuleCode(), section.getModuleCode())
-                && matchesCode(filter.getSectionCode(),
-                        section.getSectionCode());
+        boolean moduleMatches = matchesCode(filter.getModuleCode(),
+                section.getModuleCode());
+        boolean sectionMatches = matchesCode(filter.getSectionCode(),
+                section.getSectionCode());
+        return moduleMatches && sectionMatches;
     }
 
     // Compares one code of the filter with the run, ignoring case
@@ -292,8 +303,9 @@ public class StatisticsCalculator {
 
     // Only a graded submission with results has a total worth counting
     private boolean isGraded(Submission submission) {
-        return submission.getStatus() == SubmissionStatus.GRADED
-                && !submission.getQuestionResults().isEmpty();
+        boolean graded = submission.getStatus() == SubmissionStatus.GRADED;
+        boolean hasResults = !submission.getQuestionResults().isEmpty();
+        return graded && hasResults;
     }
 
     // Says whether a score reaches the pass mark from the settings
@@ -319,13 +331,15 @@ public class StatisticsCalculator {
             for (Submission submission : graded) {
                 QuestionResult result = findResult(submission,
                         question.getId());
-                if (result != null && isPass(result.getScore(),
-                        question.getMaxScore())) {
+                boolean passedQuestion = result != null
+                        && isPass(result.getScore(), question.getMaxScore());
+                if (passedQuestion) {
                     passed++;
                 }
             }
+            double questionPassRate = (double) passed / graded.size();
             summary.getQuestionPassRates().put(question.getId(),
-                    (double) passed / graded.size());
+                    questionPassRate);
         }
     }
 
@@ -333,8 +347,9 @@ public class StatisticsCalculator {
     private QuestionResult findResult(Submission submission,
             String questionId) {
         for (QuestionResult result : submission.getQuestionResults()) {
-            if (result.getQuestion() != null
-                    && result.getQuestion().getId().equals(questionId)) {
+            boolean forQuestion = result.getQuestion() != null
+                    && result.getQuestion().getId().equals(questionId);
+            if (forQuestion) {
                 return result;
             }
         }
@@ -381,10 +396,13 @@ public class StatisticsCalculator {
         Map<String, Integer> errors = summary.getCommonCompileErrors();
         for (Submission submission : graded) {
             for (Anomaly anomaly : submission.getAnomalies()) {
-                if (anomaly.getType() == AnomalyType.COMPILE_ERROR
-                        && anomaly.getMessage() != null) {
+                boolean compileError =
+                        anomaly.getType() == AnomalyType.COMPILE_ERROR
+                        && anomaly.getMessage() != null;
+                if (compileError) {
                     String reason = compileErrorReason(anomaly.getMessage());
-                    errors.put(reason, errors.getOrDefault(reason, 0) + 1);
+                    int count = errors.getOrDefault(reason, 0) + 1;
+                    errors.put(reason, count);
                 }
             }
         }
@@ -398,8 +416,8 @@ public class StatisticsCalculator {
             return message;
         }
 
-        String reason = message.substring(markerStart
-                + COMPILER_ERROR_MARKER.length());
+        int reasonStart = markerStart + COMPILER_ERROR_MARKER.length();
+        String reason = message.substring(reasonStart);
         int reasonEnd = reason.indexOf(REASON_END);
         if (reasonEnd < 0) {
             return reason;

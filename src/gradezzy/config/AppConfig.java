@@ -47,6 +47,8 @@ public class AppConfig {
     /**
      * Loads the settings from a file.
      *
+     * <p>Tier: MUST.
+     *
      * @param configFile the path of the properties file
      * @throws IOException if the file cannot be read
      */
@@ -65,6 +67,8 @@ public class AppConfig {
      * Loads the default configuration file, or the file named by the
      * gradezzy.config system property when it is set.
      *
+     * <p>Tier: MUST.
+     *
      * @return the loaded configuration
      * @throws IOException if the file cannot be read
      */
@@ -77,6 +81,8 @@ public class AppConfig {
     /**
      * Returns the file the settings were read from.
      *
+     * <p>Tier: MUST.
+     *
      * @return the path of the properties file
      */
     public String getConfigFile() {
@@ -85,6 +91,8 @@ public class AppConfig {
 
     /**
      * Says whether a setting is present in the file.
+     *
+     * <p>Tier: MUST.
      *
      * @param key the name of the setting, from ConfigKeys
      * @return true if the setting exists, even if it is empty
@@ -110,6 +118,8 @@ public class AppConfig {
     /**
      * Returns a setting as text.
      *
+     * <p>Tier: MUST.
+     *
      * @param key the name of the setting, from ConfigKeys
      * @return the value with spaces at both ends removed
      * @throws ConfigException if the setting is missing
@@ -127,6 +137,8 @@ public class AppConfig {
 
     /**
      * Returns a setting as a whole number.
+     *
+     * <p>Tier: MUST.
      *
      * @param key the name of the setting, from ConfigKeys
      * @return the value as an int
@@ -146,6 +158,8 @@ public class AppConfig {
     /**
      * Returns a setting as a large whole number.
      *
+     * <p>Tier: MUST.
+     *
      * @param key the name of the setting, from ConfigKeys
      * @return the value as a long
      * @throws ConfigException if the setting is missing or not a number
@@ -163,6 +177,8 @@ public class AppConfig {
 
     /**
      * Returns a setting as a decimal number.
+     *
+     * <p>Tier: MUST.
      *
      * @param key the name of the setting, from ConfigKeys
      * @return the value as a double
@@ -184,6 +200,8 @@ public class AppConfig {
      * case. Anything else, such as yes or on, is an error rather than
      * being read as false, so a typing mistake cannot quietly switch off
      * the database or a check.
+     *
+     * <p>Tier: MUST.
      *
      * @param key the name of the setting, from ConfigKeys
      * @return the value as a boolean
@@ -209,13 +227,29 @@ public class AppConfig {
      * Returns a comma separated setting as a list. Empty items are left
      * out, so an empty setting gives an empty list.
      *
+     * <p>Tier: MUST.
+     *
      * @param key the name of the setting, from ConfigKeys
      * @return the items, with spaces around each one removed
      * @throws ConfigException if the setting is missing
      */
     public List<String> getList(String key) {
+        return splitList(getString(key));
+    }
+
+    /**
+     * Splits a comma separated value into a list, the way every list
+     * setting is read. Empty items are left out, so empty text gives an
+     * empty list.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param text the value, such as "Q1a, Q1b,Q2"
+     * @return the items, with spaces around each one removed
+     */
+    public static List<String> splitList(String text) {
         List<String> items = new ArrayList<>();
-        String[] parts = getString(key).split(LIST_SEPARATOR);
+        String[] parts = text.split(LIST_SEPARATOR);
 
         for (String part : parts) {
             String item = part.trim();
@@ -231,6 +265,8 @@ public class AppConfig {
     /**
      * Changes a setting in memory. The file is not written; see
      * SettingsService.save for that.
+     *
+     * <p>Tier: MUST.
      *
      * @param key the name of the setting, from ConfigKeys
      * @param value the new value

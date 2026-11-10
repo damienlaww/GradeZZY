@@ -33,6 +33,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * Bell curves of several sections on one chart.
+ *
+ * <p>Tier: SHOULD.
  */
 public class CompareChart extends Region {
 
@@ -42,8 +44,11 @@ public class CompareChart extends Region {
     /** The height of the chart. */
     public static final double HEIGHT = 300.0;
 
-    // Space for the axis labels: left, right, top, bottom
-    private static final double[] MARGINS = {48, 16, 24, 36};
+    // Space for the axis labels on each side
+    private static final double LEFT_MARGIN = 48.0;
+    private static final double RIGHT_MARGIN = 16.0;
+    private static final double TOP_MARGIN = 24.0;
+    private static final double BOTTOM_MARGIN = 36.0;
 
     // Turns a fraction into a percentage
     private static final double PERCENT = 100.0;
@@ -85,6 +90,19 @@ public class CompareChart extends Region {
     // two pi
     private static final double ROOT_TWO_PI = Math.sqrt(2 * Math.PI);
 
+    // Writes an average with one decimal place, such as 8.8
+    private static final String ONE_DECIMAL_FORMAT = "%.1f";
+
+    // Comes between the sections that share an average line
+    private static final String NAME_SEPARATOR = ", ";
+
+    // Comes between the sections and their average, such as
+    // "G1 · average 8.8"
+    private static final String DOT = " \u00B7 ";
+
+    // Starts the style class of a series; the number counts from 1
+    private static final String SERIES_PREFIX = "series-";
+
     // The name of each section
     private final List<String> names = new ArrayList<>();
 
@@ -118,8 +136,8 @@ public class CompareChart extends Region {
     public void setSeries(List<String> newNames, List<MarkStats> newStats) {
         names.clear();
         stats.clear();
-        int count = Math.min(MOST_SERIES, Math.min(newNames.size(),
-                newStats.size()));
+        int given = Math.min(newNames.size(), newStats.size());
+        int count = Math.min(MOST_SERIES, given);
         for (int index = 0; index < count; index++) {
             names.add(newNames.get(index));
             stats.add(newStats.get(index));
@@ -163,10 +181,10 @@ public class CompareChart extends Region {
 
     // Draws every part of the chart into the given size.
     private void draw(double width, double height) {
-        double left = MARGINS[0];
-        double top = MARGINS[2];
-        double plotWidth = width - left - MARGINS[1];
-        double plotHeight = height - top - MARGINS[3];
+        double left = LEFT_MARGIN;
+        double top = TOP_MARGIN;
+        double plotWidth = width - left - RIGHT_MARGIN;
+        double plotHeight = height - top - BOTTOM_MARGIN;
         double bottom = top + plotHeight;
         double max = stats.get(0).getMaxTotal();
         if (plotWidth <= 0 || plotHeight <= 0 || max <= 0) {
@@ -177,9 +195,10 @@ public class CompareChart extends Region {
         for (MarkStats one : stats) {
             tallest = Math.max(tallest, peak(one));
         }
-        int step = gridStep(tallest * HEADROOM);
-        double yMax = Math.max(step, Math.ceil(tallest * HEADROOM / step)
-                * step);
+        double withRoom = tallest * HEADROOM;
+        int step = gridStep(withRoom);
+        double roundedUp = Math.ceil(withRoom / step) * step;
+        double yMax = Math.max(step, roundedUp);
         yMax = Math.min(yMax, PERCENT);
         double right = left + plotWidth;
 
@@ -199,7 +218,8 @@ public class CompareChart extends Region {
     private void drawGrid(int step, double yMax, double from, double to,
             double top, double plotHeight) {
         // The axis is the line at 0%, so 0% gets only its number
-        addGridNumber(0, from, top + plotHeight);
+        double bottom = top + plotHeight;
+        addGridNumber(0, from, bottom);
         for (int value = step; value <= yMax; value += step) {
             double at = top + plotHeight - plotHeight * value / yMax;
             Line line = new Line(from, at, to, at);
@@ -211,7 +231,7 @@ public class CompareChart extends Region {
 
     // Writes the percentage of one gridline on its left.
     private void addGridNumber(int value, double from, double at) {
-        Text label = addText(value + "%", "chart-tick");
+        Text label = addText(value + Parts.PERCENT_SIGN, "chart-tick");
         label.setLayoutX(from - LABEL_GAP
                 - label.getLayoutBounds().getWidth());
         label.setLayoutY(at - label.getLayoutBounds().getMinY()
@@ -237,7 +257,8 @@ public class CompareChart extends Region {
             curve.getPoints().addAll(pixelX, pixelY);
             fill.getPoints().addAll(pixelX, pixelY);
         }
-        fill.getPoints().addAll(left + plotWidth, bottom);
+        double right = left + plotWidth;
+        fill.getPoints().addAll(right, bottom);
         String series = seriesClass(index);
         fill.getStyleClass().addAll("compare-fill", series);
         curve.getStyleClass().addAll("compare-curve", series);
@@ -257,15 +278,7 @@ public class CompareChart extends Region {
         // The rounded averages in the order first seen, beside the
         // sections that have each
         List<String> means = new ArrayList<>();
-        Map<String, List<Integer>> groups = new HashMap<>();
-        for (int index = 0; index < stats.size(); index++) {
-            String mean = String.format("%.1f", stats.get(index).getMean());
-            if (!groups.containsKey(mean)) {
-                means.add(mean);
-                groups.put(mean, new ArrayList<>());
-            }
-            groups.get(mean).add(index);
-        }
+        Map<String, List<Integer>> groups = groupByMean(means);
         List<Bounds> placed = new ArrayList<>();
         for (String groupMean : means) {
             List<Integer> members = groups.get(groupMean);
@@ -283,40 +296,65 @@ public class CompareChart extends Region {
             List<String> who = new ArrayList<>();
             for (int index : members) {
                 who.add(names.get(index));
-                double dotY = bottom - plotHeight
-                        * Math.min(yMax, peak(stats.get(index))) / yMax;
+                double peakShare = Math.min(yMax, peak(stats.get(index)));
+                double dotY = bottom - plotHeight * peakShare / yMax;
                 Circle dot = new Circle(lineX, dotY, DOT_RADIUS);
                 dot.getStyleClass().addAll("compare-dot", seriesClass(index));
                 getChildren().add(dot);
             }
-            Text label = addText(TextUtils.join(", ", who)
-                    + " \u00B7 average " + groupMean, "chart-label");
+            Text label = addText(TextUtils.join(NAME_SEPARATOR, who) + DOT
+                    + "average " + groupMean, "chart-label");
             if (members.size() == 1) {
                 label.getStyleClass().add(seriesClass(members.get(0)));
             }
-            double width = label.getLayoutBounds().getWidth();
-            double height = label.getLayoutBounds().getHeight();
-            // Kept inside the plot, beside the line's top
-            double labelX = Math.min(left + plotWidth - width,
-                    Math.max(left, lineX + LABEL_GAP));
-            double labelTop = top;
-            Bounds box = new BoundingBox(labelX, labelTop, width, height);
-            boolean moved = true;
-            while (moved) {
-                moved = false;
-                for (Bounds other : placed) {
-                    if (other.intersects(box)) {
-                        labelTop = other.getMaxY() + NAME_SPACING;
-                        box = new BoundingBox(labelX, labelTop, width,
-                                height);
-                        moved = true;
-                    }
+            placeLabel(label, lineX, left, plotWidth, top, placed);
+        }
+    }
+
+    // Groups the sections by their average rounded to one decimal place.
+    // Fills means with the rounded averages in the order first seen, and
+    // returns the sections that have each.
+    private Map<String, List<Integer>> groupByMean(List<String> means) {
+        Map<String, List<Integer>> groups = new HashMap<>();
+        for (int index = 0; index < stats.size(); index++) {
+            String mean = String.format(ONE_DECIMAL_FORMAT,
+                    stats.get(index).getMean());
+            if (!groups.containsKey(mean)) {
+                means.add(mean);
+                groups.put(mean, new ArrayList<>());
+            }
+            groups.get(mean).add(index);
+        }
+        return groups;
+    }
+
+    // Puts an average's label beside the top of its line, inside the
+    // plot, moved down below any label already placed that it would
+    // cover, and adds its box to those placed.
+    private void placeLabel(Text label, double lineX, double left,
+            double plotWidth, double top, List<Bounds> placed) {
+        double width = label.getLayoutBounds().getWidth();
+        double height = label.getLayoutBounds().getHeight();
+        // Kept inside the plot, beside the line's top
+        double rightmost = left + plotWidth - width;
+        double besideLine = Math.max(left, lineX + LABEL_GAP);
+        double labelX = Math.min(rightmost, besideLine);
+        double labelTop = top;
+        Bounds box = new BoundingBox(labelX, labelTop, width, height);
+        boolean moved = true;
+        while (moved) {
+            moved = false;
+            for (Bounds other : placed) {
+                if (other.intersects(box)) {
+                    labelTop = other.getMaxY() + NAME_SPACING;
+                    box = new BoundingBox(labelX, labelTop, width, height);
+                    moved = true;
                 }
             }
-            placed.add(box);
-            label.setLayoutX(labelX);
-            label.setLayoutY(labelTop - label.getLayoutBounds().getMinY());
         }
+        placed.add(box);
+        label.setLayoutX(labelX);
+        label.setLayoutY(labelTop - label.getLayoutBounds().getMinY());
     }
 
     // Labels the marks along the bottom.
@@ -351,7 +389,8 @@ public class CompareChart extends Region {
         Text up = addText("Share of students", "chart-note");
         up.setRotate(QUARTER_TURN);
         double textWidth = up.getLayoutBounds().getWidth();
-        up.setLayoutX(-textWidth / 2 + up.getLayoutBounds().getHeight() / 2);
+        double textHeight = up.getLayoutBounds().getHeight();
+        up.setLayoutX(-textWidth / 2 + textHeight / 2);
         up.setLayoutY(top + plotHeight / 2);
     }
 
@@ -375,7 +414,8 @@ public class CompareChart extends Region {
 
     // Returns the style class of the n-th section, counting from 1.
     private static String seriesClass(int index) {
-        return "series-" + (index + 1);
+        int seriesNumber = index + 1;
+        return SERIES_PREFIX + seriesNumber;
     }
 
     // Picks a gap between gridlines that gives at most five lines.
@@ -385,7 +425,8 @@ public class CompareChart extends Region {
                 return step;
             }
         }
-        return GRID_STEPS[GRID_STEPS.length - 1];
+        int lastIndex = GRID_STEPS.length - 1;
+        return GRID_STEPS[lastIndex];
     }
 
     // Adds a piece of text with a style class, laid out by CSS first so

@@ -56,21 +56,10 @@ public class HistoryService {
     private final Path databaseFile;
 
     /**
-     * Creates a new history service.
-     *
-     * @param config the application settings
-     * @param repository the store results are saved to
-     * @param backupManager the helper that copies the database
-     */
-    public HistoryService(AppConfig config, ResultRepository repository,
-            BackupManager backupManager) {
-        this(config, repository, backupManager,
-                new AuditService(config, repository));
-    }
-
-    /**
      * Creates a new history service that writes backups and restores to
      * the given audit log.
+     *
+     * <p>Tier: COULD.
      *
      * @param config the application settings
      * @param repository the store results are saved to
@@ -110,6 +99,8 @@ public class HistoryService {
     /**
      * Makes a backup of the current state.
      *
+     * <p>Tier: COULD.
+     *
      * @return the backup file, or null if it failed or the database is
      *         switched off
      */
@@ -145,6 +136,8 @@ public class HistoryService {
      * finished. A grading run still going on saves its next results into
      * the restored database, so restore when no run is being graded.
      *
+     * <p>Tier: COULD.
+     *
      * @param backupFile the backup file
      * @throws IllegalStateException if the database is switched off, the
      *         current database could not be backed up first, or the backup
@@ -165,8 +158,8 @@ public class HistoryService {
 
         String problem = "";
         Path safetyBackup = null;
-        Path heldCopy = backupFile.resolveSibling(backupFile.getFileName()
-                + HELD_COPY_SUFFIX);
+        String heldName = backupFile.getFileName() + HELD_COPY_SUFFIX;
+        Path heldCopy = backupFile.resolveSibling(heldName);
 
         // Every repository method locks the repository, so holding the
         // same lock here stops other threads from using it while closed
@@ -187,21 +180,7 @@ public class HistoryService {
                         + "restored: " + exception.getMessage());
             }
 
-            repository.close();
-
-            try {
-                backupManager.restore(heldCopy, databaseFile);
-            } catch (PersistenceException exception) {
-                problem = exception.getMessage();
-            }
-            deleteQuietly(heldCopy);
-
-            try {
-                repository.open();
-            } catch (PersistenceException exception) {
-                problem = problem + " The database could not be opened "
-                        + "again: " + exception.getMessage();
-            }
+            problem = replaceDatabase(heldCopy);
 
             if (problem.isEmpty()) {
                 auditService.record(BACKUP_RESTORED, describeRestore(
@@ -212,6 +191,30 @@ public class HistoryService {
         if (!problem.isEmpty()) {
             throw new IllegalStateException(problem.trim());
         }
+    }
+
+    // Closes the database, copies the held copy of the backup over it,
+    // deletes the held copy and opens the database again, even when the
+    // copy failed. Returns what went wrong, or "" when nothing did.
+    // The caller holds the repository's lock.
+    private String replaceDatabase(Path heldCopy) {
+        String problem = "";
+        repository.close();
+
+        try {
+            backupManager.restore(heldCopy, databaseFile);
+        } catch (PersistenceException exception) {
+            problem = exception.getMessage();
+        }
+        deleteQuietly(heldCopy);
+
+        try {
+            repository.open();
+        } catch (PersistenceException exception) {
+            problem = problem + " The database could not be opened "
+                    + "again: " + exception.getMessage();
+        }
+        return problem;
     }
 
     // Backs up the database before a restore. Returns null when there is

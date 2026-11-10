@@ -23,6 +23,8 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * A background task that finds the similar pairs of one run.
+ *
+ * <p>Tier: COULD.
  */
 public class SimilarityCheck extends Task<List<SimilarityPair>> {
 

@@ -113,7 +113,8 @@ public class TesterInstaller {
 
         try {
             for (String dataFileName : dataFileNames) {
-                Files.deleteIfExists(questionFolder.resolve(dataFileName));
+                Path studentCopy = questionFolder.resolve(dataFileName);
+                Files.deleteIfExists(studentCopy);
                 Path dataFile = sourceDirectory.resolve(dataFileName);
                 if (hasOriginal(dataFile)) {
                     copyReplacing(dataFile, questionFolder);
@@ -137,7 +138,8 @@ public class TesterInstaller {
             throws IOException {
         // ISO-8859-1 reads any bytes, so a tester saved in another
         // encoding cannot stop grading; the names searched are ASCII
-        String testerSource = new String(readOriginal(testerFile),
+        byte[] testerBytes = readOriginal(testerFile);
+        String testerSource = new String(testerBytes,
                 StandardCharsets.ISO_8859_1);
         List<String> dataFileNames = config.getList(
                 ConfigKeys.TESTER_DATA_FILES);
@@ -145,8 +147,8 @@ public class TesterInstaller {
 
         for (String dataFileName : dataFileNames) {
             boolean needed = testerSource.contains(dataFileName);
-            boolean present = hasOriginal(
-                    testerFile.resolveSibling(dataFileName));
+            Path dataFile = testerFile.resolveSibling(dataFileName);
+            boolean present = hasOriginal(dataFile);
             if (needed && !present) {
                 missing.add(dataFileName);
             }
@@ -160,13 +162,13 @@ public class TesterInstaller {
     private void flagMissingDataFiles(Path testerFile,
             Submission submission) throws IOException {
         for (String dataFileName : findMissingDataFiles(testerFile)) {
-            submission.addAnomaly(new Anomaly(
-                    ID_PREFIX + UUID.randomUUID(),
+            String anomalyId = ID_PREFIX + UUID.randomUUID();
+            String message = testerFile.getFileName() + " reads "
+                    + dataFileName + ", which is not in the tester folder,"
+                    + " so its cases will fail.";
+            submission.addAnomaly(new Anomaly(anomalyId,
                     AnomalyType.MISSING_FILE, Severity.ERROR,
-                    submission.getUsername(),
-                    testerFile.getFileName() + " reads " + dataFileName
-                    + ", which is not in the tester folder, so its "
-                    + "cases will fail.",
+                    submission.getUsername(), message,
                     MISSING_DATA_ACTION));
         }
     }

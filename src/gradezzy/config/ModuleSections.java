@@ -20,6 +20,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * The sections of one module only.
+ *
+ * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
 public final class ModuleSections {
 
@@ -28,6 +30,10 @@ public final class ModuleSections {
 
     // Separates a module from its sections
     private static final String MODULE_SEPARATOR = ":";
+
+    // Separates the codes in app.section.codes and
+    // app.module.codes.own.sections.only
+    private static final String LIST_SEPARATOR = ",";
 
     // Separates the sections of one module
     private static final String SECTION_SEPARATOR = "|";
@@ -38,6 +44,15 @@ public final class ModuleSections {
     // The parts of one entry: the module and its sections
     private static final int ENTRY_PARTS = 2;
 
+    // Where the module is among the parts of one entry
+    private static final int MODULE_PART = 0;
+
+    // Where the sections are among the parts of one entry
+    private static final int SECTIONS_PART = 1;
+
+    // The split limit that keeps empty parts, so "CS102:" has two parts
+    private static final int KEEP_EMPTY_PARTS = -1;
+
     // Not used: every method is static.
     private ModuleSections() {
         // utility class, never instantiated
@@ -47,6 +62,8 @@ public final class ModuleSections {
      * Returns the sections every module has, then those of one module
      * only, without repeats.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param shared the value of app.section.codes
      * @param byModule the value of app.section.codes.by.module, or null
      * @param moduleCode the module
@@ -55,7 +72,7 @@ public final class ModuleSections {
     public static List<String> forModule(String shared, String byModule,
             String moduleCode) {
         List<String> codes = new ArrayList<>();
-        addCodes(codes, split(shared, ","));
+        addCodes(codes, split(shared, LIST_SEPARATOR));
         List<String> modules = new ArrayList<>();
         Map<String, List<String>> sections = new HashMap<>();
         read(byModule, modules, sections);
@@ -69,6 +86,8 @@ public final class ModuleSections {
     /**
      * Returns a module's sections: those every module has, unless the
      * module is listed as having only its own, then its own.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param shared the value of app.section.codes
      * @param byModule the value of app.section.codes.by.module, or null
@@ -88,6 +107,8 @@ public final class ModuleSections {
     /**
      * Says whether a module has only its own sections.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param ownOnly the value of app.module.codes.own.sections.only, or
      *        null
      * @param moduleCode the module
@@ -97,7 +118,7 @@ public final class ModuleSections {
         if (moduleCode == null) {
             return false;
         }
-        for (String code : split(ownOnly, ",")) {
+        for (String code : split(ownOnly, LIST_SEPARATOR)) {
             if (code.equalsIgnoreCase(moduleCode.trim())) {
                 return true;
             }
@@ -107,6 +128,8 @@ public final class ModuleSections {
 
     /**
      * Returns the value with one more section for one module.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param byModule the value now, or null
      * @param moduleCode the module
@@ -130,6 +153,8 @@ public final class ModuleSections {
 
     /**
      * Returns the value without one section of one module.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param byModule the value now, or null
      * @param moduleCode the module
@@ -163,6 +188,8 @@ public final class ModuleSections {
      * Returns the value without any section of one module, for a module
      * that is deleted.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param byModule the value now, or null
      * @param moduleCode the module
      * @return the new value
@@ -182,6 +209,8 @@ public final class ModuleSections {
 
     /**
      * Says whether a section belongs to one module only.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param byModule the value, or null
      * @param moduleCode the module
@@ -208,6 +237,8 @@ public final class ModuleSections {
     /**
      * Checks the value's form.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param value the value
      * @return an empty string when it is valid, or the problem
      */
@@ -216,12 +247,15 @@ public final class ModuleSections {
             return "";
         }
         for (String entry : split(value, ENTRY_SEPARATOR)) {
-            String[] parts = entry.split(MODULE_SEPARATOR, -1);
-            if (parts.length != ENTRY_PARTS
-                    || !parts[0].trim().matches(CODE_PATTERN)) {
+            String[] parts = entry.split(MODULE_SEPARATOR, KEEP_EMPTY_PARTS);
+            boolean badEntry = parts.length != ENTRY_PARTS
+                    || !parts[MODULE_PART].trim().matches(CODE_PATTERN);
+            if (badEntry) {
                 return "Write each module as CS102:G5|G6, separated by ;.";
             }
-            for (String section : split(parts[1], SECTION_SEPARATOR)) {
+            List<String> entrySections = split(parts[SECTIONS_PART],
+                    SECTION_SEPARATOR);
+            for (String section : entrySections) {
                 if (!section.matches(CODE_PATTERN)) {
                     return "Use letters, digits and dashes for sections, "
                             + "such as G11.";
@@ -240,13 +274,16 @@ public final class ModuleSections {
             return;
         }
         for (String entry : split(value, ENTRY_SEPARATOR)) {
-            String[] parts = entry.split(MODULE_SEPARATOR, -1);
-            if (parts.length == ENTRY_PARTS && !parts[0].trim().isEmpty()) {
-                String module = parts[0].trim();
+            String[] parts = entry.split(MODULE_SEPARATOR, KEEP_EMPTY_PARTS);
+            boolean namedModule = parts.length == ENTRY_PARTS
+                    && !parts[MODULE_PART].trim().isEmpty();
+            if (namedModule) {
+                String module = parts[MODULE_PART].trim();
                 if (!sections.containsKey(module)) {
                     modules.add(module);
                 }
-                sections.put(module, split(parts[1], SECTION_SEPARATOR));
+                sections.put(module, split(parts[SECTIONS_PART],
+                        SECTION_SEPARATOR));
             }
         }
     }
@@ -270,8 +307,9 @@ public final class ModuleSections {
             Map<String, List<String>> sections) {
         List<String> entries = new ArrayList<>();
         for (String module : modules) {
-            entries.add(module + MODULE_SEPARATOR + TextUtils.join(
-                    SECTION_SEPARATOR, sections.get(module)));
+            String moduleSections = TextUtils.join(SECTION_SEPARATOR,
+                    sections.get(module));
+            entries.add(module + MODULE_SEPARATOR + moduleSections);
         }
         return TextUtils.join(ENTRY_SEPARATOR, entries);
     }

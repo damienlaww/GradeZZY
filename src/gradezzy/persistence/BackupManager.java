@@ -35,6 +35,7 @@ public class BackupManager {
     // Every backup file name starts with this
     private static final String BACKUP_PREFIX = "gradezzy-";
 
+    // Every backup file name ends with this
     private static final String BACKUP_EXTENSION = ".db";
 
     // Year, month, day, then hour, minute, second and millisecond, so
@@ -42,6 +43,7 @@ public class BackupManager {
     private static final String TIMESTAMP_FORMAT =
             "%04d%02d%02d-%02d%02d%02d-%03d";
 
+    // Turns the nanoseconds of a time into milliseconds and back
     private static final int NANOSECONDS_PER_MILLISECOND = 1000000;
 
     // The newest backup is never deleted, whatever the setting says
@@ -75,7 +77,9 @@ public class BackupManager {
      * @throws PersistenceException if the operation fails
      */
     public Path backup(Path databaseFile) throws PersistenceException {
-        if (databaseFile == null || !Files.isRegularFile(databaseFile)) {
+        boolean noDatabase = databaseFile == null
+                || !Files.isRegularFile(databaseFile);
+        if (noDatabase) {
             throw new PersistenceException("There is no database to back "
                     + "up yet at " + databaseFile + ". Grade a batch "
                     + "first.");
@@ -83,14 +87,12 @@ public class BackupManager {
 
         Path backupFolder = getBackupFolder();
         LocalDateTime time = LocalDateTime.now();
-        Path backupFile = backupFolder.resolve(BACKUP_PREFIX
-                + timestamp(time) + BACKUP_EXTENSION);
+        Path backupFile = backupFileAt(backupFolder, time);
         // Two backups in one millisecond would share a name, so the later
         // one is named a millisecond on; the names still sort by age
         while (Files.exists(backupFile)) {
             time = time.plusNanos(NANOSECONDS_PER_MILLISECOND);
-            backupFile = backupFolder.resolve(BACKUP_PREFIX
-                    + timestamp(time) + BACKUP_EXTENSION);
+            backupFile = backupFileAt(backupFolder, time);
         }
         try {
             Files.createDirectories(backupFolder);
@@ -117,8 +119,9 @@ public class BackupManager {
      */
     public void restore(Path backupFile,
             Path databaseFile) throws PersistenceException {
-        if (backupFile == null || !Files.isRegularFile(backupFile,
-                LinkOption.NOFOLLOW_LINKS)) {
+        boolean noBackup = backupFile == null
+                || !Files.isRegularFile(backupFile, LinkOption.NOFOLLOW_LINKS);
+        if (noBackup) {
             throw new PersistenceException("The backup " + backupFile
                     + " does not exist. Choose one from the list.");
         }
@@ -127,8 +130,8 @@ public class BackupManager {
                     + "Check database.file in the settings.");
         }
 
-        Path temporaryFile = Paths.get(databaseFile.toString()
-                + RESTORE_SUFFIX);
+        String temporaryName = databaseFile.toString() + RESTORE_SUFFIX;
+        Path temporaryFile = Paths.get(temporaryName);
         try {
             Path parent = databaseFile.toAbsolutePath().getParent();
             if (parent != null) {
@@ -161,8 +164,8 @@ public class BackupManager {
         try {
             for (Path file : FileUtils.listFiles(backupFolder,
                     BACKUP_EXTENSION)) {
-                if (file.getFileName().toString()
-                        .startsWith(BACKUP_PREFIX)) {
+                String fileName = file.getFileName().toString();
+                if (fileName.startsWith(BACKUP_PREFIX)) {
                     backups.add(file);
                 }
             }
@@ -180,8 +183,8 @@ public class BackupManager {
     // Deletes the oldest backups beyond the number to keep. At least one
     // backup, the newest, is always kept.
     private void deleteOldBackups() {
-        int keepCount = Math.max(MIN_BACKUPS_KEPT,
-                config.getInt(ConfigKeys.BACKUP_KEEP_COUNT));
+        int setting = config.getInt(ConfigKeys.BACKUP_KEEP_COUNT);
+        int keepCount = Math.max(MIN_BACKUPS_KEPT, setting);
         List<Path> backups = listBackups();
         for (int index = keepCount; index < backups.size(); index++) {
             deleteQuietly(backups.get(index));
@@ -202,11 +205,18 @@ public class BackupManager {
         return Paths.get(config.getString(ConfigKeys.BACKUP_DIR));
     }
 
+    // The backup file in the folder for a time, such as
+    // gradezzy-20261022-154250-123.db
+    private Path backupFileAt(Path backupFolder, LocalDateTime time) {
+        String fileName = BACKUP_PREFIX + timestamp(time) + BACKUP_EXTENSION;
+        return backupFolder.resolve(fileName);
+    }
+
     // Writes a time such as 20261022-154250-123 for a file name
     private String timestamp(LocalDateTime time) {
+        int millisecond = time.getNano() / NANOSECONDS_PER_MILLISECOND;
         return String.format(TIMESTAMP_FORMAT, time.getYear(),
                 time.getMonthValue(), time.getDayOfMonth(), time.getHour(),
-                time.getMinute(), time.getSecond(),
-                time.getNano() / NANOSECONDS_PER_MILLISECOND);
+                time.getMinute(), time.getSecond(), millisecond);
     }
 }

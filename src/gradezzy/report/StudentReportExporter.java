@@ -43,8 +43,10 @@ public class StudentReportExporter implements Exporter {
      */
     public static final String FILE_EXTENSION = "txt";
 
+    // The first line of every report
     private static final String TITLE = "GradeZZY student report";
 
+    // Repeated under the title, as wide as the title
     private static final char UNDERLINE = '=';
 
     // Labels are padded to this width so the values line up
@@ -56,11 +58,17 @@ public class StudentReportExporter implements Exporter {
     // The provided roster writes _ when there is no separate last name
     private static final String ROSTER_EMPTY_NAME = "_";
 
+    // Written under a heading that has nothing to list
     private static final String NONE = "  (none)";
 
+    // Written for a result whose question was not saved
     private static final String NOT_RECORDED = "(not recorded)";
 
+    // Every line of the report ends with the computer's own line ending
     private static final String NEW_LINE = System.lineSeparator();
+
+    // Ends a line once TextUtils.normaliseLineEndings has run
+    private static final char LINE_FEED = '\n';
 
     // Printed between two students' reports in one file
     private static final String REPORT_SEPARATOR = "-";
@@ -192,28 +200,29 @@ public class StudentReportExporter implements Exporter {
     private String writeDetails(GradingRun gradingRun,
             Submission submission) {
         String report = TITLE + NEW_LINE;
-        report += String.valueOf(UNDERLINE).repeat(TITLE.length())
-                + NEW_LINE + NEW_LINE;
+        String underline = String.valueOf(UNDERLINE).repeat(TITLE.length());
+        report += underline + NEW_LINE + NEW_LINE;
 
         // The submission's own username, so the report of every student
         // names the right one
         String studentUsername = submission.getUsername();
         Student student = submission.getStudent();
         if (student == null) {
-            report += labelLine("Student:", studentUsername
-                    + " (not on the roster)");
+            String unknown = studentUsername + " (not on the roster)";
+            report += labelLine("Student:", unknown);
         } else {
-            report += labelLine("Student:", fullName(student) + " ("
-                    + studentUsername + ")");
+            String named = fullName(student) + " (" + studentUsername + ")";
+            report += labelLine("Student:", named);
             report += labelLine("Email:", student.getEmail());
         }
 
         Assessment assessment = gradingRun.getAssessment();
         Section section = gradingRun.getSection();
         if (assessment != null && section != null) {
-            report += labelLine("Assessment:", assessment.getName() + ", "
+            String graded = assessment.getName() + ", "
                     + section.getModuleCode() + " "
-                    + section.getSectionCode());
+                    + section.getSectionCode();
+            report += labelLine("Assessment:", graded);
         }
         report += labelLine("Run:", gradingRun.getId());
         report += labelLine("Status:", String.valueOf(submission.getStatus()));
@@ -254,9 +263,10 @@ public class StudentReportExporter implements Exporter {
                 remark = "stopped at the time limit";
             }
 
-            report += String.format(SCORE_FORMAT, questionId,
-                    ScoreFormatter.format(result.getScore()), maxScore,
-                    remark).stripTrailing() + NEW_LINE;
+            String score = ScoreFormatter.format(result.getScore());
+            String line = String.format(SCORE_FORMAT, questionId, score,
+                    maxScore, remark);
+            report += line.stripTrailing() + NEW_LINE;
         }
         report += NEW_LINE;
         return report;
@@ -316,8 +326,9 @@ public class StudentReportExporter implements Exporter {
     // First name, then the last name unless the roster left it empty
     private String fullName(Student student) {
         String lastName = student.getLastName();
-        if (TextUtils.isBlank(lastName)
-                || lastName.equals(ROSTER_EMPTY_NAME)) {
+        boolean noLastName = TextUtils.isBlank(lastName)
+                || lastName.equals(ROSTER_EMPTY_NAME);
+        if (noLastName) {
             return student.getFirstName();
         }
         return student.getFirstName() + " " + lastName;
@@ -337,7 +348,7 @@ public class StudentReportExporter implements Exporter {
             return "";
         }
         String normalised = TextUtils.normaliseLineEndings(text).strip();
-        int lineEnd = normalised.indexOf('\n');
+        int lineEnd = normalised.indexOf(LINE_FEED);
         if (lineEnd < 0) {
             return normalised;
         }

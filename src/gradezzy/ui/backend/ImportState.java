@@ -10,6 +10,8 @@ package gradezzy.ui.backend;
 
 /**
  * The state of one chosen input file.
+ *
+ * <p>Tier: MUST.
  */
 public enum ImportState {
 

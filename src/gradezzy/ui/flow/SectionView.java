@@ -52,6 +52,8 @@ import gradezzy.ui.backend.StatusCounts;
 
 /**
  * The figures and charts of one graded section.
+ *
+ * <p>Tier: SHOULD.
  */
 public class SectionView {
 
@@ -72,6 +74,27 @@ public class SectionView {
 
     // Rounds a number to one decimal place
     private static final double ONE_DECIMAL = 10.0;
+
+    // Writes a number with one decimal place, such as 12.4
+    private static final String ONE_DECIMAL_FORMAT = "%.1f";
+
+    // How many grid columns the bell curve spans on a narrow window
+    private static final int BOTH_COLUMNS = 2;
+
+    // Starts the second line of a tip
+    private static final String LINE_END = "\n";
+
+    // Comes before the maximum mark beside a figure, such as "/ 20"
+    private static final String MAX_PREFIX = "/ ";
+
+    // Separates a mark from the maximum, such as "12.4 / 20"
+    private static final String OUT_OF = " / ";
+
+    // Separates the parts of a figure's note
+    private static final String DOT = " · ";
+
+    // Shown when a question has no pass rate
+    private static final String NO_VALUE = "-";
 
     // The gap between legend items
     private static final double LEGEND_GAP = 16.0;
@@ -143,6 +166,9 @@ public class SectionView {
     // Where a test's counts are kept: students who ran it, who failed it
     private static final int RAN = 0;
     private static final int FAILED = 1;
+
+    // How many counts are kept for each test
+    private static final int TEST_COUNTS = FAILED + 1;
 
     // The width of a test's name, and the narrowest its bar may get
     private static final double FAILED_NAME_WIDTH = 96.0;
@@ -249,15 +275,16 @@ public class SectionView {
         if (narrow) {
             grid.getColumnConstraints().addAll(percentColumn(HALF_PERCENT),
                     percentColumn(HALF_PERCENT));
-            grid.add(spreadCard, 0, 0, 2, 1);
+            grid.add(spreadCard, 0, 0, BOTH_COLUMNS, 1);
             grid.add(ringCard, 0, 1);
             grid.add(failedCard, 1, 1);
             grid.add(questionCard, 0, 2);
             grid.add(errorCard, 1, 2);
             return;
         }
+        double rightPercent = PERCENT - LEFT_PERCENT;
         grid.getColumnConstraints().addAll(percentColumn(LEFT_PERCENT),
-                percentColumn(PERCENT - LEFT_PERCENT));
+                percentColumn(rightPercent));
         rightStack.getChildren().addAll(ringCard, failedCard);
         VBox.setVgrow(failedCard, Priority.ALWAYS);
         grid.add(spreadCard, 0, 0);
@@ -279,19 +306,21 @@ public class SectionView {
     // Fills the four figure tiles.
     private void fillFigures(MarkStats stats) {
         String max = Parts.mark(stats.getMaxTotal());
+        String median = markText(stats.getMedian());
         Node average = Parts.figure("Average", oneDecimal(stats.getMean()),
-                "/ " + max, "Median " + Parts.mark(roundOne(
-                stats.getMedian())));
-        Node spread = Parts.figure("Spread", "± " + oneDecimal(
-                stats.getSpread()), "marks", "Standard deviation");
+                MAX_PREFIX + max, "Median " + median);
+        String spreadValue = "± " + oneDecimal(stats.getSpread());
+        Node spread = Parts.figure("Spread", spreadValue, "marks",
+                "Standard deviation");
+        String passNote = "Pass mark " + markText(stats.getPassMark())
+                + OUT_OF + max + DOT + stats.getPassCount() + " of "
+                + stats.getCount() + " passed";
         Node passed = Parts.figure("Passed", percent(stats.getPassRate()),
-                null, "Pass mark " + Parts.mark(roundOne(
-                stats.getPassMark())) + " / " + max + " · "
-                + stats.getPassCount() + " of " + stats.getCount()
-                + " passed");
-        Node range = Parts.figure("Range", Parts.mark(roundOne(
-                stats.getLowest())) + " to " + Parts.mark(roundOne(
-                stats.getHighest())), null, "Lowest to highest total");
+                null, passNote);
+        String rangeValue = markText(stats.getLowest()) + " to "
+                + markText(stats.getHighest());
+        Node range = Parts.figure("Range", rangeValue, null,
+                "Lowest to highest total");
         figures.getChildren().clear();
         figures.addRow(0, average, spread, passed, range);
     }
@@ -337,14 +366,14 @@ public class SectionView {
             return "Only one student has a total so far." + hover;
         }
         if (stats.getSpread() <= 0) {
-            return "Every student scored " + Parts.mark(roundOne(
-                    stats.getMean())) + "." + hover;
+            return "Every student scored " + markText(stats.getMean()) + "."
+                    + hover;
         }
         double max = stats.getMaxTotal();
-        long low = Math.round(Math.max(0, stats.getMean()
-                - stats.getSpread()));
-        long high = Math.round(Math.min(max, stats.getMean()
-                + stats.getSpread()));
+        double lowEdge = stats.getMean() - stats.getSpread();
+        double highEdge = stats.getMean() + stats.getSpread();
+        long low = Math.round(Math.max(0, lowEdge));
+        long high = Math.round(Math.min(max, highEdge));
         return "Most students (about 2 in 3) scored between " + low
                 + " and " + high + ". The curve shows the shape of the "
                 + "spread, stretched to the tallest bar." + hover;
@@ -366,21 +395,7 @@ public class SectionView {
         int total = counted.getTotal();
 
         StatusRing ring = new StatusRing();
-        GridPane legend = new GridPane();
-        legend.setHgap(Parts.GAP_SMALL);
-        legend.setVgap(RING_ROW_GAP);
-        ColumnConstraints dotColumn = new ColumnConstraints();
-        ColumnConstraints wordColumn = new ColumnConstraints();
-        wordColumn.setHgrow(Priority.ALWAYS);
-        wordColumn.setMinWidth(0);
-        ColumnConstraints countColumn = new ColumnConstraints();
-        countColumn.setHalignment(HPos.RIGHT);
-        ColumnConstraints percentColumn = new ColumnConstraints(
-                PERCENT_WIDTH);
-        percentColumn.setHalignment(HPos.RIGHT);
-        legend.getColumnConstraints().addAll(dotColumn, wordColumn,
-                countColumn, percentColumn);
-
+        GridPane legend = createRingLegend();
         int row = 0;
         for (int index = 0; index < STATE_ORDER.length; index++) {
             if (counts[index] > 0) {
@@ -399,6 +414,26 @@ public class SectionView {
         summary.setWrapText(true);
         VBox content = new VBox(Parts.GAP, summary, body);
         return card(Parts.title("Student status"), content);
+    }
+
+    // Returns the empty legend grid of the ring: dot, words, count and
+    // percent columns.
+    private static GridPane createRingLegend() {
+        GridPane legend = new GridPane();
+        legend.setHgap(Parts.GAP_SMALL);
+        legend.setVgap(RING_ROW_GAP);
+        ColumnConstraints dotColumn = new ColumnConstraints();
+        ColumnConstraints wordColumn = new ColumnConstraints();
+        wordColumn.setHgrow(Priority.ALWAYS);
+        wordColumn.setMinWidth(0);
+        ColumnConstraints countColumn = new ColumnConstraints();
+        countColumn.setHalignment(HPos.RIGHT);
+        ColumnConstraints percentColumn = new ColumnConstraints(
+                PERCENT_WIDTH);
+        percentColumn.setHalignment(HPos.RIGHT);
+        legend.getColumnConstraints().addAll(dotColumn, wordColumn,
+                countColumn, percentColumn);
+        return legend;
     }
 
     // Says how many students are done and how many need a look, such as
@@ -453,7 +488,8 @@ public class SectionView {
         Parts.tip(name, help);
         Label number = Parts.strong(String.valueOf(count));
         number.setMinWidth(Region.USE_PREF_SIZE);
-        Label share = Parts.muted(percent((double) count / total));
+        double fraction = (double) count / total;
+        Label share = Parts.muted(percent(fraction));
         share.getStyleClass().add("small-text");
         share.setMinWidth(Region.USE_PREF_SIZE);
         legend.addRow(row, dot, name, number, share);
@@ -471,38 +507,14 @@ public class SectionView {
         Map<String, String> example = new HashMap<>();
         for (Submission submission : run.getSubmissions()) {
             for (QuestionResult result : submission.getQuestionResults()) {
-                for (TestCaseResult test : result.getTestCaseResults()) {
-                    String key = result.getQuestion().getId() + TEST_JOIN
-                            + test.getTestNumber();
-                    if (!tally.containsKey(key)) {
-                        keys.add(key);
-                        tally.put(key, new int[2]);
-                    }
-                    int[] counts = tally.get(key);
-                    counts[RAN]++;
-                    if (!test.isPassed()) {
-                        counts[FAILED]++;
-                        if (!example.containsKey(key)
-                                && test.getDetail() != null) {
-                            example.put(key, test.getDetail().trim());
-                        }
-                    }
-                }
+                tallyTests(result, keys, tally, example);
             }
         }
 
         VBox rows = new VBox(Parts.GAP_SMALL);
         List<String> shown = new ArrayList<>();
         for (int place = 0; place < MOST_FAILED_SHOWN; place++) {
-            String worst = null;
-            for (String key : keys) {
-                int failed = tally.get(key)[FAILED];
-                boolean better = worst == null
-                        || failed > tally.get(worst)[FAILED];
-                if (failed > 0 && !shown.contains(key) && better) {
-                    worst = key;
-                }
-            }
+            String worst = mostFailed(keys, tally, shown);
             if (worst != null) {
                 shown.add(worst);
                 rows.getChildren().add(failedRow(worst, tally.get(worst),
@@ -522,16 +534,60 @@ public class SectionView {
                 new VBox(Parts.GAP, rows, note));
     }
 
+    // Counts, for each test of one question result, the student who ran
+    // it and whether they failed it, and keeps the first failing tester
+    // line. New keys are added to keys in the order they are met.
+    private static void tallyTests(QuestionResult result, List<String> keys,
+            Map<String, int[]> tally, Map<String, String> example) {
+        for (TestCaseResult test : result.getTestCaseResults()) {
+            String key = result.getQuestion().getId() + TEST_JOIN
+                    + test.getTestNumber();
+            if (!tally.containsKey(key)) {
+                keys.add(key);
+                tally.put(key, new int[TEST_COUNTS]);
+            }
+            int[] counts = tally.get(key);
+            counts[RAN]++;
+            if (!test.isPassed()) {
+                counts[FAILED]++;
+                boolean firstDetail = !example.containsKey(key)
+                        && test.getDetail() != null;
+                if (firstDetail) {
+                    example.put(key, test.getDetail().trim());
+                }
+            }
+        }
+    }
+
+    // Returns the failed test with the most failures that is not shown
+    // yet, the first of them on a tie, or null when none is left.
+    private static String mostFailed(List<String> keys,
+            Map<String, int[]> tally, List<String> shown) {
+        String worst = null;
+        for (String key : keys) {
+            int failed = tally.get(key)[FAILED];
+            boolean better = worst == null
+                    || failed > tally.get(worst)[FAILED];
+            boolean candidate = failed > 0 && !shown.contains(key)
+                    && better;
+            if (candidate) {
+                worst = key;
+            }
+        }
+        return worst;
+    }
+
     // Builds one row: "Q2b, test 2", a red bar and "5 of 6 students".
     private static HBox failedRow(String key, int[] counts, String detail) {
         int join = key.indexOf(TEST_JOIN);
+        int numberStart = join + TEST_JOIN.length();
         String name = key.substring(0, join) + ", test "
-                + key.substring(join + TEST_JOIN.length());
+                + key.substring(numberStart);
         Label nameLabel = Parts.strong(name);
         nameLabel.setMinWidth(FAILED_NAME_WIDTH);
         nameLabel.setPrefWidth(FAILED_NAME_WIDTH);
-        StackPane bar = Parts.track((double) counts[FAILED] / counts[RAN],
-                Tone.BAD);
+        double failedShare = (double) counts[FAILED] / counts[RAN];
+        StackPane bar = Parts.track(failedShare, Tone.BAD);
         bar.setMinWidth(FAILED_BAR_MIN);
         Label share = smallMuted(counts[FAILED] + " of "
                 + Parts.plural(counts[RAN], "student"));
@@ -540,7 +596,7 @@ public class SectionView {
         String tip = counts[FAILED] + " of the " + counts[RAN] + " students "
                 + "who ran " + name + " failed it.";
         if (detail != null && !detail.isEmpty()) {
-            tip += "\nA failing tester line: " + detail;
+            tip += LINE_END + "A failing tester line: " + detail;
         }
         Parts.tipNode(row, tip);
         return row;
@@ -575,7 +631,9 @@ public class SectionView {
             passRates = summary.getQuestionPassRates();
         }
         for (int index = 0; index < questions.size(); index++) {
-            addQuestionRow(table, index + 1, questions.get(index),
+            // Row 0 is the header
+            int row = index + 1;
+            addQuestionRow(table, row, questions.get(index),
                     averages[index], passRates);
         }
 
@@ -607,13 +665,13 @@ public class SectionView {
             share = average / max;
         }
         Label id = Parts.strong(question.getId());
-        Label value = new Label(oneDecimal(average) + " / "
+        Label value = new Label(oneDecimal(average) + OUT_OF
                 + Parts.mark(max));
         value.setMinWidth(Region.USE_PREF_SIZE);
         table.addRow(row, id, Parts.track(share, null), value);
         if (passRates != null) {
             Double rate = passRates.get(question.getId());
-            String text = "-";
+            String text = NO_VALUE;
             if (rate != null) {
                 text = percent(rate);
             }
@@ -639,8 +697,8 @@ public class SectionView {
                         * PERCENT;
             }
             rest += " \"Passed\" is the share of students who scored at "
-                    + "least " + Parts.mark(roundOne(passPercent))
-                    + "% of that question's marks.";
+                    + "least " + markText(passPercent) + Parts.PERCENT_SIGN
+                    + " of that question's marks.";
         }
         TextFlow note = new TextFlow(start, name, noteText(rest));
         note.getStyleClass().add("stats-note");
@@ -696,22 +754,29 @@ public class SectionView {
         int shown = Math.min(MOST_ERRORS, reasons.size());
         for (int index = 0; index < shown; index++) {
             String reason = reasons.get(index);
-            Label words = new Label(reason);
-            words.setMinWidth(0);
-            words.setMaxWidth(Double.MAX_VALUE);
-            words.setTooltip(new Tooltip(reason));
-            HBox.setHgrow(words, Priority.ALWAYS);
-            Label count = Parts.strong(String.valueOf(errors.get(reason)));
-            count.setMinWidth(Region.USE_PREF_SIZE);
-            HBox row = Parts.row(Parts.GAP, new Node[] {words, count});
-            row.getStyleClass().add("card-row");
-            list.getChildren().add(row);
+            list.getChildren().add(errorRow(reason, errors.get(reason)));
         }
         if (shown > 0) {
+            int last = shown - 1;
             list.getChildren().get(0).getStyleClass().add("first");
-            list.getChildren().get(shown - 1).getStyleClass().add("last");
+            list.getChildren().get(last).getStyleClass().add("last");
         }
         return card(Parts.title("Common compile errors"), list);
+    }
+
+    // Builds one compile error row: the error, cut short with a tip, and
+    // how many times it was seen.
+    private static HBox errorRow(String reason, Integer times) {
+        Label words = new Label(reason);
+        words.setMinWidth(0);
+        words.setMaxWidth(Double.MAX_VALUE);
+        words.setTooltip(new Tooltip(reason));
+        HBox.setHgrow(words, Priority.ALWAYS);
+        Label count = Parts.strong(String.valueOf(times));
+        count.setMinWidth(Region.USE_PREF_SIZE);
+        HBox row = Parts.row(Parts.GAP, new Node[] {words, count});
+        row.getStyleClass().add("card-row");
+        return row;
     }
 
     // --------------------------------------------------------- helpers
@@ -749,12 +814,12 @@ public class SectionView {
 
     // Formats a number to one decimal place, such as "12.4".
     static String oneDecimal(double value) {
-        return String.format(Locale.ROOT, "%.1f", value);
+        return String.format(Locale.ROOT, ONE_DECIMAL_FORMAT, value);
     }
 
     // Formats a fraction as a whole percentage, such as "80%".
     static String percent(double fraction) {
-        return Math.round(fraction * PERCENT) + "%";
+        return Math.round(fraction * PERCENT) + Parts.PERCENT_SIGN;
     }
 
     // Formats a mark rounded to one decimal place, without a needless

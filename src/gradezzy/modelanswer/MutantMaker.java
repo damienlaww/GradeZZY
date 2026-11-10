@@ -62,26 +62,18 @@ public class MutantMaker {
     };
 
     // Tokens a statement starts after
-    private static final String[] STATEMENT_STARTS = {";", "{", "}"};
+    private static final String[] STATEMENT_STARTS = {
+        TokenSearch.STATEMENT_END, TokenSearch.OPEN_BRACE,
+        TokenSearch.CLOSE_BRACE
+    };
 
-    // The tokens around a condition and a block
-    private static final String OPEN_PAREN = "(";
-    private static final String CLOSE_PAREN = ")";
-    private static final String OPEN_BRACE = "{";
-    private static final String CLOSE_BRACE = "}";
-    private static final String STATEMENT_END = ";";
-    private static final String OPEN_ANGLE = "<";
-    private static final String CLOSE_ANGLE = ">";
+    // The operator that also joins strings
     private static final String PLUS = "+";
 
     // The words that mark an if statement and the main method
     private static final String IF_WORD = "if";
     private static final String VOID_WORD = "void";
     private static final String MAIN_WORD = "main";
-
-    // What JavaTokenizer.shapeToken makes of a name and of a text literal
-    private static final String NAME_SHAPE = "ID";
-    private static final String TEXT_SHAPE = "STR";
 
     // The text that ends a line, and the prefix that reverses a condition
     private static final String NEW_LINE = "\n";
@@ -96,15 +88,15 @@ public class MutantMaker {
     // How much a number literal is changed by
     private static final long NUMBER_CHANGE = 1;
 
-    // The position of the token after a given one
-    private static final int NEXT = 1;
+    // Taken from a size to give the last index
+    private static final int LAST_OFFSET = 1;
+
+    // The number of the first line: lines count from 1, arrays from 0
+    private static final int FIRST_LINE_NUMBER = 1;
 
     // The longest removed statement shown in a change, in characters
     private static final int MAX_SHOWN_LENGTH = 60;
     private static final String CUT_MARK = "...";
-
-    // Returned when no matching token is found
-    private static final int NOT_FOUND = -1;
 
     // Makes split keep empty lines at the end, so line numbers match
     private static final int KEEP_EMPTY_LINES = -1;
@@ -129,8 +121,10 @@ public class MutantMaker {
             String starterSource) {
         List<JavaToken> tokens = joinOperators(JavaTokenizer.tokenize(
                 source));
+        List<String> texts = textsOf(tokens);
         String[] lines = source.split(NEW_LINE, KEEP_EMPTY_LINES);
-        boolean[] changeable = findChangeable(tokens, lines, starterSource);
+        boolean[] changeable = findChangeable(tokens, texts, lines,
+                starterSource);
         boolean[] generic = findGenericBrackets(tokens);
         List<Mutant> mutants = new ArrayList<>();
 
@@ -140,7 +134,7 @@ public class MutantMaker {
                 addNumberChange(mutants, fileName, source, lines,
                         tokens.get(index));
                 addReversedIf(mutants, fileName, source, lines, tokens,
-                        index);
+                        texts, index);
                 addRemovedStatement(mutants, fileName, source, lines,
                         tokens, index);
             }
@@ -157,7 +151,7 @@ public class MutantMaker {
 
         while (index < tokens.size()) {
             JavaToken token = tokens.get(index);
-            int nextIndex = index + NEXT;
+            int nextIndex = index + TokenSearch.NEXT;
             JavaToken next = null;
             if (nextIndex < tokens.size()) {
                 next = tokens.get(nextIndex);
@@ -167,7 +161,7 @@ public class MutantMaker {
                 String text = token.getText() + next.getText();
                 joined.add(new JavaToken(text, token.getStart(),
                         token.getLine()));
-                index = nextIndex + NEXT;
+                index = nextIndex + TokenSearch.NEXT;
             } else {
                 joined.add(token);
                 index = nextIndex;
@@ -183,20 +177,31 @@ public class MutantMaker {
             JavaToken second) {
         boolean touching = first.getEnd() == second.getStart();
         String text = first.getText() + second.getText();
-        return touching && contains(TWO_CHARACTER_OPERATORS, text);
+        boolean operator = TokenSearch.contains(TWO_CHARACTER_OPERATORS,
+                text);
+        return touching && operator;
+    }
+
+    // Returns the text of each token, in order, for TokenSearch.
+    private List<String> textsOf(List<JavaToken> tokens) {
+        List<String> texts = new ArrayList<>();
+        for (JavaToken token : tokens) {
+            texts.add(token.getText());
+        }
+        return texts;
     }
 
     // Marks the tokens that may be changed: those on a line the student
     // wrote, outside the main method.
-    private boolean[] findChangeable(List<JavaToken> tokens, String[] lines,
-            String starterSource) {
+    private boolean[] findChangeable(List<JavaToken> tokens,
+            List<String> texts, String[] lines, String starterSource) {
         Set<String> starterLines = collectLines(starterSource);
         boolean[] changeable = new boolean[tokens.size()];
-        int mainEnd = NOT_FOUND;
+        int mainEnd = TokenSearch.NOT_FOUND;
 
         for (int index = 0; index < tokens.size(); index++) {
             if (index > mainEnd && startsMain(tokens, index)) {
-                mainEnd = findBlockEnd(tokens, index);
+                mainEnd = findBlockEnd(texts, index);
             }
 
             String lineKey = removeSpaces(lineOf(lines,
@@ -220,8 +225,8 @@ public class MutantMaker {
 
     // Says whether a token is the "void" of "void main(".
     private boolean startsMain(List<JavaToken> tokens, int index) {
-        int nameIndex = index + NEXT;
-        int parenIndex = nameIndex + NEXT;
+        int nameIndex = index + TokenSearch.NEXT;
+        int parenIndex = nameIndex + TokenSearch.NEXT;
         if (parenIndex >= tokens.size()) {
             return false;
         }
@@ -229,21 +234,23 @@ public class MutantMaker {
         boolean isVoid = tokens.get(index).getText().equals(VOID_WORD);
         boolean isMain = tokens.get(nameIndex).getText().equals(MAIN_WORD);
         boolean isCall = tokens.get(parenIndex).getText().equals(
-                OPEN_PAREN);
+                TokenSearch.OPEN_PAREN);
         return isVoid && isMain && isCall;
     }
 
     // Returns the index of the "}" that closes the first block opened
     // after a token, or the last index when it is never closed.
-    private int findBlockEnd(List<JavaToken> tokens, int from) {
-        int open = findText(tokens, OPEN_BRACE, from);
-        if (open == NOT_FOUND) {
-            return tokens.size() - NEXT;
+    private int findBlockEnd(List<String> texts, int from) {
+        int lastIndex = texts.size() - LAST_OFFSET;
+        int open = TokenSearch.findFrom(texts, TokenSearch.OPEN_BRACE, from);
+        if (open == TokenSearch.NOT_FOUND) {
+            return lastIndex;
         }
 
-        int close = findClosing(tokens, open, OPEN_BRACE, CLOSE_BRACE);
-        if (close == NOT_FOUND) {
-            return tokens.size() - NEXT;
+        int close = TokenSearch.findClosing(texts, open,
+                TokenSearch.OPEN_BRACE, TokenSearch.CLOSE_BRACE);
+        if (close == TokenSearch.NOT_FOUND) {
+            return lastIndex;
         }
         return close;
     }
@@ -258,10 +265,12 @@ public class MutantMaker {
 
         for (int index = 0; index < tokens.size(); index++) {
             String text = tokens.get(index).getText();
-            if (text.equals(OPEN_ANGLE) && opensType(tokens, index)) {
+            boolean opensGeneric = text.equals(TokenSearch.OPEN_ANGLE)
+                    && opensType(tokens, index);
+            if (opensGeneric) {
                 generic[index] = true;
                 depth++;
-            } else if (text.equals(CLOSE_ANGLE) && depth > 0) {
+            } else if (text.equals(TokenSearch.CLOSE_ANGLE) && depth > 0) {
                 generic[index] = true;
                 depth--;
             }
@@ -272,16 +281,17 @@ public class MutantMaker {
 
     // Says whether the "<" at an index opens a generic type.
     private boolean opensType(List<JavaToken> tokens, int index) {
-        int nextIndex = index + NEXT;
+        int nextIndex = index + TokenSearch.NEXT;
         if (index == 0 || nextIndex >= tokens.size()) {
             return false;
         }
 
-        String before = tokens.get(index - NEXT).getText();
+        int beforeIndex = index - TokenSearch.NEXT;
+        String before = tokens.get(beforeIndex).getText();
         String after = tokens.get(nextIndex).getText();
         boolean typeBefore = Character.isUpperCase(before.charAt(0));
         boolean typeAfter = Character.isUpperCase(after.charAt(0))
-                || after.equals(CLOSE_ANGLE);
+                || after.equals(TokenSearch.CLOSE_ANGLE);
         return typeBefore && typeAfter;
     }
 
@@ -292,8 +302,8 @@ public class MutantMaker {
             String source, String[] lines, List<JavaToken> tokens,
             int index) {
         JavaToken token = tokens.get(index);
-        int swap = indexOf(SWAP_FROM, token.getText());
-        if (swap == NOT_FOUND) {
+        int swap = TokenSearch.indexOf(SWAP_FROM, token.getText());
+        if (swap == TokenSearch.NOT_FOUND) {
             return;
         }
         if (token.getText().equals(PLUS) && touchesText(tokens, index)) {
@@ -309,9 +319,10 @@ public class MutantMaker {
 
     // Says whether the token before or after an index is a text literal.
     private boolean touchesText(List<JavaToken> tokens, int index) {
-        int nextIndex = index + NEXT;
+        int beforeIndex = index - TokenSearch.NEXT;
+        int nextIndex = index + TokenSearch.NEXT;
         boolean textBefore = index > 0
-                && isText(tokens.get(index - NEXT));
+                && isText(tokens.get(beforeIndex));
         boolean textAfter = nextIndex < tokens.size()
                 && isText(tokens.get(nextIndex));
         return textBefore || textAfter;
@@ -319,7 +330,8 @@ public class MutantMaker {
 
     // Says whether a token is a string or char literal.
     private boolean isText(JavaToken token) {
-        return JavaTokenizer.shapeToken(token.getText()).equals(TEXT_SHAPE);
+        String shape = JavaTokenizer.shapeToken(token.getText());
+        return shape.equals(JavaTokenizer.TEXT_TOKEN);
     }
 
     // Adds a copy with a whole-number literal one larger, such as 0 made
@@ -348,24 +360,29 @@ public class MutantMaker {
     // runs exactly when it should not.
     private void addReversedIf(List<Mutant> mutants, String fileName,
             String source, String[] lines, List<JavaToken> tokens,
-            int index) {
-        int openIndex = index + NEXT;
+            List<String> texts, int index) {
+        int openIndex = index + TokenSearch.NEXT;
         boolean isIf = tokens.get(index).getText().equals(IF_WORD);
-        if (!isIf || openIndex >= tokens.size()
-                || !tokens.get(openIndex).getText().equals(OPEN_PAREN)) {
+        if (!isIf || openIndex >= tokens.size()) {
+            return;
+        }
+        boolean opensCondition = tokens.get(openIndex).getText()
+                .equals(TokenSearch.OPEN_PAREN);
+        if (!opensCondition) {
             return;
         }
 
-        int closeIndex = findClosing(tokens, openIndex, OPEN_PAREN,
-                CLOSE_PAREN);
-        if (closeIndex == NOT_FOUND) {
+        int closeIndex = TokenSearch.findClosing(texts, openIndex,
+                TokenSearch.OPEN_PAREN, TokenSearch.CLOSE_PAREN);
+        if (closeIndex == TokenSearch.NOT_FOUND) {
             return;
         }
 
         int conditionStart = tokens.get(openIndex).getEnd();
         int conditionEnd = tokens.get(closeIndex).getStart();
         String condition = source.substring(conditionStart, conditionEnd);
-        String replacement = NOT + OPEN_PAREN + condition + CLOSE_PAREN;
+        String replacement = NOT + TokenSearch.OPEN_PAREN + condition
+                + TokenSearch.CLOSE_PAREN;
         mutants.add(makeMutant(fileName, source, lines, tokens.get(index),
                 conditionStart, conditionEnd, replacement,
                 "the \"if\" condition reversed"));
@@ -381,13 +398,14 @@ public class MutantMaker {
     private void addRemovedStatement(List<Mutant> mutants, String fileName,
             String source, String[] lines, List<JavaToken> tokens,
             int index) {
-        if (!startsStatement(tokens, index)
-                || !isRemovable(tokens, index)) {
+        boolean removable = startsStatement(tokens, index)
+                && isRemovable(tokens, index);
+        if (!removable) {
             return;
         }
 
         int endIndex = findStatementEnd(tokens, index);
-        if (endIndex == NOT_FOUND) {
+        if (endIndex == TokenSearch.NOT_FOUND) {
             return;
         }
 
@@ -405,25 +423,27 @@ public class MutantMaker {
         if (index == 0) {
             return true;
         }
-        String before = tokens.get(index - NEXT).getText();
-        return contains(STATEMENT_STARTS, before);
+        int beforeIndex = index - TokenSearch.NEXT;
+        String before = tokens.get(beforeIndex).getText();
+        return TokenSearch.contains(STATEMENT_STARTS, before);
     }
 
     // Says whether the statement at an index is one that may be removed.
     private boolean isRemovable(List<JavaToken> tokens, int index) {
         String first = tokens.get(index).getText();
-        if (contains(REMOVABLE_KEYWORDS, first)) {
+        if (TokenSearch.contains(REMOVABLE_KEYWORDS, first)) {
             return true;
         }
 
-        int nextIndex = index + NEXT;
+        int nextIndex = index + TokenSearch.NEXT;
         if (nextIndex >= tokens.size()) {
             return false;
         }
 
-        boolean name = JavaTokenizer.shapeToken(first).equals(NAME_SHAPE);
+        String shape = JavaTokenizer.shapeToken(first);
+        boolean name = shape.equals(JavaTokenizer.NAME_TOKEN);
         String next = tokens.get(nextIndex).getText();
-        return name && contains(AFTER_REMOVABLE_NAME, next);
+        return name && TokenSearch.contains(AFTER_REMOVABLE_NAME, next);
     }
 
     // Returns the index of the ";" that ends the statement starting at an
@@ -434,51 +454,20 @@ public class MutantMaker {
 
         for (int index = from; index < tokens.size(); index++) {
             String text = tokens.get(index).getText();
-            if (text.equals(OPEN_PAREN)) {
+            boolean isBrace = text.equals(TokenSearch.OPEN_BRACE)
+                    || text.equals(TokenSearch.CLOSE_BRACE);
+            if (text.equals(TokenSearch.OPEN_PAREN)) {
                 depth++;
-            } else if (text.equals(CLOSE_PAREN)) {
+            } else if (text.equals(TokenSearch.CLOSE_PAREN)) {
                 depth--;
-            } else if (text.equals(OPEN_BRACE)
-                    || text.equals(CLOSE_BRACE)) {
-                return NOT_FOUND;
-            } else if (text.equals(STATEMENT_END) && depth == 0) {
+            } else if (isBrace) {
+                return TokenSearch.NOT_FOUND;
+            } else if (text.equals(TokenSearch.STATEMENT_END) && depth == 0) {
                 return index;
             }
         }
 
-        return NOT_FOUND;
-    }
-
-    // Returns the index of the token that closes the bracket at an
-    // index, or NOT_FOUND when it is never closed.
-    private int findClosing(List<JavaToken> tokens, int openIndex,
-            String open, String close) {
-        int depth = 0;
-
-        for (int index = openIndex; index < tokens.size(); index++) {
-            String text = tokens.get(index).getText();
-            if (text.equals(open)) {
-                depth++;
-            } else if (text.equals(close)) {
-                depth--;
-                if (depth == 0) {
-                    return index;
-                }
-            }
-        }
-
-        return NOT_FOUND;
-    }
-
-    // Returns the index of the first token with a text from an index on,
-    // or NOT_FOUND.
-    private int findText(List<JavaToken> tokens, String text, int from) {
-        for (int index = from; index < tokens.size(); index++) {
-            if (tokens.get(index).getText().equals(text)) {
-                return index;
-            }
-        }
-        return NOT_FOUND;
+        return TokenSearch.NOT_FOUND;
     }
 
     // Makes a copy of the source with the text from start to end
@@ -495,7 +484,7 @@ public class MutantMaker {
 
     // Returns the line a token is on.
     private String lineOf(String[] lines, JavaToken token) {
-        int lineIndex = token.getLine() - NEXT;
+        int lineIndex = token.getLine() - FIRST_LINE_NUMBER;
         if (lineIndex >= lines.length) {
             return "";
         }
@@ -544,20 +533,5 @@ public class MutantMaker {
     // it is compared with the starter's lines.
     private String removeSpaces(String line) {
         return line.replaceAll(SPACES, "");
-    }
-
-    // Returns where a text is in a list, or NOT_FOUND.
-    private int indexOf(String[] values, String text) {
-        for (int index = 0; index < values.length; index++) {
-            if (values[index].equals(text)) {
-                return index;
-            }
-        }
-        return NOT_FOUND;
-    }
-
-    // Says whether a list holds a text.
-    private boolean contains(String[] values, String text) {
-        return indexOf(values, text) != NOT_FOUND;
     }
 }

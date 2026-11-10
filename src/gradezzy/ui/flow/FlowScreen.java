@@ -16,6 +16,8 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * One screen of the guided window.
+ *
+ * <p>Tier: SHOULD.
  */
 public abstract class FlowScreen {
 

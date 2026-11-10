@@ -29,6 +29,8 @@ import gradezzy.ui.backend.ContainedFile;
 
 /**
  * A link that shows or hides the files inside a chosen folder or zip.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ContainedFileList {
 

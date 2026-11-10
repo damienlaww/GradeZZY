@@ -46,6 +46,8 @@ public class SavedAssessment {
 
     /**
      * Creates an empty assessment, to be filled with the setters.
+     *
+     * <p>Tier: SHOULD.
      */
     public SavedAssessment() {
         // every field starts empty
@@ -53,6 +55,10 @@ public class SavedAssessment {
 
     /**
      * Returns a copy whose lists can be changed without changing this one.
+     * The Question objects in the question list are shared, not copied,
+     * so a change to a question's extra file names shows in both.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the copy
      */
@@ -72,6 +78,8 @@ public class SavedAssessment {
     /**
      * Returns the name, such as Lab Test 2.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the name
      */
     public String getName() {
@@ -80,6 +88,8 @@ public class SavedAssessment {
 
     /**
      * Changes the name.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param name the new name
      */
@@ -90,6 +100,8 @@ public class SavedAssessment {
     /**
      * Returns the questions, which the caller may change.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the questions, in grading order
      */
     public List<Question> getQuestions() {
@@ -98,6 +110,8 @@ public class SavedAssessment {
 
     /**
      * Returns the tester folder.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the folder, as typed or chosen
      */
@@ -108,6 +122,8 @@ public class SavedAssessment {
     /**
      * Changes the tester folder.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param testersDirectory the new folder
      */
     public void setTestersDirectory(String testersDirectory) {
@@ -116,6 +132,8 @@ public class SavedAssessment {
 
     /**
      * Returns the starter folder.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the folder, as typed or chosen
      */
@@ -126,6 +144,8 @@ public class SavedAssessment {
     /**
      * Changes the starter folder.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param starterDirectory the new folder
      */
     public void setStarterDirectory(String starterDirectory) {
@@ -135,6 +155,8 @@ public class SavedAssessment {
     /**
      * Returns the module this assessment belongs to.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the module, such as CS102, or "" for every module
      */
     public String getModuleCode() {
@@ -143,6 +165,8 @@ public class SavedAssessment {
 
     /**
      * Changes the module this assessment belongs to.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param moduleCode the module, or "" for every module
      */
@@ -159,6 +183,8 @@ public class SavedAssessment {
      * module, or one made before assessments had a module, which every
      * module that has the shared sections can use.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param module the module
      * @param ownOnly true for a module added with only its own sections
      * @return true when it is listed for the module
@@ -174,6 +200,8 @@ public class SavedAssessment {
      * Returns the class files given without source, which the caller may
      * change.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the file names, such as DataException.class
      */
     public List<String> getProvidedClassFiles() {
@@ -183,6 +211,8 @@ public class SavedAssessment {
     /**
      * Returns the data files copied next to each tester, which the caller
      * may change.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the file names, such as personstester.txt
      */
@@ -194,6 +224,8 @@ public class SavedAssessment {
      * Returns the starter folder names a student may forget to rename,
      * which the caller may change.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the folder names, such as RenameToYourUsername
      */
     public List<String> getPlaceholderFolderNames() {
@@ -202,6 +234,8 @@ public class SavedAssessment {
 
     /**
      * Returns the most marks a student can earn.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the sum of the questions' maximum marks
      */
@@ -215,6 +249,8 @@ public class SavedAssessment {
 
     /**
      * Builds the Assessment the grading screens use, for one module.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param moduleCode the module, such as CS102
      * @return the assessment

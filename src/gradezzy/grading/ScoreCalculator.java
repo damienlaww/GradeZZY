@@ -22,6 +22,8 @@ public class ScoreCalculator {
 
     /**
      * Creates a new score calculator.
+     *
+     * <p>Tier: MUST.
      */
     public ScoreCalculator() {
         // nothing to set up yet
@@ -31,6 +33,8 @@ public class ScoreCalculator {
      * Returns the score of a question, kept between 0 and the question's
      * maximum. A tester that reports more than the maximum gets the
      * maximum; a negative score or one that is not a number gets 0.
+     *
+     * <p>Tier: MUST.
      *
      * @param questionResult the question result
      * @return the marks for the question, or 0 if there is no result

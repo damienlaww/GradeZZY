@@ -32,6 +32,7 @@ import gradezzy.testcase.TesterMarks;
  */
 public class AssessmentFactory {
 
+    // The file ending of a tester's Java source
     private static final String JAVA_EXTENSION = ".java";
 
     // The end of the old setting that held a question's maximum score
@@ -43,6 +44,8 @@ public class AssessmentFactory {
     /**
      * Creates a new assessment factory.
      *
+     * <p>Tier: MUST.
+     *
      * @param config the application settings
      */
     public AssessmentFactory(AppConfig config) {
@@ -52,6 +55,8 @@ public class AssessmentFactory {
     /**
      * Reads the assessment for the default module, the first one in
      * app.module.codes.
+     *
+     * <p>Tier: MUST.
      *
      * @return the assessment to grade
      * @throws ConfigException if app.module.codes lists no module
@@ -63,6 +68,8 @@ public class AssessmentFactory {
     /**
      * Reads the assessment for one module, with the maximum scores taken
      * from the tester folder in the settings (paths.testers.dir).
+     *
+     * <p>Tier: MUST.
      *
      * @param moduleCode the module, or null or blank for the default
      * @return the assessment to grade
@@ -80,6 +87,8 @@ public class AssessmentFactory {
      * {@code score += <number>} lines of its tester in testersDirectory;
      * a question with no tester, or whose tester has no such line, gets
      * 0 (see findMaxScoreProblems).
+     *
+     * <p>Tier: MUST.
      *
      * @param moduleCode the module, or null or blank for the default
      * @param testersDirectory the batch's tester folder, or null for the
@@ -113,6 +122,8 @@ public class AssessmentFactory {
     /**
      * Returns the first module in app.module.codes.
      *
+     * <p>Tier: MUST.
+     *
      * @return the default module code
      * @throws ConfigException if app.module.codes lists no module
      */
@@ -132,6 +143,8 @@ public class AssessmentFactory {
      * in testersDirectory, cannot be read, never adds to the score, or
      * changes the score in a way TesterMarks cannot count. Grading must
      * not start while this list is not empty.
+     *
+     * <p>Tier: MUST.
      *
      * @param testersDirectory the batch's tester folder, or null for the
      *        one in the settings
@@ -158,6 +171,8 @@ public class AssessmentFactory {
      * Lists the old max.score settings that are still in the configuration.
      * They are no longer used, because each maximum now comes from the
      * question's tester, so the instructor is told they are ignored.
+     *
+     * <p>Tier: MUST.
      *
      * @return the names of the ignored settings, empty when there are none
      */
@@ -213,9 +228,10 @@ public class AssessmentFactory {
 
     // Where the tester of a question is, for example Q1aTester.java
     private Path findTesterFile(String questionId, Path testers) {
-        return testers.resolve(questionId
+        String testerName = questionId
                 + config.getString(ConfigKeys.TESTER_CLASS_SUFFIX)
-                + JAVA_EXTENSION);
+                + JAVA_EXTENSION;
+        return testers.resolve(testerName);
     }
 
     // The tester's maximum, or UNKNOWN if the file cannot be read

@@ -91,6 +91,8 @@ public class AssessmentLibrary {
     /**
      * Creates the library.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param config the application settings
      * @param settings the service that checks and saves settings
      */
@@ -104,6 +106,8 @@ public class AssessmentLibrary {
      * is always listed: when it has no file yet, as on the first start,
      * one is saved from config.properties. A file that cannot be read is
      * left out.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the assessments
      * @throws IOException if the folder cannot be read or written
@@ -122,6 +126,8 @@ public class AssessmentLibrary {
     /**
      * Returns the name of the assessment in use.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the name in assessment.name
      */
     public String getActiveName() {
@@ -130,6 +136,8 @@ public class AssessmentLibrary {
 
     /**
      * Reads the assessment in use from config.properties.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the assessment in use
      */
@@ -140,12 +148,13 @@ public class AssessmentLibrary {
                 ConfigKeys.TESTERS_DIR));
         for (String id : config.getList(ConfigKeys.QUESTION_IDS)) {
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
-            current.getQuestions().add(new Question(id,
-                    config.getString(prefix
-                            + ConfigKeys.QUESTION_FOLDER_SUFFIX),
-                    config.getString(prefix
-                            + ConfigKeys.QUESTION_FILE_SUFFIX),
-                    readMaxScore(current.getTestersDirectory(), id)));
+            String folder = config.getString(prefix
+                    + ConfigKeys.QUESTION_FOLDER_SUFFIX);
+            String file = config.getString(prefix
+                    + ConfigKeys.QUESTION_FILE_SUFFIX);
+            double maxScore = readMaxScore(current.getTestersDirectory(), id);
+            current.getQuestions().add(new Question(id, folder, file,
+                    maxScore));
         }
         current.setStarterDirectory(config.getString(
                 ConfigKeys.STARTER_DIR));
@@ -163,6 +172,8 @@ public class AssessmentLibrary {
      * Checks an assessment before it is saved, without reading any file
      * or folder.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param draft the assessment to check
      * @param originalName the name it had before, or null for a new one
      * @param takenNames the names of the saved assessments
@@ -170,21 +181,10 @@ public class AssessmentLibrary {
      */
     public String validate(SavedAssessment draft, String originalName,
             List<String> takenNames) {
-        String name = draft.getName().trim();
-        if (name.isEmpty()) {
-            return "Give the assessment a name, such as Lab Test 2.";
-        }
-        if (name.length() > MAX_NAME_LENGTH) {
-            return "Use a name of at most " + MAX_NAME_LENGTH
-                    + " characters.";
-        }
-        for (String taken : takenNames) {
-            boolean same = originalName != null
-                    && taken.equalsIgnoreCase(originalName);
-            if (!same && taken.equalsIgnoreCase(name)) {
-                return "An assessment named " + taken + " already exists. "
-                        + "Choose another name.";
-            }
+        String nameProblem = checkName(draft.getName().trim(), originalName,
+                takenNames);
+        if (!nameProblem.isEmpty()) {
+            return nameProblem;
         }
         if (draft.getQuestions().isEmpty()) {
             return "Add at least one question.";
@@ -206,10 +206,34 @@ public class AssessmentLibrary {
         return "";
     }
 
+    // Returns what is wrong with an assessment's trimmed name, or an
+    // empty string. The name it had before may be kept.
+    private String checkName(String name, String originalName,
+            List<String> takenNames) {
+        if (name.isEmpty()) {
+            return "Give the assessment a name, such as Lab Test 2.";
+        }
+        if (name.length() > MAX_NAME_LENGTH) {
+            return "Use a name of at most " + MAX_NAME_LENGTH
+                    + " characters.";
+        }
+        for (String taken : takenNames) {
+            boolean same = originalName != null
+                    && taken.equalsIgnoreCase(originalName);
+            if (!same && taken.equalsIgnoreCase(name)) {
+                return "An assessment named " + taken + " already exists. "
+                        + "Choose another name.";
+            }
+        }
+        return "";
+    }
+
     /**
      * Checks that the tester and starter folders of an assessment exist,
      * and that the tester folder has a tester with marks for every
      * question, as grading needs.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param draft the assessment
      * @return what is wrong, in one sentence, or an empty string
@@ -230,8 +254,8 @@ public class AssessmentLibrary {
                 return "The tester folder has no " + tester.getFileName()
                         + ", so " + id + " cannot be marked.";
             }
-            if (readMaxScore(draft.getTestersDirectory(), id)
-                    <= TesterMarks.UNKNOWN) {
+            double maxScore = readMaxScore(draft.getTestersDirectory(), id);
+            if (maxScore <= TesterMarks.UNKNOWN) {
                 return describeUnknownMark(tester, id);
             }
         }
@@ -258,6 +282,8 @@ public class AssessmentLibrary {
     /**
      * Reads a question's maximum mark from its tester: the sum of its
      * "score += <number>" lines.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param testersDirectory the tester folder
      * @param questionId the question, such as Q1a
@@ -289,6 +315,8 @@ public class AssessmentLibrary {
     /**
      * Saves an assessment, replacing the one it was edited from. When
      * that one is in use, GradeZZY switches to the saved version.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param draft the assessment to save
      * @param originalName the name it had before, or null for a new one
@@ -341,6 +369,8 @@ public class AssessmentLibrary {
      * Switches GradeZZY to a saved assessment: its questions, tester
      * folder and starter folder are written to config.properties.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param name the assessment's name
      * @throws IOException if config.properties cannot be written
      * @throws IllegalArgumentException if there is no such assessment, or
@@ -358,6 +388,8 @@ public class AssessmentLibrary {
     /**
      * Deletes a saved assessment. The one in use cannot be deleted.
      * Earlier results graded with it are kept.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param name the assessment's name
      * @throws IOException if the file cannot be deleted
@@ -380,6 +412,8 @@ public class AssessmentLibrary {
     /**
      * Saves the assessment in use again from config.properties, after its
      * settings were changed on the Settings page.
+     *
+     * <p>Tier: SHOULD.
      *
      * @throws IOException if the file cannot be written
      */
@@ -416,8 +450,10 @@ public class AssessmentLibrary {
                     + "Q1.";
         }
         String file = question.getFileName().trim();
-        if (!file.endsWith(JAVA_EXTENSION) || file.matches(PATH_CHARACTERS)
-                || file.length() == JAVA_EXTENSION.length()) {
+        boolean notJavaFile = !file.endsWith(JAVA_EXTENSION)
+                || file.matches(PATH_CHARACTERS)
+                || file.length() == JAVA_EXTENSION.length();
+        if (notJavaFile) {
             return "Give " + id + " a Java file name, such as " + id
                     + JAVA_EXTENSION + ".";
         }
@@ -539,25 +575,27 @@ public class AssessmentLibrary {
         assessment.setName(required(values, ConfigKeys.ASSESSMENT_NAME));
         assessment.setTestersDirectory(values.getProperty(
                 ConfigKeys.TESTERS_DIR, ""));
-        for (String id : splitList(required(values,
+        for (String id : AppConfig.splitList(required(values,
                 ConfigKeys.QUESTION_IDS))) {
             String prefix = ConfigKeys.QUESTION_PREFIX + id;
-            assessment.getQuestions().add(new Question(id,
-                    required(values, prefix
-                            + ConfigKeys.QUESTION_FOLDER_SUFFIX),
-                    required(values, prefix
-                            + ConfigKeys.QUESTION_FILE_SUFFIX),
-                    readMaxScore(assessment.getTestersDirectory(), id)));
+            String folder = required(values, prefix
+                    + ConfigKeys.QUESTION_FOLDER_SUFFIX);
+            String questionFile = required(values, prefix
+                    + ConfigKeys.QUESTION_FILE_SUFFIX);
+            double maxScore = readMaxScore(assessment.getTestersDirectory(),
+                    id);
+            assessment.getQuestions().add(new Question(id, folder,
+                    questionFile, maxScore));
         }
         assessment.setStarterDirectory(values.getProperty(
                 ConfigKeys.STARTER_DIR, ""));
 
         assessment.setModuleCode(values.getProperty(MODULE_PROPERTY, ""));
-        assessment.getProvidedClassFiles().addAll(splitList(
+        assessment.getProvidedClassFiles().addAll(AppConfig.splitList(
                 values.getProperty(ConfigKeys.PROVIDED_CLASS_FILES, "")));
-        assessment.getTesterDataFiles().addAll(splitList(
+        assessment.getTesterDataFiles().addAll(AppConfig.splitList(
                 values.getProperty(ConfigKeys.TESTER_DATA_FILES, "")));
-        assessment.getPlaceholderFolderNames().addAll(splitList(
+        assessment.getPlaceholderFolderNames().addAll(AppConfig.splitList(
                 values.getProperty(ConfigKeys.PLACEHOLDER_FOLDER_NAMES,
                         "")));
         return assessment;
@@ -645,8 +683,8 @@ public class AssessmentLibrary {
             base = base.substring(FILE_NAME_JOIN.length());
         }
         while (base.endsWith(FILE_NAME_JOIN)) {
-            base = base.substring(0, base.length()
-                    - FILE_NAME_JOIN.length());
+            int end = base.length() - FILE_NAME_JOIN.length();
+            base = base.substring(0, end);
         }
         if (base.isEmpty()) {
             return UNNAMED_FILE;
@@ -657,9 +695,10 @@ public class AssessmentLibrary {
     // Returns the folder of the saved assessments.
     private Path getFolder() {
         String folder = DEFAULT_FOLDER;
-        if (config.hasKey(ConfigKeys.ASSESSMENTS_DIR)
+        boolean folderSet = config.hasKey(ConfigKeys.ASSESSMENTS_DIR)
                 && !TextUtils.isBlank(config.getString(
-                        ConfigKeys.ASSESSMENTS_DIR))) {
+                        ConfigKeys.ASSESSMENTS_DIR));
+        if (folderSet) {
             folder = config.getString(ConfigKeys.ASSESSMENTS_DIR);
         }
         return Paths.get(folder);
@@ -691,25 +730,25 @@ public class AssessmentLibrary {
         for (int index = 1; index < assessments.size(); index++) {
             SavedAssessment next = assessments.get(index);
             int position = index;
-            while (position > 0 && assessments.get(position - 1).getName()
-                    .compareToIgnoreCase(next.getName()) > 0) {
-                assessments.set(position, assessments.get(position - 1));
+            while (followsAt(assessments, position, next)) {
+                int previous = position - 1;
+                assessments.set(position, assessments.get(previous));
                 position--;
             }
             assessments.set(position, next);
         }
     }
 
-    // Splits a list value the same way AppConfig.getList does.
-    private List<String> splitList(String text) {
-        List<String> items = new ArrayList<>();
-        for (String part : text.split(LIST_SEPARATOR)) {
-            String item = part.trim();
-            if (!item.isEmpty()) {
-                items.add(item);
-            }
+    // Says whether the assessment just before a position comes after
+    // next by name, so next must move in front of it.
+    private boolean followsAt(List<SavedAssessment> assessments,
+            int position, SavedAssessment next) {
+        if (position <= 0) {
+            return false;
         }
-        return items;
+        int previous = position - 1;
+        String previousName = assessments.get(previous).getName();
+        return previousName.compareToIgnoreCase(next.getName()) > 0;
     }
 
     // Joins list items with commas.

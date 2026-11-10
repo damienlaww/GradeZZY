@@ -21,6 +21,8 @@ import gradezzy.model.Submission;
 
 /**
  * Flags methods whose body was left empty.
+ *
+ * <p>Tier: COULD. Owner: Jun Sheng.
  */
 public class EmptyAnswerDetector implements Detector {
 
@@ -116,8 +118,9 @@ public class EmptyAnswerDetector implements Detector {
     // Says whether any method with that name still holds the starter body.
     private boolean holdsStarterBody(String studentCode, String methodName,
             String starterBody) {
-        for (String studentBody : JavaSourceText.findMethodBodies(
-                studentCode, methodName)) {
+        List<String> studentBodies = JavaSourceText.findMethodBodies(
+                studentCode, methodName);
+        for (String studentBody : studentBodies) {
             if (JavaSourceText.sameIgnoringSpaces(studentBody, starterBody)) {
                 return true;
             }

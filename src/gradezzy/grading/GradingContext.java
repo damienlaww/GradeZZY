@@ -41,6 +41,8 @@ public class GradingContext {
     /**
      * Creates a new grading context.
      *
+     * <p>Tier: MUST.
+     *
      * @param config the application settings
      * @param assessment the assessment being graded
      */
@@ -52,6 +54,8 @@ public class GradingContext {
     /**
      * Returns the application settings.
      *
+     * <p>Tier: MUST.
+     *
      * @return the application settings
      */
     public AppConfig getConfig() {
@@ -60,6 +64,8 @@ public class GradingContext {
 
     /**
      * Returns the assessment being graded.
+     *
+     * <p>Tier: MUST.
      *
      * @return the assessment being graded
      */
@@ -70,6 +76,8 @@ public class GradingContext {
     /**
      * Returns the students on the score sheet.
      *
+     * <p>Tier: MUST.
+     *
      * @return the students on the score sheet
      */
     public List<Student> getRoster() {
@@ -78,6 +86,8 @@ public class GradingContext {
 
     /**
      * Returns the tester files to use.
+     *
+     * <p>Tier: MUST.
      *
      * @return the tester files to use
      */
@@ -88,6 +98,8 @@ public class GradingContext {
     /**
      * Returns the id of the run being graded.
      *
+     * <p>Tier: MUST.
+     *
      * @return the run id, or null if none was set
      */
     public String getRunId() {
@@ -96,6 +108,8 @@ public class GradingContext {
 
     /**
      * Sets the id of the run being graded.
+     *
+     * <p>Tier: MUST.
      *
      * @param runId the run id
      */

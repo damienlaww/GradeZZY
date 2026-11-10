@@ -19,13 +19,20 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import gradezzy.util.TextUtils;
+
 /**
  * The export folders of single modules and sections.
+ *
+ * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
 public final class ExportFolders {
 
     // Separates one entry from the next
     private static final String ENTRY_SEPARATOR = ";";
+
+    // Returned by indexOf when no entry matches
+    private static final int NOT_FOUND = -1;
 
     // Separates who an entry is for from its folder
     private static final String VALUE_SEPARATOR = "=";
@@ -36,20 +43,29 @@ public final class ExportFolders {
     // A module or section code: letters, digits and dashes
     private static final String CODE_PATTERN = "[A-Za-z0-9-]+";
 
-    // Where who an entry is for, and its folder, sit in an entry
+    // Where who an entry is for sits in an entry
     private static final int WHO = 0;
+
+    // Where the folder sits in an entry
     private static final int FOLDER = 1;
 
     // The most parts who an entry is for can have: module and section
     private static final int MAX_WHO_PARTS = 2;
 
-    // A percent sign, and how encode writes it
+    // A percent sign
     private static final String PERCENT = "%";
+
+    // How encode writes a percent sign
     private static final String ENCODED_PERCENT = "%25";
 
-    // How encode writes the entry separator, and its lowercase form
+    // How encode writes the entry separator
     private static final String ENCODED_SEPARATOR = "%3B";
+
+    // The lowercase form of the encoded entry separator
     private static final String ENCODED_SEPARATOR_LOWER = "%3b";
+
+    // The split limit that keeps empty parts, so "CS102/" has two parts
+    private static final int KEEP_EMPTY_PARTS = -1;
 
     // Not used: every method is static.
     private ExportFolders() {
@@ -59,6 +75,8 @@ public final class ExportFolders {
     /**
      * Returns the folder a section's exports are saved in: its own, else
      * its module's, else the folder for everyone.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param defaultFolder the value of paths.output.dir
      * @param folders the value of paths.output.dir.by.section, or null
@@ -88,6 +106,8 @@ public final class ExportFolders {
      * Returns the value kept for exactly one module or section, without
      * falling back to anything else.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param folders the value of the setting, or null
      * @param who the module, or module/section, such as "CS102/G1"
      * @return the value, or "" when none is kept for it
@@ -104,6 +124,8 @@ public final class ExportFolders {
      * Returns who each folder is for, such as "CS102" or "CS102/G1", in
      * the order they were added, with its folder.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param folders the value of paths.output.dir.by.section, or null
      * @return each entry as {who, folder}
      */
@@ -114,6 +136,8 @@ public final class ExportFolders {
     /**
      * Returns the value with one entry set, replacing any for the same
      * module or section.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param folders the value now, or null
      * @param who the module, or module/section, such as "CS102/G1"
@@ -133,6 +157,8 @@ public final class ExportFolders {
     /**
      * Returns the value without the entry of a module or section.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param folders the value now, or null
      * @param who the module, or module/section
      * @return the new value
@@ -150,6 +176,8 @@ public final class ExportFolders {
      * Returns the value without a module's folder or any of its
      * sections' folders, for a module that is deleted.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param folders the value now, or null
      * @param moduleCode the module
      * @return the new value
@@ -159,8 +187,10 @@ public final class ExportFolders {
         List<String[]> kept = new ArrayList<>();
         for (String[] entry : read(folders)) {
             String lower = entry[WHO].toLowerCase(Locale.ROOT);
-            if (!lower.equals(module)
-                    && !lower.startsWith(module + SECTION_SEPARATOR)) {
+            String sectionStart = module + SECTION_SEPARATOR;
+            boolean otherModule = !lower.equals(module)
+                    && !lower.startsWith(sectionStart);
+            if (otherModule) {
                 kept.add(entry);
             }
         }
@@ -170,6 +200,8 @@ public final class ExportFolders {
     /**
      * Returns the value without the entries of one section in any
      * module, for a section every module has that is deleted.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param folders the value now, or null
      * @param sectionCode the section
@@ -189,6 +221,8 @@ public final class ExportFolders {
 
     /**
      * Says who an entry is for, as written in the setting.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param moduleCode the module
      * @param sectionCode the section, or null for the whole module
@@ -238,14 +272,15 @@ public final class ExportFolders {
      */
     public static Path findOwnScoreSheet(AppConfig config, String moduleCode,
             String sectionCode) {
-        if (moduleCode == null || sectionCode == null
-                || !config.hasKey(ConfigKeys.SCORE_SHEET_BY_SECTION)) {
+        boolean noOwnSheet = moduleCode == null || sectionCode == null
+                || !config.hasKey(ConfigKeys.SCORE_SHEET_BY_SECTION);
+        if (noOwnSheet) {
             return null;
         }
 
-        String own = exact(config.getString(
-                ConfigKeys.SCORE_SHEET_BY_SECTION),
-                keyOf(moduleCode, sectionCode));
+        String sheets = config.getString(ConfigKeys.SCORE_SHEET_BY_SECTION);
+        String who = keyOf(moduleCode, sectionCode);
+        String own = exact(sheets, who);
         if (own.isEmpty()) {
             return null;
         }
@@ -254,6 +289,8 @@ public final class ExportFolders {
 
     /**
      * Checks the value's form.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param value the value
      * @return an empty string when it is valid, or the problem
@@ -277,11 +314,12 @@ public final class ExportFolders {
             return "";
         }
         int equals = entry.indexOf(VALUE_SEPARATOR);
-        if (equals <= 0 || entry.substring(equals + 1).trim().isEmpty()) {
+        int folderStart = equals + 1;
+        if (equals <= 0 || entry.substring(folderStart).trim().isEmpty()) {
             return "Write each folder as CS102/G1=folder, separated by ;.";
         }
         String who = entry.substring(0, equals).trim();
-        String[] parts = who.split(SECTION_SEPARATOR, -1);
+        String[] parts = who.split(SECTION_SEPARATOR, KEEP_EMPTY_PARTS);
         if (parts.length > MAX_WHO_PARTS) {
             return "Name a module, or a module and a section, such as "
                     + "CS102/G1.";
@@ -304,8 +342,10 @@ public final class ExportFolders {
         for (String entry : value.split(ENTRY_SEPARATOR)) {
             int equals = entry.indexOf(VALUE_SEPARATOR);
             if (equals > 0) {
+                int folderStart = equals + 1;
                 String who = entry.substring(0, equals).trim();
-                String folder = decode(entry.substring(equals + 1).trim());
+                String written = entry.substring(folderStart).trim();
+                String folder = decode(written);
                 if (!who.isEmpty() && !folder.isEmpty()) {
                     putEntry(entries, who, folder);
                 }
@@ -329,15 +369,11 @@ public final class ExportFolders {
 
     // Writes the entries back into one value.
     private static String write(List<String[]> entries) {
-        if (entries.isEmpty()) {
-            return "";
+        List<String> texts = new ArrayList<>();
+        for (String[] entry : entries) {
+            texts.add(entryText(entry));
         }
-
-        String text = entryText(entries.get(0));
-        for (int index = 1; index < entries.size(); index++) {
-            text += ENTRY_SEPARATOR + entryText(entries.get(index));
-        }
-        return text;
+        return TextUtils.join(ENTRY_SEPARATOR, texts);
     }
 
     // Writes one entry as who=folder.
@@ -376,6 +412,6 @@ public final class ExportFolders {
                 return index;
             }
         }
-        return -1;
+        return NOT_FOUND;
     }
 }

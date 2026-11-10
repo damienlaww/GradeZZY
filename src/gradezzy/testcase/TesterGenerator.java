@@ -52,6 +52,17 @@ public class TesterGenerator {
     // The file ending of a tester source
     private static final String SOURCE_EXTENSION = ".java";
 
+    // A backslash, and how it is written inside a Java string literal
+    private static final String BACKSLASH = "\\";
+    private static final String ESCAPED_BACKSLASH = "\\\\";
+
+    // A double quote, and how it is written inside a Java string literal
+    private static final String QUOTE = "\"";
+    private static final String ESCAPED_QUOTE = "\\\"";
+
+    // Stands in for a line break inside a string literal
+    private static final String LINE_BREAK_STAND_IN = " ";
+
     // The application settings
     private final AppConfig config;
 
@@ -128,8 +139,8 @@ public class TesterGenerator {
      */
     public Path writeTester(Question question, List<TestCase> testCases,
             Path outputDirectory) throws TestCaseException {
-        Path file = outputDirectory.resolve(
-                getClassName(question) + SOURCE_EXTENSION);
+        String fileName = getClassName(question) + SOURCE_EXTENSION;
+        Path file = outputDirectory.resolve(fileName);
         checkOneLine(testCases);
         String source = generateSource(question, testCases);
 
@@ -164,8 +175,9 @@ public class TesterGenerator {
         for (TestCase testCase : testCases) {
             String typed = testCase.getArgumentExpressions()
                     + testCase.getExpectedExpression();
-            if (typed.contains(CARRIAGE_RETURN)
-                    || typed.contains(LINE_BREAK)) {
+            boolean hasLineBreak = typed.contains(CARRIAGE_RETURN)
+                    || typed.contains(LINE_BREAK);
+            if (hasLineBreak) {
                 throw new TestCaseException("The typed case "
                         + testCase.getMethodName() + " for "
                         + testCase.getQuestionId() + " has a line break in "
@@ -177,13 +189,15 @@ public class TesterGenerator {
 
     // Copies each data file the tester folder in the settings has
     private void copyDataFiles(Path outputDirectory) throws IOException {
-        Path testersDirectory = Path.of(
-                config.getString(ConfigKeys.TESTERS_DIR));
-        for (String dataFileName : config.getList(
-                ConfigKeys.TESTER_DATA_FILES)) {
+        String testersFolder = config.getString(ConfigKeys.TESTERS_DIR);
+        Path testersDirectory = Path.of(testersFolder);
+        List<String> dataFileNames =
+                config.getList(ConfigKeys.TESTER_DATA_FILES);
+        for (String dataFileName : dataFileNames) {
             Path dataFile = testersDirectory.resolve(dataFileName);
             if (Files.isRegularFile(dataFile)) {
-                Files.copy(dataFile, outputDirectory.resolve(dataFileName),
+                Path copy = outputDirectory.resolve(dataFileName);
+                Files.copy(dataFile, copy,
                         StandardCopyOption.REPLACE_EXISTING);
             }
         }
@@ -231,10 +245,10 @@ public class TesterGenerator {
 
     // Turns text into a Java string literal, so it can be printed as it is
     private String toStringLiteral(String text) {
-        String escaped = text.replace("\\", "\\\\");
-        escaped = escaped.replace("\"", "\\\"");
-        escaped = escaped.replace(CARRIAGE_RETURN, " ");
-        escaped = escaped.replace(LINE_BREAK, " ");
-        return "\"" + escaped + "\"";
+        String escaped = text.replace(BACKSLASH, ESCAPED_BACKSLASH);
+        escaped = escaped.replace(QUOTE, ESCAPED_QUOTE);
+        escaped = escaped.replace(CARRIAGE_RETURN, LINE_BREAK_STAND_IN);
+        escaped = escaped.replace(LINE_BREAK, LINE_BREAK_STAND_IN);
+        return QUOTE + escaped + QUOTE;
     }
 }

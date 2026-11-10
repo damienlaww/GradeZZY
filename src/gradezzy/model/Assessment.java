@@ -33,6 +33,8 @@ public class Assessment {
     /**
      * Creates a new assessment.
      *
+     * <p>Tier: MUST.
+     *
      * @param name the name of the assessment
      * @param moduleCode the course code, for example CS102
      */
@@ -44,6 +46,8 @@ public class Assessment {
     /**
      * Returns the name of the assessment.
      *
+     * <p>Tier: MUST.
+     *
      * @return the name of the assessment
      */
     public String getName() {
@@ -52,6 +56,8 @@ public class Assessment {
 
     /**
      * Returns the course code, for example CS102.
+     *
+     * <p>Tier: MUST.
      *
      * @return the course code, for example CS102
      */
@@ -62,6 +68,8 @@ public class Assessment {
     /**
      * Returns the questions, in order.
      *
+     * <p>Tier: MUST.
+     *
      * @return the questions, in order
      */
     public List<Question> getQuestions() {
@@ -70,6 +78,8 @@ public class Assessment {
 
     /**
      * Returns the starter folder names students should have renamed.
+     *
+     * <p>Tier: MUST.
      *
      * @return the starter folder names students should have renamed
      */
@@ -80,6 +90,8 @@ public class Assessment {
     /**
      * Adds a question to the end of the list.
      *
+     * <p>Tier: MUST.
+     *
      * @param question the question
      */
     public void addQuestion(Question question) {
@@ -89,6 +101,8 @@ public class Assessment {
     /**
      * Finds a question by its id. The id must match exactly, including
      * case, so Q1a and Q1A are different questions.
+     *
+     * <p>Tier: MUST.
      *
      * @param questionId the question id
      * @return the matching question, or null if there is none
@@ -109,6 +123,8 @@ public class Assessment {
 
     /**
      * Adds up the maximum score of every question.
+     *
+     * <p>Tier: MUST.
      *
      * @return the highest total a student can get
      */

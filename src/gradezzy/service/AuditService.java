@@ -3,7 +3,10 @@
  *
  * Purpose: Records instructor actions in the audit log.
  *
- * Where it fits: Called by other services whenever a result is changed by hand.
+ * Where it fits: Called by the other services for each instructor
+ * action and grading event, such as starting, retrying, resuming or
+ * cancelling grading, changing a mark by hand, saving settings, and
+ * backing up or restoring the database.
  */
 package gradezzy.service;
 
@@ -34,6 +37,8 @@ public class AuditService {
     /**
      * Creates a new audit service.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param config the application settings
      * @param repository the store results are saved to
      */
@@ -48,6 +53,8 @@ public class AuditService {
      * stops the action it records. That includes a setting audit.enabled
      * that is not true or false: the entry is dropped rather than the
      * action failing, often on its way to report another error.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param action the action
      * @param detail the detail
@@ -77,6 +84,8 @@ public class AuditService {
 
     /**
      * Returns the audit log.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the audit entries, oldest first, or an empty list when the
      *         database is switched off or cannot be read

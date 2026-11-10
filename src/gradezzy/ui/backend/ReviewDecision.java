@@ -10,6 +10,8 @@ package gradezzy.ui.backend;
 
 /**
  * A review decision about one anomaly.
+ *
+ * <p>Tier: SHOULD.
  */
 public enum ReviewDecision {
 
@@ -24,6 +26,15 @@ public enum ReviewDecision {
 
     /** A retry removed the cause of the flag. */
     RESOLVED("Resolved by retry");
+
+    /** The log's words for a flag or problem marked as checked. */
+    public static final String AUDIT_CHECKED = "Marked as checked";
+
+    /** The log's words for a flag marked as looking fine. */
+    public static final String AUDIT_LOOKS_FINE = "Marked as looks fine";
+
+    /** The log's words for a decision taken back. */
+    public static final String AUDIT_TAKEN_BACK = "Decision taken back";
 
     // The words shown next to the flag
     private final String label;
@@ -55,13 +66,4 @@ public enum ReviewDecision {
         }
         return AUDIT_TAKEN_BACK;
     }
-
-    /** The log's words for a flag or problem marked as checked. */
-    public static final String AUDIT_CHECKED = "Marked as checked";
-
-    /** The log's words for a flag marked as looking fine. */
-    public static final String AUDIT_LOOKS_FINE = "Marked as looks fine";
-
-    /** The log's words for a decision taken back. */
-    public static final String AUDIT_TAKEN_BACK = "Decision taken back";
 }

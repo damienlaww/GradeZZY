@@ -16,6 +16,8 @@ import gradezzy.model.Submission;
 
 /**
  * The arrow at the end of a Review row.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ReviewOpenCell extends TableCell<Submission, Submission> {
 

@@ -42,13 +42,19 @@ final class JavaSourceText {
     // The invisible mark some editors put at the start of a file
     private static final String BYTE_ORDER_MARK = "\uFEFF";
 
-    // The marks that start and end comments
+    // The mark that starts a block comment
     private static final String BLOCK_COMMENT_START = "/*";
+
+    // The mark that ends a block comment
     private static final String BLOCK_COMMENT_END = "*/";
+
+    // The mark that starts a line comment
     private static final String LINE_COMMENT_START = "//";
 
-    // The characters around string and char literals
+    // The character around a string literal
     private static final char DOUBLE_QUOTE = '"';
+
+    // The character around a char literal
     private static final char SINGLE_QUOTE = '\'';
 
     // Escapes the character after it inside a literal
@@ -57,12 +63,22 @@ final class JavaSourceText {
     // What the inside of a literal is replaced with
     private static final char BLANK = ' ';
 
-    // The characters that shape a class and its methods
+    // Opens a class or method body
     private static final char OPEN_BRACE = '{';
+
+    // Closes a class or method body
     private static final char CLOSE_BRACE = '}';
+
+    // Opens a parameter list
     private static final char OPEN_PAREN = '(';
+
+    // Closes a parameter list
     private static final char CLOSE_PAREN = ')';
+
+    // Ends a field or other statement in the class body
     private static final char SEMICOLON = ';';
+
+    // Gives a field its value, so a header holding one is not a method
     private static final char ASSIGN = '=';
 
     // How many braces are open around a method header: just the class
@@ -162,8 +178,8 @@ final class JavaSourceText {
                 result[count] = LINE_END_CHAR;
                 count++;
             } else if (code.startsWith(BLOCK_COMMENT_START, index)) {
-                index = skipPast(code, BLOCK_COMMENT_END,
-                        index + BLOCK_COMMENT_START.length());
+                int commentStart = index + BLOCK_COMMENT_START.length();
+                index = skipPast(code, BLOCK_COMMENT_END, commentStart);
                 result[count] = LINE_END_CHAR;
                 count++;
             } else {
@@ -184,8 +200,10 @@ final class JavaSourceText {
         while (index < code.length()) {
             if (isQuote(code.charAt(index))) {
                 int literalEnd = skipLiteral(code, index);
+                int insideStart = index + 1;
+                int closingQuote = literalEnd - 1;
 
-                for (int i = index + 1; i < literalEnd - 1; i++) {
+                for (int i = insideStart; i < closingQuote; i++) {
                     result[i] = BLANK;
                 }
 
@@ -235,7 +253,8 @@ final class JavaSourceText {
                 int closeBrace = findClosingBracket(blanked, brace,
                         OPEN_BRACE, CLOSE_BRACE);
 
-                bodies.add(code.substring(brace + 1, closeBrace));
+                int bodyStart = brace + 1;
+                bodies.add(code.substring(bodyStart, closeBrace));
             }
         }
 
@@ -275,9 +294,9 @@ final class JavaSourceText {
 
         try {
             byte[] bytes = Files.readAllBytes(file);
+            String decoded = new String(bytes, StandardCharsets.UTF_8);
 
-            String text = TextUtils.normaliseLineEndings(new String(bytes,
-                    StandardCharsets.UTF_8));
+            String text = TextUtils.normaliseLineEndings(decoded);
 
             if (text.startsWith(BYTE_ORDER_MARK)) {
                 return text.substring(BYTE_ORDER_MARK.length());
@@ -298,7 +317,8 @@ final class JavaSourceText {
             return text;
         }
 
-        return trimmed.substring(headerEnd + BLOCK_COMMENT_END.length());
+        int codeStart = headerEnd + BLOCK_COMMENT_END.length();
+        return trimmed.substring(codeStart);
     }
 
     // Drops blank lines and the spaces at the end of every line.
@@ -356,7 +376,8 @@ final class JavaSourceText {
             index++;
         }
 
-        return Math.min(index + 1, code.length());
+        int afterLiteral = index + 1;
+        return Math.min(afterLiteral, code.length());
     }
 
     // Returns the position after the next target, or the end of the code.
@@ -379,8 +400,10 @@ final class JavaSourceText {
         for (int i = 0; i < code.length(); i++) {
             char current = code.charAt(i);
 
-            if (current == OPEN_BRACE && depth == CLASS_BODY_DEPTH
-                    && isMethodHeader(code.substring(headerStart, i))) {
+            boolean methodBrace = current == OPEN_BRACE
+                    && depth == CLASS_BODY_DEPTH
+                    && isMethodHeader(code.substring(headerStart, i));
+            if (methodBrace) {
                 braces.add(i);
             }
 
@@ -390,8 +413,9 @@ final class JavaSourceText {
                 depth--;
             }
 
-            if (current == OPEN_BRACE || current == CLOSE_BRACE
-                    || current == SEMICOLON) {
+            boolean endsHeader = current == OPEN_BRACE
+                    || current == CLOSE_BRACE || current == SEMICOLON;
+            if (endsHeader) {
                 headerStart = i + 1;
             }
         }
@@ -427,19 +451,35 @@ final class JavaSourceText {
         int nameEnd = findOpeningBracket(code, closeIndex, OPEN_PAREN,
                 CLOSE_PAREN);
 
-        while (nameEnd > 0
-                && Character.isWhitespace(code.charAt(nameEnd - 1))) {
+        while (isSpaceBefore(code, nameEnd)) {
             nameEnd--;
         }
 
         int nameStart = nameEnd;
 
-        while (nameStart > 0
-                && Character.isJavaIdentifierPart(code.charAt(nameStart - 1))) {
+        while (isNamePartBefore(code, nameStart)) {
             nameStart--;
         }
 
         return code.substring(nameStart, nameEnd);
+    }
+
+    // Says whether the character just before index is a space.
+    static boolean isSpaceBefore(String code, int index) {
+        if (index <= 0) {
+            return false;
+        }
+        int before = index - 1;
+        return Character.isWhitespace(code.charAt(before));
+    }
+
+    // Says whether the character just before index can be part of a name.
+    static boolean isNamePartBefore(String code, int index) {
+        if (index <= 0) {
+            return false;
+        }
+        int before = index - 1;
+        return Character.isJavaIdentifierPart(code.charAt(before));
     }
 
     // Returns where the bracket closed at closeIndex opens, or 0.

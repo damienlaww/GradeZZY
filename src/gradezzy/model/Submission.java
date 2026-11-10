@@ -63,6 +63,8 @@ public class Submission {
     /**
      * Creates a new submission.
      *
+     * <p>Tier: MUST.
+     *
      * @param username the username taken from the zip file name
      * @param section the section chosen for this upload
      * @param originalPath the uploaded zip file or folder
@@ -77,6 +79,8 @@ public class Submission {
      * Returns why the upload was rejected before grading, for example a
      * file that is not a ZIP file.
      *
+     * <p>Tier: MUST.
+     *
      * @return the rejection reason, or null for an accepted upload
      */
     public String getIngestFailure() {
@@ -87,6 +91,8 @@ public class Submission {
      * Records why this upload cannot be graded. The pipeline then marks
      * the submission FAILED without running any stage.
      *
+     * <p>Tier: MUST.
+     *
      * @param ingestFailure the rejection reason
      */
     public void setIngestFailure(String ingestFailure) {
@@ -95,6 +101,8 @@ public class Submission {
 
     /**
      * Returns the username taken from the zip file name.
+     *
+     * <p>Tier: MUST.
      *
      * @return the username taken from the zip file name
      */
@@ -105,6 +113,8 @@ public class Submission {
     /**
      * Returns the section chosen for this upload.
      *
+     * <p>Tier: MUST.
+     *
      * @return the section chosen for this upload
      */
     public Section getSection() {
@@ -113,6 +123,8 @@ public class Submission {
 
     /**
      * Returns the uploaded zip file or folder.
+     *
+     * <p>Tier: MUST.
      *
      * @return the uploaded zip file or folder
      */
@@ -123,6 +135,8 @@ public class Submission {
     /**
      * Returns the working copy that may be modified.
      *
+     * <p>Tier: MUST.
+     *
      * @return the working copy that may be modified
      */
     public Path getWorkingCopyPath() {
@@ -131,6 +145,8 @@ public class Submission {
 
     /**
      * Sets the working copy that may be modified.
+     *
+     * <p>Tier: MUST.
      *
      * @param workingCopyPath the working copy that may be modified
      */
@@ -141,6 +157,8 @@ public class Submission {
     /**
      * Returns the matching roster entry.
      *
+     * <p>Tier: MUST.
+     *
      * @return the matching roster entry
      */
     public Student getStudent() {
@@ -149,6 +167,8 @@ public class Submission {
 
     /**
      * Sets the matching roster entry.
+     *
+     * <p>Tier: MUST.
      *
      * @param student the matching roster entry
      */
@@ -159,6 +179,8 @@ public class Submission {
     /**
      * Returns the grading status.
      *
+     * <p>Tier: MUST.
+     *
      * @return the grading status
      */
     public SubmissionStatus getStatus() {
@@ -167,6 +189,8 @@ public class Submission {
 
     /**
      * Sets the grading status.
+     *
+     * <p>Tier: MUST.
      *
      * @param status the grading status
      */
@@ -177,6 +201,8 @@ public class Submission {
     /**
      * Returns the problems found so far.
      *
+     * <p>Tier: MUST.
+     *
      * @return the problems found so far
      */
     public List<Anomaly> getAnomalies() {
@@ -186,10 +212,32 @@ public class Submission {
     /**
      * Returns the result of each question.
      *
+     * <p>Tier: MUST.
+     *
      * @return the result of each question
      */
     public List<QuestionResult> getQuestionResults() {
         return questionResults;
+    }
+
+    /**
+     * Finds the result of one question.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param questionId the question's id, such as Q1a
+     * @return the result, or null when the question has none
+     */
+    public QuestionResult findResult(String questionId) {
+        for (QuestionResult result : questionResults) {
+            Question graded = result.getQuestion();
+            boolean isQuestion = graded != null
+                    && graded.getId().equals(questionId);
+            if (isQuestion) {
+                return result;
+            }
+        }
+        return null;
     }
 
     /**
@@ -238,6 +286,8 @@ public class Submission {
     /**
      * Records a problem found in this submission.
      *
+     * <p>Tier: MUST.
+     *
      * @param anomaly the anomaly
      */
     public void addAnomaly(Anomaly anomaly) {
@@ -246,6 +296,8 @@ public class Submission {
 
     /**
      * Records the result of one question.
+     *
+     * <p>Tier: MUST.
      *
      * @param questionResult the question result
      */
@@ -260,6 +312,8 @@ public class Submission {
      * because adding doubles leaves tiny errors (0.1 + 0.2 is
      * 0.30000000000000004) that would otherwise reach the export.
      *
+     * <p>Tier: MUST.
+     *
      * @return the student's total
      */
     public double getTotalScore() {
@@ -269,6 +323,7 @@ public class Submission {
             total += questionResult.getScore();
         }
 
-        return Math.round(total * ROUNDING_FACTOR) / ROUNDING_FACTOR;
+        double scaledTotal = total * ROUNDING_FACTOR;
+        return Math.round(scaledTotal) / ROUNDING_FACTOR;
     }
 }

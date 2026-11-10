@@ -25,6 +25,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * Names and statuses of students.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class Students {
 
@@ -36,6 +38,9 @@ public final class Students {
 
     // The most questions named in a pill; more are counted instead
     private static final int MAX_NAMED_QUESTIONS = 3;
+
+    // Separates the questions named in a pill
+    private static final String LIST_SEPARATOR = ", ";
 
     // Not used: every method is static.
     private Students() {
@@ -100,6 +105,8 @@ public final class Students {
     public static Label pill(Submission submission,
             DashboardBackend backend) {
         ResultState state = state(submission, backend);
+        boolean settledZero = state == ResultState.ZERO
+                && !StatusCounts.isUncheckedZero(submission, state, backend);
         if (ResultState.isSkippedFile(submission)) {
             return Parts.pill(SKIPPED_WORDS, Tone.BAD);
         } else if (state == ResultState.NEEDS_REVIEW) {
@@ -109,9 +116,7 @@ public final class Students {
         } else if (state == ResultState.COMPILE_ERROR) {
             return Parts.pill(compileWords(submission),
                     tone(submission, backend));
-        } else if (state == ResultState.ZERO
-                && !StatusCounts.isUncheckedZero(submission, state,
-                backend)) {
+        } else if (settledZero) {
             return Parts.pill(SETTLED_ZERO_WORDS, Tone.NEUTRAL);
         }
         return Parts.pill(words(state), tone(submission, backend));
@@ -165,7 +170,7 @@ public final class Students {
         } else if (questionIds.size() > MAX_NAMED_QUESTIONS) {
             return questionIds.size() + " questions did not compile";
         }
-        return TextUtils.join(", ", questionIds) + " did not compile";
+        return TextUtils.join(LIST_SEPARATOR, questionIds) + " did not compile";
     }
 
     /**
@@ -204,10 +209,12 @@ public final class Students {
             return Tone.GOOD;
         } else if (state == ResultState.NEEDS_REVIEW) {
             return Tone.WARN;
-        } else if (state == ResultState.COMPILE_ERROR
+        }
+        boolean problem = state == ResultState.COMPILE_ERROR
                 || state == ResultState.TIMED_OUT
                 || state == ResultState.COULD_NOT_GRADE
-                || state == ResultState.ZERO) {
+                || state == ResultState.ZERO;
+        if (problem) {
             return Tone.BAD;
         }
         return Tone.NEUTRAL;

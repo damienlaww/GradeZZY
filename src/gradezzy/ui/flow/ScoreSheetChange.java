@@ -23,6 +23,8 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * A background task that changes the score sheet of a run.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ScoreSheetChange extends Task<ActionResult> {
 

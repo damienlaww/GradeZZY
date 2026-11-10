@@ -152,7 +152,7 @@ Rules the code keeps:
 | `fix` | One class per automatic correction, each with apply and undo. | `Fixer`, `AbstractFixer`, `EncodingFixer`, `FolderHierarchyFixer`, `FolderNameFixer`, `CaseNameFixer`, `MisplacedFileFixer`, `HeaderNameFixer`, `FixManager`, `FixRecord` |
 | `detection` | Flags suspicious answers. Never changes a mark. | `Detector`, `UntouchedStarterDetector`, `EmptyAnswerDetector`, `HardCodedAnswerDetector`, `RosterCheck`, `CopiedHeaderDetector` |
 | `testcase` | Where testers come from, their maximum marks, and the per-question folders. | `TestCaseSource`, `UploadedTesterSource`, `TypedTestCaseSource`, `TesterGenerator`, `TesterInstaller`, `TesterMarks`, `QuestionWorkspace`, `FolderSnapshot` |
-| `exec` | Runs `javac` and `java` as separate processes with limits. | `ProcessRunner`, `SourceCompiler`, `TesterRunner`, `TesterHarness`, `TrustedPrintStream`, `RunningProcesses`, `HarnessWatchdog` |
+| `exec` | Runs `javac` and `java` as separate processes with limits. | `ProcessRunner`, `SourceCompiler`, `TesterRunner`, `TesterHarness`, `TrustedPrintStream`, `JdkCommand`, `RunningProcesses`, `HarnessWatchdog` |
 | `grading` | The pipeline, its stages, scoring and parallel workers. | `GradingPipeline`, `GradingStage`, the nine `...Stage` classes, `ScoreParser`, `TesterOutputScoreParser`, `ScoreCalculator`, `GradingWorker`, `SubmissionHandout`, `CancellationToken`, `QuestionRerunner` |
 | `plagiarism` | Compares students' code. | `SimilarityDetector`, `WinnowingSimilarityDetector`, `TokenSimilarityDetector`, `Winnowing`, `Fingerprint`, `JavaTokenizer`, `JavaToken`, `SimilarityPair`, `LineComparison`, `LineKind` |
 | `report` | One class per export format. | `Exporter`, `CsvScoreSheetExporter`, `JsonExporter`, `JsonWriter`, `AnomalyReportExporter`, `StudentReportExporter`, `AuditLogExporter` |
@@ -201,6 +201,7 @@ classDiagram
     class ScoreParser {
         <<interface>>
         +parse(Question, ProcessResult) QuestionResult
+        +readTotal(ProcessResult) Double
     }
     class SimilarityDetector {
         <<interface>>
@@ -326,40 +327,71 @@ unzipped by hand and bulk zips downloaded from eLearn.
   `ingest.zip.name.prefix.pattern` (so `2023-2024-ping.lee.2023.zip`
   gives `ping.lee.2023`), any browser copy number such as ` (1)` and
   the ` - Copy` or ` - Copy (2)` Windows adds to a copied file, in lower
-  case (`2023-2024-PING.LEE.2023.ZIP` also gives `ping.lee.2023`). A
-  graded file with a Windows copy name gets a `DUPLICATE_SUBMISSION`
-  note.
+  case (`2023-2024-PING.LEE.2023.ZIP` also gives `ping.lee.2023`). Every
+  `.zip` ending goes, so `2023-2024-ping.lee.2023.zip.zip` gives the
+  same username. A graded file with a Windows copy name gets a
+  `DUPLICATE_SUBMISSION` note.
 - **Bulk zips.** A zip that holds student zips, and no question folder,
   is unpacked into `workspace/working/.batch-*` and each zip inside is
   one student.
 - **Duplicates.** One file per username is graded: the newest
   download, which has the highest copy number (` - Copy` counts as 1);
-  a file without one is the oldest. The others are named in a
-  `DUPLICATE_SUBMISSION` warning.
+  a file without one is the oldest. Two zips of the same name in
+  different folders of a bulk zip are told apart by the time the bulk
+  zip records for each: the newer is graded, and on a tie the first by
+  path. The others are named in a `DUPLICATE_SUBMISSION` warning, which
+  says which folder of the bulk zip each one was in.
+- **Folders unzipped by hand.** A chosen folder holding a question
+  folder is one student, and so is each sub-folder that holds one
+  directly, inside its only sub-folder, or at the end of a chain of
+  folders that each hold only one folder (`s06/s06/s06/Q1`).
 - **Skipped.** `.DS_Store`, `__MACOSX`, `Thumbs.db`, the starter folder
   itself, and files that are not zips.
 
 `ZipExtractor` unzips with `java.util.zip` and refuses unsafe entries:
 names with `..` or absolute paths (zip slip), names Windows cannot
 create, more than `ingest.max.zip.entries` entries or more than
-`ingest.max.zip.size.mb` unzipped. A damaged or empty zip becomes
+`ingest.max.zip.size.mb` unzipped. A folder or file name that ends with
+a space or a dot (`ping.lee.2023 /`), which Windows cannot save, is
+unpacked without them and named in an `INVALID_ARCHIVE` warning; two
+names that become one stop the zip. A damaged or empty zip becomes
 `INVALID_ARCHIVE` for that student only. `WorkingCopyManager` removes the
 student's own `.class` files, except the provided ones listed in
 `assessment.provided.class.files`. `RosterReader` reads the eLearn score
-sheet, removing the `#` in front of the id and username, and accepts the
-same sheet re-saved by Excel (byte order mark, LF endings).
+sheet, removing the `#` in front of the id and username and the spaces
+around them (`#ping.lee.2023 ` and `# ping.lee.2023` both give
+`ping.lee.2023`), and accepts the same sheet re-saved by Excel (byte
+order mark, LF endings, rows of empty cells such as `,,,,,,,`, which are
+skipped).
 
 ### 2. Validate: checking the structure
 
 | Validator | Checks | Reports |
 |---|---|---|
 | `StructureValidator` | One top folder named after the username, holding one folder per question group. | `MISSING_WRAPPER_FOLDER`, `WRONG_FOLDER_NAME` (a starter name such as `RenameToYourUsername` is called out), `MISSING_QUESTION_FOLDER` |
-| `FileNameValidator` | A file whose name matches a required name only when case is ignored (`q1a.java`), or has an ending added (Notepad's `Q2a.java.txt`). Java needs the exact name. | `WRONG_FILE_NAME` |
+| `FileNameValidator` | A file whose name matches a required name only when case is ignored (`q1a.java`), has an ending added (Notepad's `Q2a.java.txt`) or a browser's copy number (`Q1a (1).java`). Java needs the exact name. | `WRONG_FILE_NAME` |
 | `RequiredFilesValidator` | Every file in `assessment.question.<id>.file` is present, and every other source file of the question. | `MISSING_FILE` |
-| `HeaderNameValidator` | The first `validation.header.scan.lines` lines of each required file hold a name after `Name:` and an email after `Email ID:`. | `MISSING_HEADER_NAME` |
+| `HeaderNameValidator` | The first `validation.header.scan.lines` lines of each required file hold a name after `Name:` and an email after `Email ID:` (spaces before the colon, as in `Name :`, are accepted). | `MISSING_HEADER_NAME` |
 
 Each problem is reported once: a misnamed file is not also reported as
 missing, and the files of a missing folder are not reported one by one.
+
+**Which folder is graded.** One rule, `util.AnswerFolderRule`, picks the
+folder that holds the question folders, for the checks, the fixes and
+grading (`QuestionFolderFinder`) alike. Every place that holds question
+folders counts: the top of the zip, and inside each top folder the
+folder itself when it holds them directly, and each extra folder that
+leads to them (`src` in an IntelliJ project, a chain of folders that
+each hold only one folder, such as `Users/jy/Desktop/ping.lee.2023` from
+a command-line zip, or any other folder such as `backup`). `out`, `bin`,
+`__MACOSX` and hidden folders never count, and when there are several
+places, one whose question folders hold no `.java` file (a stray `Q1`
+with notes in it) is dropped. When more than one place is left, as with
+`ping.lee.2023/` and `ping.lee.2023 (2)/`, a starter folder with work
+in it beside the username folder, `alice/Q1` beside `alice/src/Q1`, or
+`alice/backup/Q1` beside `alice/Q1`, GradeZZY does not guess: one
+`MISSING_QUESTION_FOLDER` error names the folders, and every question
+gets 0 until the student says which is their answer.
 
 A question's other source files are the starter's other `.java` files in
 its folder, such as `GoldMember.java` next to `Q3.java`
@@ -376,9 +408,9 @@ are in place before names and headers are touched:
 | Fixer | Fixes | How |
 |---|---|---|
 | `EncodingFixer` | `WRONG_ENCODING` | Backs the file up, removes a UTF-8 byte order mark, rewrites a UTF-16 file (Notepad's "Unicode", found by its byte order mark) as UTF-8, and rewrites a file that is not UTF-8 (read as Windows-1252) as UTF-8. |
-| `FolderHierarchyFixer` | `MISSING_WRAPPER_FOLDER`, `MISSING_QUESTION_FOLDER` | Moves the question folders into a new username folder, or up out of one extra folder level. When the answer files lie loose in the username folder with no question folders, makes those folders and moves each question's files into its own. |
+| `FolderHierarchyFixer` | `MISSING_WRAPPER_FOLDER`, `MISSING_QUESTION_FOLDER` | Moves the question folders into a new username folder, or up out of an extra folder or a chain of single folders (`Users/jy/Desktop/ping.lee.2023`), removing the folders left empty. Moves a question folder dragged into itself (`Q1/Q1`) up one level. When the answer files lie loose in the username folder with no question folders, makes those folders and moves each question's files into its own. |
 | `FolderNameFixer` | `WRONG_FOLDER_NAME` | Renames the only top folder to the username. |
-| `CaseNameFixer` | `WRONG_FILE_NAME`, `MISSING_QUESTION_FOLDER` | Renames `q3` to `Q3`, `q1a.java` to `Q1a.java` or `Q2a.java.txt` to `Q2a.java`, through a temporary name because Windows and macOS ignore case. |
+| `CaseNameFixer` | `WRONG_FILE_NAME`, `MISSING_QUESTION_FOLDER` | Renames `q3` to `Q3`, `q1a.java` to `Q1a.java`, `Q2a.java.txt` or `Q2a (1).java` to `Q2a.java`, through a temporary name because Windows and macOS ignore case. |
 | `MisplacedFileFixer` | `MISSING_FILE` | Moves a required file found in exactly one other question folder, such as `Q2/Q1a.java`, into its own folder. Found in none or in two, it is left for the instructor. |
 | `HeaderNameFixer` | `MISSING_HEADER_NAME` | Writes the roster name and email after the blank labels, keeping the file's own encoding. |
 
@@ -456,15 +488,22 @@ questions are still compiled and graded. A compile that misses
 `exec.compile.timeout.seconds` is tried once more, because a busy
 computer can slow `javac`. After a second miss the student is left for
 Retry with no mark taken. `FolderSnapshot` then remembers the compiled
-classes and data files of each question folder.
+classes and data files of each question folder. A file that starts with
+a `package` line does not compile with its tester (`javac` says
+`duplicate class`); the message names the package line as the cause and
+says it must be removed, and the mark stays 0. `javac` always writes its
+messages in English (`-J-Duser.language=en -J-Duser.country=US`), so
+they read the same, and group the same in Statistics, on every computer.
 
 ### 7. Execute: running the testers safely
 
 This is the stage that keeps one bad program from blocking the batch.
 
 **One tester, one process.** `ProcessRunner` starts `java` with
-`ProcessBuilder`, reads its output in a polling loop (every 50 ms) so
-the program never freezes on a full output buffer, and stops reading at
+`ProcessBuilder` and reads both of its output pipes in a loop, pausing
+50 ms only when neither has output waiting, so the program never
+freezes on a full output buffer and a program that prints a lot is not
+slowed down; it stops keeping output at
 `exec.max.output.characters`. At `exec.run.timeout.seconds` it kills the
 process and every child process it started. A shutdown hook
 (`RunningProcesses`) kills any tester still running if GradeZZY itself
@@ -476,7 +515,15 @@ a 2 MB thread stack and one CPU, only the core Java module
 (`--limit-modules=java.base`) and no native code. On macOS the run is
 also placed in `sandbox-exec`, so it can write only in its own question
 folder and cannot read other students' working copies. Other systems
-have no built-in sandbox, and the console says so once per run.
+have no built-in sandbox, and the console says so once per run. When
+`exec.java.command` is the bare word `java` (or `exec.javac.command` is
+`javac`), the program of the JDK running GradeZZY is used, not whatever
+`java` comes first on the PATH (`JdkCommand`). Before the first run,
+`TesterRunner` runs that `java` once with every tester option plus
+`-version`; if it fails, as an older JDK does on
+`--illegal-native-access`, each student stops with an `INTERNAL_ERROR`
+naming the reason instead of getting 0. Testers run in English
+(`-Duser.language=en -Duser.country=US`).
 
 **Only the tester's own lines are believed.** The tester is started
 inside `TesterHarness`, which receives a secret token on standard input
@@ -484,7 +531,18 @@ and replaces standard output with `TrustedPrintStream`. A line is marked
 with the token only when the tester printed it with no student method
 on the call stack (checked with `StackWalker`). Every other line is
 prefixed as student output, and `TesterOutputScoreParser` never counts
-it. A student who prints `Passed` gains nothing.
+it. A student who prints `Passed` gains nothing. Every `print`,
+`println` and `printf` of the tester is marked, whatever it prints (a
+`double`, an `int`, text, or a boxed number such as `Double`; any other
+object is not, since its `toString` may be student code). Text printed
+with `print` is marked once its line ends, or when the tester stops. A
+marked line longer than 1000 characters, such as a huge wrong answer the
+tester echoes, is cut, so the tester's later lines always fit in the
+output limit. A case header is `grading.test.header.marker` followed by
+a number (`Test 1: ...`, `Test1:`), so a banner such as `Testing
+compress` is not a case. A pass is a line that starts with
+`grading.pass.marker` (`Passed`, `Passed!`); the fail marker is checked
+first.
 
 **Tampering is undone.** Before each tester run, `ExecuteStage` puts
 back any compiled class or data file that changed since compiling, and
@@ -513,19 +571,44 @@ hung and which were never reached. An exception inside a case is
 printed by the tester and counted as a failed case. An error the tester
 cannot catch, such as a `StackOverflowError`, or static code in the
 student's class that throws while it loads, ends the whole run (exit
-code `TesterHarness.CRASH_EXIT_CODE`); that case is skipped and the tester
-run again, like a hang, and a `RUNTIME_ERROR` says so. A student's own
-`System.exit` is not run again. A run that ends early never prints the
-tester's total, so its `RUNTIME_ERROR` asks the instructor to read the
-output before accepting the passes.
+code `TesterHarness.CRASH_EXIT_CODE`, after a marked line only the
+harness can print); that case is skipped and the tester run again, like
+a hang, and a `RUNTIME_ERROR` says so. A student's own `System.exit`,
+with any code including 3, is not run again. A run that ends early
+never prints the tester's total, so its `RUNTIME_ERROR` asks the
+instructor to read the output before accepting the passes. A tester
+that prints a case's header before the case's `try` block cannot skip
+that case: the skip stops the whole run, and the message says that case
+and the ones after it were not run and need checking by hand.
 
 **Each case earns its own marks.** A run that timed out, crashed or
-ended early never printed its total, so each passed case earns what its
-own `score += <number>;` line in the tester gives (`TesterMarks.readCaseMarks`):
-a case worth 0.5 counts as 0.5 and one worth 2 as 2. A finished run's
-printed total is kept unless it is more than its passed cases earn,
-which student code can cause by setting the tester's score field by
-reflection; then the passed cases' marks are given and flagged.
+ended early never printed its total, and a last line that is not a
+number cannot be read, so each passed case earns what its own
+`score += <number>;` line in the tester gives (`TesterMarks.readCaseMarks`):
+a case worth 0.5 counts as 0.5 and one worth 2 as 2. A skipped case
+never earns marks, even when a tester that expects an exception catches
+the skip and prints `Passed`. A finished run's printed total is kept
+only if it is not more than its passed cases earn, so a total that no
+case's verdict backs is never believed: student code can hide the
+tester's lines and set its score field by reflection. A total above
+what the passed cases earn is replaced by their marks and flagged. When
+no case printed a verdict at all, no case passed, so the question gets
+0; the run's "not fully recognised" flag says that the printed total
+could not be checked against any verdict, and that a tester which words
+its verdicts differently needs its "Passed line" and "Failed line" set
+in Settings (`grading.pass.marker`, `grading.fail.marker`).
+A total above the question's maximum is cut to it and flagged, because
+the maximum read from the tester may be wrong (for example a
+`score += 0.5` inside a helper called once per case). When the cases of
+a run with no total (unfinished, or whose last line is not a number)
+cannot be matched one for one to the tester's score lines, each pass
+gets the smallest mark a case is worth, and a `RUNTIME_ERROR` says so.
+A run that ends normally but whose last line is not a total, that
+printed no case, or whose cases have no verdict (as when student code
+replaces `System.out`, or the tester words its verdicts differently)
+gets a `RUNTIME_ERROR` saying the output was not fully recognised, so
+missing marks are checked by hand. None of these flags changes a mark
+by itself.
 
 ### 8. Score and 9. Persist
 
@@ -555,8 +638,8 @@ Each submission has its own working copy and writes only to its own
 `Submission` object, so workers never share student data. The only
 shared state (the next submission to hand out, the progress listener,
 `FixManager` and the repository) is guarded by `synchronized`. Each
-worker calls the same `gradeOne` method as the single-threaded path, so
-both give the same marks.
+worker calls the same `gradeSafely` method as the single-threaded path,
+so both give the same marks.
 
 ## Problems the backend reports
 
@@ -568,9 +651,9 @@ action and a fix status.
 |---|---|---|---|
 | `MISSING_WRAPPER_FOLDER` | Question folders at the top of the zip, with no username folder | `StructureValidator` | Yes |
 | `WRONG_FOLDER_NAME` | Top folder not named after the username | `StructureValidator` | Yes |
-| `MISSING_QUESTION_FOLDER` | A question folder is missing | `StructureValidator` | When it is one level too deep or wrongly cased |
+| `MISSING_QUESTION_FOLDER` | A question folder is missing, too deep, or GradeZZY cannot tell which of several folders to grade | `StructureValidator` | When it is too deep (an extra folder, a chain of single folders, or inside itself) or wrongly cased |
 | `MISSING_FILE` | A required file or a tester is missing | `RequiredFilesValidator`, `TesterInstaller` | No |
-| `WRONG_FILE_NAME` | File name differs only in letter case | `FileNameValidator` | Yes |
+| `WRONG_FILE_NAME` | File name differs only in letter case, has an ending added or a browser's copy number | `FileNameValidator` | Yes |
 | `MISSING_HEADER_NAME` | Blank name or email in the header | `HeaderNameValidator` | Yes, from the roster |
 | `WRONG_ENCODING` | Byte order mark or not UTF-8, which `javac` rejects | `FixStage` | Yes |
 | `UNKNOWN_STUDENT` | Not on the score sheet | `ExtractStage` | No |
@@ -578,7 +661,7 @@ action and a fix status.
 | `DUPLICATE_SUBMISSION` | Another upload with the same username was set aside | `SubmissionLoader` | No |
 | `COMPILE_ERROR` | A question did not compile | `CompileStage` | No |
 | `TIMEOUT` | A tester was stopped at the time limit | `ExecuteStage` | No |
-| `RUNTIME_ERROR` | A tester ended with an error | `ExecuteStage` | No |
+| `RUNTIME_ERROR` | A tester ended with an error, or its output could not be fully read | `ExecuteStage` | No |
 | `UNTOUCHED_STARTER` | A file equals the starter file | `UntouchedStarterDetector` | Flag only |
 | `EMPTY_ANSWER` | A method still holds only the starter code | `EmptyAnswerDetector` | Flag only |
 | `HARD_CODED_ANSWER` | An answer looks hard-coded to sample cases | `HardCodedAnswerDetector` | Flag only |
@@ -889,18 +972,12 @@ folder of the section (`paths.output.dir.by.section`, else
 
 | Format | Class | Contents |
 |---|---|---|
-| Score sheet CSV | `CsvScoreSheetExporter` | The provided score sheet, unchanged except for `Calculated Final Grade Numerator`. Columns, `#` prefixes, the `#` end marker, quotes, the encoding (UTF-8 with or without a byte order mark, or Windows-1252) and the CRLF line endings stay as they were. |
+| Score sheet CSV | `CsvScoreSheetExporter` | The provided score sheet, unchanged except for `Calculated Final Grade Numerator` of each student graded in the run; a row whose student has no graded submission in the run (grading failed, or nothing was submitted or chosen) gets an empty numerator, even if the sheet held a mark, so the instructor notices, as the Export step's "left blank" count says. Columns, `#` prefixes, the `#` end marker, quotes and the encoding (UTF-8 with or without a byte order mark, or Windows-1252) stay as they were. Every line ends with `export.csv.line.ending` (CRLF by default, as in the provided sheet), so a sheet re-saved with LF endings is written with CRLF. Usernames are matched without the spaces around them. |
 | JSON | `JsonExporter`, `JsonWriter` | Every student, question, test case and problem, written by hand without a library. |
 | Problem report | `AnomalyReportExporter` | One row per problem, with its fix status. |
 | Student reports | `StudentReportExporter` | A readable report per student: marks per question, test cases and problems. |
 | Audit log | `AuditLogExporter` | Every logged instructor action. |
 | Common mistakes | `CommonMistakesExporter` | One CSV row per answer group: question, mistake, pattern, the marker's name for it, the number of students, how many share a code shape, whether it was checked, and the usernames. The JSON also gives each question result its group's title and name. |
-
-`ExportService.summarizeScoreSheet` can list which students get a mark,
-which are on the sheet with no submission, which were not graded, and
-which graded students are not on the sheet. Nothing calls it yet: the
-Export step does not show this summary, so blank numerators in the CSV
-are not reported.
 
 ## Statistics
 
@@ -1036,7 +1113,8 @@ reported and grading goes on.
 | One student crashes the grader | Each stage failure becomes an `INTERNAL_ERROR` on that student; the batch carries on. |
 | Infinite loop or very slow code | Per-run time limit, kill of the whole process tree, rerun without the hung case. |
 | An error the tester cannot catch (`StackOverflowError`, `OutOfMemoryError`) | Rerun without the case that crashed, so the cases after it are still marked. When a run printed `java.lang.OutOfMemoryError`, the message says the tester ran out of memory and names the `exec.max.memory.mb` limit. |
-| Endless printing | Output capped; student output has its own smaller share so the tester's lines are never cut off. |
+| Endless printing | Output capped; student output has its own smaller share and each tester line is cut at 1000 characters, so the tester's lines are never cut off. Output is read as fast as it arrives, so heavy printing does not cause a false timeout. |
+| An older `java` first on the PATH | The bare word `java` or `javac` means the JDK running GradeZZY; `java` is tried once with the tester options, and a failure stops each student with the reason instead of a 0. |
 | Huge memory use or deep recursion | Heap limit, 2 MB stack, one CPU per run. |
 | Student prints `Passed` | Only token-marked lines from the tester are counted. |
 | Student code edits other files | Per-question folders, restore of changed class files, macOS sandbox. |
@@ -1091,8 +1169,8 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `validation.header.email.label` | `Email ID:` | Label in front of the email in a file header. |
 | `validation.header.scan.lines` | `10` | Lines at the top of a file searched for the header. |
 | `fix.auto.apply.enabled` | `true` | Apply fixes automatically, or only report. |
-| `exec.javac.command` | `javac` | Command used to compile. |
-| `exec.java.command` | `java` | Command used to run a tester. |
+| `exec.javac.command` | `javac` | Command used to compile. The bare word `javac` means the `javac` of the JDK running GradeZZY. |
+| `exec.java.command` | `java` | Command used to run a tester. The bare word `java` means the `java` of the JDK running GradeZZY; it must be JDK 25 or newer. |
 | `exec.compile.timeout.seconds` | `30` | Time limit for compiling one question folder. A compile that misses it is run once more, because a busy computer can slow `javac`; after the second miss the student is left for Retry, with no mark taken. |
 | `exec.run.timeout.seconds` | `10` | Time limit for one tester run. |
 | `exec.thread.count` | `4` | Submissions graded at the same time. |
@@ -1100,9 +1178,9 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `exec.max.memory.mb` | `256` | Most memory, in MB, one tester run may use for its objects. `0` means no limit. Each run also gets a 2 MB thread stack and one CPU. A whole number of 0 or more; GradeZZY does not start with any other value. |
 | `exec.max.hang.reruns` | `2` | Times a question's tester is run again, without the case that hung or crashed, so the cases after it are still marked. Each rerun can take the whole time limit. After the last one, the cases not yet run get no mark and the timeout flag asks the instructor to check them. A whole number of 0 or more; GradeZZY does not start with any other value. |
 | `grading.tester.class.suffix` | `Tester` | `Q1a` becomes `Q1aTester`. |
-| `grading.pass.marker` | `Passed` | Line a tester prints for a passed test. |
+| `grading.pass.marker` | `Passed` | Start of the line a tester prints for a passed test, such as `Passed` or `Passed!`. |
 | `grading.fail.marker` | `Failed` | Start of the line for a failed test. |
-| `grading.test.header.marker` | `Test` | Start of the line a tester prints before each test, such as `Test 1: ...`. |
+| `grading.test.header.marker` | `Test` | Start of the line a tester prints before each test; the test number must follow it, as in `Test 1: ...`. |
 | `detection.untouched.enabled` | `true` | Flag untouched starter files. |
 | `detection.empty.enabled` | `true` | Flag empty answers. |
 | `detection.hardcoded.enabled` | `true` | Flag hard-coded answers. |
@@ -1114,7 +1192,6 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `plagiarism.enabled` | `true` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
 | `plagiarism.algorithm` | `trigrams` | How answers are compared: `winnowing` (rename-proof fingerprints, `WinnowingSimilarityDetector`) or `trigrams` (the first version, `TokenSimilarityDetector`). See "Similar code check". |
-| `export.formats` | `csv,json` | Formats offered by default. |
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
 | `export.csv.id.prefix` | `#` | Character in front of the id and username. |
 | `export.csv.end.of.line.marker` | `#` | Value of the last column. |

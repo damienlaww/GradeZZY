@@ -22,9 +22,23 @@ public interface ScoreParser {
     /**
      * Reads the tester output for one question.
      *
+     * <p>Tier: MUST.
+     *
      * @param question the question
      * @param processResult the process result
      * @return the score and the result of each test case
      */
     QuestionResult parse(Question question, ProcessResult processResult);
+
+    /**
+     * Reads the total the tester printed as its last line, exactly as
+     * printed: not capped at the question's maximum.
+     *
+     * <p>Tier: MUST.
+     *
+     * @param processResult the process result
+     * @return the printed total, or null if the last tester line is not
+     *         a number
+     */
+    Double readTotal(ProcessResult processResult);
 }

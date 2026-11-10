@@ -59,6 +59,8 @@ import gradezzy.util.TextUtils;
 
 /**
  * The backend used in demo mode.
+ *
+ * <p>Tier: COULD.
  */
 public final class DemoBackend implements DashboardBackend {
 
@@ -93,6 +95,26 @@ public final class DemoBackend implements DashboardBackend {
     // How times are written in backup descriptions
     private static final DateTimeFormatter TIME_FORMAT =
             DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm");
+
+    // The separator between values in a list setting
+    private static final String LIST_SEPARATOR = ",";
+
+    // The pattern of a run id: the run number in three digits
+    private static final String RUN_ID_FORMAT = "%03d";
+
+    // The letter of the sample snapshot of each sample run
+    private static final String SAMPLE_SNAPSHOT_LETTER = "A";
+
+    // The letter of a snapshot taken with Back up now
+    private static final String NEW_SNAPSHOT_LETTER = "B";
+
+    // The export formats the demo can preview
+    private static final String JSON_FORMAT = "json";
+    private static final String CSV_FORMAT = "csv";
+
+    // Positions of the action and the detail in a row of AUDIT_SEED
+    private static final int SEED_ACTION = 0;
+    private static final int SEED_DETAIL = 1;
 
     // Sample audit entries, oldest first: action, then detail
     private static final String[][] AUDIT_SEED = {
@@ -185,10 +207,10 @@ public final class DemoBackend implements DashboardBackend {
         seedAssessments();
 
         runsBySection.put(section.getLabel(), sampleRun);
-        history.add(new DemoHistoryItem(sampleRun, snapshotText(sampleRun,
-                "A"), true));
+        history.add(new DemoHistoryItem(sampleRun,
+                snapshotText(sampleRun, SAMPLE_SNAPSHOT_LETTER), true));
         history.add(new DemoHistoryItem(earlierRun,
-                snapshotText(earlierRun, "A"), true));
+                snapshotText(earlierRun, SAMPLE_SNAPSHOT_LETTER), true));
         seedAudit();
     }
 
@@ -211,8 +233,13 @@ public final class DemoBackend implements DashboardBackend {
      */
     public int stepGrading(int steps) {
         int done = 0;
-        while (grader != null && done < steps && grader.step()) {
-            done++;
+        boolean going = grader != null && steps > 0;
+        while (going) {
+            boolean stepped = grader.step();
+            if (stepped) {
+                done++;
+            }
+            going = stepped && done < steps;
         }
         return done;
     }
@@ -279,13 +306,17 @@ public final class DemoBackend implements DashboardBackend {
         List<String> codes = new ArrayList<>();
         codes.add(DemoData.MODULE_CODE);
         // Modules added in this session, after the sample ones
-        for (String code : getSetting(ConfigKeys.MODULE_CODES).split(",")) {
+        String moduleCodes = getSetting(ConfigKeys.MODULE_CODES);
+        String[] listed = moduleCodes.split(LIST_SEPARATOR);
+        for (String code : listed) {
             String trimmed = code.trim();
             boolean sampleModule = trimmed.equalsIgnoreCase(
                     DemoData.MODULE_CODE);
             boolean emptyModule = trimmed.equalsIgnoreCase(
                     DemoData.EMPTY_MODULE_CODE);
-            if (!trimmed.isEmpty() && !sampleModule && !emptyModule) {
+            boolean addedModule = !trimmed.isEmpty() && !sampleModule
+                    && !emptyModule;
+            if (addedModule) {
                 codes.add(trimmed);
             }
         }
@@ -304,9 +335,11 @@ public final class DemoBackend implements DashboardBackend {
             codes.add(DemoData.EMPTY_MODULE_SECTION);
             return codes;
         }
-        return ModuleSections.forModule(getSetting(ConfigKeys.SECTION_CODES),
-                getSetting(ConfigKeys.MODULE_SECTION_CODES),
-                getSetting(ConfigKeys.OWN_SECTIONS_ONLY_MODULES), moduleCode);
+        String allSections = getSetting(ConfigKeys.SECTION_CODES);
+        String byModule = getSetting(ConfigKeys.MODULE_SECTION_CODES);
+        String ownOnly = getSetting(ConfigKeys.OWN_SECTIONS_ONLY_MODULES);
+        return ModuleSections.forModule(allSections, byModule, ownOnly,
+                moduleCode);
     }
 
     /**
@@ -404,8 +437,8 @@ public final class DemoBackend implements DashboardBackend {
         List<Path> paths = new ArrayList<>();
         if (kind == InputKind.SUBMISSION) {
             for (String username : DemoData.USERNAMES) {
-                paths.add(DemoData.samplePath(username
-                        + DemoData.ZIP_EXTENSION));
+                String fileName = username + DemoData.ZIP_EXTENSION;
+                paths.add(DemoData.samplePath(fileName));
             }
         } else if (kind == InputKind.ROSTER) {
             paths.add(DemoData.samplePath(DemoData.SAMPLE_ROSTER));
@@ -453,8 +486,9 @@ public final class DemoBackend implements DashboardBackend {
 
         String username = name.replace(DemoData.REPLACEMENT_SUFFIX, "")
                 .replace(DemoData.ZIP_EXTENSION, "");
-        if (name.equals(DemoData.INVALID_ZIP_USERNAME
-                + DemoData.ZIP_EXTENSION)) {
+        String invalidZip = DemoData.INVALID_ZIP_USERNAME
+                + DemoData.ZIP_EXTENSION;
+        if (name.equals(invalidZip)) {
             return new ImportItem(kind, path, username, ImportState.INVALID,
                     "This file could not be opened as a ZIP archive. "
                     + "Replace it with a new copy.");
@@ -501,8 +535,9 @@ public final class DemoBackend implements DashboardBackend {
     // Grades a batch of demo students as a new run.
     private void startDemoRun(ImportBatch batch, Section section,
             ProgressListener listener, RunCallback callback) {
-        GradingRun run = new GradingRun(String.format("%03d",
-                nextRunNumber), assessment, section, LocalDateTime.now());
+        String runId = String.format(RUN_ID_FORMAT, nextRunNumber);
+        GradingRun run = new GradingRun(runId, assessment, section,
+                LocalDateTime.now());
         nextRunNumber++;
 
         for (ImportItem item : batch.getItems(InputKind.SUBMISSION)) {
@@ -539,8 +574,9 @@ public final class DemoBackend implements DashboardBackend {
         List<Submission> remaining = new ArrayList<>();
         for (Submission submission : gradingRun.getSubmissions()) {
             SubmissionStatus status = submission.getStatus();
-            if (status == SubmissionStatus.CANCELLED
-                    || status == SubmissionStatus.PENDING) {
+            boolean notGraded = status == SubmissionStatus.CANCELLED
+                    || status == SubmissionStatus.PENDING;
+            if (notGraded) {
                 remaining.add(submission);
             }
         }
@@ -556,8 +592,9 @@ public final class DemoBackend implements DashboardBackend {
         List<Submission> retried = new ArrayList<>();
         for (Submission submission : gradingRun.getSubmissions()) {
             SubmissionStatus status = submission.getStatus();
-            if (status == SubmissionStatus.FAILED
-                    || status == SubmissionStatus.CANCELLED) {
+            boolean stopped = status == SubmissionStatus.FAILED
+                    || status == SubmissionStatus.CANCELLED;
+            if (stopped) {
                 submission.getAnomalies().clear();
                 submission.getQuestionResults().clear();
                 retried.add(submission);
@@ -712,7 +749,7 @@ public final class DemoBackend implements DashboardBackend {
         decisions.put(anomaly.getId(), decision);
         if (before != decision) {
             recordAudit(decision.getAuditAction(), anomaly.getUsername()
-                    + ": " + anomaly.getMessage());
+                    + ACTIVITY_DETAIL_SEPARATOR + anomaly.getMessage());
         }
         return ActionResult.done("Marked the flag for "
                 + anomaly.getUsername() + " as "
@@ -750,11 +787,12 @@ public final class DemoBackend implements DashboardBackend {
             return ActionResult.failed("No automatic fix exists for "
                     + "this finding. Handle it by hand.");
         }
-        repair.getAnomaly().setFixStatus(FixStatus.APPROVED);
-        recordAudit("Fix approved", repair.getAnomaly().getUsername()
-                + ": " + repair.getAnomaly().getMessage());
+        Anomaly anomaly = repair.getAnomaly();
+        anomaly.setFixStatus(FixStatus.APPROVED);
+        recordAudit("Fix approved", anomaly.getUsername()
+                + ACTIVITY_DETAIL_SEPARATOR + anomaly.getMessage());
         return ActionResult.done("Approved the fix for "
-                + repair.getAnomaly().getUsername() + ".");
+                + anomaly.getUsername() + ".");
     }
 
     /**
@@ -766,11 +804,12 @@ public final class DemoBackend implements DashboardBackend {
             return ActionResult.failed("No automatic fix exists for "
                     + "this finding. Handle it by hand.");
         }
-        repair.getAnomaly().setFixStatus(FixStatus.UNDONE);
-        recordAudit("Fix undone", repair.getAnomaly().getUsername()
-                + ": " + repair.getAnomaly().getMessage());
+        Anomaly anomaly = repair.getAnomaly();
+        anomaly.setFixStatus(FixStatus.UNDONE);
+        recordAudit("Fix undone", anomaly.getUsername()
+                + ACTIVITY_DETAIL_SEPARATOR + anomaly.getMessage());
         return ActionResult.done("Rejected the fix for "
-                + repair.getAnomaly().getUsername() + ". The working copy "
+                + anomaly.getUsername() + ". The working copy "
                 + "was put back. The original ZIP was never changed.");
     }
 
@@ -780,14 +819,15 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public ActionResult reapplyRepair(RepairItem repair) {
         Anomaly anomaly = repair.getAnomaly();
-        if (repair.isBlocked()
-                || anomaly.getFixStatus() != FixStatus.UNDONE) {
+        boolean notRejected = repair.isBlocked()
+                || anomaly.getFixStatus() != FixStatus.UNDONE;
+        if (notRejected) {
             return ActionResult.failed("Only a rejected fix can be "
                     + "applied again.");
         }
         anomaly.setFixStatus(FixStatus.APPLIED);
-        recordAudit("Fix reapplied", anomaly.getUsername() + ": "
-                + anomaly.getMessage());
+        recordAudit("Fix reapplied", anomaly.getUsername()
+                + ACTIVITY_DETAIL_SEPARATOR + anomaly.getMessage());
         return ActionResult.done("Applied the fix for "
                 + anomaly.getUsername() + " again. It waits for review.");
     }
@@ -801,11 +841,12 @@ public final class DemoBackend implements DashboardBackend {
             return ActionResult.failed("This finding has no fix to "
                     + "undo.");
         }
-        repair.getAnomaly().setFixStatus(FixStatus.APPLIED);
-        recordAudit("Fix decision taken back", repair.getAnomaly()
-                .getUsername() + ": " + repair.getAnomaly().getMessage());
+        Anomaly anomaly = repair.getAnomaly();
+        anomaly.setFixStatus(FixStatus.APPLIED);
+        recordAudit("Fix decision taken back", anomaly.getUsername()
+                + ACTIVITY_DETAIL_SEPARATOR + anomaly.getMessage());
         return ActionResult.done("The fix for "
-                + repair.getAnomaly().getUsername() + " waits for review "
+                + anomaly.getUsername() + " waits for review "
                 + "again.");
     }
 
@@ -834,8 +875,8 @@ public final class DemoBackend implements DashboardBackend {
         if (output == null) {
             output = "";
         }
-        again.setOutput(output + "\n[Demo mode runs no code: this is the "
-                + "saved output.]");
+        again.setOutput(output + LINE_END + "[Demo mode runs no code: this "
+                + "is the saved output.]");
         return again;
     }
 
@@ -938,9 +979,9 @@ public final class DemoBackend implements DashboardBackend {
         }
 
         String preview = "";
-        if ("json".equalsIgnoreCase(formatName)) {
+        if (JSON_FORMAT.equalsIgnoreCase(formatName)) {
             preview = DemoExports.toJson(gradingRun, scope);
-        } else if ("csv".equalsIgnoreCase(formatName)) {
+        } else if (CSV_FORMAT.equalsIgnoreCase(formatName)) {
             preview = DemoExports.toCsv(gradingRun, scope);
         } else {
             // The reports have no preview; live mode writes them
@@ -979,8 +1020,8 @@ public final class DemoBackend implements DashboardBackend {
             return ActionResult.failed("There is no run to back up yet.");
         }
         String runId = entry.getRun().getId();
-        entry.recordSnapshot("Snapshot " + runId + "-B, "
-                + LocalDateTime.now().format(TIME_FORMAT));
+        entry.recordSnapshot("Snapshot " + runId + "-" + NEW_SNAPSHOT_LETTER
+                + ", " + LocalDateTime.now().format(TIME_FORMAT));
         return ActionResult.done("Backed up run " + runId
                 + ". Demo mode keeps the snapshot in memory only.");
     }
@@ -1217,7 +1258,8 @@ public final class DemoBackend implements DashboardBackend {
         SavedAssessment second = current.copy();
         second.setName(SECOND_ASSESSMENT);
         while (second.getQuestions().size() > SECOND_QUESTION_COUNT) {
-            second.getQuestions().remove(second.getQuestions().size() - 1);
+            int lastIndex = second.getQuestions().size() - 1;
+            second.getQuestions().remove(lastIndex);
         }
         addSorted(second);
     }
@@ -1235,15 +1277,20 @@ public final class DemoBackend implements DashboardBackend {
         return null;
     }
 
-    // Adds an assessment in name order.
+    // Adds an assessment in name order, before the first name that does
+    // not sort before it.
     private void addSorted(SavedAssessment added) {
-        int position = 0;
-        while (position < savedAssessments.size()
-                && savedAssessments.get(position).getName()
-                        .compareToIgnoreCase(added.getName()) < 0) {
-            position++;
+        for (int position = 0; position < savedAssessments.size();
+                position++) {
+            String name = savedAssessments.get(position).getName();
+            boolean addedFirst = name.compareToIgnoreCase(added.getName())
+                    >= 0;
+            if (addedFirst) {
+                savedAssessments.add(position, added);
+                return;
+            }
         }
-        savedAssessments.add(position, added);
+        savedAssessments.add(added);
     }
 
     // ------------------------------------------------------ similarity
@@ -1258,8 +1305,9 @@ public final class DemoBackend implements DashboardBackend {
                 DemoData.SIMILAR_FIRST_USERNAME);
         Submission second = findSubmission(gradingRun,
                 DemoData.SIMILAR_SECOND_USERNAME);
-        if (first != null && second != null && ResultState.hasTotal(first)
-                && ResultState.hasTotal(second)) {
+        boolean bothGraded = first != null && second != null
+                && ResultState.hasTotal(first) && ResultState.hasTotal(second);
+        if (bothGraded) {
             pairs.add(new SimilarityPair(first.getUsername(),
                     second.getUsername(), SIMILAR_QUESTION,
                     SAMPLE_SIMILARITY));
@@ -1304,12 +1352,24 @@ public final class DemoBackend implements DashboardBackend {
     @Override
     public SimilarityDetail getSimilarityDetail(GradingRun gradingRun,
             SimilarityPair pair) {
+        return new SimilarityDetail(pair, SIMILAR_FILE, SIMILAR_FILE,
+                sampleExcerpt(), sampleCopy(), sampleStarter(),
+                sampleExcludedFiles());
+    }
+
+    // Lists the files the sample comparison left out, with the reason.
+    private static List<String> sampleExcludedFiles() {
         List<String> excluded = new ArrayList<>();
         excluded.add("RenameToYourUsername/Q2/Q2a.java (starter file)");
         excluded.add("Q2aTester.java (tester)");
         excluded.add("DataException.class (provided class)");
         excluded.add("personstester.txt, studentstester.txt (tester data)");
-        String starter = joinLines(new String[] {
+        return excluded;
+    }
+
+    // Returns the starter file of the sample similar question.
+    private static String sampleStarter() {
+        return joinLines(new String[] {
                 "import java.util.*;",
                 "",
                 "public class Q2a {",
@@ -1318,7 +1378,11 @@ public final class DemoBackend implements DashboardBackend {
                 "        return 0;",
                 "    }",
                 "}"});
-        String excerpt = joinLines(new String[] {
+    }
+
+    // Returns the first student's answer in the sample similar pair.
+    private static String sampleExcerpt() {
+        return joinLines(new String[] {
                 "import java.util.*;",
                 "",
                 "public class Q2a {",
@@ -1334,7 +1398,11 @@ public final class DemoBackend implements DashboardBackend {
                 "        return best;",
                 "    }",
                 "}"});
-        String copied = joinLines(new String[] {
+    }
+
+    // Returns the second student's answer in the sample similar pair.
+    private static String sampleCopy() {
+        return joinLines(new String[] {
                 "import java.util.*;",
                 "",
                 "public class Q2a {",
@@ -1351,8 +1419,6 @@ public final class DemoBackend implements DashboardBackend {
                 "        return best;",
                 "    }",
                 "}"});
-        return new SimilarityDetail(pair, SIMILAR_FILE, SIMILAR_FILE,
-                excerpt, copied, starter, excluded);
     }
 
     // Joins lines of sample code, each ended by a line end.
@@ -1390,8 +1456,8 @@ public final class DemoBackend implements DashboardBackend {
     private void startGrader(GradingRun run, List<Submission> queue,
             ProgressListener listener, RunCallback callback,
             boolean newRun) {
-        DemoOutcome outcome = submission -> gradeOne(submission);
-        grader = new DemoGrader(run, queue, listener, outcome,
+        grader = new DemoGrader(run, queue, listener,
+                submission -> gradeOne(submission),
                 () -> finishRun(run, callback, newRun));
         grader.start(!manualStepping);
     }
@@ -1417,7 +1483,8 @@ public final class DemoBackend implements DashboardBackend {
 
     // Records that a student was graded once more.
     private void countGrade(String username) {
-        gradeCounts.put(username, getGradeCount(username) + 1);
+        int count = getGradeCount(username) + 1;
+        gradeCounts.put(username, count);
     }
 
     // Approves the sample repair and marks the sample flags reviewed.
@@ -1427,8 +1494,9 @@ public final class DemoBackend implements DashboardBackend {
                 String username = submission.getUsername();
                 boolean approved = username.equals(
                         DemoData.APPROVED_REPAIR_USERNAME);
-                if (anomaly.getType() == AnomalyType.MISSING_WRAPPER_FOLDER
-                        && approved) {
+                boolean wrapperFix = anomaly.getType()
+                        == AnomalyType.MISSING_WRAPPER_FOLDER;
+                if (wrapperFix && approved) {
                     anomaly.setFixStatus(FixStatus.APPROVED);
                 }
                 if (username.equals(DemoData.REVIEWED_USERNAME)) {
@@ -1441,10 +1509,11 @@ public final class DemoBackend implements DashboardBackend {
     // Adds the sample audit entries, newest first.
     private void seedAudit() {
         for (int index = 0; index < AUDIT_SEED.length; index++) {
+            long offsetSeconds = SEED_STEP_SECONDS * index;
             LocalDateTime time = DemoData.CURRENT_RUN_STARTED.plusSeconds(
-                    SEED_STEP_SECONDS * index);
-            audit.add(0, new AuditEntry(time, AUDIT_SEED[index][0],
-                    AUDIT_SEED[index][1]));
+                    offsetSeconds);
+            audit.add(0, new AuditEntry(time, AUDIT_SEED[index][SEED_ACTION],
+                    AUDIT_SEED[index][SEED_DETAIL]));
         }
     }
 
@@ -1501,9 +1570,10 @@ public final class DemoBackend implements DashboardBackend {
 
     // Describes the sample snapshot of a run.
     private String snapshotText(GradingRun run, String letter) {
+        LocalDateTime savedAt = run.getStartedAt().plusMinutes(
+                SNAPSHOT_DELAY_MINUTES);
         return "Snapshot " + run.getId() + "-" + letter + ", "
-                + run.getStartedAt().plusMinutes(SNAPSHOT_DELAY_MINUTES)
-                .format(TIME_FORMAT);
+                + savedAt.format(TIME_FORMAT);
     }
 
     // Finds the history entry of a run.

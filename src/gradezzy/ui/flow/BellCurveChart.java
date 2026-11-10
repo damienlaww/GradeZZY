@@ -29,6 +29,8 @@ import javafx.scene.text.TextAlignment;
 
 /**
  * A bar chart of total marks with a bell curve on top.
+ *
+ * <p>Tier: SHOULD.
  */
 public class BellCurveChart extends Region {
 
@@ -56,6 +58,18 @@ public class BellCurveChart extends Region {
 
     // Space for the axis labels of the small chart
     private static final double[] SMALL_MARGINS = {4, 4, 6, 18};
+
+    // Where each side is kept in the margins above
+    private static final int LEFT_SIDE = 0;
+    private static final int RIGHT_SIDE = 1;
+    private static final int TOP_SIDE = 2;
+    private static final int BOTTOM_SIDE = 3;
+
+    // The fewest students with a total that a curve is drawn for
+    private static final int FEWEST_FOR_CURVE = 2;
+
+    // Separates a bar's marks from its count in the bar's tip
+    private static final String TIP_SEPARATOR = ": ";
 
     // The gap between neighbouring bars, in pixels
     private static final double BAR_GAP = 2.0;
@@ -160,11 +174,12 @@ public class BellCurveChart extends Region {
         if (small) {
             margins = SMALL_MARGINS;
         }
-        double left = margins[0];
-        double top = margins[2];
-        double plotWidth = width - left - margins[1];
-        double plotHeight = height - top - margins[3];
+        double left = margins[LEFT_SIDE];
+        double top = margins[TOP_SIDE];
+        double plotWidth = width - left - margins[RIGHT_SIDE];
+        double plotHeight = height - top - margins[BOTTOM_SIDE];
         double bottom = top + plotHeight;
+        double right = left + plotWidth;
         if (plotWidth <= 0 || plotHeight <= 0) {
             return;
         }
@@ -181,7 +196,8 @@ public class BellCurveChart extends Region {
         double lowMark = 0.0;
         double highMark = 0.0;
         if (single) {
-            counts = countSingle((int) max + 1);
+            int markCount = (int) max + 1;
+            counts = countSingle(markCount);
             binMarks = 1.0;
             lowMark = -HALF_MARK;
             highMark = max + HALF_MARK;
@@ -191,8 +207,7 @@ public class BellCurveChart extends Region {
             lowMark = 0.0;
             highMark = max;
         }
-        ChartScale xScale = new ChartScale(lowMark, highMark, left,
-                left + plotWidth);
+        ChartScale xScale = new ChartScale(lowMark, highMark, left, right);
 
         double tallest = 0;
         for (int count : counts) {
@@ -206,18 +221,20 @@ public class BellCurveChart extends Region {
             curveScale = tallest / peak;
         }
         tallest = Math.max(tallest, peak * curveScale);
-        int gridStep = gridStep(tallest * HEADROOM);
-        double yMax = Math.max(gridStep, Math.ceil(tallest * HEADROOM
-                / gridStep) * gridStep);
+        double roomyTop = tallest * HEADROOM;
+        int gridStep = gridStep(roomyTop);
+        double gridLines = Math.ceil(roomyTop / gridStep);
+        double yMax = Math.max(gridStep, gridLines * gridStep);
         ChartScale yScale = new ChartScale(0, yMax, bottom, top);
 
         if (!small) {
-            drawGrid(yScale, gridStep, yMax, left, left + plotWidth);
+            drawGrid(yScale, gridStep, yMax, left, right);
             drawBand(xScale, top, plotHeight);
         }
         drawBars(counts, xScale, yScale, single, binMarks, bottom);
-        drawCurve(xScale, yScale, binMarks * curveScale, lowMark, highMark);
-        addLine(left, bottom, left + plotWidth, bottom, "chart-axis");
+        double stretchedBinMarks = binMarks * curveScale;
+        drawCurve(xScale, yScale, stretchedBinMarks, lowMark, highMark);
+        addLine(left, bottom, right, bottom, "chart-axis");
         drawTicks(xScale, max, bottom, single);
         if (!small) {
             drawMarkers(xScale, top, bottom);
@@ -228,9 +245,10 @@ public class BellCurveChart extends Region {
     // Counts how many students got each whole mark, rounding halves up.
     private int[] countSingle(int binCount) {
         int[] counts = new int[binCount];
+        int lastBin = binCount - 1;
         for (double total : stats.getTotals()) {
             int mark = (int) Math.round(total);
-            mark = Math.max(0, Math.min(binCount - 1, mark));
+            mark = Math.max(0, Math.min(lastBin, mark));
             counts[mark]++;
         }
         return counts;
@@ -293,14 +311,15 @@ public class BellCurveChart extends Region {
             from = xScale.map(bin * binMarks);
             to = xScale.map((bin + 1) * binMarks);
         }
-        double barWidth = Math.max(1, to - from - BAR_GAP);
+        double spaceWidth = to - from - BAR_GAP;
+        double barWidth = Math.max(1, spaceWidth);
         double barHeight = bottom - yScale.map(count);
+        double barLeft = from + BAR_GAP / 2;
         SVGPath bar = new SVGPath();
-        bar.setContent(roundedTop(from + BAR_GAP / 2, bottom, barWidth,
-                barHeight));
+        bar.setContent(roundedTop(barLeft, bottom, barWidth, barHeight));
         bar.getStyleClass().add("chart-bar");
         Tooltip.install(bar, new Tooltip(binName(bin, single, binMarks)
-                + ": " + Parts.plural(count, "student")));
+                + TIP_SEPARATOR + Parts.plural(count, "student")));
         getChildren().add(bar);
     }
 
@@ -309,7 +328,7 @@ public class BellCurveChart extends Region {
     // stretch that makes the curve's peak meet the tallest bar.
     private void drawCurve(ChartScale xScale, ChartScale yScale,
             double binMarks, double lowMark, double highMark) {
-        if (stats.getSpread() <= 0 || stats.getCount() < 2) {
+        if (stats.getSpread() <= 0 || stats.getCount() < FEWEST_FOR_CURVE) {
             return;
         }
         Polyline curve = new Polyline();
@@ -340,9 +359,11 @@ public class BellCurveChart extends Region {
         } else if (single && max <= MOST_SINGLE_BARS / 2) {
             step = FULL_TICK_MARKS;
         } else {
-            step = max / (GROUPED_BINS / FULL_TICK_MARKS);
+            int tickCount = GROUPED_BINS / FULL_TICK_MARKS;
+            step = max / tickCount;
         }
-        for (double mark = 0; mark <= max + step / 2; mark += step) {
+        double lastTick = max + step / 2;
+        for (double mark = 0; mark <= lastTick; mark += step) {
             Text label = addText(Parts.mark(round(mark)), "chart-tick");
             placeCentre(label, xScale.map(mark), bottom + LABEL_GAP);
         }
@@ -378,13 +399,17 @@ public class BellCurveChart extends Region {
             double plotHeight, double height) {
         Text across = addText("Total mark out of "
                 + Parts.mark(stats.getMaxTotal()), "chart-note");
-        placeCentre(across, left + plotWidth / 2,
-                height - across.getLayoutBounds().getHeight());
+        double plotCentreX = left + plotWidth / 2;
+        double acrossTop = height - across.getLayoutBounds().getHeight();
+        placeCentre(across, plotCentreX, acrossTop);
         Text up = addText("Students", "chart-note");
         up.setRotate(QUARTER_TURN);
         double textWidth = up.getLayoutBounds().getWidth();
-        up.setLayoutX(-textWidth / 2 + up.getLayoutBounds().getHeight() / 2);
-        up.setLayoutY(top + plotHeight / 2);
+        double textHeight = up.getLayoutBounds().getHeight();
+        double upX = -textWidth / 2 + textHeight / 2;
+        double plotCentreY = top + plotHeight / 2;
+        up.setLayoutX(upX);
+        up.setLayoutY(plotCentreY);
     }
 
     // Returns the height of the true bell curve at a mark, in students,
@@ -416,7 +441,8 @@ public class BellCurveChart extends Region {
                 return step;
             }
         }
-        return GRID_STEPS[GRID_STEPS.length - 1];
+        int lastIndex = GRID_STEPS.length - 1;
+        return GRID_STEPS[lastIndex];
     }
 
     // Rounds to one decimal place.
@@ -427,14 +453,20 @@ public class BellCurveChart extends Region {
     // Returns the path of a bar with rounded top corners.
     private static String roundedTop(double leftX, double bottom,
             double width, double height) {
-        double radius = Math.min(BAR_RADIUS, Math.min(width / 2, height));
+        double halfWidth = width / 2;
+        double radius = Math.min(BAR_RADIUS, Math.min(halfWidth, height));
+        double barTop = bottom - height;
+        double cornerBottom = barTop + radius;
+        double rightX = leftX + width;
+        double leftCornerEnd = leftX + radius;
+        double rightCornerStart = rightX - radius;
         return "M" + leftX + "," + bottom
-                + " V" + (bottom - height + radius)
-                + " Q" + leftX + "," + (bottom - height) + " "
-                + (leftX + radius) + "," + (bottom - height)
-                + " H" + (leftX + width - radius)
-                + " Q" + (leftX + width) + "," + (bottom - height) + " "
-                + (leftX + width) + "," + (bottom - height + radius)
+                + " V" + cornerBottom
+                + " Q" + leftX + "," + barTop + " "
+                + leftCornerEnd + "," + barTop
+                + " H" + rightCornerStart
+                + " Q" + rightX + "," + barTop + " "
+                + rightX + "," + cornerBottom
                 + " V" + bottom + " Z";
     }
 

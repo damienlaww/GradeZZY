@@ -43,6 +43,8 @@ public class ScoreStage implements GradingStage {
     /**
      * Creates a new score stage.
      *
+     * <p>Tier: MUST.
+     *
      * @param scoreCalculator the helper that adds up scores
      */
     public ScoreStage(ScoreCalculator scoreCalculator) {
@@ -51,6 +53,8 @@ public class ScoreStage implements GradingStage {
 
     /**
      * Returns the name of this stage.
+     *
+     * <p>Tier: MUST.
      *
      * @return the name of this stage
      */
@@ -73,6 +77,8 @@ public class ScoreStage implements GradingStage {
      * such as one with no typed test case, gets no flag: by design it has
      * no tester and adds nothing to any total.
      *
+     * <p>Tier: MUST.
+     *
      * @param submission the submission
      * @param context the context
      * @throws GradingException if the context holds no assessment
@@ -87,9 +93,10 @@ public class ScoreStage implements GradingStage {
         }
 
         for (Question question : assessment.getQuestions()) {
-            if (TesterFile.findFor(context.getTesters(),
-                    question.getId()) == null
-                    && question.getMaxScore() > 0) {
+            boolean noTester = TesterFile.findFor(context.getTesters(),
+                    question.getId()) == null;
+            boolean worthMarks = question.getMaxScore() > 0;
+            if (noTester && worthMarks) {
                 flagMissingTester(submission, question, context);
             }
 
@@ -128,15 +135,6 @@ public class ScoreStage implements GradingStage {
 
     // Says whether the submission already has a result for a question.
     private boolean hasResult(Submission submission, Question question) {
-        for (QuestionResult questionResult
-                : submission.getQuestionResults()) {
-            Question graded = questionResult.getQuestion();
-
-            if (graded != null && graded.getId().equals(question.getId())) {
-                return true;
-            }
-        }
-
-        return false;
+        return submission.findResult(question.getId()) != null;
     }
 }

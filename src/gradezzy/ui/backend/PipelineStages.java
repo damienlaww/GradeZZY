@@ -21,6 +21,8 @@ import gradezzy.modelanswer.RandomInputStage;
 
 /**
  * The grading stages, in order.
+ *
+ * <p>Tier: MUST.
  */
 public final class PipelineStages {
 

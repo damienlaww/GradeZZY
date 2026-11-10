@@ -43,6 +43,8 @@ public class MethodSignature {
     /**
      * Creates a signature with no parameters yet.
      *
+     * <p>Tier: COULD.
+     *
      * @param className the class the method is in
      * @param methodName the method's name
      * @param returnType the return type
@@ -57,6 +59,8 @@ public class MethodSignature {
     /**
      * Returns the class the method is in.
      *
+     * <p>Tier: COULD.
+     *
      * @return the class name, such as Q1
      */
     public String getClassName() {
@@ -66,6 +70,8 @@ public class MethodSignature {
     /**
      * Returns the method's name.
      *
+     * <p>Tier: COULD.
+     *
      * @return the method name, such as compress
      */
     public String getMethodName() {
@@ -74,6 +80,8 @@ public class MethodSignature {
 
     /**
      * Returns the return type.
+     *
+     * <p>Tier: COULD.
      *
      * @return the return type, such as String
      */
@@ -85,6 +93,8 @@ public class MethodSignature {
      * Returns the type of each parameter, in order. The list can be
      * added to.
      *
+     * <p>Tier: COULD.
+     *
      * @return the parameter types
      */
     public List<String> getParameterTypes() {
@@ -94,6 +104,8 @@ public class MethodSignature {
     /**
      * Writes a call of the method with some arguments, as Java, such as
      * compress("aab").
+     *
+     * <p>Tier: COULD.
      *
      * @param arguments each argument as Java text
      * @return the call

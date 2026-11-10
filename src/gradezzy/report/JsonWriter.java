@@ -40,9 +40,19 @@ public class JsonWriter {
     // the letter u and four hex digits
     private static final int MAX_ESCAPE_LENGTH = 6;
 
-    // The quotes around a JSON string, one at each end
+    // The quote around a JSON string
     private static final char QUOTE = '"';
+
+    // The quotes around a JSON string, one at each end
     private static final int QUOTE_COUNT = 2;
+
+    // The brackets around a JSON object
+    private static final String OBJECT_START = "{";
+    private static final String OBJECT_END = "}";
+
+    // The brackets around a JSON array
+    private static final String ARRAY_START = "[";
+    private static final String ARRAY_END = "]";
 
     /**
      * Creates a new json writer.
@@ -65,8 +75,8 @@ public class JsonWriter {
         // Tester output can be long, so the characters go into an array
         // big enough for the worst case, every character escaped, plus
         // the two quotes; count says how much of it is filled
-        char[] quoted = new char[text.length() * MAX_ESCAPE_LENGTH
-                + QUOTE_COUNT];
+        int capacity = text.length() * MAX_ESCAPE_LENGTH + QUOTE_COUNT;
+        char[] quoted = new char[capacity];
         int count = 0;
         quoted[count] = QUOTE;
         count++;
@@ -94,10 +104,11 @@ public class JsonWriter {
     public String writeObject(JsonFields fields) {
         List<String> pairs = new ArrayList<>();
         for (String name : fields.getNames()) {
-            pairs.add(quote(name) + NAME_SEPARATOR
-                    + valueOrNull(fields.get(name)));
+            String pair = quote(name) + NAME_SEPARATOR
+                    + valueOrNull(fields.get(name));
+            pairs.add(pair);
         }
-        return "{" + TextUtils.join(SEPARATOR, pairs) + "}";
+        return OBJECT_START + TextUtils.join(SEPARATOR, pairs) + OBJECT_END;
     }
 
     /**
@@ -111,12 +122,12 @@ public class JsonWriter {
         for (String element : elements) {
             values.add(valueOrNull(element));
         }
-        return "[" + TextUtils.join(SEPARATOR, values) + "]";
+        return ARRAY_START + TextUtils.join(SEPARATOR, values) + ARRAY_END;
     }
 
     // Returns the escaped form of one character of a JSON string
     private String escape(char character) {
-        if (character == '"') {
+        if (character == QUOTE) {
             return "\\\"";
         } else if (character == '\\') {
             return "\\\\";

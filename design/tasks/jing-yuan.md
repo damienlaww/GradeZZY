@@ -57,7 +57,8 @@ Most of your list is done on `jingyuan/taught-java`:
   returns a `ScoreSheetSummary` with `getFilled()`, `getNotGraded()`,
   `getNoSubmission()`, `getNotOnSheet()` and `getMessage()` ("16 marks
   filled, 2 left blank: 1 could not be graded, 1 no submission."). It
-  matches rows the way the CSV export does.
+  matches rows the way the CSV export does. Removed on 2026-11-10:
+  the window never called it.
 - **Smaller items:**
   - `PlagiarismService.check` saves the run.
   - `cancel` names the run being graded, safely across threads.

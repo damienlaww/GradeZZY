@@ -48,6 +48,15 @@ public class RosterReader {
     // The mark some editors put at the very start of a UTF-8 file
     private static final String BYTE_ORDER_MARK = "﻿";
 
+    // Opens and closes a quoted CSV field
+    private static final char QUOTE = '"';
+
+    // Ends a record once the line endings are normalised
+    private static final char LINE_END = '\n';
+
+    // Ends the sentence of an error message
+    private static final String SENTENCE_END = ".";
+
     /**
      * Returned by readDenominator when the score sheet gives no single
      * denominator.
@@ -67,8 +76,10 @@ public class RosterReader {
     }
 
     /**
-     * Reads every student row of the score sheet. A sheet with no
-     * student row is refused, like an empty file.
+     * Reads every student row of the score sheet. A row whose cells are
+     * all empty, as Excel leaves at the end of a sheet, is skipped. The
+     * id and username lose their prefix and the spaces around them. A
+     * sheet with no student row is refused, like an empty file.
      *
      * @param scoreSheetFile the score sheet file
      * @return the students in file order, at least one
@@ -91,23 +102,14 @@ public class RosterReader {
             List<Student> students = new ArrayList<>();
             Set<String> usernames = new HashSet<>();
             for (int index = 1; index < records.size(); index++) {
-                List<String> fields = TextUtils.splitCsvLine(
-                        records.get(index));
-                checkColumnCount(header, fields, index + 1);
-                String id = removePrefix(fields.get(header.indexOf(
-                        ID_COLUMN)));
-                String username = removePrefix(fields.get(header.indexOf(
-                        USERNAME_COLUMN)));
-                if (TextUtils.isBlank(id) || TextUtils.isBlank(username)
-                        || !usernames.add(username.toLowerCase(Locale.ROOT))) {
-                    throw new IllegalArgumentException("Missing student ID "
-                            + "or missing/duplicate username in record "
-                            + (index + 1) + ".");
+                int recordNumber = index + 1;
+                String record = records.get(index);
+                // Excel keeps rows of empty cells, such as ,,,,,,, at the
+                // end of a sheet; they hold no student
+                if (!isEmptyRow(record)) {
+                    students.add(readStudent(header, record, recordNumber,
+                            usernames));
                 }
-                students.add(new Student(id, username,
-                        fields.get(header.indexOf(LAST_NAME_COLUMN)),
-                        fields.get(header.indexOf(FIRST_NAME_COLUMN)),
-                        fields.get(header.indexOf(EMAIL_COLUMN))));
             }
             // A header with no student row would mark every upload as not
             // on the roster and export an empty sheet
@@ -173,9 +175,11 @@ public class RosterReader {
                 return UNKNOWN_DENOMINATOR;
             }
             for (int index = 1; index < records.size(); index++) {
-                List<String> fields = TextUtils.splitCsvLine(
-                        records.get(index));
-                if (column < fields.size()) {
+                String record = records.get(index);
+                List<String> fields = TextUtils.splitCsvLine(record);
+                boolean hasValue = column < fields.size()
+                        && !isEmptyRow(record);
+                if (hasValue) {
                     values.add(fields.get(column).trim());
                 }
             }
@@ -186,6 +190,29 @@ public class RosterReader {
         }
 
         return findSingleNumber(values);
+    }
+
+    // Reads one student row; usernames holds the lower-case usernames of
+    // the rows before it, and gets this row's username added.
+    private Student readStudent(List<String> header, String record,
+            int recordNumber, Set<String> usernames) {
+        List<String> fields = TextUtils.splitCsvLine(record);
+        checkColumnCount(header, fields, recordNumber);
+        String id = readId(fields.get(header.indexOf(ID_COLUMN)));
+        String username = readId(fields.get(header.indexOf(
+                USERNAME_COLUMN)));
+        boolean badRow = TextUtils.isBlank(id)
+                || TextUtils.isBlank(username)
+                || !usernames.add(username.toLowerCase(Locale.ROOT));
+        if (badRow) {
+            throw new IllegalArgumentException("Missing student ID "
+                    + "or missing/duplicate username in record "
+                    + recordNumber + ".");
+        }
+        return new Student(id, username,
+                fields.get(header.indexOf(LAST_NAME_COLUMN)),
+                fields.get(header.indexOf(FIRST_NAME_COLUMN)),
+                fields.get(header.indexOf(EMAIL_COLUMN)));
     }
 
     // Reads the score sheet and splits it into records, without a byte
@@ -224,8 +251,8 @@ public class RosterReader {
     private IngestException rosterFailure(Path scoreSheetFile,
             Exception exception) {
         String reason = String.valueOf(exception.getMessage()).trim();
-        if (!reason.endsWith(".")) {
-            reason += ".";
+        if (!reason.endsWith(SENTENCE_END)) {
+            reason += SENTENCE_END;
         }
         return new IngestException("Could not read roster "
                 + scoreSheetFile + ": " + reason
@@ -255,11 +282,30 @@ public class RosterReader {
 
     // Requires a column to appear in the header exactly once.
     private void requireColumn(List<String> header, String name) {
-        if (header.indexOf(name) < 0
-                || header.indexOf(name) != header.lastIndexOf(name)) {
+        boolean missingOrRepeated = header.indexOf(name) < 0
+                || header.indexOf(name) != header.lastIndexOf(name);
+        if (missingOrRepeated) {
             throw new IllegalArgumentException("Missing or repeated column: "
                     + name);
         }
+    }
+
+    // Says whether every field of a record is blank, as in ,,,,,,, from
+    // Excel.
+    private boolean isEmptyRow(String record) {
+        for (String field : TextUtils.splitCsvLine(record)) {
+            if (!TextUtils.isBlank(field)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Reads an id or username: without the spaces around it and without
+    // its prefix, so "#ping.lee.2023 " and "# ping.lee.2023" both give
+    // ping.lee.2023.
+    private String readId(String value) {
+        return removePrefix(value.trim()).trim();
     }
 
     // Remove exactly one configured prefix; preserve leading zeroes.
@@ -281,9 +327,9 @@ public class RosterReader {
         boolean quoted = false;
         for (int index = 0; index < text.length(); index++) {
             char current = text.charAt(index);
-            if (current == '"') {
+            if (current == QUOTE) {
                 quoted = !quoted;
-            } else if (current == '\n' && !quoted) {
+            } else if (current == LINE_END && !quoted) {
                 addRecord(records, text.substring(recordStart, index));
                 recordStart = index + 1;
             }

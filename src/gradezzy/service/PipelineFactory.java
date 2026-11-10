@@ -72,6 +72,8 @@ public class PipelineFactory {
     /**
      * Creates a new pipeline factory.
      *
+     * <p>Tier: MUST.
+     *
      * @param config the application settings
      * @param fixManager the fix manager shared with the anomaly log
      * @param repository the store results are saved to
@@ -86,6 +88,8 @@ public class PipelineFactory {
     /**
      * Creates a pipeline with every stage in grading order.
      *
+     * <p>Tier: MUST.
+     *
      * @param cancellationToken the flag that stops the batch when set
      * @return the pipeline, ready to run
      */
@@ -97,6 +101,8 @@ public class PipelineFactory {
     /**
      * Creates a pipeline whose checks compare answers with the starter
      * folder chosen for the batch.
+     *
+     * <p>Tier: MUST.
      *
      * @param cancellationToken the flag that stops the batch when set
      * @param starterDirectory the starter folder, or null to use
@@ -120,16 +126,7 @@ public class PipelineFactory {
                 starterDirectory));
         pipeline.addStage(new DetectStage(createDetectors(
                 starterDirectory), createRosterChecks()));
-        pipeline.addStage(new InstallTestersStage(
-                new TesterInstaller(config)));
-        SourceCompiler compiler = new SourceCompiler(config, processRunner);
-        // One runner, so the note about a missing sandbox prints once
-        TesterRunner testerRunner = new TesterRunner(config, processRunner);
-        pipeline.addStage(new CompileStage(compiler, starterDirectory));
-        pipeline.addStage(new ExecuteStage(testerRunner,
-                new TesterOutputScoreParser(config)));
-        addRandomInputStage(pipeline, compiler, testerRunner,
-                starterDirectory);
+        addRunStages(pipeline, processRunner, starterDirectory);
         pipeline.addStage(new ScoreStage(new ScoreCalculator()));
         pipeline.addStage(new PersistStage(repository));
 
@@ -157,17 +154,26 @@ public class PipelineFactory {
         GradingPipeline pipeline = new GradingPipeline(cancellationToken);
         ProcessRunner processRunner = new ProcessRunner(config);
 
+        addRunStages(pipeline, processRunner, starterDirectory);
+
+        return pipeline;
+    }
+
+    // Adds the stages that put the testers in place, compile, run the
+    // testers and call methods with random inputs. They share one
+    // compiler and one tester runner.
+    private void addRunStages(GradingPipeline pipeline,
+            ProcessRunner processRunner, Path starterDirectory) {
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
         SourceCompiler compiler = new SourceCompiler(config, processRunner);
+        // One runner, so the note about a missing sandbox prints once
         TesterRunner testerRunner = new TesterRunner(config, processRunner);
         pipeline.addStage(new CompileStage(compiler, starterDirectory));
         pipeline.addStage(new ExecuteStage(testerRunner,
                 new TesterOutputScoreParser(config)));
         addRandomInputStage(pipeline, compiler, testerRunner,
                 starterDirectory);
-
-        return pipeline;
     }
 
     // Adds the check that calls students' methods with random inputs,

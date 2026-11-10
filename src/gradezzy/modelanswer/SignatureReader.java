@@ -30,34 +30,13 @@ import gradezzy.util.TextUtils;
  */
 public class SignatureReader {
 
-    // Types a parameter or result may have as they are
-    private static final String[] SIMPLE_TYPES = {
-        "int", "long", "double", "boolean", "char", "String"
-    };
-
-    // The text type, which a list may also hold
-    private static final String STRING_TYPE = "String";
-
-    // Types a result may also have, and a list may hold
-    private static final String[] BOXED_TYPES = {
-        "Integer", "Long", "Double", "Boolean", "Character"
-    };
-
-    // The end of an array type, such as int[]
-    private static final String ARRAY_END = "[]";
-
-    // List types, written up to the element type, such as ArrayList<
-    private static final String[] LIST_STARTS = {"ArrayList<", "List<"};
-
-    // The end of a list type
-    private static final String LIST_END = ">";
-
     // Words in front of a method that are not its type
     private static final String[] MODIFIERS = {
         "public", "protected", "static", "final", "synchronized"
     };
 
-    // The words and tokens the reader looks for
+    // The words and tokens the reader looks for, besides the brackets
+    // and the ";" named in TokenSearch
     private static final String CLASS_WORD = "class";
     private static final String STATIC_WORD = "static";
     private static final String PRIVATE_WORD = "private";
@@ -67,28 +46,18 @@ public class SignatureReader {
     private static final String ANNOTATION_MARK = "@";
     private static final String ASSIGN = "=";
     private static final String COMMA = ",";
-    private static final String OPEN_PAREN = "(";
-    private static final String CLOSE_PAREN = ")";
-    private static final String OPEN_BRACE = "{";
-    private static final String CLOSE_BRACE = "}";
-    private static final String OPEN_ANGLE = "<";
-    private static final String CLOSE_ANGLE = ">";
-    private static final String STATEMENT_END = ";";
-
-    // What JavaTokenizer.shapeToken makes of a name
-    private static final String NAME_SHAPE = "ID";
 
     // A parameter whose name holds this names a file
     private static final String FILE_WORD = "file";
 
-    // The position of the token after a given one
-    private static final int NEXT = 1;
+    // Taken from a size to give the last index
+    private static final int LAST_OFFSET = 1;
+
+    // A parameter needs a type and a name
+    private static final int MIN_PARAMETER_WORDS = 2;
 
     // The number of tokens in an annotation such as @Override
     private static final int ANNOTATION_LENGTH = 2;
-
-    // Returned when no matching token is found
-    private static final int NOT_FOUND = -1;
 
     /**
      * Finds the callable static methods of one class in a model answer.
@@ -107,64 +76,77 @@ public class SignatureReader {
         List<String> starterTokens = JavaTokenizer.split(starterSource);
         List<MethodSignature> methods = new ArrayList<>();
         int bodyStart = findClassBody(tokens, className);
-        if (bodyStart == NOT_FOUND) {
+        if (bodyStart == TokenSearch.NOT_FOUND) {
             return methods;
         }
 
         List<String> header = new ArrayList<>();
-        int index = bodyStart + NEXT;
+        int index = bodyStart + TokenSearch.NEXT;
         while (index < tokens.size()) {
             String text = tokens.get(index);
-            if (text.equals(CLOSE_BRACE)) {
+            if (text.equals(TokenSearch.CLOSE_BRACE)) {
                 return methods;
-            } else if (text.equals(OPEN_BRACE)) {
+            } else if (text.equals(TokenSearch.OPEN_BRACE)) {
                 index = skipBlock(tokens, index);
                 header.clear();
-            } else if (text.equals(STATEMENT_END)) {
-                index = index + NEXT;
+            } else if (text.equals(TokenSearch.STATEMENT_END)) {
+                index = index + TokenSearch.NEXT;
                 header.clear();
-            } else if (text.equals(OPEN_PAREN)) {
-                int close = findClosing(tokens, index, OPEN_PAREN,
-                        CLOSE_PAREN);
-                if (close == NOT_FOUND) {
-                    return methods;
-                }
-                if (endsWithAnnotation(header)) {
-                    // The arguments of an annotation such as
-                    // @SuppressWarnings("unchecked"): the method comes after
-                    index = close + NEXT;
-                    continue;
-                }
-                int firstParameter = index + NEXT;
-                List<String> parameters = tokens.subList(firstParameter,
-                        close);
-                MethodSignature method = readMethod(className, header,
-                        parameters);
-                if (method != null && isInStarter(method, starterTokens)) {
-                    methods.add(method);
-                }
-                index = skipMethodBody(tokens, close);
-                header.clear();
+            } else if (text.equals(TokenSearch.OPEN_PAREN)) {
+                index = readBrackets(tokens, index, className, header,
+                        starterTokens, methods);
             } else {
                 header.add(text);
-                index = index + NEXT;
+                index = index + TokenSearch.NEXT;
             }
         }
         return methods;
     }
 
+    // Reads what the "(" at an index opens: the arguments of an
+    // annotation, which are skipped, or a method's parameters, adding the
+    // method when it can be called and is in the starter. Returns the
+    // index to read on from, or the end of the tokens when the "(" is
+    // never closed.
+    private int readBrackets(List<String> tokens, int openParen,
+            String className, List<String> header,
+            List<String> starterTokens, List<MethodSignature> methods) {
+        int close = TokenSearch.findClosing(tokens, openParen,
+                TokenSearch.OPEN_PAREN, TokenSearch.CLOSE_PAREN);
+        if (close == TokenSearch.NOT_FOUND) {
+            return tokens.size();
+        }
+        if (endsWithAnnotation(header)) {
+            // The arguments of an annotation such as
+            // @SuppressWarnings("unchecked"): the method comes after
+            return close + TokenSearch.NEXT;
+        }
+
+        int firstParameter = openParen + TokenSearch.NEXT;
+        List<String> parameters = tokens.subList(firstParameter, close);
+        MethodSignature method = readMethod(className, header, parameters);
+        if (method != null && isInStarter(method, starterTokens)) {
+            methods.add(method);
+        }
+        int after = skipMethodBody(tokens, close);
+        header.clear();
+        return after;
+    }
+
     // Returns the index of the "{" that opens a class's body, or
     // NOT_FOUND.
     private int findClassBody(List<String> tokens, String className) {
-        for (int index = 0; index + NEXT < tokens.size(); index++) {
+        int lastClassWord = tokens.size() - TokenSearch.NEXT;
+        for (int index = 0; index < lastClassWord; index++) {
             boolean classWord = tokens.get(index).equals(CLASS_WORD);
-            int nameIndex = index + NEXT;
+            int nameIndex = index + TokenSearch.NEXT;
             boolean name = tokens.get(nameIndex).equals(className);
             if (classWord && name) {
-                return findFrom(tokens, OPEN_BRACE, nameIndex);
+                return TokenSearch.findFrom(tokens, TokenSearch.OPEN_BRACE,
+                        nameIndex);
             }
         }
-        return NOT_FOUND;
+        return TokenSearch.NOT_FOUND;
     }
 
     // Reads a method from the tokens in front of its "(" and between its
@@ -181,11 +163,12 @@ public class SignatureReader {
         List<String> modifiers = words.subList(0, modifierCount);
         boolean isStatic = modifiers.contains(STATIC_WORD);
         boolean isPrivate = words.contains(PRIVATE_WORD);
-        int nameIndex = words.size() - NEXT;
+        int nameIndex = words.size() - LAST_OFFSET;
         String name = words.get(nameIndex);
         String returnType = TextUtils.join("", words.subList(modifierCount,
                 nameIndex));
-        boolean isName = JavaTokenizer.shapeToken(name).equals(NAME_SHAPE);
+        boolean isName = JavaTokenizer.shapeToken(name).equals(
+                JavaTokenizer.NAME_TOKEN);
         boolean callable = isStatic && !isPrivate && isName
                 && !name.equals(MAIN_NAME) && isSupportedResult(returnType);
         if (!callable) {
@@ -220,7 +203,7 @@ public class SignatureReader {
                 index = index + ANNOTATION_LENGTH;
             } else {
                 words.add(header.get(index));
-                index = index + NEXT;
+                index = index + TokenSearch.NEXT;
             }
         }
         return words;
@@ -229,11 +212,18 @@ public class SignatureReader {
     // Counts the modifiers at the start of a header.
     private int countModifiers(List<String> words) {
         int count = 0;
-        while (count < words.size() && contains(MODIFIERS,
-                words.get(count))) {
+        while (isModifierAt(words, count)) {
             count++;
         }
         return count;
+    }
+
+    // Says whether there is a word at a position and it is a modifier.
+    private boolean isModifierAt(List<String> words, int position) {
+        if (position >= words.size()) {
+            return false;
+        }
+        return TokenSearch.contains(MODIFIERS, words.get(position));
     }
 
     // Adds each parameter's type to a method. Returns false when one
@@ -247,10 +237,10 @@ public class SignatureReader {
         for (List<String> parameter : splitParameters(parameters)) {
             List<String> words = new ArrayList<>(parameter);
             words.remove(FINAL_WORD);
-            if (words.size() <= NEXT) {
+            if (words.size() < MIN_PARAMETER_WORDS) {
                 return false;
             }
-            int nameIndex = words.size() - NEXT;
+            int nameIndex = words.size() - LAST_OFFSET;
             String name = words.get(nameIndex).toLowerCase();
             String type = TextUtils.join("", words.subList(0, nameIndex));
             if (name.contains(FILE_WORD) || !isSupportedParameter(type)) {
@@ -269,9 +259,9 @@ public class SignatureReader {
         int depth = 0;
 
         for (String token : tokens) {
-            if (token.equals(OPEN_ANGLE)) {
+            if (token.equals(TokenSearch.OPEN_ANGLE)) {
                 depth++;
-            } else if (token.equals(CLOSE_ANGLE)) {
+            } else if (token.equals(TokenSearch.CLOSE_ANGLE)) {
                 depth--;
             }
 
@@ -288,35 +278,32 @@ public class SignatureReader {
 
     // Says whether a parameter type can be made up.
     private boolean isSupportedParameter(String type) {
-        if (contains(SIMPLE_TYPES, type)) {
+        if (JavaTypes.isSimple(type)) {
             return true;
         }
-        if (type.endsWith(ARRAY_END)) {
-            int elementEnd = type.length() - ARRAY_END.length();
-            return contains(SIMPLE_TYPES, type.substring(0, elementEnd));
+
+        String arrayElement = JavaTypes.findArrayElement(type);
+        if (arrayElement != null) {
+            return JavaTypes.isSimple(arrayElement);
         }
-        for (String listStart : LIST_STARTS) {
-            boolean isList = type.startsWith(listStart)
-                    && type.endsWith(LIST_END);
-            if (isList) {
-                int elementEnd = type.length() - LIST_END.length();
-                String element = type.substring(listStart.length(),
-                        elementEnd);
-                return contains(BOXED_TYPES, element)
-                        || element.equals(STRING_TYPE);
-            }
+
+        String listElement = JavaTypes.findListElement(type);
+        if (listElement != null) {
+            return JavaTypes.isListElement(listElement);
         }
         return false;
     }
 
     // Says whether a result type prints the same way every time: the
-    // types a parameter may have and the boxed numbers. void results and
-    // objects of the assessment's own classes are left out.
+    // types a parameter may have and the boxed types a list may hold.
+    // void results and objects of the assessment's own classes are left
+    // out.
     private boolean isSupportedResult(String type) {
         if (type.equals(VOID_TYPE)) {
             return false;
         }
-        return contains(BOXED_TYPES, type) || isSupportedParameter(type);
+        boolean listElement = JavaTypes.isListElement(type);
+        return listElement || isSupportedParameter(type);
     }
 
     // Says whether a method is named in the starter file, so it is part
@@ -333,16 +320,16 @@ public class SignatureReader {
     // Returns the index after a method's body, or after the ";" of a
     // method with no body.
     private int skipMethodBody(List<String> tokens, int closeParen) {
-        int index = closeParen + NEXT;
+        int index = closeParen + TokenSearch.NEXT;
         while (index < tokens.size()) {
             String text = tokens.get(index);
-            if (text.equals(OPEN_BRACE)) {
+            if (text.equals(TokenSearch.OPEN_BRACE)) {
                 return skipBlock(tokens, index);
             }
-            if (text.equals(STATEMENT_END)) {
-                return index + NEXT;
+            if (text.equals(TokenSearch.STATEMENT_END)) {
+                return index + TokenSearch.NEXT;
             }
-            index = index + NEXT;
+            index = index + TokenSearch.NEXT;
         }
         return index;
     }
@@ -350,50 +337,11 @@ public class SignatureReader {
     // Returns the index after the "}" closing the block opened at an
     // index.
     private int skipBlock(List<String> tokens, int openBrace) {
-        int close = findClosing(tokens, openBrace, OPEN_BRACE, CLOSE_BRACE);
-        if (close == NOT_FOUND) {
+        int close = TokenSearch.findClosing(tokens, openBrace,
+                TokenSearch.OPEN_BRACE, TokenSearch.CLOSE_BRACE);
+        if (close == TokenSearch.NOT_FOUND) {
             return tokens.size();
         }
-        return close + NEXT;
-    }
-
-    // Returns the index of the token closing the bracket at an index, or
-    // NOT_FOUND.
-    private int findClosing(List<String> tokens, int openIndex, String open,
-            String close) {
-        int depth = 0;
-        for (int index = openIndex; index < tokens.size(); index++) {
-            String text = tokens.get(index);
-            if (text.equals(open)) {
-                depth++;
-            } else if (text.equals(close)) {
-                depth--;
-                if (depth == 0) {
-                    return index;
-                }
-            }
-        }
-        return NOT_FOUND;
-    }
-
-    // Returns the index of the first token with a text from an index on,
-    // or NOT_FOUND.
-    private int findFrom(List<String> tokens, String text, int from) {
-        for (int index = from; index < tokens.size(); index++) {
-            if (tokens.get(index).equals(text)) {
-                return index;
-            }
-        }
-        return NOT_FOUND;
-    }
-
-    // Says whether a list holds a text.
-    private boolean contains(String[] values, String text) {
-        for (String value : values) {
-            if (value.equals(text)) {
-                return true;
-            }
-        }
-        return false;
+        return close + TokenSearch.NEXT;
     }
 }

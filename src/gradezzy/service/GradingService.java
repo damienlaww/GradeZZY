@@ -31,8 +31,6 @@ import gradezzy.config.ConfigKeys;
 import gradezzy.config.ExportFolders;
 import gradezzy.config.ModuleSections;
 import gradezzy.grading.CancellationToken;
-import gradezzy.grading.CompileStage;
-import gradezzy.grading.ExecuteStage;
 import gradezzy.grading.GradingContext;
 import gradezzy.grading.GradingException;
 import gradezzy.grading.GradingPipeline;
@@ -52,10 +50,8 @@ import gradezzy.model.Severity;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
-import gradezzy.modelanswer.RandomInputStage;
 import gradezzy.persistence.PersistenceException;
 import gradezzy.persistence.ResultRepository;
-import gradezzy.report.ScoreFormatter;
 import gradezzy.testcase.TestCaseException;
 import gradezzy.testcase.TestCaseSource;
 import gradezzy.testcase.TesterFile;
@@ -85,10 +81,6 @@ public class GradingService {
     private static final String RESUME_WARNING_ACTION = "Check the marks "
             + "of this student, or grade the batch again with Set up.";
 
-    // Start of the id of the problem added when grading one question
-    // again fails
-    private static final String REGRADE_FAILED_ID_PREFIX = "regrade-";
-
     // Start of the id of the warning on a student who is not on the
     // score sheet, as ExtractStage gives it
     private static final String UNKNOWN_STUDENT_ID_PREFIX = "UNKNOWN-";
@@ -115,9 +107,6 @@ public class GradingService {
     // The folder, inside paths.output.dir, that keeps each typed run's
     // testers in a folder named after the run
     private static final String TYPED_TESTERS_FOLDER = "generated-testers";
-
-    // Written in the audit log for a student who has no total
-    private static final String NOT_GRADED = "not graded";
 
     // The message when grading, Undo or a late batch is tried during
     // grading
@@ -185,6 +174,8 @@ public class GradingService {
     /**
      * Creates a new grading service.
      *
+     * <p>Tier: MUST.
+     *
      * @param config the application settings
      * @param pipelineFactory the helper that builds the pipeline
      * @param assessmentFactory the helper that reads the assessment
@@ -196,6 +187,8 @@ public class GradingService {
 
     /**
      * Creates a new grading service that saves each run.
+     *
+     * <p>Tier: MUST.
      *
      * @param config the application settings
      * @param pipelineFactory the helper that builds the pipeline
@@ -213,6 +206,8 @@ public class GradingService {
     /**
      * Creates a new grading service that saves each run and writes its
      * actions to the given audit log.
+     *
+     * <p>Tier: MUST.
      *
      * @param config the application settings
      * @param pipelineFactory the helper that builds the pipeline
@@ -251,6 +246,8 @@ public class GradingService {
      * score sheet: the section's own in paths.score.sheet.by.section, else
      * paths.score.sheet.file. A submission that fails is marked FAILED and
      * does not stop the others.
+     *
+     * <p>Tier: MUST.
      *
      * @param inputPaths the zip files or folders the instructor chose
      * @param section the section the batch belongs to
@@ -375,8 +372,7 @@ public class GradingService {
             throws GradingException {
         checkArguments(inputPaths, section, testCaseSource, listener);
         checkTypedCases(testCaseSource);
-        setCurrentRunId(null);
-        cancellationToken.reset();
+        startRun(null);
 
         Path rosterFile = scoreSheetFile;
         if (rosterFile == null) {
@@ -387,34 +383,17 @@ public class GradingService {
         // test cases set their own maximums when their testers are made,
         // so the tester folder in the settings is not checked for them.
         boolean typed = testCaseSource instanceof TypedTestCaseSource;
-        Path testersDirectory = null;
-        if (testCaseSource instanceof UploadedTesterSource) {
-            UploadedTesterSource uploaded =
-                    (UploadedTesterSource) testCaseSource;
-            testersDirectory = uploaded.getTestersDirectory();
-        }
+        Path testersDirectory = findTestersDirectory(testCaseSource);
         if (!typed) {
-            List<String> markProblems =
-                    assessmentFactory.findMaxScoreProblems(
-                            testersDirectory);
-            if (!markProblems.isEmpty()) {
-                throw new GradingException(markProblems.get(0));
-            }
+            checkMaxScores(testersDirectory);
         }
 
-        Assessment assessment = assessmentFactory.create(
-                section.getModuleCode(), testersDirectory);
-        String runId = RUN_ID_PREFIX + System.currentTimeMillis();
-        GradingRun gradingRun = new GradingRun(runId, assessment, section,
-                LocalDateTime.now());
-        // Kept on the run so the CSV export and Resume use this roster,
-        // not the one in the settings
-        gradingRun.setScoreSheetFile(rosterFile);
-        gradingRun.setStarterDirectory(starterDirectory);
-        // Kept so Resume after a restart uses the same testers
-        gradingRun.setTestersDirectory(testersDirectory);
+        GradingRun gradingRun = createRun(section, testersDirectory,
+                rosterFile, starterDirectory);
+        String runId = gradingRun.getId();
         setCurrentRunId(runId);
-        GradingContext context = new GradingContext(config, assessment);
+        GradingContext context = new GradingContext(config,
+                gradingRun.getAssessment());
         context.setRunId(runId);
 
         // The roster for this batch is read first, so a bad score sheet
@@ -433,6 +412,46 @@ public class GradingService {
         lastRun = gradingRun;
         lastContext = context;
         addSessionRun(gradingRun);
+        return gradingRun;
+    }
+
+    // Returns the tester folder of uploaded testers, or null for any
+    // other source, such as typed test cases.
+    private Path findTestersDirectory(TestCaseSource testCaseSource) {
+        if (!(testCaseSource instanceof UploadedTesterSource)) {
+            return null;
+        }
+        UploadedTesterSource uploaded = (UploadedTesterSource) testCaseSource;
+        return uploaded.getTestersDirectory();
+    }
+
+    // Stops a batch when a tester in the folder gives no maximum mark,
+    // with the first problem found.
+    private void checkMaxScores(Path testersDirectory)
+            throws GradingException {
+        List<String> markProblems =
+                assessmentFactory.findMaxScoreProblems(testersDirectory);
+        if (!markProblems.isEmpty()) {
+            throw new GradingException(markProblems.get(0));
+        }
+    }
+
+    // Makes a new run of a section, with a new id, the assessment read
+    // from the testers, and the roster, starter and tester folders it is
+    // graded with.
+    private GradingRun createRun(Section section, Path testersDirectory,
+            Path rosterFile, Path starterDirectory) {
+        Assessment assessment = assessmentFactory.create(
+                section.getModuleCode(), testersDirectory);
+        String runId = RUN_ID_PREFIX + System.currentTimeMillis();
+        GradingRun gradingRun = new GradingRun(runId, assessment, section,
+                LocalDateTime.now());
+        // Kept on the run so the CSV export and Resume use this roster,
+        // not the one in the settings
+        gradingRun.setScoreSheetFile(rosterFile);
+        gradingRun.setStarterDirectory(starterDirectory);
+        // Kept so Resume after a restart uses the same testers
+        gradingRun.setTestersDirectory(testersDirectory);
         return gradingRun;
     }
 
@@ -506,13 +525,9 @@ public class GradingService {
                         tester.getClassName(), copy));
             }
         } catch (IOException exception) {
-            throw new GradingException("The testers made from the typed "
-                    + "test cases could not be kept in " + runFolder
-                    + ": " + exception.getMessage(), exception);
+            throw testersNotKept(runFolder, exception);
         } catch (TestCaseException exception) {
-            throw new GradingException("The testers made from the typed "
-                    + "test cases could not be kept in " + runFolder
-                    + ": " + exception.getMessage(), exception);
+            throw testersNotKept(runFolder, exception);
         }
 
         context.getTesters().clear();
@@ -535,8 +550,9 @@ public class GradingService {
     // the marks stand and the audit log says why the flags are missing.
     // Returns true when the check ran, so the caller saves the flags.
     private boolean checkSimilarity(GradingRun gradingRun) {
-        if (plagiarismService == null
-                || !config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED)) {
+        boolean checkOff = plagiarismService == null
+                || !config.getBoolean(ConfigKeys.PLAGIARISM_ENABLED);
+        if (checkOff) {
             return false;
         }
 
@@ -550,13 +566,53 @@ public class GradingService {
         return true;
     }
 
+    // The failure to report when the testers made from typed test cases
+    // cannot be copied into the run's folder.
+    private GradingException testersNotKept(Path runFolder,
+            Exception exception) {
+        return new GradingException("The testers made from the typed "
+                + "test cases could not be kept in " + runFolder
+                + ": " + exception.getMessage(), exception);
+    }
+
     // Keeps the id of the run being graded, for cancel.
     private synchronized void setCurrentRunId(String runId) {
         currentRunId = runId;
     }
 
+    // Starts grading part of a run: keeps its id for cancel and clears
+    // an earlier cancel.
+    private void startRun(String runId) {
+        setCurrentRunId(runId);
+        cancellationToken.reset();
+    }
+
+    // An empty run that shares a run's id, assessment, section and
+    // start time, for grading some of its submissions on their own.
+    private GradingRun emptyCopyOf(GradingRun gradingRun) {
+        return new GradingRun(gradingRun.getId(),
+                gradingRun.getAssessment(), gradingRun.getSection(),
+                gradingRun.getStartedAt());
+    }
+
+    // The listener given, or one that ignores progress when none was.
+    private ProgressListener listenerOrQuiet(ProgressListener listener) {
+        if (listener == null) {
+            return new QuietProgressListener();
+        }
+        return listener;
+    }
+
+    // Says whether runs are saved: there is a store and the database
+    // setting is on.
+    private boolean isDatabaseUsed() {
+        return repository != null
+                && config.getBoolean(ConfigKeys.DATABASE_ENABLED);
+    }
+
     /**
-     * Asks the current run to stop after the submission being graded.
+     * Asks the current run to stop at the next stage. The submission
+     * being graded then becomes CANCELLED.
      *
      * <p>Tier: SHOULD.
      */
@@ -631,35 +687,28 @@ public class GradingService {
                     + "instead.");
         }
 
-        // The retried submissions go through the pipeline on their own,
-        // in a run that shares the id, assessment and section.
-        GradingRun retryRun = new GradingRun(gradingRun.getId(),
-                gradingRun.getAssessment(), gradingRun.getSection(),
-                gradingRun.getStartedAt());
-
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (needsRetry(submission)) {
-                resetForRetry(submission);
-                retryRun.addSubmission(submission);
-            }
-        }
-
-        if (retryRun.getSubmissions().isEmpty()) {
-            return gradingRun;
-        }
-
+        // Refused before anything changes, so a Retry pressed while
+        // grading runs leaves the run being graded as it is
         beginOnlyGrading();
         try {
+            // The retried submissions go through the pipeline on their
+            // own, in a run that shares the id, assessment and section.
+            GradingRun retryRun = emptyCopyOf(gradingRun);
+            for (Submission submission : gradingRun.getSubmissions()) {
+                if (needsRetry(submission)) {
+                    resetForRetry(submission);
+                    retryRun.addSubmission(submission);
+                }
+            }
+
+            if (retryRun.getSubmissions().isEmpty()) {
+                return gradingRun;
+            }
+
             auditService.record(GRADING_RETRIED, "Grading "
                     + retryRun.getSubmissions().size() + " submission(s) of "
                     + gradingRun.getId() + " again.");
-            setCurrentRunId(gradingRun.getId());
-            cancellationToken.reset();
-            GradingPipeline pipeline = createPipeline(gradingRun);
-            pipeline.run(retryRun, lastContext,
-                    new RetryProgressListener(listener, gradingRun));
-            checkSimilarity(gradingRun);
-            saveRun(gradingRun, true);
+            gradePart(gradingRun, retryRun, listener);
         } finally {
             endGrading();
         }
@@ -694,35 +743,45 @@ public class GradingService {
      */
     public GradingRun resume(String runId, ProgressListener listener)
             throws GradingException {
-        if (runId == null || runId.isBlank() || listener == null) {
+        boolean noRunChosen = runId == null || runId.isBlank()
+                || listener == null;
+        if (noRunChosen) {
             throw new GradingException("Choose a run to resume.");
         }
 
-        // Set when the saved run does not say which testers it used
-        String testerWarning = null;
-        if (lastRun == null || !runId.equals(lastRun.getId())) {
-            GradingRun savedRun = loadSavedRun(runId);
-            lastContext = prepareSavedContext(savedRun);
-            lastRun = savedRun;
-            addSessionRun(savedRun);
-            if (savedRun.getTestersDirectory() == null) {
-                testerWarning = "This student was graded after the app "
-                        + "was restarted. The tester folder this run was "
-                        + "started with was not saved, so the one in the "
-                        + "settings was used: "
-                        + config.getString(ConfigKeys.TESTERS_DIR)
-                        + ". If that is a different folder, the marks can "
-                        + "differ from the rest of the run.";
+        // Refused before anything changes, so a Resume pressed while
+        // grading runs neither swaps the last run nor resets students
+        beginOnlyGrading();
+        try {
+            // Set when the saved run does not say which testers it used
+            String testerWarning = null;
+            if (lastRun == null || !runId.equals(lastRun.getId())) {
+                testerWarning = switchToSavedRun(runId);
             }
+            GradingRun gradingRun = lastRun;
+            GradingRun resumeRun = collectUnfinished(gradingRun,
+                    testerWarning);
+
+            if (resumeRun.getSubmissions().isEmpty()) {
+                return gradingRun;
+            }
+
+            auditService.record(GRADING_RESUMED, "Grading the "
+                    + resumeRun.getSubmissions().size() + " unfinished "
+                    + "submission(s) of " + gradingRun.getId() + ".");
+            gradePart(gradingRun, resumeRun, listener);
+            return gradingRun;
+        } finally {
+            endGrading();
         }
-        GradingRun gradingRun = lastRun;
+    }
 
-        // The unfinished submissions go through the pipeline on their
-        // own, in a run that shares the id, assessment and section.
-        GradingRun resumeRun = new GradingRun(gradingRun.getId(),
-                gradingRun.getAssessment(), gradingRun.getSection(),
-                gradingRun.getStartedAt());
-
+    // The unfinished submissions of a run, reset to grade from scratch,
+    // in a run of their own that shares the id, assessment and section.
+    // Each gets the tester warning when there is one.
+    private GradingRun collectUnfinished(GradingRun gradingRun,
+            String testerWarning) {
+        GradingRun resumeRun = emptyCopyOf(gradingRun);
         for (Submission submission : gradingRun.getSubmissions()) {
             if (needsResume(submission)) {
                 resetForRetry(submission);
@@ -736,27 +795,40 @@ public class GradingService {
                 resumeRun.addSubmission(submission);
             }
         }
+        return resumeRun;
+    }
 
-        if (resumeRun.getSubmissions().isEmpty()) {
-            return gradingRun;
-        }
+    // Grades some submissions of the last run through the full pipeline
+    // with its loaded testers, then checks for similar code and saves
+    // the run. Used by retry and resume.
+    private void gradePart(GradingRun gradingRun, GradingRun part,
+            ProgressListener listener) {
+        startRun(gradingRun.getId());
+        GradingPipeline pipeline = createPipeline(gradingRun);
+        pipeline.run(part, lastContext,
+                new RetryProgressListener(listener, gradingRun));
+        checkSimilarity(gradingRun);
+        saveRun(gradingRun, true);
+    }
 
-        beginOnlyGrading();
-        try {
-            auditService.record(GRADING_RESUMED, "Grading the "
-                    + resumeRun.getSubmissions().size() + " unfinished "
-                    + "submission(s) of " + gradingRun.getId() + ".");
-            setCurrentRunId(gradingRun.getId());
-            cancellationToken.reset();
-            GradingPipeline pipeline = createPipeline(gradingRun);
-            pipeline.run(resumeRun, lastContext,
-                    new RetryProgressListener(listener, gradingRun));
-            checkSimilarity(gradingRun);
-            saveRun(gradingRun, true);
-        } finally {
-            endGrading();
+    // Loads a saved run and its shared information and makes it the last
+    // run. Returns the warning for each student graded again when the run
+    // does not say which testers it used, or null.
+    private String switchToSavedRun(String runId) throws GradingException {
+        GradingRun savedRun = loadSavedRun(runId);
+        lastContext = prepareSavedContext(savedRun);
+        lastRun = savedRun;
+        addSessionRun(savedRun);
+        if (savedRun.getTestersDirectory() != null) {
+            return null;
         }
-        return gradingRun;
+        return "This student was graded after the app "
+                + "was restarted. The tester folder this run was "
+                + "started with was not saved, so the one in the "
+                + "settings was used: "
+                + config.getString(ConfigKeys.TESTERS_DIR)
+                + ". If that is a different folder, the marks can "
+                + "differ from the rest of the run.";
     }
 
     /**
@@ -796,22 +868,16 @@ public class GradingService {
             ProgressListener listener) throws GradingException {
         checkCanRegrade(gradingRun, submission);
 
-        ProgressListener progress = listener;
-        if (progress == null) {
-            progress = new QuietProgressListener();
-        }
+        ProgressListener progress = listenerOrQuiet(listener);
         GradingContext context = findContext(gradingRun);
 
         // The student goes through the pipeline on their own, in a run
         // that shares the id, assessment and section.
-        GradingRun oneRun = new GradingRun(gradingRun.getId(),
-                gradingRun.getAssessment(), gradingRun.getSection(),
-                gradingRun.getStartedAt());
+        GradingRun oneRun = emptyCopyOf(gradingRun);
         resetForRetry(submission);
         oneRun.addSubmission(submission);
 
-        setCurrentRunId(gradingRun.getId());
-        cancellationToken.reset();
+        startRun(gradingRun.getId());
         GradingPipeline pipeline = createPipeline(gradingRun);
         try {
             pipeline.run(oneRun, context,
@@ -886,7 +952,7 @@ public class GradingService {
             Submission submission, String questionId,
             ProgressListener listener) throws GradingException {
         checkCanRegrade(gradingRun, submission);
-        QuestionResult oldResult = findResult(submission, questionId);
+        QuestionResult oldResult = submission.findResult(questionId);
         if (oldResult == null) {
             throw new GradingException(questionId + " of "
                     + submission.getUsername() + " has no result to "
@@ -908,7 +974,7 @@ public class GradingService {
                     + "graded again.");
         }
 
-        Submission copy = copyForQuestion(submission);
+        Submission copy = QuestionRegrade.copyForQuestion(submission);
         runQuestionPipeline(gradingRun, context, copy, tester, listener);
         if (copy.getStatus() != SubmissionStatus.GRADED) {
             String problem = keepEarlierResult(gradingRun, submission, copy,
@@ -916,27 +982,17 @@ public class GradingService {
             throw new GradingException(problem);
         }
 
-        QuestionResult newResult = findResult(copy, questionId);
+        QuestionResult newResult = copy.findResult(questionId);
         if (newResult == null) {
             // The folder or file is missing: 0 marks, as ScoreStage gives
             newResult = new QuestionResult(question);
         }
         newResult.setScore(scoreCalculator.questionScore(newResult));
-        replaceQuestionProblems(submission, copy, question, tester);
-        replaceResult(submission, oldResult, newResult);
+        QuestionRegrade.replaceQuestionProblems(submission, copy, question,
+                tester);
+        QuestionRegrade.replaceResult(submission, oldResult, newResult);
         saveRun(gradingRun, true);
         return newResult;
-    }
-
-    // Makes the copy of a student that grades one question again: the
-    // same username, upload, working copy and roster entry, with no
-    // results and no problems yet.
-    private Submission copyForQuestion(Submission submission) {
-        Submission copy = new Submission(submission.getUsername(),
-                submission.getSection(), submission.getOriginalPath());
-        copy.setWorkingCopyPath(submission.getWorkingCopyPath());
-        copy.setStudent(submission.getStudent());
-        return copy;
     }
 
     // Runs the short pipeline of one question on the copy of a student,
@@ -944,21 +1000,15 @@ public class GradingService {
     private void runQuestionPipeline(GradingRun gradingRun,
             GradingContext context, Submission copy, TesterFile tester,
             ProgressListener listener) {
-        GradingRun questionRun = new GradingRun(gradingRun.getId(),
-                gradingRun.getAssessment(), gradingRun.getSection(),
-                gradingRun.getStartedAt());
+        GradingRun questionRun = emptyCopyOf(gradingRun);
         questionRun.addSubmission(copy);
         GradingContext questionContext = new GradingContext(config,
                 context.getAssessment());
         questionContext.setRunId(gradingRun.getId());
         questionContext.getTesters().add(tester);
 
-        ProgressListener progress = listener;
-        if (progress == null) {
-            progress = new QuietProgressListener();
-        }
-        setCurrentRunId(gradingRun.getId());
-        cancellationToken.reset();
+        ProgressListener progress = listenerOrQuiet(listener);
+        startRun(gradingRun.getId());
         GradingPipeline pipeline = pipelineFactory.createQuestionPipeline(
                 cancellationToken, gradingRun.getStarterDirectory());
         pipeline.run(questionRun, questionContext,
@@ -979,94 +1029,15 @@ public class GradingService {
         }
         String message = questionId + " was not graded again: " + reason
                 + " Its earlier mark is kept.";
-        submission.addAnomaly(new Anomaly(REGRADE_FAILED_ID_PREFIX
-                + UUID.randomUUID(), AnomalyType.INTERNAL_ERROR,
-                Severity.ERROR, submission.getUsername(), message,
+        String anomalyId = QuestionRegrade.REGRADE_FAILED_ID_PREFIX
+                + UUID.randomUUID();
+        submission.addAnomaly(new Anomaly(anomalyId,
+                AnomalyType.INTERNAL_ERROR, Severity.ERROR,
+                submission.getUsername(), message,
                 "Grade " + questionId + " again, or grade the whole "
                 + "student again."));
         saveRun(gradingRun, true);
         return message;
-    }
-
-    // Swaps the problems the compiler, the tester and the random inputs
-    // check gave a question for the ones the new run gave it. Every other
-    // problem stays.
-    private void replaceQuestionProblems(Submission submission,
-            Submission copy, Question question, TesterFile tester) {
-        List<Anomaly> earlier = new ArrayList<>();
-        for (Anomaly anomaly : submission.getAnomalies()) {
-            if (isQuestionRunProblem(anomaly, question, tester)) {
-                earlier.add(anomaly);
-            }
-        }
-        submission.getAnomalies().removeAll(earlier);
-        for (Anomaly anomaly : copy.getAnomalies()) {
-            submission.addAnomaly(anomaly);
-        }
-    }
-
-    // Says whether a problem came from compiling or running a question's
-    // tester or its random inputs: its id is one the tester, compile,
-    // execute or random inputs steps give, or an earlier failed try of
-    // this question, and its words name the question or its tester.
-    private boolean isQuestionRunProblem(Anomaly anomaly, Question question,
-            TesterFile tester) {
-        String id = anomaly.getId();
-        boolean fromRun = id.startsWith(TesterInstaller.ID_PREFIX)
-                || id.startsWith(CompileStage.ID_PREFIX)
-                || id.startsWith(ExecuteStage.ID_PREFIX)
-                || id.startsWith(RandomInputStage.ID_PREFIX)
-                || id.startsWith(REGRADE_FAILED_ID_PREFIX);
-        if (!fromRun) {
-            return false;
-        }
-        String message = anomaly.getMessage();
-        return containsWord(message, question.getId())
-                || containsWord(message, tester.getClassName());
-    }
-
-    // Says whether a text holds a word on its own, so Q1 is not found in
-    // Q1a and Q2b is found in "Q2b.java".
-    private boolean containsWord(String text, String word) {
-        int index = text.indexOf(word);
-        while (index >= 0) {
-            int end = index + word.length();
-            boolean startsWord = index == 0
-                    || !Character.isLetterOrDigit(text.charAt(index - 1));
-            boolean endsWord = end == text.length()
-                    || !Character.isLetterOrDigit(text.charAt(end));
-            if (startsWord && endsWord) {
-                return true;
-            }
-            int next = index + 1;
-            index = text.indexOf(word, next);
-        }
-        return false;
-    }
-
-    // Puts a question's new result where its old one was, so the
-    // questions keep their order.
-    private void replaceResult(Submission submission,
-            QuestionResult oldResult, QuestionResult newResult) {
-        List<QuestionResult> results = submission.getQuestionResults();
-        int place = results.indexOf(oldResult);
-        if (place < 0) {
-            results.add(newResult);
-            return;
-        }
-        results.set(place, newResult);
-    }
-
-    // Finds a student's result of one question, or null.
-    private QuestionResult findResult(Submission submission,
-            String questionId) {
-        for (QuestionResult result : submission.getQuestionResults()) {
-            Question graded = result.getQuestion();
-            if (graded != null && graded.getId().equals(questionId)) {
-                return result;
-            }
-        }
-        return null;
     }
 
     // Says whether a student still has the working copy grading made.
@@ -1170,9 +1141,10 @@ public class GradingService {
     // Warns that a student is not on the score sheet, as ExtractStage
     // does while grading.
     private void addUnknownStudent(Submission submission) {
-        submission.addAnomaly(new Anomaly(UNKNOWN_STUDENT_ID_PREFIX
-                + UUID.randomUUID(), AnomalyType.UNKNOWN_STUDENT,
-                Severity.WARNING, submission.getUsername(),
+        String anomalyId = UNKNOWN_STUDENT_ID_PREFIX + UUID.randomUUID();
+        submission.addAnomaly(new Anomaly(anomalyId,
+                AnomalyType.UNKNOWN_STUDENT, Severity.WARNING,
+                submission.getUsername(),
                 submission.getUsername() + " is not on the roster.",
                 UNKNOWN_STUDENT_ACTION));
     }
@@ -1225,16 +1197,18 @@ public class GradingService {
         List<GradingRun> sessionCopy = getSessionRuns();
         GradingRun newest = null;
         for (GradingRun gradingRun : sessionCopy) {
-            if (isRunOf(gradingRun, moduleCode, sectionCode)
-                    && isNewer(gradingRun, newest)) {
+            boolean newer = isRunOf(gradingRun, moduleCode, sectionCode)
+                    && isNewer(gradingRun, newest);
+            if (newer) {
                 newest = gradingRun;
             }
         }
 
         for (GradingRun savedRun : listSavedRuns()) {
-            if (isRunOf(savedRun, moduleCode, sectionCode)
+            boolean newer = isRunOf(savedRun, moduleCode, sectionCode)
                     && !hasRunWithId(sessionCopy, savedRun.getId())
-                    && isNewer(savedRun, newest)) {
+                    && isNewer(savedRun, newest);
+            if (newer) {
                 newest = savedRun;
             }
         }
@@ -1317,26 +1291,9 @@ public class GradingService {
             saveRun(gradingRun, true);
         }
 
-        // Written after grading, so each line has the new total too. A
-        // late zip that turned out to be damaged gives the student their
-        // earlier result back; its working copy was kept, because a zip
-        // that cannot be unpacked never replaces one.
-        boolean restored = false;
-        for (int index = 0; index < replacedUsernames.size(); index++) {
-            String username = replacedUsernames.get(index);
-            Submission late = findLoaded(gradingRun, username);
-            if (isUnusableUpload(late)) {
-                putBackOlder(gradingRun, username, removedOlder);
-                auditService.record(LATE_UPLOAD_REFUSED, "Kept the earlier "
-                        + "result of " + username + " (" + oldTotals.get(index)
-                        + "), because the late upload could not be opened.");
-                restored = true;
-            } else {
-                auditService.record(RESULT_REPLACED, "Replaced " + username
-                        + ": " + oldTotals.get(index) + " to "
-                        + describeTotal(late) + ".");
-            }
-        }
+        // Written after grading, so each line has the new total too
+        boolean restored = recordReplacedResults(gradingRun,
+                replacedUsernames, oldTotals, removedOlder);
         // Checked once the run holds the results it keeps, then saved
         // with its flags, as after any other batch
         boolean checked = checkSimilarity(gradingRun);
@@ -1346,43 +1303,31 @@ public class GradingService {
         return gradingRun;
     }
 
-    // Says whether a late upload could not be used at all: it was refused
-    // when loaded, or its zip could not be unpacked.
-    private boolean isUnusableUpload(Submission late) {
-        if (late == null || late.getIngestFailure() != null) {
-            return true;
-        }
-        return hasRejectedZip(late);
-    }
-
-    // Says whether ExtractStage refused a submission's zip (a zip bomb,
-    // an empty or damaged zip, or a zip slip). Only an ERROR counts: a
-    // WARNING of the same type, such as a file left out of the zip, is
-    // given to students who were still graded.
-    private boolean hasRejectedZip(Submission submission) {
-        for (Anomaly anomaly : submission.getAnomalies()) {
-            if (anomaly.getType() == AnomalyType.INVALID_ARCHIVE
-                    && anomaly.getSeverity() == Severity.ERROR) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Replaces the late copies of a student with the results they had
-    // before the late batch.
-    private void putBackOlder(GradingRun gradingRun, String username,
+    // Writes to the audit log how each replaced student's total changed.
+    // A late zip that turned out to be damaged gives the student their
+    // earlier result back; its working copy was kept, because a zip that
+    // cannot be unpacked never replaces one. Returns true when any
+    // earlier result was put back.
+    private boolean recordReplacedResults(GradingRun gradingRun,
+            List<String> replacedUsernames, List<String> oldTotals,
             List<Submission> removedOlder) {
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (submission.getUsername().equalsIgnoreCase(username)) {
-                gradingRun.removeSubmission(submission);
+        boolean restored = false;
+        for (int index = 0; index < replacedUsernames.size(); index++) {
+            String username = replacedUsernames.get(index);
+            Submission late = gradingRun.findLoaded(username);
+            if (LateBatch.isUnusableUpload(late)) {
+                LateBatch.putBackOlder(gradingRun, username, removedOlder);
+                auditService.record(LATE_UPLOAD_REFUSED, "Kept the earlier "
+                        + "result of " + username + " (" + oldTotals.get(index)
+                        + "), because the late upload could not be opened.");
+                restored = true;
+            } else {
+                auditService.record(RESULT_REPLACED, "Replaced " + username
+                        + ": " + oldTotals.get(index) + " to "
+                        + LateBatch.describeTotal(late) + ".");
             }
         }
-        for (Submission older : removedOlder) {
-            if (older.getUsername().equalsIgnoreCase(username)) {
-                gradingRun.addSubmission(older);
-            }
-        }
+        return restored;
     }
 
     // Checks a late batch, reads its roster and testers, loads its zips
@@ -1405,8 +1350,7 @@ public class GradingService {
         checkArguments(inputPaths, section, testCaseSource, listener);
         checkSameFiles(gradingRun, testCaseSource, scoreSheetFile);
 
-        setCurrentRunId(gradingRun.getId());
-        cancellationToken.reset();
+        startRun(gradingRun.getId());
         GradingContext context = new GradingContext(config,
                 gradingRun.getAssessment());
         context.setRunId(gradingRun.getId());
@@ -1418,38 +1362,30 @@ public class GradingService {
         // Only a copy that could be opened replaces an earlier result. A
         // late zip that is damaged, or a refused duplicate, never costs a
         // student the marks they already have.
-        List<String> lateUsernames = new ArrayList<>();
-        for (Submission late : lateSubmissions) {
-            if (late.getIngestFailure() == null) {
-                lateUsernames.add(late.getUsername().toLowerCase(
-                        Locale.ROOT));
-            }
-        }
+        List<String> lateUsernames = LateBatch.listUsableUsernames(
+                lateSubmissions);
+        LateBatch.removeOlderResults(gradingRun, lateUsernames,
+                replacedUsernames, oldTotals, removedOlder);
+        GradingRun batchRun = addLateSubmissions(gradingRun, lateSubmissions,
+                lateUsernames);
 
-        // Older results of the same students leave the run first, so the
-        // run never holds two results for one student. The old total is
-        // taken before any copy is removed.
-        for (Submission older : gradingRun.getSubmissions()) {
-            String key = older.getUsername().toLowerCase(Locale.ROOT);
-            if (lateUsernames.contains(key)) {
-                if (!containsIgnoringCase(replacedUsernames,
-                        older.getUsername())) {
-                    replacedUsernames.add(older.getUsername());
-                    oldTotals.add(describeTotal(findLoaded(gradingRun,
-                            older.getUsername())));
-                }
-                gradingRun.removeSubmission(older);
-                removedOlder.add(older);
-            }
-        }
+        lastRun = gradingRun;
+        lastContext = context;
+        addSessionRun(gradingRun);
+        return batchRun;
+    }
 
-        GradingRun batchRun = new GradingRun(gradingRun.getId(),
-                gradingRun.getAssessment(), section,
-                gradingRun.getStartedAt());
+    // Adds the late uploads to the run, except a refused copy of a
+    // student who keeps an earlier result, which the audit log names.
+    // Returns a run that holds only the added uploads, for the pipeline.
+    private GradingRun addLateSubmissions(GradingRun gradingRun,
+            List<Submission> lateSubmissions, List<String> lateUsernames) {
+        GradingRun batchRun = emptyCopyOf(gradingRun);
         for (Submission late : lateSubmissions) {
             String key = late.getUsername().toLowerCase(Locale.ROOT);
-            if (lateUsernames.contains(key)
-                    || findLoaded(gradingRun, key) == null) {
+            boolean added = lateUsernames.contains(key)
+                    || gradingRun.findLoaded(key) == null;
+            if (added) {
                 gradingRun.addSubmission(late);
                 batchRun.addSubmission(late);
             } else {
@@ -1459,10 +1395,6 @@ public class GradingService {
                         + late.getIngestFailure());
             }
         }
-
-        lastRun = gradingRun;
-        lastContext = context;
-        addSessionRun(gradingRun);
         return batchRun;
     }
 
@@ -1546,8 +1478,7 @@ public class GradingService {
     // The saved runs, or an empty list when the database is off or
     // cannot be read; this session's runs are still searched.
     private List<GradingRun> listSavedRuns() {
-        if (repository == null
-                || !config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+        if (!isDatabaseUsed()) {
             return new ArrayList<>();
         }
         try {
@@ -1590,40 +1521,6 @@ public class GradingService {
             }
         }
         return false;
-    }
-
-    // Says whether a list of usernames holds this one, ignoring case.
-    private boolean containsIgnoringCase(List<String> usernames,
-            String username) {
-        for (String listed : usernames) {
-            if (listed.equalsIgnoreCase(username)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Finds a student's submission in a run, ignoring case. A copy whose
-    // upload was refused is used only if no other copy was loaded, as the
-    // CSV export does.
-    private Submission findLoaded(GradingRun gradingRun, String username) {
-        Submission found = null;
-        for (Submission submission : gradingRun.getSubmissions()) {
-            if (submission.getUsername().equalsIgnoreCase(username)
-                    && (found == null || found.getIngestFailure() != null)) {
-                found = submission;
-            }
-        }
-        return found;
-    }
-
-    // The total of a student for the audit log, or "not graded".
-    private String describeTotal(Submission submission) {
-        if (submission == null
-                || submission.getStatus() != SubmissionStatus.GRADED) {
-            return NOT_GRADED;
-        }
-        return ScoreFormatter.format(submission.getTotalScore());
     }
 
     // Builds the pipeline for a run. The one-argument factory method,
@@ -1670,8 +1567,7 @@ public class GradingService {
 
     // Loads a run of an earlier session from the database.
     private GradingRun loadSavedRun(String runId) throws GradingException {
-        if (repository == null
-                || !config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+        if (!isDatabaseUsed()) {
             throw new GradingException("Run " + runId + " was not "
                     + "started in this session and the database is "
                     + "switched off, so it cannot be resumed.");
@@ -1748,8 +1644,7 @@ public class GradingService {
     // the window both show it. When logFailure is true, a failure is also
     // written to the audit log, once per run.
     private void saveRun(GradingRun gradingRun, boolean logFailure) {
-        if (repository == null
-                || !config.getBoolean(ConfigKeys.DATABASE_ENABLED)) {
+        if (!isDatabaseUsed()) {
             return;
         }
 
@@ -1767,10 +1662,11 @@ public class GradingService {
                 auditService.record(SAVE_FAILED, message);
             }
             for (Submission submission : gradingRun.getSubmissions()) {
-                submission.addAnomaly(new Anomaly(SAVE_WARNING_ID_PREFIX
-                        + UUID.randomUUID(), AnomalyType.INTERNAL_ERROR,
-                        Severity.WARNING, submission.getUsername(),
-                        message, SAVE_FAILED_ACTION));
+                String anomalyId = SAVE_WARNING_ID_PREFIX + UUID.randomUUID();
+                submission.addAnomaly(new Anomaly(anomalyId,
+                        AnomalyType.INTERNAL_ERROR, Severity.WARNING,
+                        submission.getUsername(), message,
+                        SAVE_FAILED_ACTION));
             }
         }
     }
@@ -1840,9 +1736,10 @@ public class GradingService {
         if (config.hasKey(ConfigKeys.OWN_SECTIONS_ONLY_MODULES)) {
             ownOnly = config.getString(ConfigKeys.OWN_SECTIONS_ONLY_MODULES);
         }
-        for (String code : ModuleSections.forModule(config.getString(
-                ConfigKeys.SECTION_CODES), byModule, ownOnly,
-                section.getModuleCode())) {
+        String shared = config.getString(ConfigKeys.SECTION_CODES);
+        List<String> codes = ModuleSections.forModule(shared, byModule,
+                ownOnly, section.getModuleCode());
+        for (String code : codes) {
             if (code.equalsIgnoreCase(section.getSectionCode())) {
                 return true;
             }
@@ -1869,8 +1766,9 @@ public class GradingService {
     // A refused upload or zip is left out: grading the same file again
     // cannot help. After a zip limit is raised, grade the batch again.
     private boolean needsRetry(Submission submission) {
-        if (submission.getIngestFailure() != null
-                || hasRejectedZip(submission)) {
+        boolean refused = submission.getIngestFailure() != null
+                || LateBatch.hasRejectedZip(submission);
+        if (refused) {
             return false;
         }
         SubmissionStatus status = submission.getStatus();

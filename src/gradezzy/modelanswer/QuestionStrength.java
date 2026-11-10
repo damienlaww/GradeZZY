@@ -22,11 +22,11 @@ public class QuestionStrength {
     // Turns a fraction into a percentage
     private static final int PERCENT = 100;
 
+    // Follows a share printed as a percentage
+    private static final String PERCENT_SIGN = "%";
+
     // The question, such as Q2b
     private final String questionId;
-
-    // The question's maximum mark, read from its tester
-    private final double maxScore;
 
     // The broken copies tried, with what the tester did with each
     private final List<Mutant> mutants = new ArrayList<>();
@@ -34,40 +34,21 @@ public class QuestionStrength {
     // Why the question could not be checked, or "" when it was
     private String problem = "";
 
-    // The marks the tester gave the model answer itself
-    private double modelScore;
-
     /**
      * Creates the result of one question, with no copies tried yet.
      *
+     * <p>Tier: COULD.
+     *
      * @param questionId the question, such as Q2b
-     * @param maxScore the question's maximum mark
      */
-    public QuestionStrength(String questionId, double maxScore) {
+    public QuestionStrength(String questionId) {
         this.questionId = questionId;
-        this.maxScore = maxScore;
-    }
-
-    /**
-     * Returns the question.
-     *
-     * @return the question id, such as Q2b
-     */
-    public String getQuestionId() {
-        return questionId;
-    }
-
-    /**
-     * Returns the question's maximum mark.
-     *
-     * @return the maximum mark
-     */
-    public double getMaxScore() {
-        return maxScore;
     }
 
     /**
      * Returns the broken copies tried. The list can be added to.
+     *
+     * <p>Tier: COULD.
      *
      * @return the copies
      */
@@ -76,16 +57,9 @@ public class QuestionStrength {
     }
 
     /**
-     * Returns why the question could not be checked.
-     *
-     * @return the reason, or "" when it was checked
-     */
-    public String getProblem() {
-        return problem;
-    }
-
-    /**
      * Records why the question could not be checked.
+     *
+     * <p>Tier: COULD.
      *
      * @param problem the reason
      */
@@ -94,26 +68,10 @@ public class QuestionStrength {
     }
 
     /**
-     * Returns the marks the tester gave the model answer itself.
-     *
-     * @return the marks
-     */
-    public double getModelScore() {
-        return modelScore;
-    }
-
-    /**
-     * Records the marks the tester gave the model answer itself.
-     *
-     * @param modelScore the marks
-     */
-    public void setModelScore(double modelScore) {
-        this.modelScore = modelScore;
-    }
-
-    /**
      * Counts the copies that compiled and were run to an outcome: the
      * ones the tester was really tried on.
+     *
+     * <p>Tier: COULD.
      *
      * @return the number of copies tried
      */
@@ -126,6 +84,8 @@ public class QuestionStrength {
     /**
      * Counts the copies the tester still gave full marks.
      *
+     * <p>Tier: COULD.
+     *
      * @return the number of copies that got full marks
      */
     public int countSurvived() {
@@ -136,6 +96,8 @@ public class QuestionStrength {
      * Returns the share of tried copies the tester caught, as a whole
      * percentage: the mutation score.
      *
+     * <p>Tier: COULD.
+     *
      * @return the percentage, or 0 when no copy was tried
      */
     public long getPercentCaught() {
@@ -145,11 +107,14 @@ public class QuestionStrength {
         }
         int caught = tried - countSurvived();
         double share = (double) caught / tried;
-        return Math.round(share * PERCENT);
+        double percent = share * PERCENT;
+        return Math.round(percent);
     }
 
     /**
      * Returns the copies the tester still gave full marks.
+     *
+     * <p>Tier: COULD.
      *
      * @return the copies, in the order of the files
      */
@@ -169,6 +134,8 @@ public class QuestionStrength {
      * caught only because they ran past the time limit are counted
      * apart.
      *
+     * <p>Tier: COULD.
+     *
      * @return the sentence
      */
     public String summarise() {
@@ -181,7 +148,7 @@ public class QuestionStrength {
             return questionId + ": no broken copy could be made and run.";
         }
 
-        String caught = "caught " + getPercentCaught() + "%";
+        String caught = "caught " + getPercentCaught() + PERCENT_SIGN;
         int timedOut = countOutcome(MutantOutcome.TIMED_OUT);
         if (timedOut > 0) {
             // Shown apart, since a slow computer can stop a copy that

@@ -4,7 +4,7 @@
  * Purpose: Checks that source files follow the naming convention.
  *
  * Where it fits: Finds files that exist but are misnamed, for example q1a.java,
- * Q1A.java or Q1a.java.txt, so CaseNameFixer can rename them.
+ * Q1A.java, Q1a.java.txt or Q1a (1).java, so CaseNameFixer can rename them.
  */
 package gradezzy.validation;
 
@@ -24,10 +24,13 @@ import gradezzy.model.Submission;
 /**
  * Checks that source files follow the naming convention. A file counts as
  * misnamed when its name matches the required name only if case is
- * ignored, or when it is the required name with an ending added, such as
- * Q1a.java.txt from Notepad. Java needs the exact name, so such a file
+ * ignored, when it is the required name with an ending added, such as
+ * Q1a.java.txt from Notepad, or with a browser's copy number, such as
+ * Q1a (1).java. Java needs the exact name, so such a file
  * would not compile. The answer file of each question is checked, and so
  * are the other files the starter has for it, such as GoldMember.java.
+ *
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class FileNameValidator extends AbstractValidator {
 
@@ -104,8 +107,9 @@ public class FileNameValidator extends AbstractValidator {
     }
 
     // Returns the file whose name differs from the wanted one only in case,
-    // else one named like it with an ending added, such as .txt. Returns
-    // null when the right name is there or nothing is close.
+    // else one named like it with an ending added, such as .txt, else one
+    // with a copy number, such as Q1a (1).java. Returns null when the
+    // right name is there or nothing is close.
     private Path findMisnamed(List<Path> files, String wantedName) {
         if (findExact(files, wantedName) != null) {
             return null;
@@ -116,7 +120,25 @@ public class FileNameValidator extends AbstractValidator {
             return wrongCase;
         }
 
-        return findWithEnding(files, wantedName);
+        Path withEnding = findWithEnding(files, wantedName);
+        if (withEnding != null) {
+            return withEnding;
+        }
+
+        return findCopyNumbered(files, wantedName);
+    }
+
+    // Returns the file named like the wanted one with a browser's copy
+    // number, such as Q1a (1).java, or null.
+    private Path findCopyNumbered(List<Path> files, String wantedName) {
+        for (Path file : files) {
+            String fileName = file.getFileName().toString();
+            if (isCopyNumbered(fileName, wantedName)) {
+                return file;
+            }
+        }
+
+        return null;
     }
 
     // Returns the file whose name is the wanted name, in any case, with an
@@ -144,7 +166,8 @@ public class FileNameValidator extends AbstractValidator {
             String wantedName) {
         String folderName = question.getFolderName();
 
-        return folderName + "/" + misnamed.getFileName() + " should be named "
+        return folderName + FOLDER_SEPARATOR + misnamed.getFileName()
+                + " should be named "
                 + folderName + FOLDER_SEPARATOR + wantedName + ".";
     }
 }

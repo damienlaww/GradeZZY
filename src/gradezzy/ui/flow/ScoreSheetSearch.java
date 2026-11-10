@@ -23,6 +23,8 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * A background task that looks for a better score sheet for a run.
+ *
+ * <p>Tier: SHOULD.
  */
 public class ScoreSheetSearch extends Task<ClassFileMatch> {
 

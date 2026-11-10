@@ -1,8 +1,7 @@
 /*
  * File: ExportService.java
  *
- * Purpose: Keeps the available exporters and runs the chosen one, and
- * says which score sheet rows the CSV export leaves blank.
+ * Purpose: Keeps the available exporters and runs the chosen one.
  *
  * Where it fits: Lets the export screen list formats without knowing the
  * classes.
@@ -15,20 +14,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 
-import gradezzy.config.AppConfig;
-import gradezzy.config.ExportFolders;
-import gradezzy.ingest.IngestException;
-import gradezzy.ingest.RosterReader;
 import gradezzy.model.GradingRun;
-import gradezzy.model.Section;
-import gradezzy.model.Student;
 import gradezzy.model.Submission;
-import gradezzy.model.SubmissionStatus;
 import gradezzy.report.ExportException;
 import gradezzy.report.Exporter;
 import gradezzy.util.TextUtils;
@@ -43,8 +32,12 @@ public class ExportService {
     // Joins the run id, module and section in an export file name
     private static final String NAME_SEPARATOR = "-";
 
-    // Stands in for a character that is not safe in a file name
+    // Stands in for a character that is not safe in a file name; it is
+    // itself safe and is kept
     private static final char SAFE_CHARACTER = '_';
+
+    // A dash is also safe in a file name and is kept
+    private static final char DASH = '-';
 
     // Added to the file name while an export is being written, so a
     // failed export never replaces the earlier file
@@ -54,32 +47,28 @@ public class ExportService {
     // as 3_OF_6
     private static final String OF_SEPARATOR = "_OF_";
 
+    // Comes between a file name and its extension
+    private static final String EXTENSION_DOT = ".";
+
+    // Comes between two format names in an error message
+    private static final String LIST_SEPARATOR = ", ";
+
     // The registered exporters
     private final List<Exporter> exporters = new ArrayList<>();
 
-    // The application settings, or null if the score sheet cannot be
-    // summarised
-    private final AppConfig config;
-
     /**
-     * Creates a new export service that cannot summarise a score sheet.
+     * Creates a new export service with no exporters yet.
+     *
+     * <p>Tier: MUST.
      */
     public ExportService() {
-        this(null);
-    }
-
-    /**
-     * Creates a new export service.
-     *
-     * @param config the application settings, used to read a run's
-     *        score sheet
-     */
-    public ExportService(AppConfig config) {
-        this.config = config;
+        // the exporters are added with registerExporter
     }
 
     /**
      * Makes one more export format available.
+     *
+     * <p>Tier: MUST.
      *
      * @param exporter the exporter
      */
@@ -93,6 +82,8 @@ public class ExportService {
      * sheet". When no name matches, the first exporter registered with
      * that file extension is used, so the screens' "csv" finds the score
      * sheet exporter, which ApplicationContext registers first.
+     *
+     * <p>Tier: MUST.
      *
      * @param formatName the format name or file extension
      * @return the exporter, or null if the format is unknown or null
@@ -169,7 +160,9 @@ public class ExportService {
         }
 
         int total = gradingRun.getSubmissions().size();
-        if (scope == null || scope.isEmpty() || scope.size() >= total) {
+        boolean wholeRun = scope == null || scope.isEmpty()
+                || scope.size() >= total;
+        if (wholeRun) {
             return export(gradingRun, formatName, outputDirectory);
         }
 
@@ -210,6 +203,17 @@ public class ExportService {
             throw new ExportException("No output folder was given.");
         }
 
+        createFolder(outputDirectory);
+
+        String fileName = createFileName(gradingRun, exporter, nameExtra);
+        Path outputFile = outputDirectory.resolve(fileName);
+        writeThenMove(gradingRun, exporter, outputFile);
+
+        return outputFile;
+    }
+
+    // Creates the output folder if it is missing.
+    private void createFolder(Path outputDirectory) throws ExportException {
         try {
             Files.createDirectories(outputDirectory);
         } catch (IOException exception) {
@@ -217,12 +221,15 @@ public class ExportService {
                     + outputDirectory + " could not be created: "
                     + exception.getMessage(), exception);
         }
+    }
 
-        Path outputFile = outputDirectory.resolve(
-                createFileName(gradingRun, exporter, nameExtra));
-
-        Path tempFile = outputFile.resolveSibling(outputFile.getFileName()
-                + TEMP_SUFFIX);
+    // Has the exporter write a temporary file beside the output file,
+    // then moves it into place, so a failed export keeps the earlier
+    // file.
+    private void writeThenMove(GradingRun gradingRun, Exporter exporter,
+            Path outputFile) throws ExportException {
+        String tempName = outputFile.getFileName() + TEMP_SUFFIX;
+        Path tempFile = outputFile.resolveSibling(tempName);
 
         try {
             // A file left by an earlier failed export would hide an
@@ -251,107 +258,6 @@ public class ExportService {
             // Only does something when writing or moving failed
             deleteQuietly(tempFile);
         }
-
-        return outputFile;
-    }
-
-    /**
-     * Says which rows of a run's score sheet the CSV export fills, and
-     * why the others stay blank: the student's submission has no mark,
-     * or there is none. It also lists submissions that match no row.
-     * Rows are matched to submissions by username, ignoring case, as the
-     * CSV export does, so the counts agree with the file it writes. Only
-     * a GRADED submission fills its row. Nothing is written. The sheet
-     * is read with RosterReader, as it was when the run started, so a
-     * sheet edited since then to hold a row RosterReader refuses (a
-     * blank id or a repeated username) gives an ExportException here,
-     * though the CSV export would still write it.
-     *
-     * <p>Tier: SHOULD.
-     *
-     * @param gradingRun the grading run
-     * @return the summary
-     * @throws ExportException if there is no run, or its score sheet
-     *         cannot be read
-     */
-    public ScoreSheetSummary summarizeScoreSheet(GradingRun gradingRun)
-            throws ExportException {
-        if (gradingRun == null) {
-            throw new ExportException("There is no run to export.");
-        }
-        if (config == null) {
-            throw new ExportException("The score sheet cannot be checked "
-                    + "without the settings.");
-        }
-
-        // The same sheet the CSV export fills: the run's, else its
-        // section's own, else the one for everyone
-        Path scoreSheetFile = gradingRun.getScoreSheetFile();
-        if (scoreSheetFile == null) {
-            scoreSheetFile = findSectionSheet(gradingRun);
-        }
-
-        List<Student> roster = null;
-        try {
-            roster = new RosterReader(config).readRoster(scoreSheetFile);
-        } catch (IngestException exception) {
-            throw new ExportException(exception.getMessage(), exception);
-        }
-
-        Map<String, Submission> submissionsByUsername =
-                indexByUsername(gradingRun.getSubmissions());
-        ScoreSheetSummary summary = new ScoreSheetSummary();
-        List<String> sheetUsernames = new ArrayList<>();
-        for (Student student : roster) {
-            String key = student.getUsername().toLowerCase(Locale.ROOT);
-            sheetUsernames.add(key);
-            Submission submission = submissionsByUsername.get(key);
-            if (submission == null) {
-                summary.getNoSubmission().add(student.getUsername());
-            } else if (submission.getStatus() == SubmissionStatus.GRADED) {
-                summary.getFilled().add(student.getUsername());
-            } else {
-                summary.getNotGraded().add(student.getUsername());
-            }
-        }
-
-        // In upload order, each student once
-        List<String> listed = new ArrayList<>();
-        for (Submission submission : gradingRun.getSubmissions()) {
-            String key = submission.getUsername().toLowerCase(Locale.ROOT);
-            if (!sheetUsernames.contains(key) && !listed.contains(key)) {
-                listed.add(key);
-                summary.getNotOnSheet().add(submission.getUsername());
-            }
-        }
-        return summary;
-    }
-
-    // The score sheet of a run's section, or the one for everyone, for a
-    // run saved before its score sheet was recorded.
-    private Path findSectionSheet(GradingRun gradingRun) {
-        Section section = gradingRun.getSection();
-        if (section == null) {
-            return ExportFolders.findScoreSheet(config, null, null);
-        }
-        return ExportFolders.findScoreSheet(config, section.getModuleCode(),
-                section.getSectionCode());
-    }
-
-    // Maps each username, in lower case, to its submission, as the CSV
-    // export does: a copy whose upload was refused never replaces one
-    // that was loaded.
-    private Map<String, Submission> indexByUsername(
-            List<Submission> submissions) {
-        Map<String, Submission> submissionsByUsername = new HashMap<>();
-        for (Submission submission : submissions) {
-            String key = submission.getUsername().toLowerCase(Locale.ROOT);
-            Submission earlier = submissionsByUsername.get(key);
-            if (earlier == null || earlier.getIngestFailure() != null) {
-                submissionsByUsername.put(key, submission);
-            }
-        }
-        return submissionsByUsername;
     }
 
     // Deletes a file if it is there. A file that cannot be deleted is
@@ -377,7 +283,8 @@ public class ExportService {
         }
         name = name + exporter.getFormatName();
 
-        return makeSafe(name) + "." + makeSafe(exporter.getFileExtension());
+        return makeSafe(name) + EXTENSION_DOT
+                + makeSafe(exporter.getFileExtension());
     }
 
     // Keeps letters, digits, dashes and underscores, so a code
@@ -388,8 +295,9 @@ public class ExportService {
         for (int index = 0; index < text.length(); index++) {
             char current = text.charAt(index);
 
-            if (Character.isLetterOrDigit(current) || current == '-'
-                    || current == '_') {
+            boolean isSafe = Character.isLetterOrDigit(current)
+                    || current == DASH || current == SAFE_CHARACTER;
+            if (isSafe) {
                 safe += current;
             } else {
                 safe += SAFE_CHARACTER;
@@ -407,6 +315,6 @@ public class ExportService {
             names.add(exporter.getFormatName());
         }
 
-        return TextUtils.join(", ", names);
+        return TextUtils.join(LIST_SEPARATOR, names);
     }
 }

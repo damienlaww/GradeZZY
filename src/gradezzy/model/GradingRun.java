@@ -50,6 +50,8 @@ public class GradingRun {
     /**
      * Creates a new grading run.
      *
+     * <p>Tier: MUST.
+     *
      * @param id the unique id of this run
      * @param assessment the assessment being graded
      * @param section the section the batch belongs to
@@ -66,6 +68,8 @@ public class GradingRun {
     /**
      * Returns the unique id of this run.
      *
+     * <p>Tier: MUST.
+     *
      * @return the unique id of this run
      */
     public String getId() {
@@ -74,6 +78,8 @@ public class GradingRun {
 
     /**
      * Returns the assessment being graded.
+     *
+     * <p>Tier: MUST.
      *
      * @return the assessment being graded
      */
@@ -84,6 +90,8 @@ public class GradingRun {
     /**
      * Returns the section the batch belongs to.
      *
+     * <p>Tier: MUST.
+     *
      * @return the section the batch belongs to
      */
     public Section getSection() {
@@ -92,6 +100,8 @@ public class GradingRun {
 
     /**
      * Returns the time the run started.
+     *
+     * <p>Tier: MUST.
      *
      * @return the time the run started
      */
@@ -102,6 +112,8 @@ public class GradingRun {
     /**
      * Returns the submissions in this run.
      *
+     * <p>Tier: MUST.
+     *
      * @return the submissions in this run
      */
     public List<Submission> getSubmissions() {
@@ -110,6 +122,8 @@ public class GradingRun {
 
     /**
      * Adds a submission to this run.
+     *
+     * <p>Tier: MUST.
      *
      * @param submission the submission
      */
@@ -130,8 +144,34 @@ public class GradingRun {
     }
 
     /**
+     * Finds a student's submission, ignoring case. A copy whose upload
+     * was refused is used only if no other copy was loaded, as the CSV
+     * export does.
+     *
+     * <p>Tier: SHOULD.
+     *
+     * @param username the student's username
+     * @return the submission, or null when the student has none
+     */
+    public Submission findLoaded(String username) {
+        Submission found = null;
+        for (Submission submission : submissions) {
+            boolean isBetterCopy = found == null
+                    || found.getIngestFailure() != null;
+            boolean isStudent = submission.getUsername()
+                    .equalsIgnoreCase(username);
+            if (isStudent && isBetterCopy) {
+                found = submission;
+            }
+        }
+        return found;
+    }
+
+    /**
      * Returns the score sheet the batch was graded against. The CSV
      * export fills in this sheet.
+     *
+     * <p>Tier: MUST.
      *
      * @return the score sheet, or null for a run saved before this was
      *         recorded
@@ -143,6 +183,8 @@ public class GradingRun {
     /**
      * Sets the score sheet the batch was graded against.
      *
+     * <p>Tier: MUST.
+     *
      * @param scoreSheetFile the score sheet
      */
     public void setScoreSheetFile(Path scoreSheetFile) {
@@ -153,6 +195,8 @@ public class GradingRun {
      * Returns the starter folder chosen for the batch. The untouched and
      * empty answer checks compare each answer with its files.
      *
+     * <p>Tier: MUST.
+     *
      * @return the starter folder, or null to use the one in the settings
      */
     public Path getStarterDirectory() {
@@ -161,6 +205,8 @@ public class GradingRun {
 
     /**
      * Sets the starter folder chosen for the batch.
+     *
+     * <p>Tier: MUST.
      *
      * @param starterDirectory the starter folder, or null for the settings
      */
@@ -172,6 +218,8 @@ public class GradingRun {
      * Returns the tester folder the batch was graded with. Resume uses it,
      * so a run is never finished with other testers than it started with.
      *
+     * <p>Tier: MUST.
+     *
      * @return the tester folder, or null if the testers were typed in the
      *         app or the run was saved before this was recorded
      */
@@ -181,6 +229,8 @@ public class GradingRun {
 
     /**
      * Sets the tester folder the batch was graded with.
+     *
+     * <p>Tier: MUST.
      *
      * @param testersDirectory the tester folder, or null if unknown
      */

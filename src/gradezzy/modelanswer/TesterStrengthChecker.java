@@ -57,10 +57,6 @@ public class TesterStrengthChecker {
     // Exit code of javac when the files compiled
     private static final int COMPILED = 0;
 
-    // How far below the maximum a mark may be and still be full marks,
-    // since marks such as 0.5 are added as doubles
-    private static final double FULL_MARKS_MARGIN = 0.0001;
-
     // Splits compiler output into lines
     private static final String LINE_BREAK = "\\R";
 
@@ -90,6 +86,8 @@ public class TesterStrengthChecker {
 
     /**
      * Creates a checker.
+     *
+     * <p>Tier: COULD.
      *
      * @param config the settings
      * @param processRunner the helper that runs javac and java
@@ -126,15 +124,15 @@ public class TesterStrengthChecker {
         List<QuestionStrength> results = new ArrayList<>();
 
         for (Question question : assessment.getQuestions()) {
-            QuestionStrength result = new QuestionStrength(question.getId(),
-                    question.getMaxScore());
+            QuestionStrength result = new QuestionStrength(
+                    question.getId());
             Path questionWork = workRoot.resolve(question.getId());
             checkQuestion(result, question, testersDirectory,
                     starterDirectory, modelAnswers, questionWork);
             results.add(result);
         }
 
-        deleteQuietly(workRoot);
+        ModelAnswerCopy.deleteQuietly(workRoot);
         return results;
     }
 
@@ -146,16 +144,10 @@ public class TesterStrengthChecker {
                 + config.getString(ConfigKeys.TESTER_CLASS_SUFFIX);
         String testerFileName = testerClassName + JAVA_EXTENSION;
         Path testerFile = testersDirectory.resolve(testerFileName);
-        if (!Files.isRegularFile(testerFile)) {
-            result.setProblem("There is no " + testerFileName
-                    + " in the tester folder.");
-            return;
-        }
-        if (ModelAnswerCopy.findAnswerFile(modelAnswers, question) == null) {
-            result.setProblem("The model answers have no "
-                    + question.getFolderName() + FOLDER_SEPARATOR
-                    + question.getFileName()
-                    + ".");
+        String missing = findMissingFile(question, testerFile,
+                testerFileName, modelAnswers);
+        if (missing != null) {
+            result.setProblem(missing);
             return;
         }
 
@@ -163,8 +155,9 @@ public class TesterStrengthChecker {
             Path modelFolder = questionWork.resolve(MODEL_FOLDER);
             prepareModel(question, testersDirectory, starterDirectory,
                     modelAnswers, testerFile, modelFolder);
-            if (!checkModelAnswer(result, question, modelFolder,
-                    testerClassName, testerFileName)) {
+            boolean fullMarks = checkModelAnswer(result, question,
+                    modelFolder, testerClassName, testerFileName);
+            if (!fullMarks) {
                 return;
             }
 
@@ -184,6 +177,21 @@ public class TesterStrengthChecker {
             result.setProblem("javac or java could not be run: "
                     + exception.getMessage());
         }
+    }
+
+    // Returns the problem when the tester or the model answer of a
+    // question is missing, or null when both are there.
+    private String findMissingFile(Question question, Path testerFile,
+            String testerFileName, Path modelAnswers) {
+        if (!Files.isRegularFile(testerFile)) {
+            return "There is no " + testerFileName
+                    + " in the tester folder.";
+        }
+        if (ModelAnswerCopy.findAnswerFile(modelAnswers, question) == null) {
+            return "The model answers have no " + question.getFolderName()
+                    + FOLDER_SEPARATOR + question.getFileName() + ".";
+        }
+        return null;
     }
 
     // Makes the unbroken copy: starter files, model answer, tester and
@@ -218,8 +226,7 @@ public class TesterStrengthChecker {
         ProcessResult run = testerRunner.runTester(modelFolder,
                 testerClassName);
         double score = scoreParser.parse(question, run).getScore();
-        result.setModelScore(score);
-        if (!isFullMarks(score, question)) {
+        if (!ModelAnswerCopy.isFullMarks(score, question)) {
             result.setProblem("The model answer itself gets " + score
                     + " of " + question.getMaxScore() + ", so check the "
                     + "tester and the model answer first.");
@@ -238,8 +245,8 @@ public class TesterStrengthChecker {
         for (String fileName : listAnswerFiles(question, answerFolder)) {
             String source = FileUtils.readText(answerFolder.resolve(
                     fileName));
-            String starterSource = readStarter(starterDirectory, question,
-                    fileName);
+            String starterSource = ModelAnswerCopy.readStarter(
+                    starterDirectory, question, fileName);
             mutants.addAll(mutantMaker.make(fileName, source,
                     starterSource));
         }
@@ -261,24 +268,11 @@ public class TesterStrengthChecker {
         return names;
     }
 
-    // Reads the starter's copy of a file, or "" when there is none.
-    private String readStarter(Path starterDirectory, Question question,
-            String fileName) throws IOException {
-        if (starterDirectory == null) {
-            return "";
-        }
-        Path starterFile = starterDirectory.resolve(question.getFolderName())
-                .resolve(fileName);
-        if (!Files.isRegularFile(starterFile)) {
-            return "";
-        }
-        return FileUtils.readText(starterFile);
-    }
-
     // Runs every copy of a batch on exec.thread.count threads and waits
     // for them all.
     private void runBatch(MutantBatch batch) {
-        int threadCount = Math.min(config.getInt(ConfigKeys.THREAD_COUNT),
+        int configuredThreads = config.getInt(ConfigKeys.THREAD_COUNT);
+        int threadCount = Math.min(configuredThreads,
                 batch.getMutants().size());
         List<Thread> threads = new ArrayList<>();
 
@@ -325,7 +319,7 @@ public class TesterStrengthChecker {
         } catch (ProcessExecutionException exception) {
             mutant.setOutcome(MutantOutcome.NOT_RUN);
         } finally {
-            deleteQuietly(folder);
+            ModelAnswerCopy.deleteQuietly(folder);
         }
     }
 
@@ -343,9 +337,9 @@ public class TesterStrengthChecker {
 
         long timeoutSeconds = config.getLong(
                 ConfigKeys.TESTER_STRENGTH_TIMEOUT_SECONDS);
+        List<Integer> skippedCases = new ArrayList<>();
         ProcessResult run = testerRunner.runTester(folder,
-                batch.getTesterClassName(), new ArrayList<Integer>(),
-                timeoutSeconds);
+                batch.getTesterClassName(), skippedCases, timeoutSeconds);
         if (run.isTimedOut()) {
             mutant.setOutcome(MutantOutcome.TIMED_OUT);
             return;
@@ -353,18 +347,11 @@ public class TesterStrengthChecker {
 
         double score = scoreParser.parse(batch.getQuestion(), run)
                 .getScore();
-        mutant.setScore(score);
-        if (isFullMarks(score, batch.getQuestion())) {
+        if (ModelAnswerCopy.isFullMarks(score, batch.getQuestion())) {
             mutant.setOutcome(MutantOutcome.SURVIVED);
         } else {
             mutant.setOutcome(MutantOutcome.CAUGHT);
         }
-    }
-
-    // Says whether a mark is the question's maximum.
-    private boolean isFullMarks(double score, Question question) {
-        double lowestFull = question.getMaxScore() - FULL_MARKS_MARGIN;
-        return score >= lowestFull;
     }
 
     // Returns the first line the compiler printed, for a problem.
@@ -374,15 +361,5 @@ public class TesterStrengthChecker {
             output = compiled.getStandardOutput().trim();
         }
         return output.split(LINE_BREAK)[FIRST_LINE];
-    }
-
-    // Deletes a folder the check made. One that cannot be deleted stays
-    // in paths.working.dir, where the next check replaces it.
-    private void deleteQuietly(Path folder) {
-        try {
-            FileUtils.deleteDirectory(folder);
-        } catch (IOException exception) {
-            System.err.println("Could not delete " + folder);
-        }
     }
 }

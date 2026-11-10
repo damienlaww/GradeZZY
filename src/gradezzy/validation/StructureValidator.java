@@ -21,10 +21,14 @@ import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.Severity;
 import gradezzy.model.Submission;
+import gradezzy.util.AnswerFolderRule;
+import gradezzy.util.TextUtils;
 
 /**
  * Checks the folder layout: a username folder holding one folder per question
  * group.
+ *
+ * <p>Tier: MUST. Owner: Seth.
  */
 public class StructureValidator extends AbstractValidator {
 
@@ -37,6 +41,20 @@ public class StructureValidator extends AbstractValidator {
     // folder unzipped by hand
     private static final String ZIP_TOP = "the ZIP file";
     private static final String FOLDER_TOP = "the uploaded folder";
+
+    // Separates a folder and the folder inside it in a message
+    private static final String FOLDER_SEPARATOR = "/";
+
+    // Comes between two folder names in a list in a message
+    private static final String LIST_SEPARATOR = ", ";
+
+    // Names the top of the upload among the places that hold question
+    // folders
+    private static final String TOP_LEVEL_NAME = "its top level";
+
+    // The depth, below the content root, of an extra folder that holds
+    // the question folders itself
+    private static final int ONE_LEVEL = 1;
 
     /**
      * Creates a new structure validator.
@@ -74,14 +92,14 @@ public class StructureValidator extends AbstractValidator {
         }
 
         Path contentRoot = findContentRoot(submission, assessment);
-        List<Path> holders = findHolders(listFolders(workingCopy),
-                assessment);
+        List<Path> holders = AnswerFolderRule.findAnswerHolders(workingCopy,
+                getQuestionFolderNames(assessment));
 
         if (contentRoot == null && holders.size() > 1) {
             // The folders are there, so one card says why none is graded
             anomalies.add(createAnomaly(submission,
                     AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
-                    describeSeveralAnswers(holders)));
+                    describeSeveralAnswers(holders, submission)));
             return anomalies;
         } else if (contentRoot == null) {
             addAllFoldersMissing(anomalies, submission, assessment,
@@ -93,11 +111,12 @@ public class StructureValidator extends AbstractValidator {
         String topName = contentRoot.getFileName().toString();
 
         if (contentRoot.equals(workingCopy)) {
+            String message = "The question folders were at the top of "
+                    + describeUpload(submission) + " instead of inside a "
+                    + "folder named " + username + ".";
             anomalies.add(createAnomaly(submission,
                     AnomalyType.MISSING_WRAPPER_FOLDER, Severity.INFO,
-                    "The question folders were at the top of "
-                    + describeUpload(submission) + " instead of inside a "
-                    + "folder named " + username + "."));
+                    message));
         } else if (!topName.equals(username)) {
             anomalies.add(createAnomaly(submission,
                     AnomalyType.WRONG_FOLDER_NAME, Severity.WARNING,
@@ -109,28 +128,39 @@ public class StructureValidator extends AbstractValidator {
         return anomalies;
     }
 
-    // Reports each question folder that is not in the content root.
+    // Reports each question folder that is not in the content root, or
+    // that sits inside a folder of its own name, such as Q1/Q1.
     private void addMissingQuestionFolders(List<Anomaly> anomalies,
             Submission submission, Assessment assessment, Path contentRoot)
             throws IOException {
         List<Path> folders = listFolders(contentRoot);
-        Path extraFolder = findExtraFolder(folders, assessment);
-        String nestingHint = describeNesting(contentRoot, extraFolder);
-        List<String> nestedNames = listNestedNames(folders, extraFolder,
+        Path extraFolder = AnswerFolderRule.findExtraFolder(contentRoot,
+                getQuestionFolderNames(assessment));
+        Path chainEnd = null;
+        if (extraFolder != null) {
+            chainEnd = AnswerFolderRule.findChainEnd(extraFolder,
+                    getQuestionFolderNames(assessment));
+        }
+        String nestingHint = describeNesting(contentRoot, chainEnd);
+        List<String> nestedNames = listNestedNames(folders, chainEnd,
                 assessment);
         boolean firstNested = true;
 
         for (String folderName : getQuestionFolderNames(assessment)) {
-            boolean present = findExact(folders, folderName) != null;
+            Path present = findExact(folders, folderName);
             Path nearMatch = findIgnoringCase(folders, folderName);
 
-            if (!present && nearMatch != null) {
+            if (present != null) {
+                addIfInsideItself(anomalies, submission, contentRoot,
+                        present, folderName);
+            } else if (nearMatch != null) {
+                String message = "The " + folderName + " folder is missing. "
+                        + "A folder named " + nearMatch.getFileName()
+                        + " was found, but folder names must match exactly.";
                 anomalies.add(createAnomaly(submission,
                         AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
-                        "The " + folderName + " folder is missing. A folder "
-                        + "named " + nearMatch.getFileName() + " was found, "
-                        + "but folder names must match exactly."));
-            } else if (!present && isInside(extraFolder, folderName)) {
+                        message));
+            } else if (isInside(chainEnd, folderName)) {
                 // The fix moves every nested folder at once and keeps only
                 // the first card, so that card names them all
                 String subject = folderName + " was";
@@ -138,54 +168,67 @@ public class StructureValidator extends AbstractValidator {
                     subject = joinNames(nestedNames) + " were";
                 }
                 firstNested = false;
+                String message = subject + " " + describeDepth(contentRoot,
+                        chainEnd) + " too deep, inside "
+                        + showPath(contentRoot, chainEnd) + ".";
                 anomalies.add(createAnomaly(submission,
                         AnomalyType.MISSING_QUESTION_FOLDER,
-                        Severity.WARNING, subject + " one level too "
-                        + "deep, inside " + contentRoot.getFileName() + "/"
-                        + extraFolder.getFileName() + "."));
-            } else if (!present) {
+                        Severity.WARNING, message));
+            } else {
+                String message = "The " + folderName + " folder is missing."
+                        + nestingHint;
                 anomalies.add(createAnomaly(submission,
                         AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
-                        "The " + folderName + " folder is missing."
-                        + nestingHint));
+                        message));
             }
         }
     }
 
-    // Returns the one folder of the content root that is not a question
-    // folder but holds question folders one level too deep, such as src
-    // beside out in an IntelliJ project, or null when there is none or
-    // more than one. FolderHierarchyFixer moves the folders by the same
-    // rule.
-    private Path findExtraFolder(List<Path> folders, Assessment assessment)
-            throws IOException {
-        List<String> folderNames = getQuestionFolderNames(assessment);
-        List<Path> holders = new ArrayList<>();
-
-        for (Path folder : folders) {
-            String name = folder.getFileName().toString();
-            boolean questionFolder = isQuestionFolderName(name, folderNames);
-            if (!questionFolder
-                    && holdsQuestionFolder(listFolders(folder), assessment)) {
-                holders.add(folder);
-            }
+    // Reports a question folder that holds only a folder of its own name,
+    // as when Q1 was dragged into Q1. FolderHierarchyFixer moves the inner
+    // one up.
+    private void addIfInsideItself(List<Anomaly> anomalies,
+            Submission submission, Path contentRoot, Path questionFolder,
+            String folderName) throws IOException {
+        Path inner = findNestedQuestionFolder(questionFolder, folderName);
+        if (inner == null) {
+            return;
         }
 
-        if (holders.size() != 1) {
-            return null;
-        }
-        return holders.get(0);
+        String message = folderName + " was one level too deep, inside "
+                + showPath(contentRoot, questionFolder) + ".";
+        anomalies.add(createAnomaly(submission,
+                AnomalyType.MISSING_QUESTION_FOLDER, Severity.WARNING,
+                message));
     }
 
-    // Says whether a folder name is a question folder name, in any case.
-    private boolean isQuestionFolderName(String name,
-            List<String> folderNames) {
-        for (String folderName : folderNames) {
-            if (folderName.equalsIgnoreCase(name)) {
-                return true;
-            }
+    // Says how deep the question folders sit below the content root:
+    // "one level" or, for a chain of folders, "3 levels".
+    private String describeDepth(Path contentRoot, Path chainEnd) {
+        int levels = contentRoot.relativize(chainEnd).getNameCount();
+        if (levels == ONE_LEVEL) {
+            return "one level";
         }
-        return false;
+        return levels + " levels";
+    }
+
+    // Writes a folder below the content root as content root, then each
+    // folder down to it, such as ping.lee.2023/src.
+    private String showPath(Path contentRoot, Path folder) {
+        String shown = contentRoot.getFileName().toString();
+        for (Path part : contentRoot.relativize(folder)) {
+            shown = shown + FOLDER_SEPARATOR + part;
+        }
+        return shown;
+    }
+
+    // Shows where a folder is inside the working copy, such as alice/src.
+    private String showInside(Path workingCopy, Path folder) {
+        List<String> parts = new ArrayList<>();
+        for (Path part : workingCopy.relativize(folder)) {
+            parts.add(part.toString());
+        }
+        return TextUtils.join(FOLDER_SEPARATOR, parts);
     }
 
     // Names the top of the upload: a ZIP file, or a folder unzipped by
@@ -200,15 +243,16 @@ public class StructureValidator extends AbstractValidator {
         return ZIP_TOP;
     }
 
-    // Lists the absent question folders that sit in the extra folder.
+    // Lists the absent question folders that sit at the end of the extra
+    // folder's chain.
     private List<String> listNestedNames(List<Path> folders,
-            Path extraFolder, Assessment assessment) throws IOException {
+            Path chainEnd, Assessment assessment) throws IOException {
         List<String> names = new ArrayList<>();
 
         for (String folderName : getQuestionFolderNames(assessment)) {
             boolean absent = findExact(folders, folderName) == null
                     && findIgnoringCase(folders, folderName) == null;
-            if (absent && isInside(extraFolder, folderName)) {
+            if (absent && isInside(chainEnd, folderName)) {
                 names.add(folderName);
             }
         }
@@ -225,7 +269,7 @@ public class StructureValidator extends AbstractValidator {
         String joined = names.get(0);
 
         for (int index = 1; index < last; index++) {
-            joined = joined + ", " + names.get(index);
+            joined = joined + LIST_SEPARATOR + names.get(index);
         }
         if (last > 0) {
             joined = joined + " and " + names.get(last);
@@ -233,48 +277,62 @@ public class StructureValidator extends AbstractValidator {
         return joined;
     }
 
-    // Says whether the extra folder holds the question folder.
-    private boolean isInside(Path extraFolder, String folderName)
+    // Says whether the end of the extra folder's chain holds the question
+    // folder.
+    private boolean isInside(Path chainEnd, String folderName)
             throws IOException {
-        return extraFolder != null
-                && findIgnoringCase(listFolders(extraFolder),
+        return chainEnd != null
+                && findIgnoringCase(listFolders(chainEnd),
                 folderName) != null;
     }
 
-    // Explains where the question folders sit one level too deep, or
-    // returns empty text.
-    private String describeNesting(Path contentRoot, Path extraFolder) {
-        if (extraFolder == null) {
+    // Explains where the question folders sit too deep, or returns empty
+    // text.
+    private String describeNesting(Path contentRoot, Path chainEnd) {
+        if (chainEnd == null) {
             return "";
         }
 
-        return " The question folders were found one level too deep, in "
-                + contentRoot.getFileName() + "/" + extraFolder.getFileName()
-                + ".";
+        return " The question folders were found "
+                + describeDepth(contentRoot, chainEnd) + " too deep, in "
+                + showPath(contentRoot, chainEnd) + ".";
     }
 
     // Reports every question folder as missing, with the same reason.
     private void addAllFoldersMissing(List<Anomaly> anomalies,
             Submission submission, Assessment assessment, String reason) {
         for (String folderName : getQuestionFolderNames(assessment)) {
+            String message = "The " + folderName + " folder is missing. "
+                    + reason;
             anomalies.add(createAnomaly(submission,
                     AnomalyType.MISSING_QUESTION_FOLDER, Severity.ERROR,
-                    "The " + folderName + " folder is missing. " + reason));
+                    message));
         }
     }
 
     // Says that several folders hold question folders, so GradeZZY cannot
-    // tell which one is the answer.
-    private String describeSeveralAnswers(List<Path> holders) {
+    // tell which one is the answer. The top of the upload counts as one.
+    private String describeSeveralAnswers(List<Path> holders,
+            Submission submission) {
         List<String> names = new ArrayList<>();
+        Path workingCopy = submission.getWorkingCopyPath();
 
         for (Path holder : holders) {
-            names.add(holder.getFileName().toString());
+            if (holder.equals(workingCopy)) {
+                names.add(TOP_LEVEL_NAME);
+            } else {
+                names.add(showInside(workingCopy, holder));
+            }
         }
-        return "The ZIP file holds " + holders.size() + " folders with the "
-                + "question folders in them (" + joinNames(names) + "), so "
-                + "GradeZZY cannot tell which one to grade. Ask the student "
-                + "which one is their answer, then grade it again.";
+
+        String upload = "The ZIP file";
+        if (describeUpload(submission).equals(FOLDER_TOP)) {
+            upload = "The uploaded folder";
+        }
+        return upload + " holds the question folders in " + holders.size()
+                + " places (" + joinNames(names) + "), so GradeZZY cannot "
+                + "tell which one to grade. Ask the student which one is "
+                + "their answer, then grade it again.";
     }
 
     // Explains why no top folder could be used: none, or too many.
@@ -286,11 +344,12 @@ public class StructureValidator extends AbstractValidator {
             return "The ZIP file holds no folder.";
         }
 
-        String names = topFolders.get(0).getFileName().toString();
+        List<String> folderNames = new ArrayList<>();
 
-        for (int i = 1; i < topFolders.size(); i++) {
-            names += ", " + topFolders.get(i).getFileName();
+        for (Path topFolder : topFolders) {
+            folderNames.add(topFolder.getFileName().toString());
         }
+        String names = TextUtils.join(LIST_SEPARATOR, folderNames);
 
         return "The ZIP file holds several folders (" + names + ") and "
                 + "none is named " + submission.getUsername() + ".";

@@ -20,9 +20,14 @@ import java.time.LocalDateTime;
  */
 public class AuditEntry {
 
-    // The text around the reference at the end of a detail
+    // The text before the reference at the end of a detail
     private static final String REFERENCE_START = " [ref ";
+
+    // The text after the reference at the end of a detail
     private static final String REFERENCE_END = "]";
+
+    // Returned by referenceStart when the detail holds no reference
+    private static final int NO_REFERENCE = -1;
 
     // The time of the action
     private final LocalDateTime timestamp;
@@ -35,6 +40,8 @@ public class AuditEntry {
 
     /**
      * Creates a new audit entry.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param timestamp the time of the action
      * @param action a short name for the action
@@ -49,6 +56,8 @@ public class AuditEntry {
     /**
      * Returns the time of the action.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the time of the action
      */
     public LocalDateTime getTimestamp() {
@@ -57,6 +66,8 @@ public class AuditEntry {
 
     /**
      * Returns a short name for the action.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return a short name for the action
      */
@@ -67,6 +78,8 @@ public class AuditEntry {
     /**
      * Returns the full description of the action.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the full description of the action
      */
     public String getDetail() {
@@ -76,6 +89,8 @@ public class AuditEntry {
     /**
      * Returns the description without the reference at its end, as the
      * window shows it.
+     *
+     * <p>Tier: SHOULD.
      *
      * @return the description to show
      */
@@ -91,6 +106,8 @@ public class AuditEntry {
      * Returns the id of the flag or run the line is about, as added by
      * withReference.
      *
+     * <p>Tier: SHOULD.
+     *
      * @return the id, or an empty text for a line with no reference
      */
     public String getReference() {
@@ -98,13 +115,16 @@ public class AuditEntry {
         if (start < 0) {
             return "";
         }
-        return detail.substring(start + REFERENCE_START.length(),
-                detail.length() - REFERENCE_END.length());
+        int idStart = start + REFERENCE_START.length();
+        int idEnd = detail.length() - REFERENCE_END.length();
+        return detail.substring(idStart, idEnd);
     }
 
     /**
      * Adds a reference to the end of a description, such as the id of
      * the flag the line is about.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param detail the description
      * @param reference the id; null or empty adds nothing
@@ -120,7 +140,7 @@ public class AuditEntry {
     // Finds where the reference starts, or -1 when there is none.
     private int referenceStart() {
         if (detail == null || !detail.endsWith(REFERENCE_END)) {
-            return -1;
+            return NO_REFERENCE;
         }
         return detail.lastIndexOf(REFERENCE_START);
     }

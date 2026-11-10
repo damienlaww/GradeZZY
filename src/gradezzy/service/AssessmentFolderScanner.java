@@ -30,6 +30,8 @@ import gradezzy.util.FileUtils;
 
 /**
  * Finds data files, provided class files and starter folder names.
+ *
+ * <p>Tier: SHOULD. Owner: Jing Yuan.
  */
 public final class AssessmentFolderScanner {
 
@@ -46,6 +48,19 @@ public final class AssessmentFolderScanner {
     // How deep to look for a folder's own files, not its subfolders'
     private static final int OWN_FILES_DEPTH = 1;
 
+    // The start of a hidden file or folder name, such as .DS_Store
+    private static final String HIDDEN_PREFIX = ".";
+
+    // Ends each tester's source when they are read into one text
+    private static final String LINE_END = "\n";
+
+    // A starter folder whose only folder is not a question folder is
+    // wrapped in one more folder
+    private static final int ONLY_FOLDER = 1;
+
+    // The lower-case letters at the end of an id, such as the a of Q1a
+    private static final String ID_LETTERS = "[a-z]+$";
+
     // Not used: every method is static.
     private AssessmentFolderScanner() {
     }
@@ -58,6 +73,8 @@ public final class AssessmentFolderScanner {
      * Q2a.java and Q2b.java, gives its other files to the first of them,
      * so each file is checked once. Earlier names are replaced, and
      * nothing is added when the starter folder cannot be read.
+     *
+     * <p>Tier: SHOULD.
      *
      * @param assessment the assessment whose questions are filled in
      * @param starterFolder the starter folder, or null
@@ -123,6 +140,8 @@ public final class AssessmentFolderScanner {
      * tester's source. When no tester names any, every such file except a
      * readme is listed.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param testersFolder the tester folder
      * @return the file names, sorted; empty when the folder cannot be read
      */
@@ -133,7 +152,7 @@ public final class AssessmentFolderScanner {
         }
         List<Path> files = null;
         try {
-            files = listChildren(testersFolder, 1);
+            files = listChildren(testersFolder, OWN_FILES_DEPTH);
         } catch (IOException exception) {
             return found;
         }
@@ -142,11 +161,12 @@ public final class AssessmentFolderScanner {
         for (Path file : files) {
             String name = file.getFileName().toString();
             String lower = name.toLowerCase(Locale.ROOT);
-            if (!Files.isRegularFile(file) || name.startsWith(".")) {
+            if (!Files.isRegularFile(file)
+                    || name.startsWith(HIDDEN_PREFIX)) {
                 continue;
             }
             if (lower.endsWith(JAVA)) {
-                allSource += read(file) + "\n";
+                allSource += read(file) + LINE_END;
             } else if (!lower.endsWith(CLASS)) {
                 others.add(name);
             }
@@ -171,6 +191,8 @@ public final class AssessmentFolderScanner {
      * Lists the class files in a starter folder that have no Java source
      * beside them, such as DataException.class.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param starterFolder the starter folder
      * @return the file names, sorted, each once; empty when the folder
      *         cannot be read
@@ -188,11 +210,13 @@ public final class AssessmentFolderScanner {
         }
         for (Path file : files) {
             String name = file.getFileName().toString();
-            if (!Files.isRegularFile(file)
-                    || !name.toLowerCase(Locale.ROOT).endsWith(CLASS)) {
+            boolean isClassFile = Files.isRegularFile(file)
+                    && name.toLowerCase(Locale.ROOT).endsWith(CLASS);
+            if (!isClassFile) {
                 continue;
             }
-            String base = name.substring(0, name.length() - CLASS.length());
+            int baseLength = name.length() - CLASS.length();
+            String base = name.substring(0, baseLength);
             if (!Files.exists(file.resolveSibling(base + JAVA))) {
                 found.add(name);
             }
@@ -205,6 +229,8 @@ public final class AssessmentFolderScanner {
      * starter folder's own name, or, when it holds just one folder that
      * is not a question folder, that folder's name.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param starterFolder the starter folder
      * @param questionFolders the question folder names, such as Q1
      * @return the names; empty when the folder cannot be read
@@ -212,25 +238,31 @@ public final class AssessmentFolderScanner {
     public static List<String> findStarterFolderNames(Path starterFolder,
             List<String> questionFolders) {
         List<String> found = new ArrayList<>();
-        if (starterFolder == null || !Files.isDirectory(starterFolder)
-                || starterFolder.getFileName() == null) {
+        boolean noFolder = starterFolder == null
+                || !Files.isDirectory(starterFolder)
+                || starterFolder.getFileName() == null;
+        if (noFolder) {
             return found;
         }
         List<Path> children = null;
         try {
-            children = listChildren(starterFolder, 1);
+            children = listChildren(starterFolder, OWN_FILES_DEPTH);
         } catch (IOException exception) {
             return found;
         }
         List<Path> folders = new ArrayList<>();
         for (Path child : children) {
-            if (Files.isDirectory(child)
-                    && !child.getFileName().toString().startsWith(".")) {
+            boolean visibleFolder = Files.isDirectory(child)
+                    && !child.getFileName().toString()
+                    .startsWith(HIDDEN_PREFIX);
+            if (visibleFolder) {
                 folders.add(child);
             }
         }
-        if (folders.size() == 1 && !isQuestionFolder(
-                folders.get(0).getFileName().toString(), questionFolders)) {
+        boolean oneOtherFolder = folders.size() == ONLY_FOLDER
+                && !isQuestionFolder(folders.get(0).getFileName()
+                        .toString(), questionFolders);
+        if (oneOtherFolder) {
             found.add(folders.get(0).getFileName().toString());
         } else {
             found.add(starterFolder.getFileName().toString());
@@ -245,6 +277,8 @@ public final class AssessmentFolderScanner {
      * holds Q1a.java in the starter folder, or else the id without its
      * last letters, so Q1a is in Q1 and Q3 in Q3.
      *
+     * <p>Tier: SHOULD.
+     *
      * @param testersFolder the tester folder
      * @param testerSuffix the end of a tester's class name, such as Tester
      * @param starterFolder the starter folder, or null
@@ -254,29 +288,35 @@ public final class AssessmentFolderScanner {
     public static List<Question> findQuestions(Path testersFolder,
             String testerSuffix, Path starterFolder) {
         List<Question> found = new ArrayList<>();
-        if (testersFolder == null || !Files.isDirectory(testersFolder)
-                || testerSuffix == null || testerSuffix.isEmpty()) {
+        boolean noTesters = testersFolder == null
+                || !Files.isDirectory(testersFolder)
+                || testerSuffix == null || testerSuffix.isEmpty();
+        if (noTesters) {
             return found;
         }
         String ending = testerSuffix + JAVA;
         List<Path> files = null;
         try {
-            files = listChildren(testersFolder, 1);
+            files = listChildren(testersFolder, OWN_FILES_DEPTH);
         } catch (IOException exception) {
             return found;
         }
         TreeSet<String> ids = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         for (Path file : files) {
             String name = file.getFileName().toString();
-            if (Files.isRegularFile(file) && name.endsWith(ending)
-                    && name.length() > ending.length()) {
-                ids.add(name.substring(0, name.length() - ending.length()));
+            boolean isTester = Files.isRegularFile(file)
+                    && name.endsWith(ending)
+                    && name.length() > ending.length();
+            if (isTester) {
+                int idLength = name.length() - ending.length();
+                ids.add(name.substring(0, idLength));
             }
         }
         for (String id : ids) {
-            found.add(new Question(id, folderOf(id, starterFolder),
-                    id + JAVA, readMaxScore(testersFolder.resolve(id
-                    + ending))));
+            String folderName = folderOf(id, starterFolder);
+            Path tester = testersFolder.resolve(id + ending);
+            double maxScore = readMaxScore(tester);
+            found.add(new Question(id, folderName, id + JAVA, maxScore));
         }
         return found;
     }
@@ -296,12 +336,14 @@ public final class AssessmentFolderScanner {
     private static String folderOf(String id, Path starterFolder) {
         for (Path file : listOrEmpty(starterFolder)) {
             Path parent = file.getParent();
-            if (file.getFileName().toString().equalsIgnoreCase(id + JAVA)
-                    && parent != null && !parent.equals(starterFolder)) {
+            String name = file.getFileName().toString();
+            boolean isAnswerInFolder = name.equalsIgnoreCase(id + JAVA)
+                    && parent != null && !parent.equals(starterFolder);
+            if (isAnswerInFolder) {
                 return parent.getFileName().toString();
             }
         }
-        String folder = id.replaceAll("[a-z]+$", "");
+        String folder = id.replaceAll(ID_LETTERS, "");
         if (folder.isEmpty()) {
             return id;
         }
@@ -345,9 +387,11 @@ public final class AssessmentFolderScanner {
             children = Files.newDirectoryStream(folder);
             for (Path child : children) {
                 found.add(child);
-                if (depth > 1 && Files.isDirectory(child,
-                        LinkOption.NOFOLLOW_LINKS)) {
-                    found.addAll(listChildren(child, depth - 1));
+                boolean goDeeper = depth > OWN_FILES_DEPTH
+                        && Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS);
+                if (goDeeper) {
+                    int deeper = depth - 1;
+                    found.addAll(listChildren(child, deeper));
                 }
             }
         } finally {

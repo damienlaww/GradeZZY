@@ -49,6 +49,8 @@ public class MutantBatch {
     /**
      * Creates a batch with no copy handed out yet.
      *
+     * <p>Tier: COULD.
+     *
      * @param question the question the copies are of
      * @param mutants the broken copies
      * @param modelFolder the compiled model answer with its tester
@@ -71,6 +73,8 @@ public class MutantBatch {
      * Hands out the next copy. Only one worker at a time gets in, so no
      * copy is run twice.
      *
+     * <p>Tier: COULD.
+     *
      * @return the index of the copy, or NONE_LEFT
      */
     public synchronized int next() {
@@ -85,6 +89,8 @@ public class MutantBatch {
     /**
      * Returns the question the copies are of.
      *
+     * <p>Tier: COULD.
+     *
      * @return the question
      */
     public Question getQuestion() {
@@ -93,6 +99,8 @@ public class MutantBatch {
 
     /**
      * Returns the broken copies.
+     *
+     * <p>Tier: COULD.
      *
      * @return the copies
      */
@@ -103,6 +111,8 @@ public class MutantBatch {
     /**
      * Returns the folder of the compiled model answer and its tester.
      *
+     * <p>Tier: COULD.
+     *
      * @return the folder
      */
     public Path getModelFolder() {
@@ -111,6 +121,8 @@ public class MutantBatch {
 
     /**
      * Returns the folder each copy gets its own folder in.
+     *
+     * <p>Tier: COULD.
      *
      * @return the folder
      */
@@ -121,6 +133,8 @@ public class MutantBatch {
     /**
      * Returns the tester's class name.
      *
+     * <p>Tier: COULD.
+     *
      * @return the class name, such as Q1Tester
      */
     public String getTesterClassName() {
@@ -129,6 +143,8 @@ public class MutantBatch {
 
     /**
      * Returns the tester's file name.
+     *
+     * <p>Tier: COULD.
      *
      * @return the file name, such as Q1Tester.java
      */

@@ -6,8 +6,8 @@
  * hide copied code.
  *
  * Where it fits: Used by PlagiarismService when plagiarism.algorithm is
- * winnowing (the default). TokenSimilarityDetector is the first version,
- * kept so the two can be compared.
+ * winnowing. TokenSimilarityDetector (trigrams) is the first version
+ * and the default, kept so the two can be compared.
  */
 package gradezzy.plagiarism;
 
@@ -63,6 +63,8 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
     /**
      * Creates a new winnowing similarity detector.
      *
+     * <p>Tier: COULD.
+     *
      * @param config the application settings
      */
     public WinnowingSimilarityDetector(AppConfig config) {
@@ -71,6 +73,8 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
 
     /**
      * Returns the name of the algorithm.
+     *
+     * <p>Tier: COULD.
      *
      * @return the name of the algorithm
      */
@@ -82,6 +86,8 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
     /**
      * Compares every pair of submissions whose answers hold enough new
      * code, leaving out the code in paths.starter.dir.
+     *
+     * <p>Tier: COULD.
      *
      * @param submissions the submissions
      * @param assessment the assessment
@@ -96,6 +102,8 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
     /**
      * Compares every pair of submissions whose answers hold enough new
      * code, leaving out the code in the run's starter folder.
+     *
+     * <p>Tier: COULD.
      *
      * @param submissions the submissions
      * @param assessment the assessment
@@ -278,11 +286,21 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
             SimilarityPair newPair) {
         int position = 0;
 
-        while (position < pairs.size() && pairs.get(position).getSimilarity()
-                >= newPair.getSimilarity()) {
+        while (isAtLeastAsSimilar(pairs, position, newPair)) {
             position++;
         }
 
         pairs.add(position, newPair);
+    }
+
+    // Says whether there is a pair at a position and it is at least as
+    // similar as the new pair, so the new pair goes after it.
+    private boolean isAtLeastAsSimilar(List<SimilarityPair> pairs,
+            int position, SimilarityPair newPair) {
+        if (position >= pairs.size()) {
+            return false;
+        }
+        double similarity = pairs.get(position).getSimilarity();
+        return similarity >= newPair.getSimilarity();
     }
 }

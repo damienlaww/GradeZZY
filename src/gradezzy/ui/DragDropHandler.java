@@ -12,6 +12,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import javafx.scene.Node;
 import javafx.scene.input.DragEvent;
@@ -20,6 +21,8 @@ import javafx.scene.input.TransferMode;
 
 /**
  * Lets the instructor drop files onto the window.
+ *
+ * <p>Tier: COULD.
  */
 public class DragDropHandler {
 
@@ -63,15 +66,6 @@ public class DragDropHandler {
     }
 
     /**
-     * Removes the hover highlight when the files leave the target.
-     *
-     * @param target the target
-     */
-    private void clearDragOver(Node target) {
-        target.getStyleClass().remove(DRAG_OVER_CLASS);
-    }
-
-    /**
      * Returns the files dropped most recently.
      *
      * @return the dropped paths
@@ -90,6 +84,11 @@ public class DragDropHandler {
             }
         }
         event.consume();
+    }
+
+    // Removes the hover highlight when the files leave the target.
+    private void clearDragOver(Node target) {
+        target.getStyleClass().remove(DRAG_OVER_CLASS);
     }
 
     // Keeps the accepted paths and tells the screen.
@@ -117,7 +116,7 @@ public class DragDropHandler {
     private List<File> acceptedFiles(Dragboard board) {
         List<File> accepted = new ArrayList<>();
         for (File file : board.getFiles()) {
-            boolean isZip = file.getName().toLowerCase().endsWith(
+            boolean isZip = file.getName().toLowerCase(Locale.ROOT).endsWith(
                     ZIP_EXTENSION);
             if (file.isDirectory() || isZip) {
                 accepted.add(file);

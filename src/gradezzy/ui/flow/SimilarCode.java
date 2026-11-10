@@ -31,6 +31,8 @@ import gradezzy.ui.backend.SimilarityDetail;
 
 /**
  * The two files of a similar pair, scrolling together.
+ *
+ * <p>Tier: COULD.
  */
 public class SimilarCode {
 
@@ -269,7 +271,9 @@ public class SimilarCode {
             DoubleProperty offset) {
         double hiddenWidth = column.getWidth()
                 - pane.getViewportBounds().getWidth();
-        offset.set(pane.getHvalue() * Math.max(NO_WIDTH, hiddenWidth));
+        double scrolledLeft = pane.getHvalue()
+                * Math.max(NO_WIDTH, hiddenWidth);
+        offset.set(scrolledLeft);
     }
 
     // Builds one line: its number, its code and, for starter code, a tag.

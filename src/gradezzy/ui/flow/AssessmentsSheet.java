@@ -25,6 +25,8 @@ import gradezzy.ui.backend.ActionResult;
 
 /**
  * Builds the list of saved assessments.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class AssessmentsSheet {
 
@@ -119,8 +121,9 @@ public final class AssessmentsSheet {
             Parts.tip(pill, "Set up and grading use this assessment now.");
             nameLine.getChildren().add(pill);
         }
-        Label facts = Parts.muted(Parts.plural(assessment.getQuestions()
-                .size(), "question") + DOT
+        int questionCount = assessment.getQuestions().size();
+        Label facts = Parts.muted(Parts.plural(questionCount, "question")
+                + DOT
                 + Parts.mark(assessment.getMaxTotal()) + " marks" + DOT
                 + "testers in " + assessment.getTestersDirectory());
         facts.getStyleClass().add("small-text");

@@ -59,6 +59,8 @@ public class ServiceRegistry {
     /**
      * Creates a new service registry.
      *
+     * <p>Tier: MUST.
+     *
      * @param config the application settings
      * @param gradingService the grading service
      * @param anomalyService the anomaly service
@@ -92,6 +94,8 @@ public class ServiceRegistry {
      * Gives the registry the service that changes marks by hand. It is
      * set after construction because it needs the result store.
      *
+     * <p>Tier: MUST.
+     *
      * @param service the service
      */
     public void setScoreAdjustmentService(ScoreAdjustmentService service) {
@@ -100,6 +104,8 @@ public class ServiceRegistry {
 
     /**
      * Returns the service that changes marks by hand.
+     *
+     * <p>Tier: MUST.
      *
      * @return the service; one that keeps changes for this session only
      *         when none was set
@@ -156,6 +162,8 @@ public class ServiceRegistry {
     /**
      * Returns the application settings.
      *
+     * <p>Tier: MUST.
+     *
      * @return the application settings
      */
     public AppConfig getConfig() {
@@ -164,6 +172,8 @@ public class ServiceRegistry {
 
     /**
      * Returns the grading service.
+     *
+     * <p>Tier: MUST.
      *
      * @return the grading service
      */
@@ -174,6 +184,8 @@ public class ServiceRegistry {
     /**
      * Returns the anomaly service.
      *
+     * <p>Tier: MUST.
+     *
      * @return the anomaly service
      */
     public AnomalyService getAnomalyService() {
@@ -182,6 +194,8 @@ public class ServiceRegistry {
 
     /**
      * Returns the export service.
+     *
+     * <p>Tier: MUST.
      *
      * @return the export service
      */
@@ -192,6 +206,8 @@ public class ServiceRegistry {
     /**
      * Returns the statistics service.
      *
+     * <p>Tier: MUST.
+     *
      * @return the statistics service
      */
     public StatisticsService getStatisticsService() {
@@ -200,6 +216,8 @@ public class ServiceRegistry {
 
     /**
      * Returns the audit service.
+     *
+     * <p>Tier: MUST.
      *
      * @return the audit service
      */
@@ -210,6 +228,8 @@ public class ServiceRegistry {
     /**
      * Returns the settings service.
      *
+     * <p>Tier: MUST.
+     *
      * @return the settings service
      */
     public SettingsService getSettingsService() {
@@ -218,6 +238,8 @@ public class ServiceRegistry {
 
     /**
      * Returns the history service.
+     *
+     * <p>Tier: MUST.
      *
      * @return the history service
      */
@@ -228,6 +250,8 @@ public class ServiceRegistry {
     /**
      * Returns the plagiarism service.
      *
+     * <p>Tier: MUST.
+     *
      * @return the plagiarism service
      */
     public PlagiarismService getPlagiarismService() {
@@ -236,6 +260,8 @@ public class ServiceRegistry {
 
     /**
      * Returns the saved assessments.
+     *
+     * <p>Tier: MUST.
      *
      * @return the assessment library
      */

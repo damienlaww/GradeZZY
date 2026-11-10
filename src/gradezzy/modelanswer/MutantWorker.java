@@ -26,6 +26,8 @@ public class MutantWorker implements Runnable {
     /**
      * Creates a worker.
      *
+     * <p>Tier: COULD.
+     *
      * @param checker the checker that runs one copy
      * @param batch where the worker gets its next copy
      */
@@ -37,6 +39,8 @@ public class MutantWorker implements Runnable {
     /**
      * Takes copies from the batch and runs each one, until there are none
      * left.
+     *
+     * <p>Tier: COULD.
      */
     @Override
     public void run() {

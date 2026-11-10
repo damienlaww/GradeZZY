@@ -20,6 +20,8 @@ public class ConfigException extends RuntimeException {
     /**
      * Creates the exception with a message for the instructor.
      *
+     * <p>Tier: MUST.
+     *
      * @param message what is wrong with the configuration
      */
     public ConfigException(String message) {

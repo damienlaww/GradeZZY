@@ -26,6 +26,8 @@ import gradezzy.model.Submission;
  * file with an ending added, such as Q2a.java.txt, or another file of the
  * starter, such as TaskComparator.java. FileNameValidator names the wrong
  * and the right file in its message, and this fixer reads them from there.
+ *
+ * <p>Tier: SHOULD. Owner: Jun Sheng.
  */
 public class CaseNameFixer extends AbstractFixer {
 
@@ -151,8 +153,8 @@ public class CaseNameFixer extends AbstractFixer {
             throw new FixException(fixRecord.getFixedPath().getFileName()
                     + " is no longer there, so nothing was renamed.");
         }
-        rename(renamed, renamed.resolveSibling(
-                fixRecord.getOriginalPath().getFileName()));
+        Path originalName = fixRecord.getOriginalPath().getFileName();
+        rename(renamed, renamed.resolveSibling(originalName));
     }
 
     // Finds the anomaly's question folder when only its case is wrong.
@@ -163,7 +165,16 @@ public class CaseNameFixer extends AbstractFixer {
         if (folderName == null) {
             return null;
         }
-        return findIgnoringCase(listFolders(contentRoot), folderName);
+
+        // A folder already named right, such as Q1 holding Q1, is not a
+        // case problem
+        Path folder = findIgnoringCase(listFolders(contentRoot), folderName);
+        boolean namedRight = folder != null
+                && folder.getFileName().toString().equals(folderName);
+        if (namedRight) {
+            return null;
+        }
+        return folder;
     }
 
     // Finds the anomaly's misnamed file while the right name is not there.

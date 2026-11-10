@@ -23,6 +23,8 @@ import gradezzy.ui.backend.DashboardBackend;
 
 /**
  * A background task that checks a tester folder.
+ *
+ * <p>Tier: SHOULD.
  */
 public class TesterCheck extends Task<List<String>> {
 

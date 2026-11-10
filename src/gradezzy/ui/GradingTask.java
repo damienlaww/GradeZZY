@@ -28,6 +28,8 @@ import gradezzy.testcase.TestCaseSource;
 
 /**
  * A background task that grades one batch.
+ *
+ * <p>Tier: MUST.
  */
 public class GradingTask extends Task<GradingRun> {
 
@@ -87,7 +89,16 @@ public class GradingTask extends Task<GradingRun> {
         this.listener = listener;
     }
 
-    /** Creates a task with the roster chosen on Set up. */
+    /**
+     * Creates a task for a new batch with the roster chosen on Set up.
+     *
+     * @param gradingService the grading service
+     * @param inputPaths the chosen zip files or folders
+     * @param section the section of the batch
+     * @param testCaseSource where the testers come from
+     * @param listener the progress listener, on the background thread
+     * @param scoreSheetFile the roster chosen on Set up, or null
+     */
     public GradingTask(GradingService gradingService, List<Path> inputPaths,
             Section section, TestCaseSource testCaseSource,
             ProgressListener listener, Path scoreSheetFile) {
@@ -95,7 +106,18 @@ public class GradingTask extends Task<GradingRun> {
         this.scoreSheetFile = scoreSheetFile;
     }
 
-    /** Creates a task with the roster and starter folder from Set up. */
+    /**
+     * Creates a task for a new batch with the roster and starter folder
+     * chosen on Set up.
+     *
+     * @param gradingService the grading service
+     * @param inputPaths the chosen zip files or folders
+     * @param section the section of the batch
+     * @param testCaseSource where the testers come from
+     * @param listener the progress listener, on the background thread
+     * @param scoreSheetFile the roster chosen on Set up, or null
+     * @param starterDirectory the starter folder chosen on Set up, or null
+     */
     public GradingTask(GradingService gradingService, List<Path> inputPaths,
             Section section, TestCaseSource testCaseSource,
             ProgressListener listener, Path scoreSheetFile,

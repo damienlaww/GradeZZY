@@ -60,24 +60,32 @@ public class CsvScoreSheetExporter implements Exporter {
     // Value of CSV_LINE_ENDING that selects Windows line endings
     private static final String CRLF_SETTING = "CRLF";
 
+    // The Windows line ending, as in the provided sheet
     private static final String CRLF = "\r\n";
 
+    // The line ending used when the setting is not CRLF
     private static final String LF = "\n";
 
+    // Opens and closes a quoted CSV value
     private static final char QUOTE = '"';
 
+    // Separates the fields of a CSV record
     private static final char COMMA = ',';
 
+    // Ends a record on its own (old Mac) or as the first half of CRLF
     private static final char CARRIAGE_RETURN = '\r';
 
+    // Ends a record on its own or as the second half of CRLF
     private static final char LINE_FEED = '\n';
+
+    // Records are counted from 1 in messages, so the header is record 1
+    private static final int HEADER_RECORD_NUMBER = 1;
 
     // A sheet that is not valid UTF-8 was saved by Excel on Windows
     private static final String WINDOWS_CHARSET = "windows-1252";
 
     // Places in the int[] that findField returns
     private static final int FIELD_START = 0;
-
     private static final int FIELD_END = 1;
 
     // Written when a student has no graded submission
@@ -128,8 +136,8 @@ public class CsvScoreSheetExporter implements Exporter {
      * <p>Every row and value of the template is kept as it is, quotes
      * included, apart from the numerator, which receives the student's
      * total. A student without a graded submission is left blank so the
-     * instructor notices. The file is written in the encoding the template
-     * was saved in.
+     * instructor notices, even if the template held a mark. The file is
+     * written in the encoding the template was saved in.
      *
      * @param gradingRun the grading run
      * @param outputFile the output file
@@ -146,30 +154,23 @@ public class CsvScoreSheetExporter implements Exporter {
         Path template = chooseTemplate(gradingRun);
         byte[] templateBytes = readTemplateBytes(template);
         Charset charset = chooseCharset(templateBytes);
-        List<String> records = splitRecords(
-                new String(templateBytes, charset));
+        String templateText = new String(templateBytes, charset);
+        List<String> records = splitRecords(templateText);
         if (records.isEmpty()) {
             throw new ExportException("The score sheet template "
                     + template + " is empty.");
         }
 
         // Find the two columns by name so a reordered sheet still works
-        List<String> header = splitLine(records.get(0), 1);
+        List<String> header = splitLine(records.get(0), HEADER_RECORD_NUMBER);
         int usernameIndex = findColumn(header, USERNAME_COLUMN);
         int numeratorIndex = findColumn(header, NUMERATOR_COLUMN);
 
         Map<String, Submission> submissionsByUsername =
                 indexByUsername(gradingRun.getSubmissions());
         String lineEnding = getLineEnding();
-        List<String> outputRecords = new ArrayList<>();
-        outputRecords.add(records.get(0));
-
-        for (int index = 1; index < records.size(); index++) {
-            String record = records.get(index);
-            String filledRecord = fillRow(record, index + 1, usernameIndex,
-                    numeratorIndex, submissionsByUsername);
-            outputRecords.add(filledRecord);
-        }
+        List<String> outputRecords = fillRecords(records, usernameIndex,
+                numeratorIndex, submissionsByUsername);
 
         // Every record, the header included, ends with the line ending
         String output = TextUtils.join(lineEnding, outputRecords)
@@ -184,12 +185,29 @@ public class CsvScoreSheetExporter implements Exporter {
         }
     }
 
+    // The header as it was, then every other record with its numerator
+    // filled in, in the template's order
+    private List<String> fillRecords(List<String> records, int usernameIndex,
+            int numeratorIndex, Map<String, Submission> submissionsByUsername)
+            throws ExportException {
+        List<String> outputRecords = new ArrayList<>();
+        outputRecords.add(records.get(0));
+
+        for (int index = 1; index < records.size(); index++) {
+            String record = records.get(index);
+            int recordNumber = index + 1;
+            String filledRecord = fillRow(record, recordNumber,
+                    usernameIndex, numeratorIndex, submissionsByUsername);
+            outputRecords.add(filledRecord);
+        }
+        return outputRecords;
+    }
+
     // The sheet the batch was graded against, so the export lists the
     // same students. A run saved before the sheet was recorded uses its
     // section's own sheet, else the one for everyone, both read from the
-    // settings now (Settings can change them while the app is open), as
-    // the Export warning (ExportService.summarizeScoreSheet) does. A run
-    // with no section uses the template.
+    // settings now (Settings can change them while the app is open). A
+    // run with no section uses the template.
     private Path chooseTemplate(GradingRun gradingRun) {
         if (gradingRun.getScoreSheetFile() != null) {
             return gradingRun.getScoreSheetFile();
@@ -245,8 +263,10 @@ public class CsvScoreSheetExporter implements Exporter {
                 quoted = !quoted;
             } else if (!quoted && current == CARRIAGE_RETURN) {
                 records.add(text.substring(recordStart, index));
-                if (index + 1 < text.length()
-                        && text.charAt(index + 1) == LINE_FEED) {
+                int next = index + 1;
+                boolean partOfCrlf = next < text.length()
+                        && text.charAt(next) == LINE_FEED;
+                if (partOfCrlf) {
                     index++;
                 }
                 recordStart = index + 1;
@@ -298,8 +318,9 @@ public class CsvScoreSheetExporter implements Exporter {
 
     // Returns the record with the numerator filled in. Only the text of
     // the numerator field changes; every other character, quotes
-    // included, is copied as it is. A blank record, or one too short to
-    // hold both columns, is kept exactly as it was.
+    // included, is copied as it is. The username is matched without the
+    // spaces around it. A blank record, or one too short to hold both
+    // columns, is kept exactly as it was.
     private String fillRow(String record, int recordNumber,
             int usernameIndex, int numeratorIndex,
             Map<String, Submission> submissionsByUsername)
@@ -318,9 +339,10 @@ public class CsvScoreSheetExporter implements Exporter {
         String usernameText = record.substring(usernameField[FIELD_START],
                 usernameField[FIELD_END]);
         List<String> usernameValues = splitLine(usernameText, recordNumber);
-        String username = removeIdPrefix(usernameValues.get(0));
-        Submission submission = submissionsByUsername.get(
-                username.toLowerCase(Locale.ROOT));
+        String username = removeIdPrefix(usernameValues.get(0).trim())
+                .trim();
+        String key = username.toLowerCase(Locale.ROOT);
+        Submission submission = submissionsByUsername.get(key);
 
         return record.substring(0, numeratorField[FIELD_START])
                 + formatScore(submission)
@@ -375,10 +397,12 @@ public class CsvScoreSheetExporter implements Exporter {
     }
 
     // Writes 12 for a whole total and 10.5 otherwise. Only a graded
-    // submission gets a number; anything else stays blank.
+    // submission gets a number; anything else is left blank, even if the
+    // template held a mark, as the Export step says.
     private String formatScore(Submission submission) {
-        if (submission == null
-                || submission.getStatus() != SubmissionStatus.GRADED) {
+        boolean notGraded = submission == null
+                || submission.getStatus() != SubmissionStatus.GRADED;
+        if (notGraded) {
             return NO_SCORE;
         }
 

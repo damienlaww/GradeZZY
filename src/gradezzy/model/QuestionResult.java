@@ -39,6 +39,8 @@ public class QuestionResult {
     /**
      * Creates a new question result.
      *
+     * <p>Tier: MUST.
+     *
      * @param question the question that was graded
      */
     public QuestionResult(Question question) {
@@ -47,6 +49,8 @@ public class QuestionResult {
 
     /**
      * Returns the question that was graded.
+     *
+     * <p>Tier: MUST.
      *
      * @return the question that was graded
      */
@@ -57,6 +61,8 @@ public class QuestionResult {
     /**
      * Returns the marks awarded.
      *
+     * <p>Tier: MUST.
+     *
      * @return the marks awarded
      */
     public double getScore() {
@@ -65,6 +71,8 @@ public class QuestionResult {
 
     /**
      * Sets the marks awarded.
+     *
+     * <p>Tier: MUST.
      *
      * @param score the marks awarded
      */
@@ -75,6 +83,8 @@ public class QuestionResult {
     /**
      * Returns whether the code compiled.
      *
+     * <p>Tier: MUST.
+     *
      * @return whether the code compiled
      */
     public boolean isCompiled() {
@@ -83,6 +93,8 @@ public class QuestionResult {
 
     /**
      * Sets whether the code compiled.
+     *
+     * <p>Tier: MUST.
      *
      * @param compiled whether the code compiled
      */
@@ -93,6 +105,8 @@ public class QuestionResult {
     /**
      * Returns whether the tester was stopped at the time limit.
      *
+     * <p>Tier: MUST.
+     *
      * @return whether the tester was stopped at the time limit
      */
     public boolean isTimedOut() {
@@ -101,6 +115,8 @@ public class QuestionResult {
 
     /**
      * Sets whether the tester was stopped at the time limit.
+     *
+     * <p>Tier: MUST.
      *
      * @param timedOut whether the tester was stopped at the time limit
      */
@@ -111,6 +127,8 @@ public class QuestionResult {
     /**
      * Returns the captured compiler or tester output.
      *
+     * <p>Tier: MUST.
+     *
      * @return the captured compiler or tester output
      */
     public String getOutput() {
@@ -119,6 +137,8 @@ public class QuestionResult {
 
     /**
      * Sets the captured compiler or tester output.
+     *
+     * <p>Tier: MUST.
      *
      * @param output the captured compiler or tester output
      */
@@ -129,6 +149,8 @@ public class QuestionResult {
     /**
      * Returns the result of each test case.
      *
+     * <p>Tier: MUST.
+     *
      * @return the result of each test case
      */
     public List<TestCaseResult> getTestCaseResults() {
@@ -137,6 +159,8 @@ public class QuestionResult {
 
     /**
      * Adds the result of one test case.
+     *
+     * <p>Tier: MUST.
      *
      * @param testCaseResult the test case result
      */

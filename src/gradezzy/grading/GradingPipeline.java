@@ -66,6 +66,8 @@ public class GradingPipeline {
     /**
      * Creates an empty pipeline.
      *
+     * <p>Tier: MUST.
+     *
      * @param cancellationToken the flag that stops the batch when set
      */
     public GradingPipeline(CancellationToken cancellationToken) {
@@ -74,6 +76,8 @@ public class GradingPipeline {
 
     /**
      * Adds a stage to the end of the pipeline.
+     *
+     * <p>Tier: MUST.
      *
      * @param stage the stage to add
      */
@@ -87,6 +91,8 @@ public class GradingPipeline {
      * number of submissions graded at the same time comes from
      * {@code exec.thread.count}; a value of one, a single submission, or a
      * bad value all grade the submissions in order.
+     *
+     * <p>Tier: MUST.
      *
      * @param gradingRun the batch to grade
      * @param context the shared information the stages need
@@ -111,7 +117,7 @@ public class GradingPipeline {
     private void gradeInOrder(List<Submission> submissions,
             GradingContext context, ProgressListener listener) {
         for (Submission submission : submissions) {
-            gradeOne(submission, context, listener);
+            gradeSafely(submission, context, listener);
         }
     }
 
@@ -127,9 +133,10 @@ public class GradingPipeline {
 
         List<Thread> workers = new ArrayList<>();
         for (int number = 0; number < workerCount; number++) {
-            Thread worker = new Thread(
-                    new GradingWorker(this, handout, context, safeListener),
-                    WORKER_NAME_PREFIX + number);
+            GradingWorker job = new GradingWorker(this, handout, context,
+                    safeListener);
+            String workerName = WORKER_NAME_PREFIX + number;
+            Thread worker = new Thread(job, workerName);
             workers.add(worker);
             worker.start();
         }
@@ -160,18 +167,10 @@ public class GradingPipeline {
         }
     }
 
-    /**
-     * Grades one submission: skipped and marked CANCELLED if the run was
-     * cancelled, otherwise run through the stages. Always tells the
-     * listener the submission is finished. Shared by the in-order path
-     * and by each GradingWorker of the parallel path, which is why it is
-     * visible to the rest of the package.
-     *
-     * @param submission the submission to grade
-     * @param context the shared information the stages need
-     * @param listener the object told about progress
-     */
-    void gradeOne(Submission submission, GradingContext context,
+    // Grades one submission: skipped and marked CANCELLED if the run was
+    // cancelled, otherwise run through the stages. Always tells the
+    // listener the submission is finished. Called through gradeSafely.
+    private void gradeOne(Submission submission, GradingContext context,
             ProgressListener listener) {
         if (cancellationToken.isCancelled()) {
             submission.setStatus(SubmissionStatus.CANCELLED);
@@ -180,6 +179,52 @@ public class GradingPipeline {
         }
 
         listener.onSubmissionFinished(submission);
+    }
+
+    /**
+     * Grades one submission as gradeOne does, and stops a
+     * RuntimeException outside the stages, such as one in a listener,
+     * from ending the batch or the worker thread: a submission it
+     * stopped before the end is marked FAILED with the reason and the
+     * listener is told it is finished, and a finished one keeps its
+     * result. Used by the in-order path and by each GradingWorker.
+     *
+     * @param submission the submission to grade
+     * @param context the shared information the stages need
+     * @param listener the object told about progress
+     */
+    void gradeSafely(Submission submission, GradingContext context,
+            ProgressListener listener) {
+        try {
+            gradeOne(submission, context, listener);
+        } catch (RuntimeException exception) {
+            if (!isFinished(submission)) {
+                recordFailure(submission, exception);
+                tellFinished(submission, listener);
+            }
+        }
+    }
+
+    // Tells the listener that a student stopped outside the stages is
+    // finished, so the progress counts every student. The student is
+    // already FAILED, so a listener that fails again is only reported
+    // on the error stream.
+    private void tellFinished(Submission submission,
+            ProgressListener listener) {
+        try {
+            listener.onSubmissionFinished(submission);
+        } catch (RuntimeException exception) {
+            System.err.println("Progress of " + submission.getUsername()
+                    + " could not be shown: " + exception.getMessage());
+        }
+    }
+
+    // Says whether a submission already has its final status.
+    private boolean isFinished(Submission submission) {
+        SubmissionStatus status = submission.getStatus();
+        return status == SubmissionStatus.GRADED
+                || status == SubmissionStatus.FAILED
+                || status == SubmissionStatus.CANCELLED;
     }
 
     // Reads exec.thread.count and keeps it within sensible bounds: never

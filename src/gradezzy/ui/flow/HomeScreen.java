@@ -67,6 +67,8 @@ import gradezzy.ui.backend.StatusCounts;
 
 /**
  * The Home tab.
+ *
+ * <p>Tier: SHOULD.
  */
 public class HomeScreen extends FlowScreen {
 
@@ -126,8 +128,17 @@ public class HomeScreen extends FlowScreen {
     // Turns a share into a percentage
     private static final double PERCENT = 100.0;
 
-    // The scrolling page
-    private final ScrollPane view;
+    // Writes a mark with one decimal place, such as 12.4
+    private static final String ONE_DECIMAL_FORMAT = "%.1f";
+
+    // A tiny preferred width, so the parts of the progress bar share it
+    // evenly
+    private static final double PART_PREF_WIDTH = 1.0;
+
+    // The numbers of the checklist steps
+    private static final int ASSESSMENT_STEP = 1;
+    private static final int SCORE_SHEET_STEP = 2;
+    private static final int FIRST_GRADE_STEP = 3;
 
     // The last line of each dropdown, which creates a new one
     private static final String NEW_MODULE = "+ New module...";
@@ -139,6 +150,18 @@ public class HomeScreen extends FlowScreen {
 
     // The width of each dropdown
     private static final double CHOICE_WIDTH = 200.0;
+
+    // Comes before the most marks after an average, such as "/ 20"
+    private static final String OUT_OF = "/ ";
+
+    // Comes between a mark and the most it can be, such as "12.4 / 20"
+    private static final String MARK_SEPARATOR = " / ";
+
+    // Comes between what was done and its detail in the activity card
+    private static final String ACTION_SEPARATOR = ": ";
+
+    // The scrolling page
+    private final ScrollPane view;
 
     // The module, section and assessment dropdowns
     private final ComboBox<String> moduleBox = new ComboBox<>();
@@ -279,6 +302,20 @@ public class HomeScreen extends FlowScreen {
     // Fills the three dropdowns.
     private void fillContext() {
         filling = true;
+        String module = fillModules();
+        fillSections(module);
+        List<String> names = fillAssessments(module);
+        // The batch being graded keeps its module and section
+        moduleBox.setDisable(getState().isGrading());
+        sectionBox.setDisable(getState().isGrading());
+        assessmentBox.setDisable(getState().isGrading());
+        showContextDetail(module, names);
+        filling = false;
+    }
+
+    // Fills the module dropdown and returns the module chosen, which
+    // becomes the first one when the chosen one is no longer listed.
+    private String fillModules() {
         List<String> modules = getBackend().getModuleCodes();
         String module = getState().getModuleCode();
         if (!modules.contains(module) && !modules.isEmpty()) {
@@ -290,7 +327,11 @@ public class HomeScreen extends FlowScreen {
             moduleBox.getItems().add(NEW_MODULE);
         }
         moduleBox.setValue(module);
+        return module;
+    }
 
+    // Fills the section dropdown with the module's sections.
+    private void fillSections(String module) {
         List<String> sections = getBackend().getSectionCodes(module);
         if (shownSection != null && !sections.contains(shownSection)) {
             shownSection = null;
@@ -305,10 +346,13 @@ public class HomeScreen extends FlowScreen {
         } else {
             sectionBox.setValue(shownSection);
         }
+    }
 
+    // Fills the assessment dropdown with the module's assessments and
+    // returns their names.
+    private List<String> fillAssessments(String module) {
         // Only the chosen module's assessments; a new module has none
-        boolean ownOnly = ModuleSections.hasOwnOnly(getBackend().getSetting(
-                ConfigKeys.OWN_SECTIONS_ONLY_MODULES), module);
+        boolean ownOnly = isOwnOnly(module);
         List<String> names = new ArrayList<>();
         for (SavedAssessment saved : getBackend().listAssessments()) {
             if (saved.belongsTo(module, ownOnly)) {
@@ -327,10 +371,12 @@ public class HomeScreen extends FlowScreen {
                 assessmentBox.setPromptText("Choose one");
             }
         }
-        // The batch being graded keeps its module and section
-        moduleBox.setDisable(getState().isGrading());
-        sectionBox.setDisable(getState().isGrading());
-        assessmentBox.setDisable(getState().isGrading());
+        return names;
+    }
+
+    // Says under the dropdowns how big the assessment is, or what to do
+    // when none is chosen.
+    private void showContextDetail(String module, List<String> names) {
         if (names.contains(activeName())) {
             contextDetail.setText(describeAssessmentSize());
         } else if (names.isEmpty()) {
@@ -340,7 +386,6 @@ public class HomeScreen extends FlowScreen {
             contextDetail.setText("Choose the assessment to grade for "
                     + module + ".");
         }
-        filling = false;
     }
 
     // Follows a pick in the module dropdown.
@@ -354,8 +399,9 @@ public class HomeScreen extends FlowScreen {
             openAddModule();
             return;
         }
-        if (!getWindow().chooseSection(chosen,
-                getState().getSectionCode())) {
+        boolean switched = getWindow().chooseSection(chosen,
+                getState().getSectionCode());
+        if (!switched) {
             undoPick();
             return;
         }
@@ -370,8 +416,7 @@ public class HomeScreen extends FlowScreen {
         if (getState().isGrading()) {
             return;
         }
-        boolean ownOnly = ModuleSections.hasOwnOnly(getBackend().getSetting(
-                ConfigKeys.OWN_SECTIONS_ONLY_MODULES), module);
+        boolean ownOnly = isOwnOnly(module);
         String first = null;
         for (SavedAssessment saved : getBackend().listAssessments()) {
             if (saved.belongsTo(module, ownOnly)) {
@@ -401,14 +446,28 @@ public class HomeScreen extends FlowScreen {
         }
         if (ALL_SECTIONS.equals(chosen)) {
             shownSection = null;
-        } else if (getWindow().chooseSection(getState().getModuleCode(),
-                chosen)) {
+        } else if (chooseInModule(chosen)) {
             shownSection = chosen;
         } else {
             undoPick();
             return;
         }
         refresh();
+    }
+
+    // Switches Set up to a section of the chosen module, and says whether
+    // it switched.
+    private boolean chooseInModule(String section) {
+        return getWindow().chooseSection(getState().getModuleCode(),
+                section);
+    }
+
+    // Says whether a module has only its own sections, none of the
+    // sections every module has, as the settings list it.
+    private boolean isOwnOnly(String module) {
+        String setting = getBackend().getSetting(
+                ConfigKeys.OWN_SECTIONS_ONLY_MODULES);
+        return ModuleSections.hasOwnOnly(setting, module);
     }
 
     // Follows a pick in the assessment dropdown.
@@ -449,10 +508,11 @@ public class HomeScreen extends FlowScreen {
             if (stopped != null) {
                 int total = stopped.getSubmissions().size();
                 int waiting = countWaiting(stopped);
+                int graded = total - waiting;
                 nextUpSection = stopped.getSection().getSectionCode();
                 content = nextUpRow(stopped.getSection().getLabel() + DOT
                         + stopped.getAssessment().getName() + " stopped "
-                        + "after " + (total - waiting) + " of " + total
+                        + "after " + graded + " of " + total
                         + " students. Marks already given are kept.",
                         "Resume", () -> getWindow().resumeRun(stopped));
             } else {
@@ -542,20 +602,30 @@ public class HomeScreen extends FlowScreen {
         }
 
         VBox steps = new VBox(
-                checkRow(1, assessmentReady, "The assessment",
+                checkRow(ASSESSMENT_STEP, assessmentReady, "The assessment",
                         assessmentDetail, assessmentFull, "Edit assessment",
                         () -> getWindow().editAssessment(activeName())),
-                checkRow(2, rosterReady, "The score sheet", rosterDetail,
-                        rosterFull, "Choose score sheet",
+                checkRow(SCORE_SHEET_STEP, rosterReady, "The score sheet",
+                        rosterDetail, rosterFull, "Choose score sheet",
                         () -> chooseScoreSheet()));
         if (!anyRun) {
-            String firstSection = firstSection();
-            steps.getChildren().add(checkRow(3, null, "Grade your first "
-                    + "section", "Choose the students' zip files and start "
-                    + "grading. You can check every fix and flag before you "
-                    + "export.", null, "Set up " + firstSection,
-                    () -> openSetUp(firstSection)));
+            steps.getChildren().add(firstGradeRow());
         }
+        checklist.getChildren().add(checklistCard(anyRun, steps));
+    }
+
+    // Builds the checklist step that grades the first section.
+    private HBox firstGradeRow() {
+        String firstSection = firstSection();
+        return checkRow(FIRST_GRADE_STEP, null, "Grade your first section",
+                "Choose the students' zip files and start grading. You can "
+                + "check every fix and flag before you export.", null,
+                "Set up " + firstSection, () -> openSetUp(firstSection));
+    }
+
+    // Builds the checklist card: a title and a line of help above the
+    // steps. Before the first run it is a getting started list.
+    private VBox checklistCard(boolean anyRun, VBox steps) {
         String titleText = "Getting started";
         String helpText = "Click any \"?\" to see what a word means.";
         if (anyRun) {
@@ -568,7 +638,7 @@ public class HomeScreen extends FlowScreen {
         help.setWrapText(true);
         VBox card = Parts.card(null, new Node[] {title, help, steps});
         card.getStyleClass().add("checklist");
-        checklist.getChildren().add(card);
+        return card;
     }
 
     // Builds one step of the checklist: a tick, a warning or a number,
@@ -672,9 +742,13 @@ public class HomeScreen extends FlowScreen {
         }
         card.getChildren().addAll(progress(stepOf(section, run)),
                 footer(section, run));
+        setCardAction(card, section, run);
+        return card;
+    }
 
-        // The whole card does the main thing: open the results, watch
-        // the batch, or set up grading
+    // Makes the whole card do the main thing: open the results, watch
+    // the batch, or set up grading.
+    private void setCardAction(VBox card, String section, GradingRun run) {
         if (isGradingNow(section)) {
             makeClickable(card, () -> getWindow().show(Step.GRADE),
                     "Watch " + section + " being graded");
@@ -688,7 +762,6 @@ public class HomeScreen extends FlowScreen {
                 acceptDrops(card, section);
             }
         }
-        return card;
     }
 
     // The body of a card not graded yet: a drop area for zip files, or
@@ -735,8 +808,8 @@ public class HomeScreen extends FlowScreen {
             none.getStyleClass().add("card-average-empty");
             return new VBox(none);
         }
-        return cardStat("Average", String.format("%.1f", stats.getMean()),
-                "/ " + Parts.mark(max));
+        String mean = String.format(ONE_DECIMAL_FORMAT, stats.getMean());
+        return cardStat("Average", mean, OUT_OF + Parts.mark(max));
     }
 
     // Builds one figure of a card: a small grey label above a large value
@@ -758,7 +831,7 @@ public class HomeScreen extends FlowScreen {
         Label pill = null;
         String tip = "";
         if (isGradingNow(section)) {
-            pill = Parts.pill("Grading now", Tone.NEUTRAL);
+            pill = Parts.pill("Grading now", Tone.GOOD);
             tip = "This section is being graded. You can leave this page; "
                     + "grading carries on.";
         } else if (run == null) {
@@ -802,7 +875,7 @@ public class HomeScreen extends FlowScreen {
                 part.getStyleClass().add("current");
             }
             part.setMinSize(0, PROGRESS_HEIGHT);
-            part.setPrefSize(1, PROGRESS_HEIGHT);
+            part.setPrefSize(PART_PREF_WIDTH, PROGRESS_HEIGHT);
             part.setMaxSize(Double.MAX_VALUE, PROGRESS_HEIGHT);
             HBox.setHgrow(part, Priority.ALWAYS);
             Parts.tipNode(part, STEP_NAMES[index]);
@@ -812,7 +885,8 @@ public class HomeScreen extends FlowScreen {
         bar.setMaxWidth(Double.MAX_VALUE);
         String place = "Exported";
         if (current < EXPORTED) {
-            place = "Step " + (current + 1) + " of " + STEP_NAMES.length
+            int stepNumber = current + 1;
+            place = "Step " + stepNumber + " of " + STEP_NAMES.length
                     + DOT + STEP_NAMES[current];
         }
         Label words = Parts.muted(place);
@@ -826,8 +900,10 @@ public class HomeScreen extends FlowScreen {
         String when = "Not graded yet";
         if (isGradingNow(section)) {
             when = "Being graded now";
-        } else if (run != null) {
+        } else if (run != null && run.getStartedAt() != null) {
             when = "Graded " + run.getStartedAt().format(WHEN);
+        } else if (run != null) {
+            when = "Graded date unknown";
         }
         Label time = Parts.muted(when);
         time.getStyleClass().addAll("small-text", "card-meta");
@@ -846,11 +922,14 @@ public class HomeScreen extends FlowScreen {
             return cardButton("See progress",
                     () -> getWindow().show(Step.GRADE),
                     "Open the Grade step to watch the batch.");
-        } else if (run == null) {
+        }
+        if (run == null) {
             return cardButton("Set up grading", () -> openSetUp(section),
                     "Choose this section's zip files on Set up.");
-        } else if (countWaiting(run) > 0
-                && getBackend().supports(Capability.RESUME_RUN)) {
+        }
+        boolean canResume = countWaiting(run) > 0
+                && getBackend().supports(Capability.RESUME_RUN);
+        if (canResume) {
             return cardButton("Resume grading",
                     () -> getWindow().resumeRun(run),
                     "Grade the students who were not graded yet.");
@@ -896,8 +975,9 @@ public class HomeScreen extends FlowScreen {
             more.getItems().add(menuItem("Earlier runs", Parts.CLOCK,
                     () -> getWindow().showPage(Page.RUNS)));
         }
-        if (getBackend().supports(Capability.SETTINGS)
-                && !isGradingNow(section)) {
+        boolean canDelete = getBackend().supports(Capability.SETTINGS)
+                && !isGradingNow(section);
+        if (canDelete) {
             MenuItem delete = menuItem("Delete section...", Parts.CLOSE,
                     () -> askDeleteSection(section));
             delete.getStyleClass().add("danger-item");
@@ -908,8 +988,9 @@ public class HomeScreen extends FlowScreen {
             more.getItems().add(delete);
         }
         // A line sets the next step apart only when something follows it
-        if (more.getItems().size() > 1
-                && !(more.getItems().get(1) instanceof SeparatorMenuItem)) {
+        boolean needsLine = more.getItems().size() > 1
+                && !(more.getItems().get(1) instanceof SeparatorMenuItem);
+        if (needsLine) {
             more.getItems().add(1, new SeparatorMenuItem());
         }
         return more;
@@ -1009,10 +1090,10 @@ public class HomeScreen extends FlowScreen {
 
     // Returns the figures of a run, with the pass mark in Settings.
     private MarkStats statsOf(GradingRun run) {
+        double passPercent = MarkStats.parsePassPercent(
+                getBackend().getSetting(ConfigKeys.PASS_MARK_PERCENT));
         return MarkStats.of(run.getSubmissions(),
-                run.getAssessment().getMaxTotal(),
-                MarkStats.parsePassPercent(getBackend().getSetting(
-                ConfigKeys.PASS_MARK_PERCENT)));
+                run.getAssessment().getMaxTotal(), passPercent);
     }
 
     // -------------------------------------------------------- lower row
@@ -1023,24 +1104,9 @@ public class HomeScreen extends FlowScreen {
                 getBackend().listAuditEntries());
         entries.sort(new AuditEntryNewestFirstComparator());
         VBox list = new VBox();
-        int shown = 0;
-        for (AuditEntry entry : entries) {
-            if (shown == MOST_ACTIVITY) {
-                break;
-            }
-            Label when = Parts.muted(entry.getTimestamp().format(WHEN));
-            when.getStyleClass().add("small-text");
-            when.setMinWidth(Label.USE_PREF_SIZE);
-            Label what = new Label(entry.getAction() + ": "
-                    + Parts.shortenPaths(entry.getShownDetail()));
-            what.getStyleClass().add("small-text");
-            what.setMinWidth(0);
-            Parts.tip(what, entry.getAction() + ": " + entry.getDetail());
-            HBox line = Parts.row(Parts.GAP, new Node[] {what, Parts.grow(),
-                when});
-            line.getStyleClass().add("card-row");
-            list.getChildren().add(line);
-            shown++;
+        int shown = Math.min(MOST_ACTIVITY, entries.size());
+        for (int index = 0; index < shown; index++) {
+            list.getChildren().add(activityLine(entries.get(index)));
         }
         if (shown == 0) {
             list.getChildren().add(Parts.muted("Nothing done yet. Grading, "
@@ -1048,12 +1114,31 @@ public class HomeScreen extends FlowScreen {
         } else {
             list.getChildren().get(0).getStyleClass().add("first");
         }
-        HBox top = Parts.row(Parts.GAP, new Node[] {Parts.title("Recent "
-                + "activity"), Parts.grow(), Parts.link("See all",
-                () -> openActivity())});
+        Label title = Parts.title("Recent activity");
+        Node seeAll = Parts.link("See all", () -> openActivity());
+        HBox top = Parts.row(Parts.GAP,
+                new Node[] {title, Parts.grow(), seeAll});
         VBox card = Parts.card(null, new Node[] {top, list});
         card.getStyleClass().add("home-lower-card");
         return card;
+    }
+
+    // Builds one line of the activity card: what was done on the left,
+    // when on the right, and the full detail in the tip.
+    private HBox activityLine(AuditEntry entry) {
+        Label when = Parts.muted(entry.getTimestamp().format(WHEN));
+        when.getStyleClass().add("small-text");
+        when.setMinWidth(Label.USE_PREF_SIZE);
+        Label what = new Label(entry.getAction() + ACTION_SEPARATOR
+                + Parts.shortenPaths(entry.getShownDetail()));
+        what.getStyleClass().add("small-text");
+        what.setMinWidth(0);
+        Parts.tip(what, entry.getAction() + ACTION_SEPARATOR
+                + entry.getDetail());
+        HBox line = Parts.row(Parts.GAP, new Node[] {what, Parts.grow(),
+            when});
+        line.getStyleClass().add("card-row");
+        return line;
     }
 
     // Opens the activity log on Runs.
@@ -1079,26 +1164,7 @@ public class HomeScreen extends FlowScreen {
             if (stats.isEmpty()) {
                 continue;
             }
-            Label name = Parts.strong(section);
-            name.setMinWidth(Label.USE_PREF_SIZE);
-            String mean = String.format("%.1f", stats.getMean());
-            String max = Parts.mark(stats.getMaxTotal());
-            long passed = Math.round(stats.getPassRate() * PERCENT);
-            Label figures = Parts.muted(mean + " / " + max + DOT + passed
-                    + "% passed");
-            figures.getStyleClass().add("small-text");
-            figures.setMinWidth(Label.USE_PREF_SIZE);
-            // An assessment with no marks to earn shows an empty bar
-            double filled = 0.0;
-            if (stats.getMaxTotal() > 0.0) {
-                filled = stats.getMean() / stats.getMaxTotal();
-            }
-            StackPane bar = Parts.track(filled, null);
-            HBox.setHgrow(bar, Priority.ALWAYS);
-            HBox line = Parts.row(Parts.GAP, new Node[] {name, bar,
-                figures});
-            line.getStyleClass().add("card-row");
-            list.getChildren().add(line);
+            list.getChildren().add(marksLine(section, stats));
             shown++;
         }
         if (shown == 0) {
@@ -1107,12 +1173,38 @@ public class HomeScreen extends FlowScreen {
         } else {
             list.getChildren().get(0).getStyleClass().add("first");
         }
-        HBox top = Parts.row(Parts.GAP, new Node[] {Parts.title("Marks "
-                + "across sections"), Parts.grow(), Parts.link("Compare",
-                () -> getWindow().showPage(Page.STATISTICS))});
+        Label title = Parts.title("Marks across sections");
+        Node compare = Parts.link("Compare",
+                () -> getWindow().showPage(Page.STATISTICS));
+        HBox top = Parts.row(Parts.GAP,
+                new Node[] {title, Parts.grow(), compare});
         VBox card = Parts.card(null, new Node[] {top, list});
         card.getStyleClass().add("home-lower-card");
         return card;
+    }
+
+    // Builds one line of the marks card: the section, a bar filled to
+    // its average, and its average and pass rate.
+    private HBox marksLine(String section, MarkStats stats) {
+        Label name = Parts.strong(section);
+        name.setMinWidth(Label.USE_PREF_SIZE);
+        String mean = String.format(ONE_DECIMAL_FORMAT, stats.getMean());
+        String max = Parts.mark(stats.getMaxTotal());
+        long passed = Math.round(stats.getPassRate() * PERCENT);
+        Label figures = Parts.muted(mean + MARK_SEPARATOR + max + DOT + passed
+                + Parts.PERCENT_SIGN + " passed");
+        figures.getStyleClass().add("small-text");
+        figures.setMinWidth(Label.USE_PREF_SIZE);
+        // An assessment with no marks to earn shows an empty bar
+        double filled = 0.0;
+        if (stats.getMaxTotal() > 0.0) {
+            filled = stats.getMean() / stats.getMaxTotal();
+        }
+        StackPane bar = Parts.track(filled, null);
+        HBox.setHgrow(bar, Priority.ALWAYS);
+        HBox line = Parts.row(Parts.GAP, new Node[] {name, bar, figures});
+        line.getStyleClass().add("card-row");
+        return line;
     }
 
     // ---------------------------------------------------------- actions
@@ -1129,8 +1221,9 @@ public class HomeScreen extends FlowScreen {
     // Opens Set up on a section of the chosen module. With no section
     // listed yet, it asks for one first.
     private void openSetUp(String section) {
-        if (!getBackend().getSectionCodes(getState().getModuleCode())
-                .contains(section)) {
+        List<String> sections = getBackend().getSectionCodes(
+                getState().getModuleCode());
+        if (!sections.contains(section)) {
             openAddSection();
             return;
         }
@@ -1196,8 +1289,9 @@ public class HomeScreen extends FlowScreen {
         }
         for (RunRecord record : records) {
             GradingRun run = record.getRun();
-            if (record.isCurrent() && run.getSection() != null
-                    && countWaiting(run) > 0) {
+            boolean stopped = record.isCurrent() && run.getSection() != null
+                    && countWaiting(run) > 0;
+            if (stopped) {
                 return run;
             }
         }
@@ -1224,8 +1318,10 @@ public class HomeScreen extends FlowScreen {
     private int countWaiting(GradingRun run) {
         int waiting = 0;
         for (Submission submission : run.getSubmissions()) {
-            if (submission.getStatus() == SubmissionStatus.CANCELLED
-                    || submission.getStatus() == SubmissionStatus.PENDING) {
+            boolean notGraded =
+                    submission.getStatus() == SubmissionStatus.CANCELLED
+                    || submission.getStatus() == SubmissionStatus.PENDING;
+            if (notGraded) {
                 waiting++;
             }
         }
@@ -1304,10 +1400,11 @@ public class HomeScreen extends FlowScreen {
     // section, or 0 when Set up is on another section.
     private int countChosen(String section) {
         Section chosen = getState().getSection();
-        if (chosen == null || getState().isGrading()
+        boolean otherSection = chosen == null || getState().isGrading()
                 || !section.equalsIgnoreCase(chosen.getSectionCode())
                 || !getState().getModuleCode().equalsIgnoreCase(
-                        chosen.getModuleCode())) {
+                        chosen.getModuleCode());
+        if (otherSection) {
             return 0;
         }
         return getState().getBatch().countStudents();
@@ -1352,8 +1449,9 @@ public class HomeScreen extends FlowScreen {
         if (assessment == null) {
             return "No assessment is set";
         }
-        return assessment.getName() + DOT + Parts.plural(assessment
-                .getQuestions().size(), "question") + DOT
+        int questionCount = assessment.getQuestions().size();
+        return assessment.getName() + DOT
+                + Parts.plural(questionCount, "question") + DOT
                 + Parts.mark(assessment.getMaxTotal()) + " marks";
     }
 

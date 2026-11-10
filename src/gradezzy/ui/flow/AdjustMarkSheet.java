@@ -11,9 +11,9 @@
  */
 package gradezzy.ui.flow;
 
-import javafx.geometry.Pos;
 import java.util.function.Supplier;
 
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -30,6 +30,8 @@ import gradezzy.ui.backend.ActionResult;
 
 /**
  * Builds the sheet that changes one mark.
+ *
+ * <p>Tier: SHOULD.
  */
 public final class AdjustMarkSheet {
 
@@ -41,6 +43,12 @@ public final class AdjustMarkSheet {
 
     // The gap between a field's name and the field
     private static final double LABEL_GAP = 6.0;
+
+    // Comes between the student and the change in the activity log
+    private static final String USER_SEPARATOR = ": ";
+
+    // Ends the change before its reason in the activity log
+    private static final String SENTENCE_END = ". ";
 
     // Not used: every method is static.
     private AdjustMarkSheet() {
@@ -103,9 +111,9 @@ public final class AdjustMarkSheet {
         HBox buttons = Parts.row(Parts.GAP,
                 new Node[] {Parts.grow(), cancel, save});
 
-        VBox body = new VBox(Parts.GAP,
-                Parts.title("Adjust " + questionId + " for "
-                + Students.name(submission)), help,
+        Label title = Parts.title("Adjust " + questionId + " for "
+                + Students.name(submission));
+        VBox body = new VBox(Parts.GAP, title, help,
                 field("New mark", markRow), field("Reason", reason),
                 problem, buttons);
         body.getStyleClass().add("adjust-sheet");
@@ -116,8 +124,9 @@ public final class AdjustMarkSheet {
     // Turns Save on or off for what is typed.
     private static void refreshSave(Button save, TextField mark,
             TextArea reason, QuestionResult result) {
-        save.setDisable(!canSave(mark.getText(), reason.getText(),
-                result.getScore()));
+        boolean allowed = canSave(mark.getText(), reason.getText(),
+                result.getScore());
+        save.setDisable(!allowed);
     }
 
     /**
@@ -132,8 +141,9 @@ public final class AdjustMarkSheet {
      */
     public static boolean canSave(String markText, String reasonText,
             double current) {
-        if (markText == null || markText.trim().isEmpty()
-                || reasonText == null || reasonText.trim().isEmpty()) {
+        boolean missing = markText == null || markText.trim().isEmpty()
+                || reasonText == null || reasonText.trim().isEmpty();
+        if (missing) {
             return false;
         }
         try {
@@ -190,9 +200,9 @@ public final class AdjustMarkSheet {
             return;
         }
         GradingRun run = window.getState().getRun();
+        double newMark = Double.parseDouble(markText.trim());
         ActionResult saved = window.getBackend().adjustScore(run, submission,
-                result.getQuestion().getId(),
-                Double.parseDouble(markText.trim()), reasonText.trim());
+                result.getQuestion().getId(), newMark, reasonText.trim());
         if (!saved.isDone()) {
             showProblem(problem, saved.getMessage());
             return;
@@ -206,8 +216,8 @@ public final class AdjustMarkSheet {
         } else {
             Supplier<ActionResult> undo = ActivityUndo.record(
                     window.getBackend(), ActivityUndo.MARK_CHANGED,
-                    describe(change), () -> undoAdjustment(window, run,
-                    change));
+                    describe(change),
+                    () -> undoAdjustment(window, run, change));
             window.notify(saved.getMessage(), "Undo",
                     () -> undoChange(window, undo, onSaved));
         }
@@ -223,7 +233,8 @@ public final class AdjustMarkSheet {
     // Takes a changed mark back and says how it went.
     private static void undoChange(FlowWindow window,
             Supplier<ActionResult> undo, Runnable onSaved) {
-        window.notify(undo.get().getMessage());
+        ActionResult result = undo.get();
+        window.notify(result.getMessage());
         onSaved.run();
     }
 
@@ -235,9 +246,10 @@ public final class AdjustMarkSheet {
      * @return the words
      */
     public static String describe(ScoreAdjustment change) {
-        return change.getUsername() + ": " + change.getQuestionId() + " "
+        return change.getUsername() + USER_SEPARATOR
+                + change.getQuestionId() + " "
                 + Parts.mark(change.getPreviousScore()) + " to "
-                + Parts.mark(change.getNewScore()) + ". "
+                + Parts.mark(change.getNewScore()) + SENTENCE_END
                 + change.getReason();
     }
 
@@ -266,7 +278,8 @@ public final class AdjustMarkSheet {
     // Shows a problem under the fields, or hides it when empty.
     private static void showProblem(Label problem, String message) {
         problem.setText(message);
-        problem.setVisible(!message.isEmpty());
-        problem.setManaged(!message.isEmpty());
+        boolean shown = !message.isEmpty();
+        problem.setVisible(shown);
+        problem.setManaged(shown);
     }
 }

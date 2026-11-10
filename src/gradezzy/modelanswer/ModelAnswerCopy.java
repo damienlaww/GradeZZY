@@ -4,7 +4,7 @@
  * Purpose: Makes a copy of one question's model answer that can be
  * compiled and run: the starter folder of the question (with its
  * provided .class files and data files), with the model answer's files
- * on top.
+ * on top. Also holds the small helpers both model answer checks use.
  *
  * Where it fits: The tester strength check runs the tester on such a
  * copy and on broken copies of it; the random inputs check calls the
@@ -29,8 +29,13 @@ import gradezzy.util.FileUtils;
  */
 public final class ModelAnswerCopy {
 
+    // How far below the maximum a mark may be and still be full marks,
+    // since marks such as 0.5 are added as doubles
+    private static final double FULL_MARKS_MARGIN = 0.0001;
+
     // Only static methods; never created
     private ModelAnswerCopy() {
+        // Nothing to set up
     }
 
     /**
@@ -105,5 +110,60 @@ public final class ModelAnswerCopy {
 
         Path answerFolder = modelAnswers.resolve(question.getFolderName());
         FileUtils.copyDirectory(answerFolder.toRealPath(), target);
+    }
+
+    /**
+     * Reads the starter's copy of a file of a question.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param starterDirectory the starter folder, or null when there is
+     *        none
+     * @param question the question whose folder holds the file
+     * @param fileName the file's name, such as Q1a.java
+     * @return the file's text, or "" when there is no such file
+     * @throws IOException if the file cannot be read
+     */
+    public static String readStarter(Path starterDirectory,
+            Question question, String fileName) throws IOException {
+        if (starterDirectory == null) {
+            return "";
+        }
+        Path starterFile = starterDirectory.resolve(question.getFolderName())
+                .resolve(fileName);
+        if (!Files.isRegularFile(starterFile)) {
+            return "";
+        }
+        return FileUtils.readText(starterFile);
+    }
+
+    /**
+     * Says whether a mark is the question's maximum.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param score the mark
+     * @param question the question
+     * @return true for full marks
+     */
+    public static boolean isFullMarks(double score, Question question) {
+        double lowestFull = question.getMaxScore() - FULL_MARKS_MARGIN;
+        return score >= lowestFull;
+    }
+
+    /**
+     * Deletes a folder a check made. One that cannot be deleted stays in
+     * paths.working.dir.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param folder the folder to delete
+     */
+    public static void deleteQuietly(Path folder) {
+        try {
+            FileUtils.deleteDirectory(folder);
+        } catch (IOException exception) {
+            System.err.println("Could not delete " + folder);
+        }
     }
 }

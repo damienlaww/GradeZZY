@@ -52,29 +52,6 @@ public class InputMaker {
     // quote or backslash, so the text can be written as Java as it is.
     private static final String CHARACTER_POOL = "aaabbbccxyzABC 0129";
 
-    // The simple types
-    private static final String INT_TYPE = "int";
-    private static final String LONG_TYPE = "long";
-    private static final String DOUBLE_TYPE = "double";
-    private static final String BOOLEAN_TYPE = "boolean";
-    private static final String CHAR_TYPE = "char";
-    private static final String STRING_TYPE = "String";
-
-    // The simple types, and at the same place the boxed type each is
-    // held in a list as
-    private static final String[] SIMPLE_TYPES = {
-        INT_TYPE, LONG_TYPE, DOUBLE_TYPE, BOOLEAN_TYPE, CHAR_TYPE,
-        STRING_TYPE
-    };
-    private static final String[] BOXED_TYPES = {
-        "Integer", "Long", "Double", "Boolean", "Character", "String"
-    };
-
-    // How array and list types are written
-    private static final String ARRAY_END = "[]";
-    private static final String[] LIST_STARTS = {"ArrayList<", "List<"};
-    private static final String LIST_END = ">";
-
     // Java text around an array or a list. Classes are named in full,
     // such as java.util.ArrayList, so a student class with the same
     // short name cannot take their place.
@@ -131,6 +108,8 @@ public class InputMaker {
     /**
      * Creates an input maker.
      *
+     * <p>Tier: COULD.
+     *
      * @param random the source of random values
      */
     public InputMaker(Random random) {
@@ -172,30 +151,16 @@ public class InputMaker {
     // Makes one value of a type: an edge case in the first rounds, else
     // a random one.
     private String makeValue(String type, int round) {
-        if (type.endsWith(ARRAY_END)) {
-            int elementEnd = type.length() - ARRAY_END.length();
-            return makeArray(type.substring(0, elementEnd), round);
+        String arrayElement = JavaTypes.findArrayElement(type);
+        if (arrayElement != null) {
+            return makeArray(arrayElement, round);
         }
 
-        String element = findListElement(type);
-        if (element != null) {
-            return makeList(element, round);
+        String listElement = JavaTypes.findListElement(type);
+        if (listElement != null) {
+            return makeList(listElement, round);
         }
         return makeSimple(type, round);
-    }
-
-    // Returns the element type of a list type, such as Integer for
-    // ArrayList<Integer>, or null for any other type.
-    private String findListElement(String type) {
-        for (String listStart : LIST_STARTS) {
-            boolean isList = type.startsWith(listStart)
-                    && type.endsWith(LIST_END);
-            if (isList) {
-                int elementEnd = type.length() - LIST_END.length();
-                return type.substring(listStart.length(), elementEnd);
-            }
-        }
-        return null;
     }
 
     // Makes an array, such as new int[] {3, 0, -1}: null and empty in
@@ -206,10 +171,10 @@ public class InputMaker {
         }
         List<String> elements = makeElements(elementType, round);
         String writtenType = elementType;
-        if (elementType.equals(STRING_TYPE)) {
+        if (elementType.equals(JavaTypes.STRING_TYPE)) {
             writtenType = JAVA_LANG + elementType;
         }
-        return NEW + writtenType + ARRAY_END + ARRAY_OPEN
+        return NEW + writtenType + JavaTypes.ARRAY_END + ARRAY_OPEN
                 + TextUtils.join(ELEMENT_SEPARATOR, elements) + ARRAY_CLOSE;
     }
 
@@ -218,8 +183,8 @@ public class InputMaker {
         if (round == NULL_ROUND) {
             return NULL;
         }
-        List<String> elements = makeElements(simpleTypeOf(elementType),
-                round);
+        String simpleType = JavaTypes.simpleTypeOf(elementType);
+        List<String> elements = makeElements(simpleType, round);
         String writtenType = JAVA_LANG + elementType;
         if (elements.isEmpty()) {
             return NEW + LIST_TYPE + writtenType + EMPTY_LIST_END;
@@ -245,17 +210,6 @@ public class InputMaker {
         return elements;
     }
 
-    // Returns the simple type a list's boxed element type holds, such as
-    // int for Integer.
-    private String simpleTypeOf(String boxedType) {
-        for (int index = 0; index < BOXED_TYPES.length; index++) {
-            if (BOXED_TYPES[index].equals(boxedType)) {
-                return SIMPLE_TYPES[index];
-            }
-        }
-        return boxedType;
-    }
-
     // Makes a simple value: an edge case in the first rounds, else a
     // random one.
     private String makeSimple(String type, int round) {
@@ -269,15 +223,15 @@ public class InputMaker {
 
     // Returns the edge cases of a simple type.
     private String[] edgesOf(String type) {
-        if (type.equals(INT_TYPE)) {
+        if (type.equals(JavaTypes.INT_TYPE)) {
             return INT_EDGES;
-        } else if (type.equals(LONG_TYPE)) {
+        } else if (type.equals(JavaTypes.LONG_TYPE)) {
             return LONG_EDGES;
-        } else if (type.equals(DOUBLE_TYPE)) {
+        } else if (type.equals(JavaTypes.DOUBLE_TYPE)) {
             return DOUBLE_EDGES;
-        } else if (type.equals(BOOLEAN_TYPE)) {
+        } else if (type.equals(JavaTypes.BOOLEAN_TYPE)) {
             return BOOLEAN_EDGES;
-        } else if (type.equals(CHAR_TYPE)) {
+        } else if (type.equals(JavaTypes.CHAR_TYPE)) {
             return CHAR_EDGES;
         }
         return STRING_EDGES;
@@ -285,15 +239,15 @@ public class InputMaker {
 
     // Makes a random value of a simple type, as Java text.
     private String randomSimple(String type) {
-        if (type.equals(INT_TYPE)) {
+        if (type.equals(JavaTypes.INT_TYPE)) {
             return String.valueOf(randomWholeNumber());
-        } else if (type.equals(LONG_TYPE)) {
+        } else if (type.equals(JavaTypes.LONG_TYPE)) {
             return randomWholeNumber() + LONG_SUFFIX;
-        } else if (type.equals(DOUBLE_TYPE)) {
+        } else if (type.equals(JavaTypes.DOUBLE_TYPE)) {
             return String.valueOf(randomDouble());
-        } else if (type.equals(BOOLEAN_TYPE)) {
+        } else if (type.equals(JavaTypes.BOOLEAN_TYPE)) {
             return String.valueOf(random.nextBoolean());
-        } else if (type.equals(CHAR_TYPE)) {
+        } else if (type.equals(JavaTypes.CHAR_TYPE)) {
             return CHAR_QUOTE + randomCharacter() + CHAR_QUOTE;
         }
         return TEXT_QUOTE + randomText() + TEXT_QUOTE;
@@ -323,7 +277,8 @@ public class InputMaker {
     private double randomDouble() {
         double width = DOUBLE_RANGE + DOUBLE_RANGE;
         double value = random.nextDouble() * width - DOUBLE_RANGE;
-        return Math.round(value * HUNDREDTHS) / HUNDREDTHS;
+        double inHundredths = value * HUNDREDTHS;
+        return Math.round(inHundredths) / HUNDREDTHS;
     }
 
     // Picks one character from CHARACTER_POOL.

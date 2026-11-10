@@ -21,6 +21,8 @@ import gradezzy.model.Submission;
 
 /**
  * Flags answers that look hard-coded to the sample cases.
+ *
+ * <p>Tier: COULD. Owner: Jun Sheng.
  */
 public class HardCodedAnswerDetector implements Detector {
 
@@ -46,13 +48,19 @@ public class HardCodedAnswerDetector implements Detector {
             "Read the method and compare it with the sample cases. The mark "
             + "has not been changed.";
 
-    // The keywords that start a branch
+    // The keyword that starts an if branch
     private static final String IF_KEYWORD = "if";
+
+    // The keyword that starts a case branch
     private static final String CASE_KEYWORD = "case";
 
-    // The ways to test a value against a literal
+    // Tests a value against a literal with an operator
     private static final String EQUALS_OPERATOR = "==";
+
+    // Tests a value against a literal with equals
     private static final String EQUALS_METHOD = ".equals";
+
+    // Tests a value against a literal with contains
     private static final String CONTAINS_METHOD = ".contains";
 
     // The signs of a calculation, such as the % in i % 2
@@ -61,8 +69,10 @@ public class HardCodedAnswerDetector implements Detector {
     // The arrow after a label such as case 3 ->, which is not a minus sign
     private static final String ARROW = "->";
 
-    // The brackets around a condition or an argument
+    // The bracket before a condition or an argument
     private static final char OPEN_PAREN = '(';
+
+    // The bracket after a condition or an argument
     private static final char CLOSE_PAREN = ')';
 
     // The bracket that ends an array index, as in a[i] - 5
@@ -136,8 +146,9 @@ public class HardCodedAnswerDetector implements Detector {
         String code = JavaSourceText.removeComments(studentText);
 
         for (String methodName : JavaSourceText.findAnswerMethodNames(code)) {
-            for (String body : JavaSourceText.findMethodBodies(code,
-                    methodName)) {
+            List<String> bodies = JavaSourceText.findMethodBodies(code,
+                    methodName);
+            for (String body : bodies) {
                 int literalBranches = countLiteralBranches(body);
 
                 if (literalBranches >= MIN_LITERAL_BRANCHES) {
@@ -159,12 +170,9 @@ public class HardCodedAnswerDetector implements Detector {
         int count = 0;
 
         for (int i = 0; i < blanked.length(); i++) {
-            if (isKeywordAt(blanked, i, IF_KEYWORD)
-                    && comparesWithLiteral(findCondition(body, blanked, i))) {
-                count++;
-            } else if (isKeywordAt(blanked, i, CASE_KEYWORD)
-                    && isSampleValue(readLiteralAt(body,
-                    i + CASE_KEYWORD.length()))) {
+            boolean literalBranch = isLiteralIf(body, blanked, i)
+                    || isLiteralCase(body, blanked, i);
+            if (literalBranch) {
                 count++;
             }
         }
@@ -172,11 +180,34 @@ public class HardCodedAnswerDetector implements Detector {
         return count;
     }
 
+    // Says whether an if starts at index whose condition compares a value
+    // with a literal.
+    private boolean isLiteralIf(String body, String blanked, int index) {
+        if (!isKeywordAt(blanked, index, IF_KEYWORD)) {
+            return false;
+        }
+
+        String condition = findCondition(body, blanked, index);
+        return comparesWithLiteral(condition);
+    }
+
+    // Says whether a case starts at index whose label is a sample value.
+    private boolean isLiteralCase(String body, String blanked, int index) {
+        if (!isKeywordAt(blanked, index, CASE_KEYWORD)) {
+            return false;
+        }
+
+        int labelStart = index + CASE_KEYWORD.length();
+        String label = readLiteralAt(body, labelStart);
+        return isSampleValue(label);
+    }
+
     // Says whether the keyword starts at index as a whole word.
     private boolean isKeywordAt(String text, int index, String keyword) {
         int after = index + keyword.length();
+        int before = index - 1;
         boolean startsWord = index == 0
-                || !Character.isJavaIdentifierPart(text.charAt(index - 1));
+                || !Character.isJavaIdentifierPart(text.charAt(before));
         boolean endsWord = after >= text.length()
                 || !Character.isJavaIdentifierPart(text.charAt(after));
 
@@ -194,7 +225,8 @@ public class HardCodedAnswerDetector implements Detector {
         int closeIndex = JavaSourceText.findClosingBracket(blanked, openIndex,
                 OPEN_PAREN, CLOSE_PAREN);
 
-        return body.substring(openIndex + 1, closeIndex);
+        int conditionStart = openIndex + 1;
+        return body.substring(conditionStart, closeIndex);
     }
 
     // Says whether a condition compares something with a literal.
@@ -203,10 +235,9 @@ public class HardCodedAnswerDetector implements Detector {
 
         for (int i = 0; i < blanked.length(); i++) {
             int rightStart = findRightOperand(blanked, i);
+            boolean comparison = rightStart != NOT_FOUND;
 
-            if (rightStart != NOT_FOUND
-                    && (isSampleValue(readLiteralBefore(condition, i))
-                    || isSampleValue(readLiteralAt(condition, rightStart)))) {
+            if (comparison && hasSampleOperand(condition, i, rightStart)) {
                 return true;
             }
         }
@@ -214,13 +245,30 @@ public class HardCodedAnswerDetector implements Detector {
         return false;
     }
 
+    // Says whether the value before a comparison at index, or the value
+    // after it at rightStart, is a sample value.
+    private boolean hasSampleOperand(String condition, int index,
+            int rightStart) {
+        String left = readLiteralBefore(condition, index);
+        if (isSampleValue(left)) {
+            return true;
+        }
+
+        String right = readLiteralAt(condition, rightStart);
+        return isSampleValue(right);
+    }
+
     // Returns where the value after ==, .equals( or .contains( starts.
     private int findRightOperand(String condition, int index) {
         if (condition.startsWith(EQUALS_OPERATOR, index)) {
             return index + EQUALS_OPERATOR.length();
-        } else if (condition.startsWith(EQUALS_METHOD, index)
-                || condition.startsWith(CONTAINS_METHOD, index)) {
-            return condition.indexOf(OPEN_PAREN, index) + 1;
+        }
+
+        boolean methodCall = condition.startsWith(EQUALS_METHOD, index)
+                || condition.startsWith(CONTAINS_METHOD, index);
+        if (methodCall) {
+            int openIndex = condition.indexOf(OPEN_PAREN, index);
+            return openIndex + 1;
         }
 
         return NOT_FOUND;
@@ -230,14 +278,18 @@ public class HardCodedAnswerDetector implements Detector {
     private String readLiteralBefore(String text, int index) {
         int end = index;
 
-        while (end > 0 && Character.isWhitespace(text.charAt(end - 1))) {
+        while (JavaSourceText.isSpaceBefore(text, end)) {
             end--;
         }
 
-        if (end > 0 && JavaSourceText.isQuote(text.charAt(end - 1))) {
-            int closingQuote = end - 1;
-            int openingQuote = text.lastIndexOf(text.charAt(closingQuote),
-                    closingQuote - 1);
+        int closingQuote = end - 1;
+        boolean quoteBefore = end > 0
+                && JavaSourceText.isQuote(text.charAt(closingQuote));
+
+        if (quoteBefore) {
+            char quote = text.charAt(closingQuote);
+            int searchFrom = closingQuote - 1;
+            int openingQuote = text.lastIndexOf(quote, searchFrom);
 
             if (openingQuote < 0) {
                 return "";
@@ -247,8 +299,7 @@ public class HardCodedAnswerDetector implements Detector {
 
         int start = end;
 
-        while (start > 0
-                && Character.isJavaIdentifierPart(text.charAt(start - 1))) {
+        while (JavaSourceText.isNamePartBefore(text, start)) {
             start--;
         }
 
@@ -256,8 +307,11 @@ public class HardCodedAnswerDetector implements Detector {
                 && Character.isDigit(text.charAt(start));
 
         // The minus of a negative number such as -5 belongs to it
-        if (isNumber && start > 0 && text.charAt(start - 1) == MINUS
-                && isNegativeSign(text, start - 1)) {
+        int minusIndex = start - 1;
+        boolean negative = isNumber && start > 0
+                && text.charAt(minusIndex) == MINUS
+                && isNegativeSign(text, minusIndex);
+        if (negative) {
             start--;
         }
 
@@ -290,8 +344,7 @@ public class HardCodedAnswerDetector implements Detector {
     private String readLiteralAt(String text, int index) {
         int start = index;
 
-        while (start < text.length()
-                && Character.isWhitespace(text.charAt(start))) {
+        while (isSpaceAt(text, start)) {
             start++;
         }
 
@@ -302,19 +355,20 @@ public class HardCodedAnswerDetector implements Detector {
         }
 
         if (end < text.length() && JavaSourceText.isQuote(text.charAt(end))) {
-            int close = text.indexOf(text.charAt(end), end + 1);
+            char quote = text.charAt(end);
+            int afterQuote = end + 1;
+            int close = text.indexOf(quote, afterQuote);
 
             if (close < 0) {
                 return "";
             }
-            return text.substring(start, close + 1);
+            int literalEnd = close + 1;
+            return text.substring(start, literalEnd);
         }
 
         int digitsStart = end;
 
-        while (end < text.length()
-                && (Character.isLetterOrDigit(text.charAt(end))
-                || text.charAt(end) == DECIMAL_POINT)) {
+        while (isNumberPartAt(text, end)) {
             end++;
         }
 
@@ -337,8 +391,7 @@ public class HardCodedAnswerDetector implements Detector {
 
         int after = end;
 
-        while (after < text.length()
-                && Character.isWhitespace(text.charAt(after))) {
+        while (isSpaceAt(text, after)) {
             after++;
         }
 
@@ -349,6 +402,23 @@ public class HardCodedAnswerDetector implements Detector {
                 && !text.startsWith(ARROW, after);
 
         return signBefore || signAfter;
+    }
+
+    // Says whether the character at index is a space; false past the end.
+    private boolean isSpaceAt(String text, int index) {
+        return index < text.length()
+                && Character.isWhitespace(text.charAt(index));
+    }
+
+    // Says whether the character at index can be part of a number, such
+    // as a digit or the point of 3.5; false past the end.
+    private boolean isNumberPartAt(String text, int index) {
+        if (index >= text.length()) {
+            return false;
+        }
+
+        char current = text.charAt(index);
+        return Character.isLetterOrDigit(current) || current == DECIMAL_POINT;
     }
 
     // Says whether a literal is a sample value, not 0 or a separator.
