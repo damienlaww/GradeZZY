@@ -26,6 +26,9 @@ public class AuditEntry {
     // The text after the reference at the end of a detail
     private static final String REFERENCE_END = "]";
 
+    // Returned by referenceStart when the detail holds no reference
+    private static final int NO_REFERENCE = -1;
+
     // The time of the action
     private final LocalDateTime timestamp;
 
@@ -123,7 +126,7 @@ public class AuditEntry {
     // Finds where the reference starts, or -1 when there is none.
     private int referenceStart() {
         if (detail == null || !detail.endsWith(REFERENCE_END)) {
-            return -1;
+            return NO_REFERENCE;
         }
         return detail.lastIndexOf(REFERENCE_START);
     }

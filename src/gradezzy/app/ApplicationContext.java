@@ -66,6 +66,9 @@ public class ApplicationContext {
     // token trigrams; any other valid value picks winnowing
     private static final String TRIGRAM_ALGORITHM = "trigrams";
 
+    // Separates the bad settings in the start-up message
+    private static final String PROBLEM_SEPARATOR = " ";
+
     // The application settings
     private final AppConfig config;
 
@@ -136,7 +139,7 @@ public class ApplicationContext {
         }
         throw new ConfigException("Fix these settings in "
                 + config.getConfigFile() + ", then start GradeZZY again: "
-                + TextUtils.join(" ", problems));
+                + TextUtils.join(PROBLEM_SEPARATOR, problems));
     }
 
     /**

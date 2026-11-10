@@ -31,6 +31,9 @@ public final class ExportFolders {
     // Separates one entry from the next
     private static final String ENTRY_SEPARATOR = ";";
 
+    // Returned by indexOf when no entry matches
+    private static final int NOT_FOUND = -1;
+
     // Separates who an entry is for from its folder
     private static final String VALUE_SEPARATOR = "=";
 
@@ -391,6 +394,6 @@ public final class ExportFolders {
                 return index;
             }
         }
-        return -1;
+        return NOT_FOUND;
     }
 }
