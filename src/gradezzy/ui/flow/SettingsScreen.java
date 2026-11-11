@@ -438,7 +438,7 @@ public class SettingsScreen extends FlowScreen {
         }
         actions.addSecondary(showErrorButton);
         actions.addSecondary(discardButton);
-        actions.setPrimary("Save", () -> save(), false);
+        actions.setPrimary("Save", () -> saveAll(), false);
         refreshBar();
     }
 
@@ -473,7 +473,7 @@ public class SettingsScreen extends FlowScreen {
 
     /**
      * Says whether the assessment form has a change that is not saved
-     * yet. Its own Save assessment saves it, not the bar's Save.
+     * yet. Its own Save assessment saves it, and so does the bar's Save.
      *
      * @return true if the assessment form was changed and not saved
      */
@@ -543,8 +543,9 @@ public class SettingsScreen extends FlowScreen {
     // Asks before throwing away the changes that are not saved.
     private void askDiscard() {
         getWindow().confirm("Discard your changes?", "Every setting goes "
-                + "back to what config.properties holds now.",
-                "Discard changes", () -> discardChanges());
+                + "back to what config.properties holds now, and the "
+                + "assessment form to its saved values.",
+                "Discard changes", () -> discardAll());
     }
 
     /**
@@ -2018,8 +2019,10 @@ public class SettingsScreen extends FlowScreen {
         assessmentForm = AssessmentEditor.inline(getWindow(), start,
                 originalName, saved -> showAssessment(saved),
                 saved -> useFromSettings(saved));
+        assessmentForm.setOnChange(() -> refreshBar());
         assessmentHolder.getChildren().setAll(pickRow,
                 assessmentForm.getView());
+        refreshBar();
     }
 
     // Returns the module's assessment with a name, else the one in use
@@ -2086,6 +2089,7 @@ public class SettingsScreen extends FlowScreen {
         HBox pickRow = assessmentPickRow(null, null, "", true);
         assessmentForm = null;
         assessmentHolder.getChildren().setAll(pickRow, empty);
+        refreshBar();
     }
 
     // Lists the saved assessments in the dropdown, with the line that
@@ -2290,7 +2294,8 @@ public class SettingsScreen extends FlowScreen {
 
     // ------------------------------------------------------ action bar
 
-    // Updates the count of changes and the Save and Discard buttons.
+    // Updates the count of changes and the Save and Discard buttons. A
+    // change in the assessment form counts as one change.
     private void refreshBar() {
         getWindow().refreshSettingsMark();
         if (!isOnScreen() || !getBackend().supports(Capability.SETTINGS)) {
@@ -2305,6 +2310,9 @@ public class SettingsScreen extends FlowScreen {
                     errors++;
                 }
             }
+        }
+        if (hasUnsavedAssessment()) {
+            changed++;
         }
         boolean valid = errors == 0;
         boolean hasErrors = errors > 0;

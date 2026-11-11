@@ -157,6 +157,9 @@ public final class AssessmentEditor {
     // use it, or null to switch as Home does
     private Consumer<String> onUse = null;
 
+    // Called after each change to the inline form, or null
+    private Runnable onChange = null;
+
     // The inline form, once built
     private Node view = null;
 
@@ -213,7 +216,18 @@ public final class AssessmentEditor {
         editor.onUse = onUse;
         editor.view = editor.build();
         editor.savedForm = editor.formText();
+        editor.watchFields();
         return editor;
+    }
+
+    /**
+     * Says what to call after each change to the inline form, such as
+     * Settings turning its Save button on.
+     *
+     * @param onChange called after each change
+     */
+    public void setOnChange(Runnable onChange) {
+        this.onChange = onChange;
     }
 
     /**
@@ -395,6 +409,24 @@ public final class AssessmentEditor {
         body.setPrefWidth(WIDTH);
         body.getStyleClass().add("assessment-editor");
         return body;
+    }
+
+    // Reports every change to the form's own fields; the question rows
+    // report theirs through questionChanged.
+    private void watchFields() {
+        TextField[] watched = {name, testers, starter, modelAnswers,
+            classFiles, dataFiles, placeholders};
+        for (TextField field : watched) {
+            field.textProperty().addListener((seen, before, now) ->
+                    formChanged());
+        }
+    }
+
+    // Tells the page holding the inline form that the form changed.
+    private void formChanged() {
+        if (onChange != null) {
+            onChange.run();
+        }
     }
 
     // Puts back the values saved for this assessment, by reloading the
@@ -615,6 +647,7 @@ public final class AssessmentEditor {
         int lastIndex = questions.size() - 1;
         questions.get(lastIndex).focus();
         updateTotal();
+        formChanged();
     }
 
     // Removes a question row.
@@ -623,6 +656,7 @@ public final class AssessmentEditor {
         questionRows.getChildren().remove(fields.getRow());
         updateTotal();
         checkStarterAgain();
+        formChanged();
     }
 
     // Reads the marks and checks the starter folder again after a
@@ -630,6 +664,7 @@ public final class AssessmentEditor {
     private void questionChanged() {
         readAllMarks();
         checkStarterAgain();
+        formChanged();
     }
 
     // Checks the starter folder against the questions now in the form,
