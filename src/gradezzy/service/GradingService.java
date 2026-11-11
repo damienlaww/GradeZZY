@@ -316,10 +316,42 @@ public class GradingService {
             TestCaseSource testCaseSource, ProgressListener listener,
             Path scoreSheetFile, Path starterDirectory)
             throws GradingException {
+        return startGrading(inputPaths, section, testCaseSource, listener,
+                scoreSheetFile, starterDirectory, null);
+    }
+
+    /**
+     * Starts a run as the method above does, with the model answers
+     * folder chosen for this batch; null means the one in the settings.
+     * The folder is kept on the run while GradeZZY is open, so Retry
+     * and Resume in that time use it too, and the run's grading
+     * settings name it.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param inputPaths the zip files or folders the instructor chose
+     * @param section the section the batch belongs to
+     * @param testCaseSource where the tester files come from
+     * @param listener the object told about progress
+     * @param scoreSheetFile the score sheet for this batch, or null for
+     *        the section's one in the settings
+     * @param starterDirectory the starter folder for this batch, or null
+     *        for the one in the settings
+     * @param modelAnswersDirectory the model answers folder for this
+     *        batch, or null for the one in the settings
+     * @return the finished run, holding every submission and its results
+     * @throws GradingException if grading is still running, or the
+     *         batch cannot start at all
+     */
+    public GradingRun startGrading(List<Path> inputPaths, Section section,
+            TestCaseSource testCaseSource, ProgressListener listener,
+            Path scoreSheetFile, Path starterDirectory,
+            Path modelAnswersDirectory) throws GradingException {
         ActiveGrading active = beginGrading(section);
         try {
             return gradeBatch(inputPaths, section, testCaseSource, listener,
-                    scoreSheetFile, starterDirectory, active);
+                    scoreSheetFile, starterDirectory, modelAnswersDirectory,
+                    active);
         } finally {
             endGrading(active);
         }
@@ -328,12 +360,14 @@ public class GradingService {
     // Prepares and grades a whole batch; see startGrading.
     private GradingRun gradeBatch(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener,
-            Path scoreSheetFile, Path starterDirectory, ActiveGrading active)
+            Path scoreSheetFile, Path starterDirectory,
+            Path modelAnswersDirectory, ActiveGrading active)
             throws GradingException {
         GradingRun gradingRun = null;
         try {
             gradingRun = prepareRun(inputPaths, section, testCaseSource,
-                    listener, scoreSheetFile, starterDirectory, active);
+                    listener, scoreSheetFile, starterDirectory,
+                    modelAnswersDirectory, active);
         } catch (GradingException exception) {
             auditService.record(GRADING_NOT_STARTED, exception.getMessage());
             throw exception;
@@ -368,7 +402,8 @@ public class GradingService {
     // graded yet.
     private GradingRun prepareRun(List<Path> inputPaths, Section section,
             TestCaseSource testCaseSource, ProgressListener listener,
-            Path scoreSheetFile, Path starterDirectory, ActiveGrading active)
+            Path scoreSheetFile, Path starterDirectory,
+            Path modelAnswersDirectory, ActiveGrading active)
             throws GradingException {
         checkArguments(inputPaths, section, testCaseSource, listener);
         checkTypedCases(testCaseSource);
@@ -389,6 +424,7 @@ public class GradingService {
 
         GradingRun gradingRun = createRun(section, testersDirectory,
                 rosterFile, starterDirectory);
+        keepModelAnswers(gradingRun, modelAnswersDirectory);
         String runId = gradingRun.getId();
         active.setRunId(runId);
         GradingContext context = new GradingContext(config,
@@ -456,6 +492,21 @@ public class GradingService {
         // Kept so History can show what the run was graded with
         gradingRun.setGradingSettings(RunSettings.capture(config));
         return gradingRun;
+    }
+
+    // Keeps the model answers folder chosen for a batch on its run, and
+    // writes it into the run's grading settings in place of the one in
+    // the settings, so History shows the folder the run used.
+    private void keepModelAnswers(GradingRun gradingRun,
+            Path modelAnswersDirectory) {
+        if (modelAnswersDirectory == null) {
+            return;
+        }
+        gradingRun.setModelAnswersDirectory(modelAnswersDirectory);
+        gradingRun.setGradingSettings(RunSettings.put(
+                gradingRun.getGradingSettings(),
+                ConfigKeys.MODEL_ANSWERS_DIR,
+                modelAnswersDirectory.toString()));
     }
 
     // Loads the chosen zips and folders as submissions of a section.
@@ -1097,7 +1148,8 @@ public class GradingService {
         active.setRunId(gradingRun.getId());
         GradingPipeline pipeline = pipelineFactory.createQuestionPipeline(
                 active.getCancellationToken(),
-                gradingRun.getStarterDirectory());
+                gradingRun.getStarterDirectory(),
+                gradingRun.getModelAnswersDirectory());
         pipeline.run(questionRun, questionContext,
                 new RetryProgressListener(progress, gradingRun));
     }
@@ -1720,8 +1772,8 @@ public class GradingService {
     }
 
     // Builds the pipeline for a run. The one-argument factory method,
-    // which uses the starter folder in the settings, is kept for a run
-    // with no starter folder of its own.
+    // which uses the starter and model answers folders in the settings,
+    // is kept for a run with no folder of its own.
     // Each question's other source files are read from the starter
     // folder here, so every way of grading a run knows them.
     private GradingPipeline createPipeline(GradingRun gradingRun,
@@ -1734,12 +1786,13 @@ public class GradingService {
         }
         AssessmentFolderScanner.fillExtraFiles(gradingRun.getAssessment(),
                 starterForFiles);
-        if (starterDirectory == null) {
+        Path modelAnswersDirectory = gradingRun.getModelAnswersDirectory();
+        if (starterDirectory == null && modelAnswersDirectory == null) {
             return pipelineFactory.createPipeline(
                     active.getCancellationToken());
         }
         return pipelineFactory.createPipeline(active.getCancellationToken(),
-                starterDirectory);
+                starterDirectory, modelAnswersDirectory);
     }
 
     // Reads a score sheet into the roster of a run.

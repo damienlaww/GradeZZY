@@ -53,6 +53,7 @@ import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.SubmissionStatus;
+import gradezzy.modelanswer.ModelAnswerCopy;
 import gradezzy.modelanswer.QuestionStrength;
 import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.report.CsvScoreSheetExporter;
@@ -367,8 +368,8 @@ public class LiveBackend implements DashboardBackend {
         }
     }
 
-    // Reads a path setting. A new assessment has no score sheet yet, so
-    // a blank one gives null.
+    // Reads a path setting. A new assessment has no score sheet yet, and
+    // model answers are optional, so a blank one gives null.
     private Path configuredPath(InputKind kind) {
         if (kind == InputKind.ROSTER) {
             String sheet = config.getString(ConfigKeys.SCORE_SHEET_FILE);
@@ -380,6 +381,13 @@ public class LiveBackend implements DashboardBackend {
             return Paths.get(config.getString(ConfigKeys.TESTERS_DIR));
         } else if (kind == InputKind.STARTER) {
             return Paths.get(config.getString(ConfigKeys.STARTER_DIR));
+        } else if (kind == InputKind.MODEL_ANSWERS) {
+            String answers = config.getString(ConfigKeys.MODEL_ANSWERS_DIR)
+                    .trim();
+            if (answers.isEmpty()) {
+                return null;
+            }
+            return Paths.get(answers);
         }
         return null;
     }
@@ -388,8 +396,9 @@ public class LiveBackend implements DashboardBackend {
      * Checks the path with InputValidator and its file name, and reads a
      * score sheet with RosterReader as grading will. Student zips
      * and folders are checked with SubmissionPreview, a starter folder
-     * for the starter file of each question of the assessment in use, and
-     * a tester folder for the testers it holds.
+     * for the starter file of each question of the assessment in use, a
+     * model answers folder for the answer of each question, and a tester
+     * folder for the testers it holds.
      */
     @Override
     public ImportItem inspect(InputKind kind, Path path) {
@@ -422,6 +431,8 @@ public class LiveBackend implements DashboardBackend {
         }
         if (kind == InputKind.STARTER) {
             return checkStarter(path, assessment.getQuestions());
+        } else if (kind == InputKind.MODEL_ANSWERS) {
+            return checkModelAnswers(path, assessment.getQuestions());
         } else if (kind == InputKind.TESTERS) {
             return inspectTesters(path);
         }
@@ -506,10 +517,11 @@ public class LiveBackend implements DashboardBackend {
      */
     @Override
     public List<QuestionStrength> checkTesterStrength(Section section,
-            Path testersDirectory, Path starterDirectory) {
+            Path testersDirectory, Path starterDirectory,
+            Path modelAnswersDirectory) {
         return services.getTesterStrengthService().checkTesters(
                 section.getModuleCode(), testersDirectory,
-                starterDirectory);
+                starterDirectory, modelAnswersDirectory);
     }
 
     /**
@@ -694,8 +706,9 @@ public class LiveBackend implements DashboardBackend {
 
     /**
      * Starts GradingService.startGrading in a GradingTask. When no usable
-     * starter folder is chosen, the one in Settings is passed, as its row
-     * on Set up says, so the run records the folder it used.
+     * starter or model answers folder is chosen, the one in Settings is
+     * passed, as its row on Set up says, so the run records the folder it
+     * used.
      */
     @Override
     public void startGrading(ImportBatch batch, Section section,
@@ -704,7 +717,7 @@ public class LiveBackend implements DashboardBackend {
                 batch.getSubmissionPaths(), section,
                 createTestCaseSource(batch), listener,
                 batch.getSinglePath(InputKind.ROSTER),
-                findUsableStarter(batch));
+                findUsableStarter(batch), findUsableModelAnswers(batch));
         runInBackground(task, callback, Capability.IMPORT_AND_GRADE, null);
     }
 
@@ -2223,6 +2236,36 @@ public class LiveBackend implements DashboardBackend {
                 + joinWords(missingIds) + " will not be flagged.");
     }
 
+    // Checks for which questions a model answers folder holds an answer,
+    // as the assessment editor does. The folder is optional, and one
+    // with some answers missing still serves the questions it has.
+    private ImportItem checkModelAnswers(Path folder,
+            List<Question> questions) {
+        if (questions.isEmpty()) {
+            return new ImportItem(InputKind.MODEL_ANSWERS, folder, "",
+                    ImportState.ACCEPTED, "Folder found. Its answers are "
+                    + "checked once there are questions.");
+        }
+
+        int found = 0;
+        for (Question question : questions) {
+            if (ModelAnswerCopy.findAnswerFile(folder, question) != null) {
+                found++;
+            }
+        }
+        if (found == questions.size()) {
+            return new ImportItem(InputKind.MODEL_ANSWERS, folder, "",
+                    ImportState.ACCEPTED, "Has an answer for every "
+                    + "question.");
+        }
+        int questionCount = questions.size();
+        return new ImportItem(InputKind.MODEL_ANSWERS, folder, "",
+                ImportState.WARNING, "Has an answer for " + found + " of "
+                + questionCount + " question" + plural(questionCount)
+                + ", so the others are left out of the model answer "
+                + "checks.");
+    }
+
     // Checks that a tester folder holds testers, with the scan that fills
     // in an assessment's questions, so the folder's status and the
     // questions found always agree. A tester with no marks to read is a
@@ -2277,6 +2320,26 @@ public class LiveBackend implements DashboardBackend {
         return "so untouched and empty answers cannot be flagged.";
     }
 
+    // Says what grading does instead of using a model answers folder
+    // that cannot be used: it uses the one in Settings, when that is
+    // another folder that can be used, else it skips the model answer
+    // checks.
+    private String describeModelAnswersFallback(Path folder) {
+        Path configured = configuredPath(InputKind.MODEL_ANSWERS);
+        boolean otherUsable = false;
+        if (configured != null && !isSameFolder(folder, configured)) {
+            ImportItem settingsItem = inspect(InputKind.MODEL_ANSWERS,
+                    configured);
+            otherUsable = settingsItem.getState().isUsable();
+        }
+        if (otherUsable) {
+            return "so the model answers folder in Settings is used "
+                    + "instead.";
+        }
+        return "so the tester strength check (mutation testing) and the "
+                + "random inputs check will be skipped.";
+    }
+
     // Says whether two paths name the same folder.
     private boolean isSameFolder(Path first, Path second) {
         return first.toAbsolutePath().normalize().equals(
@@ -2300,6 +2363,27 @@ public class LiveBackend implements DashboardBackend {
         return null;
     }
 
+    // Returns the chosen model answers folder, else the one in Settings,
+    // so the run records the folder it was graded with. Returns null
+    // when neither can be used.
+    private Path findUsableModelAnswers(ImportBatch batch) {
+        List<ImportItem> answers = batch.getItems(InputKind.MODEL_ANSWERS);
+        if (!answers.isEmpty() && answers.get(0).getState().isUsable()) {
+            return answers.get(0).getPath();
+        }
+
+        Path configured = configuredPath(InputKind.MODEL_ANSWERS);
+        if (configured == null) {
+            return null;
+        }
+        ImportItem settingsItem = inspect(InputKind.MODEL_ANSWERS,
+                configured);
+        if (settingsItem.getState().isUsable()) {
+            return configured;
+        }
+        return null;
+    }
+
     // Returns the item for a path InputValidator could not read. A path
     // that is not there is named in full, because the usual cause is a
     // setting that points at a folder this computer does not have.
@@ -2313,6 +2397,10 @@ public class LiveBackend implements DashboardBackend {
         if (kind == InputKind.STARTER) {
             message = "GradeZZY could not read this, "
                     + describeStarterFallback(path) + SENTENCE_GAP + message;
+        } else if (kind == InputKind.MODEL_ANSWERS) {
+            message = "GradeZZY could not read this, "
+                    + describeModelAnswersFallback(path) + SENTENCE_GAP
+                    + message;
         }
         CapabilityStatus checks = Capability.INPUT_CHECKS.getStatus();
         if (checks != CapabilityStatus.WORKS_NOW) {

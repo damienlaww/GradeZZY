@@ -121,6 +121,31 @@ public final class RunSettings {
         return TextUtils.join(LINE_END, lines);
     }
 
+    /**
+     * Writes one setting into the text a run keeps with a value of its
+     * own, such as the model answers folder chosen on Set up in place of
+     * the one in the settings. A run that kept no settings keeps none.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param settings the run's text, from capture
+     * @param key the setting
+     * @param value its value for this run
+     * @return the run's new text
+     */
+    public static String put(String settings, String key, String value) {
+        if (settings == null || settings.isEmpty()) {
+            return settings;
+        }
+        List<String> lines = new ArrayList<>();
+        for (String line : settings.split(LINE_END)) {
+            lines.add(line);
+        }
+        String oneLine = value.replace(LINE_END, " ");
+        replaceLine(lines, key, key + KEY_VALUE_SEPARATOR + oneLine);
+        return TextUtils.join(LINE_END, lines);
+    }
+
     // Puts a setting's new line in place of its old one, or at the end
     // when the run did not keep it.
     private static void replaceLine(List<String> lines, String key,

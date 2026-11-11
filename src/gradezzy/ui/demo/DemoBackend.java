@@ -482,6 +482,9 @@ public final class DemoBackend implements DashboardBackend {
             paths.add(DemoData.samplePath(DemoData.SAMPLE_ROSTER));
         } else if (kind == InputKind.TESTERS) {
             paths.add(DemoData.samplePath(DemoData.SAMPLE_TESTERS));
+        } else if (kind == InputKind.MODEL_ANSWERS) {
+            // The demo has no model answers
+            return paths;
         } else {
             paths.add(DemoData.samplePath(DemoData.SAMPLE_STARTER));
         }
@@ -520,6 +523,9 @@ public final class DemoBackend implements DashboardBackend {
         } else if (kind == InputKind.STARTER) {
             return new ImportItem(kind, path, "", ImportState.ACCEPTED,
                     "Starter files for the untouched-answer check.");
+        } else if (kind == InputKind.MODEL_ANSWERS) {
+            return new ImportItem(kind, path, "", ImportState.ACCEPTED,
+                    "Model answers for the tester strength check.");
         }
 
         String username = name.replace(DemoData.REPLACEMENT_SUFFIX, "")
@@ -675,7 +681,8 @@ public final class DemoBackend implements DashboardBackend {
      */
     @Override
     public List<QuestionStrength> checkTesterStrength(Section section,
-            Path testersDirectory, Path starterDirectory) {
+            Path testersDirectory, Path starterDirectory,
+            Path modelAnswersDirectory) {
         return new ArrayList<>();
     }
 

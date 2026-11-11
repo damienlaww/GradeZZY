@@ -126,6 +126,28 @@ public class SetUpScreen extends FlowScreen {
             + "used to spot untouched answers and to supply provided class "
             + "files such as DataException.class.";
 
+    // What the model answers are
+    private static final String MODEL_ANSWERS_HELP = "Optional: grading "
+            + "starts without it. A folder laid out like the starter "
+            + "folder, such as Q1/Q1.java, with a correct answer to each "
+            + "question. It is used for two checks. The tester strength "
+            + "check is mutation testing: GradeZZY makes small mistakes in "
+            + "the model answer and runs each tester on them, to see "
+            + "whether the testers catch them. The random inputs check "
+            + "calls the students' methods with random inputs and flags "
+            + "answers that differ from the model answer; marks never "
+            + "change. Leave it empty to skip both. Their switches are "
+            + "under Model answer checks in Settings. A folder chosen here "
+            + "is used for this section and assessment only; the "
+            + "assessment keeps its own.";
+
+    // The line under the model answers row's title that says what the
+    // folder is used for
+    private static final String MODEL_ANSWERS_PURPOSE = "Correct answers "
+            + "for two extra checks: mutation testing (do the testers "
+            + "catch small bugs?) and random inputs (does each answer "
+            + "behave like the model answer?). Leave empty to skip both.";
+
     // The size of the icon in the drop area
     private static final double DROP_ICON_SIZE = 20.0;
 
@@ -197,6 +219,8 @@ public class SetUpScreen extends FlowScreen {
     private static final String ROSTER_TITLE = "Score sheet";
     private static final String TESTERS_TITLE = "Tester files";
     private static final String STARTER_TITLE = "Starter files";
+    private static final String MODEL_ANSWERS_TITLE =
+            "Model answers (optional)";
 
     // The most unfinished runs the Continue card lists; History lists
     // the rest
@@ -1068,8 +1092,9 @@ public class SetUpScreen extends FlowScreen {
         refillClassFiles();
     }
 
-    // Puts back the score sheet, tester and starter folder chosen for the
-    // module, section and assessment now open, or their defaults.
+    // Puts back the score sheet, tester, starter and model answers folder
+    // chosen for the module, section and assessment now open, or their
+    // defaults.
     private void refillClassFiles() {
         if (getBackend().isDemo()) {
             return;
@@ -1084,6 +1109,8 @@ public class SetUpScreen extends FlowScreen {
         }
         batch.clear(InputKind.STARTER);
         addDefault(InputKind.STARTER);
+        batch.clear(InputKind.MODEL_ANSWERS);
+        addDefault(InputKind.MODEL_ANSWERS);
     }
 
     // Asks before removing every chosen zip file.
@@ -1102,10 +1129,11 @@ public class SetUpScreen extends FlowScreen {
         refresh();
     }
 
-    // Fills the score sheet, tester and starter rows from the settings.
+    // Fills the score sheet, tester, starter and model answers rows from
+    // the settings.
     private void fillClassFiles() {
         InputKind[] kinds = {InputKind.ROSTER, InputKind.TESTERS,
-            InputKind.STARTER};
+            InputKind.STARTER, InputKind.MODEL_ANSWERS};
         ImportBatch batch = getState().getBatch();
 
         for (InputKind kind : kinds) {
@@ -1147,7 +1175,8 @@ public class SetUpScreen extends FlowScreen {
         }
     }
 
-    // Asks for a new score sheet, tester or starter folder.
+    // Asks for a new score sheet, tester, starter or model answers
+    // folder.
     private void changeClassFile(InputKind kind) {
         Path path = chooseClassFile(kind);
         if (path == null) {
@@ -1216,6 +1245,21 @@ public class SetUpScreen extends FlowScreen {
         store.save(chosenClassFiles);
     }
 
+    // Forgets the class file of a kind chosen on Set up for the module,
+    // section and assessment open now, and puts back its default, such
+    // as the assessment's model answers folder, or none.
+    private void forgetClassFile(InputKind kind) {
+        ChosenSubmissionsStore store = classFileStore();
+        if (store == null) {
+            return;
+        }
+        chosenClassFiles.remove(classFileKey(kind));
+        store.save(chosenClassFiles);
+        getState().getBatch().clear(kind);
+        addDefault(kind);
+        refresh();
+    }
+
     // Names the section chosen now, such as "CS102 G1", or "".
     private String sectionLabel() {
         if (getState().getSection() == null) {
@@ -1265,8 +1309,10 @@ public class SetUpScreen extends FlowScreen {
         getBackend().saveSettings(changes);
     }
 
-    // Uses a score sheet, tester or starter folder the instructor chose,
-    // or one a suggestion offered instead of the chosen one.
+    // Uses a score sheet, tester, starter or model answers folder the
+    // instructor chose, or one a suggestion offered instead of the chosen
+    // one. Like the others, a model answers folder is kept for the
+    // module, section and assessment, not saved into the assessment.
     private void useChosenClassFile(InputKind kind, Path path) {
         rememberClassFile(kind, path);
         // Settings lists each section's score sheet, so one chosen here,
@@ -1341,6 +1387,8 @@ public class SetUpScreen extends FlowScreen {
         if (getBackend().isDemo()) {
             List<Path> samples = getBackend().getSampleFiles(kind);
             if (samples.isEmpty()) {
+                getWindow().notify("The demo has no "
+                        + kind.getTitle().toLowerCase() + " to choose.");
                 return null;
             }
             return samples.get(0);
@@ -1906,7 +1954,7 @@ public class SetUpScreen extends FlowScreen {
                 + ONE_FILE_RULE;
     }
 
-    // Redraws the score sheet, tester and starter rows.
+    // Redraws the score sheet, tester, starter and model answers rows.
     private void refreshClassFiles() {
         checkTestersIfChanged();
         checkStrengthIfChanged();
@@ -1914,7 +1962,9 @@ public class SetUpScreen extends FlowScreen {
         HBox[] rows = {
             createClassFileRow(InputKind.ROSTER, ROSTER_TITLE, null),
             createTesterRow(),
-            createClassFileRow(InputKind.STARTER, STARTER_TITLE, null)};
+            createClassFileRow(InputKind.STARTER, STARTER_TITLE, null),
+            createClassFileRow(InputKind.MODEL_ANSWERS, MODEL_ANSWERS_TITLE,
+                    findForgetLink(InputKind.MODEL_ANSWERS))};
         classFiles.getChildren().clear();
         for (int index = 0; index < rows.length; index++) {
             rows[index].getStyleClass().add("card-row");
@@ -1955,6 +2005,21 @@ public class SetUpScreen extends FlowScreen {
     private Path findUsableStarter() {
         ImportBatch batch = getState().getBatch();
         List<ImportItem> items = batch.getItems(InputKind.STARTER);
+        if (items.isEmpty()) {
+            return null;
+        }
+        ImportItem item = items.get(0);
+        if (!batch.getEffectiveState(item).isUsable()) {
+            return null;
+        }
+        return item.getPath();
+    }
+
+    // Returns the usable chosen model answers folder, or null for
+    // Settings.
+    private Path findUsableModelAnswers() {
+        ImportBatch batch = getState().getBatch();
+        List<ImportItem> items = batch.getItems(InputKind.MODEL_ANSWERS);
         if (items.isEmpty()) {
             return null;
         }
@@ -2252,13 +2317,17 @@ public class SetUpScreen extends FlowScreen {
     // Names the tester, starter and model answers folders a tester
     // strength check would use, or returns null when it cannot run: no
     // usable tester folder, typed test cases, or no model answers.
+    // The chosen model answers folder is used, else the one in Settings.
     private String findStrengthFolders() {
         Path testers = findUsableTesters();
-        if (testers == null || !getBackend().hasModelAnswers()) {
+        Path modelAnswers = findUsableModelAnswers();
+        if (modelAnswers == null && getBackend().hasModelAnswers()) {
+            modelAnswers = getBackend().getConfiguredPath(
+                    InputKind.MODEL_ANSWERS);
+        }
+        if (testers == null || modelAnswers == null) {
             return null;
         }
-        String modelAnswers = getBackend().getSetting(
-                ConfigKeys.MODEL_ANSWERS_DIR).trim();
         return describeFolders(testers, findUsableStarter())
                 + KEY_SEPARATOR + modelAnswers;
     }
@@ -2290,7 +2359,7 @@ public class SetUpScreen extends FlowScreen {
         }
         TesterStrengthCheck check = new TesterStrengthCheck(getBackend(),
                 getState().getSection(), findUsableTesters(),
-                findUsableStarter(), folders);
+                findUsableStarter(), findUsableModelAnswers(), folders);
         check.setOnSucceeded(event -> strengthCheckDone(check));
         check.setOnFailed(event -> strengthCheckFailed(check));
         strengthCheck = check;
@@ -2448,8 +2517,13 @@ public class SetUpScreen extends FlowScreen {
         matches.addAll(found);
     }
 
-    // Returns what the match check found for a class file's row.
+    // Returns what the match check found for a class file's row. Model
+    // answers are the instructor's own, so they are not matched with the
+    // uploads.
     private ClassFileMatch findMatch(InputKind kind) {
+        if (kind == InputKind.MODEL_ANSWERS) {
+            return ClassFileMatch.fits();
+        }
         int index = STARTER_MATCH;
         if (kind == InputKind.ROSTER) {
             index = ROSTER_MATCH;
@@ -2561,6 +2635,10 @@ public class SetUpScreen extends FlowScreen {
         List<ImportItem> items = getState().getBatch().getItems(kind);
         String detail = "Not chosen. The starter folder in Settings is used.";
         Label status = Parts.pill("From Settings", Tone.NEUTRAL);
+        if (kind == InputKind.MODEL_ANSWERS) {
+            detail = describeNoModelAnswers();
+            status = Parts.pill("Optional", Tone.NEUTRAL);
+        }
         ClassFileMatch match = ClassFileMatch.fits();
         boolean missing = items.isEmpty() && kind.isRequired();
         if (missing && filesBeingChecked > 0) {
@@ -2587,6 +2665,9 @@ public class SetUpScreen extends FlowScreen {
             line.getChildren().add(extra);
         }
         VBox details = new VBox(line);
+        if (kind == InputKind.MODEL_ANSWERS) {
+            details.getChildren().add(0, detailLine(MODEL_ANSWERS_PURPOSE));
+        }
         if (match.hasSuggestion()) {
             details.getChildren().add(createSuggestion(kind, match));
         }
@@ -2602,6 +2683,31 @@ public class SetUpScreen extends FlowScreen {
         return classFileRow(iconPath, title, details, status, change);
     }
 
+    // Says what the model answers row shows with no folder in it: the
+    // assessment's folder is used, as it joins the row once checked, or
+    // with none the two model answer checks are skipped.
+    private String describeNoModelAnswers() {
+        if (getBackend().hasModelAnswers()) {
+            return "Not chosen. The model answers folder of the assessment "
+                    + "is used.";
+        }
+        return "None chosen, so the tester strength check (mutation "
+                + "testing) and the random inputs check will be skipped.";
+    }
+
+    // Returns the link that puts back the model answers folder of the
+    // assessment, after one was chosen on Set up, or null when none was.
+    private Hyperlink findForgetLink(InputKind kind) {
+        if (findRememberedClassFile(kind) == null) {
+            return null;
+        }
+        String text = "Remove";
+        if (getBackend().hasModelAnswers()) {
+            text = "Use the assessment's folder";
+        }
+        return smallLink(text, () -> forgetClassFile(kind));
+    }
+
     // Returns the icon of a class file row: a file for the score sheet,
     // a folder for the others.
     private String classFileIcon(InputKind kind) {
@@ -2613,10 +2719,17 @@ public class SetUpScreen extends FlowScreen {
 
     // Returns the link at the end of a class file row. Tester and starter
     // files belong to the assessment, so they are changed in its editor;
-    // only the score sheet is chosen here.
+    // the score sheet and the optional model answers are chosen here.
     private Hyperlink changeLink(InputKind kind) {
         Hyperlink change = rowLink("Change", () -> changeClassFile(kind));
-        if (kind != InputKind.ROSTER) {
+        boolean noAnswers = kind == InputKind.MODEL_ANSWERS
+                && getState().getBatch().getItems(kind).isEmpty();
+        if (noAnswers) {
+            change = rowLink("Choose", () -> changeClassFile(kind));
+        }
+        boolean inEditor = kind == InputKind.TESTERS
+                || kind == InputKind.STARTER;
+        if (inEditor) {
             change = rowLink("Edit assessment",
                     () -> editAssessmentFiles());
             change.setPrefWidth(Region.USE_COMPUTED_SIZE);
@@ -2672,6 +2785,8 @@ public class SetUpScreen extends FlowScreen {
             help = ROSTER_HELP;
         } else if (title.equals(TESTERS_TITLE)) {
             help = TESTERS_HELP;
+        } else if (title.equals(MODEL_ANSWERS_TITLE)) {
+            help = MODEL_ANSWERS_HELP;
         }
         VBox text = new VBox(Parts.labelWithInfo(Parts.strong(title), help),
                 detail);

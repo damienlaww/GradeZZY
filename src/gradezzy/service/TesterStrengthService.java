@@ -90,7 +90,32 @@ public class TesterStrengthService {
      */
     public List<QuestionStrength> checkTesters(String moduleCode,
             Path testersDirectory, Path starterDirectory) {
-        Path modelAnswers = ModelAnswerCopy.findFolder(config);
+        return checkTesters(moduleCode, testersDirectory, starterDirectory,
+                null);
+    }
+
+    /**
+     * Checks the tester of every question as the method above does, with
+     * the model answers folder chosen on Set up.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param moduleCode the module, such as CS102
+     * @param testersDirectory the folder holding the testers
+     * @param starterDirectory the starter folder, or null to use
+     *        paths.starter.dir
+     * @param modelAnswersDirectory the model answers folder, or null to
+     *        use paths.model.answers.dir
+     * @return one result per question, or an empty list when there are
+     *         no model answers
+     */
+    public List<QuestionStrength> checkTesters(String moduleCode,
+            Path testersDirectory, Path starterDirectory,
+            Path modelAnswersDirectory) {
+        Path modelAnswers = modelAnswersDirectory;
+        if (modelAnswers == null) {
+            modelAnswers = ModelAnswerCopy.findFolder(config);
+        }
         if (modelAnswers == null) {
             return new ArrayList<>();
         }

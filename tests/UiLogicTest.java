@@ -36,6 +36,10 @@ import gradezzy.plagiarism.SimilarityPair;
 import gradezzy.service.PlagiarismService;
 import gradezzy.ui.backend.CheatingRemarks;
 import gradezzy.ui.backend.DashboardBackend;
+import gradezzy.ui.backend.ImportBatch;
+import gradezzy.ui.backend.ImportItem;
+import gradezzy.ui.backend.ImportState;
+import gradezzy.ui.backend.InputKind;
 import gradezzy.ui.backend.ReviewDecision;
 import gradezzy.ui.backend.RunRecord;
 import gradezzy.ui.flow.SectionProgress;
@@ -111,6 +115,7 @@ public class UiLogicTest {
         plagiarism = new PlagiarismService(config, null, null);
         checkRemarks();
         checkProgress();
+        checkModelAnswersKind();
         System.out.println("UiLogicTest: " + passed + " passed, " + failed
                 + " failed");
         if (failed > 0) {
@@ -378,6 +383,28 @@ public class UiLogicTest {
     // Gives the time a progress run was made on a day of the month.
     private static LocalDateTime madeOn(int day) {
         return LocalDateTime.of(YEAR, MONTH, day, HOUR, MINUTE);
+    }
+
+    // Checks that model answers are optional: a batch without them, or
+    // with an unusable folder, gives no reason to wait, and a new folder
+    // takes the place of the last one.
+    private static void checkModelAnswersKind() {
+        InputKind kind = InputKind.MODEL_ANSWERS;
+        check(!kind.isRequired(), "model answers are optional");
+        check(InputKind.valueOf("MODEL_ANSWERS") == kind,
+                "the store's kind name reads back");
+
+        ImportBatch batch = new ImportBatch();
+        int reasonsWithout = batch.getBlockingReasons().size();
+        batch.add(new ImportItem(kind, Path.of("gone"), "",
+                ImportState.INVALID, "Not found."));
+        check(batch.getBlockingReasons().size() == reasonsWithout,
+                "an unusable model answers folder does not block grading");
+        batch.add(new ImportItem(kind, Path.of("answers"), "",
+                ImportState.ACCEPTED, "Has an answer for every question."));
+        check(batch.getItems(kind).size() == 1
+                && Path.of("answers").equals(batch.getSinglePath(kind)),
+                "a new model answers folder replaces the last one");
     }
 
     // Counts one check and prints it when it fails.

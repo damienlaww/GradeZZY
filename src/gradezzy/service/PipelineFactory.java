@@ -111,6 +111,25 @@ public class PipelineFactory {
      */
     public GradingPipeline createPipeline(
             CancellationToken cancellationToken, Path starterDirectory) {
+        return createPipeline(cancellationToken, starterDirectory, null);
+    }
+
+    /**
+     * Creates a pipeline whose checks compare answers with the starter
+     * folder and the model answers folder chosen for the batch.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param cancellationToken the flag that stops the batch when set
+     * @param starterDirectory the starter folder, or null to use
+     *        paths.starter.dir
+     * @param modelAnswersDirectory the model answers folder, or null to
+     *        use paths.model.answers.dir
+     * @return the pipeline, ready to run
+     */
+    public GradingPipeline createPipeline(
+            CancellationToken cancellationToken, Path starterDirectory,
+            Path modelAnswersDirectory) {
         GradingPipeline pipeline = new GradingPipeline(cancellationToken);
         ProcessRunner processRunner = new ProcessRunner(config);
         WorkingCopyManager workingCopyManager = new WorkingCopyManager(
@@ -126,7 +145,8 @@ public class PipelineFactory {
                 starterDirectory));
         List<Detector> detectors = createDetectors(starterDirectory);
         pipeline.addStage(new DetectStage(detectors, createRosterChecks()));
-        addRunStages(pipeline, processRunner, starterDirectory);
+        addRunStages(pipeline, processRunner, starterDirectory,
+                modelAnswersDirectory);
         pipeline.addStage(new ScoreStage(new ScoreCalculator()));
         pipeline.addStage(new PersistStage(repository));
 
@@ -151,10 +171,32 @@ public class PipelineFactory {
      */
     public GradingPipeline createQuestionPipeline(
             CancellationToken cancellationToken, Path starterDirectory) {
+        return createQuestionPipeline(cancellationToken, starterDirectory,
+                null);
+    }
+
+    /**
+     * Creates the shorter pipeline of createQuestionPipeline, whose
+     * random inputs check uses the model answers folder chosen for the
+     * batch.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param cancellationToken the flag that stops the grading when set
+     * @param starterDirectory the starter folder, or null to use
+     *        paths.starter.dir
+     * @param modelAnswersDirectory the model answers folder, or null to
+     *        use paths.model.answers.dir
+     * @return the pipeline, ready to run
+     */
+    public GradingPipeline createQuestionPipeline(
+            CancellationToken cancellationToken, Path starterDirectory,
+            Path modelAnswersDirectory) {
         GradingPipeline pipeline = new GradingPipeline(cancellationToken);
         ProcessRunner processRunner = new ProcessRunner(config);
 
-        addRunStages(pipeline, processRunner, starterDirectory);
+        addRunStages(pipeline, processRunner, starterDirectory,
+                modelAnswersDirectory);
 
         return pipeline;
     }
@@ -163,7 +205,8 @@ public class PipelineFactory {
     // testers and call methods with random inputs. They share one
     // compiler and one tester runner.
     private void addRunStages(GradingPipeline pipeline,
-            ProcessRunner processRunner, Path starterDirectory) {
+            ProcessRunner processRunner, Path starterDirectory,
+            Path modelAnswersDirectory) {
         pipeline.addStage(new InstallTestersStage(
                 new TesterInstaller(config)));
         SourceCompiler compiler = new SourceCompiler(config, processRunner);
@@ -173,16 +216,20 @@ public class PipelineFactory {
         pipeline.addStage(new ExecuteStage(testerRunner,
                 new TesterOutputScoreParser(config)));
         addRandomInputStage(pipeline, compiler, testerRunner,
-                starterDirectory);
+                starterDirectory, modelAnswersDirectory);
     }
 
     // Adds the check that calls students' methods with random inputs,
     // when random.inputs.enabled is true and there are model answers to
-    // compare with. Each pipeline gets new inputs, from a new seed.
+    // compare with. Each pipeline gets new inputs, from a new seed. A
+    // null model answers folder means the one in the settings.
     private void addRandomInputStage(GradingPipeline pipeline,
             SourceCompiler compiler, TesterRunner testerRunner,
-            Path chosenStarter) {
-        Path modelAnswers = ModelAnswerCopy.findFolder(config);
+            Path chosenStarter, Path chosenModelAnswers) {
+        Path modelAnswers = chosenModelAnswers;
+        if (modelAnswers == null) {
+            modelAnswers = ModelAnswerCopy.findFolder(config);
+        }
         boolean enabled = config.getBoolean(ConfigKeys.RANDOM_INPUTS_ENABLED);
         if (modelAnswers == null || !enabled) {
             return;

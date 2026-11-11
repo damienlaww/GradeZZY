@@ -220,11 +220,14 @@ public interface DashboardBackend {
      * @param testersDirectory the tester folder
      * @param starterDirectory the starter folder chosen on Set up, or null
      *        for the one in Settings
+     * @param modelAnswersDirectory the model answers folder chosen on Set
+     *        up, or null for the one in Settings
      * @return one result per question, or an empty list when there are
      *         no model answers
      */
     List<QuestionStrength> checkTesterStrength(Section section,
-            Path testersDirectory, Path starterDirectory);
+            Path testersDirectory, Path starterDirectory,
+            Path modelAnswersDirectory);
 
     /**
      * Saves the tester strength results as tester-strength.txt in the

@@ -9,10 +9,11 @@
  * Where it fits: SetUpScreen saves to it whenever the chosen files
  * change and reads it once when it is first shown. The file is named by
  * paths.chosen.submissions.file in config.properties. A second store
- * beside it keeps the score sheet, tester and starter folder chosen on
- * Set up. AssessmentLibrary clears an assessment's lines from both when
- * it is deleted, puts them back on Undo and moves them when it is
- * renamed, so a new assessment with the same name starts with none.
+ * beside it keeps the score sheet, tester, starter and model answers
+ * folder chosen on Set up. AssessmentLibrary clears an assessment's
+ * lines from both when it is deleted, puts them back on Undo and moves
+ * them when it is renamed, so a new assessment with the same name starts
+ * with none.
  */
 package gradezzy.service;
 
@@ -45,14 +46,14 @@ public class ChosenSubmissionsStore {
     public static final String DEFAULT_FILE =
             "workspace/chosen-submissions.properties";
 
-    // The file beside it that keeps the score sheet, tester and starter
-    // folder chosen for each module, section and assessment
+    // The file beside it that keeps the score sheet, tester, starter and
+    // model answers folder chosen for each module, section and assessment
     private static final String CLASS_FILES_NAME =
             "chosen-class-files.properties";
 
     // The comment at the top of the class files' file
-    private static final String CLASS_FILES_COMMENT = "Score sheet, tester "
-            + "and starter folder chosen on Set up, by "
+    private static final String CLASS_FILES_COMMENT = "Score sheet, tester, "
+            + "starter and model answers folder chosen on Set up, by "
             + "module/section/assessment|kind. Written by GradeZZY.";
 
     // Separates the module, section and assessment in a key such as
@@ -124,8 +125,9 @@ public class ChosenSubmissionsStore {
     }
 
     /**
-     * Creates the store of the score sheet, tester and starter folder
-     * chosen on Set up. It sits beside the file of chosen submissions.
+     * Creates the store of the score sheet, tester, starter and model
+     * answers folder chosen on Set up. It sits beside the file of chosen
+     * submissions.
      *
      * <p>Tier: COULD.
      *

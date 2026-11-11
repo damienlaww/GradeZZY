@@ -47,6 +47,10 @@ public class GradingRun {
     // The tester folder chosen for the batch, or null if unknown
     private Path testersDirectory = null;
 
+    // The model answers folder chosen for the batch, or null for the
+    // settings. Kept only while GradeZZY is open.
+    private Path modelAnswersDirectory = null;
+
     // The grading settings the batch started with, one key=value a line,
     // or "" for a run graded before they were kept
     private String gradingSettings = "";
@@ -240,6 +244,33 @@ public class GradingRun {
      */
     public void setTestersDirectory(Path testersDirectory) {
         this.testersDirectory = testersDirectory;
+    }
+
+    /**
+     * Returns the model answers folder chosen for the batch on Set up.
+     * The random inputs check compares answers with its files. It is
+     * kept only while GradeZZY is open, so a run opened again after a
+     * restart uses the one in the settings.
+     *
+     * <p>Tier: COULD.
+     *
+     * @return the model answers folder, or null to use the one in the
+     *         settings
+     */
+    public Path getModelAnswersDirectory() {
+        return modelAnswersDirectory;
+    }
+
+    /**
+     * Sets the model answers folder chosen for the batch.
+     *
+     * <p>Tier: COULD.
+     *
+     * @param modelAnswersDirectory the model answers folder, or null for
+     *        the settings
+     */
+    public void setModelAnswersDirectory(Path modelAnswersDirectory) {
+        this.modelAnswersDirectory = modelAnswersDirectory;
     }
 
     /**

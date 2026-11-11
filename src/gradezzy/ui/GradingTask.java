@@ -48,6 +48,10 @@ public class GradingTask extends Task<GradingRun> {
     // The starter folder chosen for this batch, or null to use the config
     private Path starterDirectory = null;
 
+    // The model answers folder chosen for this batch, or null to use the
+    // config
+    private Path modelAnswersDirectory = null;
+
     // The section the batch belongs to
     private final Section section;
 
@@ -125,6 +129,29 @@ public class GradingTask extends Task<GradingRun> {
         this(gradingService, inputPaths, section, testCaseSource, listener,
                 scoreSheetFile);
         this.starterDirectory = starterDirectory;
+    }
+
+    /**
+     * Creates a task for a new batch with the roster, starter folder and
+     * model answers folder chosen on Set up.
+     *
+     * @param gradingService the grading service
+     * @param inputPaths the chosen zip files or folders
+     * @param section the section of the batch
+     * @param testCaseSource where the testers come from
+     * @param listener the progress listener, on the background thread
+     * @param scoreSheetFile the roster chosen on Set up, or null
+     * @param starterDirectory the starter folder chosen on Set up, or null
+     * @param modelAnswersDirectory the model answers folder chosen on Set
+     *        up, or null
+     */
+    public GradingTask(GradingService gradingService, List<Path> inputPaths,
+            Section section, TestCaseSource testCaseSource,
+            ProgressListener listener, Path scoreSheetFile,
+            Path starterDirectory, Path modelAnswersDirectory) {
+        this(gradingService, inputPaths, section, testCaseSource, listener,
+                scoreSheetFile, starterDirectory);
+        this.modelAnswersDirectory = modelAnswersDirectory;
     }
 
     /**
@@ -229,8 +256,10 @@ public class GradingTask extends Task<GradingRun> {
             return gradingService.addToRun(gradingRun, inputPaths,
                     testCaseSource, listener, scoreSheetFile);
         }
-        // A null roster or starter folder means the one in the settings
+        // A null roster, starter or model answers folder means the one in
+        // the settings
         return gradingService.startGrading(inputPaths, section,
-                testCaseSource, listener, scoreSheetFile, starterDirectory);
+                testCaseSource, listener, scoreSheetFile, starterDirectory,
+                modelAnswersDirectory);
     }
 }

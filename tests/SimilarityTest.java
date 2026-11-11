@@ -46,6 +46,9 @@ public class SimilarityTest {
     private static final String QUESTION = "Q1";
     private static final String FILE_NAME = "Q1.java";
 
+    // A model answers folder chosen for one run
+    private static final String CHOSEN_ANSWERS = "chosen/answers";
+
     // The plagiarism.algorithm values
     private static final String WINNOWING = "winnowing";
     private static final String TRIGRAMS =
@@ -286,6 +289,15 @@ public class SimilarityTest {
                 ConfigKeys.PLAGIARISM_ALGORITHM))
                 && "1".equals(RunSettings.valueOf(added, "a.key")),
                 "A setting the run did not keep is added after the rest");
+        String answers = RunSettings.put(added,
+                ConfigKeys.MODEL_ANSWERS_DIR, CHOSEN_ANSWERS);
+        check(CHOSEN_ANSWERS.equals(RunSettings.valueOf(answers,
+                ConfigKeys.MODEL_ANSWERS_DIR))
+                && "1".equals(RunSettings.valueOf(answers, "a.key")),
+                "A folder chosen for a run is written into its settings");
+        check("".equals(RunSettings.put("", ConfigKeys.MODEL_ANSWERS_DIR,
+                CHOSEN_ANSWERS)),
+                "A run that kept no settings is not given a folder");
     }
 
     // Writes every student's answer and returns their submissions.

@@ -284,7 +284,7 @@ public class ImportBatch {
     /**
      * Returns the chosen file of a single-file group.
      *
-     * @param kind the roster, tester or starter group
+     * @param kind the roster, tester, starter or model answers group
      * @return the chosen path, or null if none is chosen
      */
     public Path getSinglePath(InputKind kind) {
