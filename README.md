@@ -984,7 +984,7 @@ have at least 50 trigrams of their own.
 | Cost | One set of trigrams per answer. | Fewer values kept per answer (about one fingerprint for every 2 to 3 tokens), plus the hashing. Both are fast at class size. |
 
 Both detectors also leave out an answer with fewer than
-`plagiarism.min.lines` lines of new code (40 by default), counted by
+`plagiarism.min.lines` lines of new code (15 by default), counted by
 `CodeLineCounter`: blank lines, comments, lines of only braces and lines
 also in the starter file do not count. Easy questions have short answers
 that honest students write the same way, which winnowing in particular
@@ -1279,7 +1279,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `plagiarism.enabled` | `true` | Run the similarity check after grading. `GradingService` runs it when a batch, a retry, a resume, a regrade (such as after Undo) or a late batch has been graded, in the console and the window alike; the console prints the similar pairs after its summary. |
 | `plagiarism.similarity.threshold` | `0.80` | Similarity at which a pair is flagged. |
 | `plagiarism.algorithm` | `winnowing` | How answers are compared: `winnowing` (rename-proof fingerprints, `WinnowingSimilarityDetector`) or `trigrams` (the first version, `TokenSimilarityDetector`). See "Similar code check". |
-| `plagiarism.min.lines` | `40` | The fewest lines of new code each answer needs before it is compared (`CodeLineCounter`): blank lines, comments, lines of only braces and lines also in the starter file are not counted. Short answers to easy questions are often written the same way by honest students. Settings offers 10 to 60, with 40 recommended. Lab test answers are short (about 7 to 32 new lines each on Lab Test 2), so at 40 most of them are not compared; choose a lower minimum to compare more of them. |
+| `plagiarism.min.lines` | `15` | The fewest lines of new code each answer needs before it is compared (`CodeLineCounter`): blank lines, comments, lines of only braces and lines also in the starter file are not counted. Short answers to easy questions are often written the same way by honest students. Settings offers 10 to 60, with 15 recommended. Lab test answers are short (about 7 to 32 new lines each on Lab Test 2), so 15 compares most of them while still skipping answers too short to prove anything; choose a higher minimum to flag fewer pairs. |
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
 | `export.csv.id.prefix` | `#` | Character in front of the id and username. |
 | `export.csv.end.of.line.marker` | `#` | Value of the last column. |

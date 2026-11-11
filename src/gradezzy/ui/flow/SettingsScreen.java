@@ -117,7 +117,7 @@ public class SettingsScreen extends FlowScreen {
     // The values plagiarism.min.lines offers, and the one recommended
     static final String[] MIN_LINES = {"10", "15", "20", "25", "30", "40",
         "50", "60"};
-    private static final String RECOMMENDED_MIN_LINES = "40";
+    private static final String RECOMMENDED_MIN_LINES = "15";
 
     // The values each number setting offers in its list. A value set by
     // hand that is not here is kept as one more choice.
