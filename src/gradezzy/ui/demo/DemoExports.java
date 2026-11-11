@@ -63,23 +63,32 @@ public final class DemoExports {
     /**
      * Builds a CSV preview with one row per student.
      *
+     * <p>Tier: COULD.
+     *
      * @param run the run
      * @param scope the students to include
      * @param remarks each student's remark by username in lower case,
      *        as the live score sheet's Remarks column has them
+     * @param extraColumns whether the question and Remarks columns are
+     *        shown, as export.csv.extra.columns says
      * @return the CSV text
      */
     public static String toCsv(GradingRun run, List<Submission> scope,
-            Map<String, String> remarks) {
+            Map<String, String> remarks, boolean extraColumns) {
         String csv = "Username,Last Name,First Name";
         // The question columns are named as the live score sheet names
         // them, such as Lab Test 2 Q1a Points Grade
-        for (Question question : run.getAssessment().getQuestions()) {
-            csv += COMMA + ScoreSheetColumns.nameColumn(
-                    run.getAssessment(), question);
+        if (extraColumns) {
+            for (Question question : run.getAssessment().getQuestions()) {
+                csv += COMMA + ScoreSheetColumns.nameColumn(
+                        run.getAssessment(), question);
+            }
         }
-        csv += COMMA + "Total" + COMMA
-                + CsvScoreSheetExporter.REMARKS_COLUMN + CSV_LINE_END;
+        csv += COMMA + "Total";
+        if (extraColumns) {
+            csv += COMMA + CsvScoreSheetExporter.REMARKS_COLUMN;
+        }
+        csv += CSV_LINE_END;
 
         for (Submission submission : scope) {
             Student student = submission.getStudent();
@@ -87,22 +96,36 @@ public final class DemoExports {
                     + csvValue(lastName(student)) + COMMA
                     + csvValue(firstName(student));
             boolean graded = ResultState.hasTotal(submission);
-            for (Question question : run.getAssessment().getQuestions()) {
-                csv += COMMA;
-                QuestionResult result = find(submission, question);
-                if (graded && result != null) {
-                    csv += format(result.getScore());
-                }
+            if (extraColumns) {
+                csv += questionMarks(run, submission, graded);
             }
             csv += COMMA;
             if (graded) {
                 csv += format(submission.getTotalScore());
             }
-            String key = submission.getUsername().toLowerCase(Locale.ROOT);
-            csv += COMMA + csvValue(remarks.getOrDefault(key, ""));
+            if (extraColumns) {
+                String key = submission.getUsername()
+                        .toLowerCase(Locale.ROOT);
+                csv += COMMA + csvValue(remarks.getOrDefault(key, ""));
+            }
             csv += CSV_LINE_END;
         }
         return csv;
+    }
+
+    // Returns a student's question marks, each after a comma, blank when
+    // the student was not graded or has no result for the question.
+    private static String questionMarks(GradingRun run,
+            Submission submission, boolean graded) {
+        String marks = "";
+        for (Question question : run.getAssessment().getQuestions()) {
+            marks += COMMA;
+            QuestionResult result = find(submission, question);
+            if (graded && result != null) {
+                marks += format(result.getScore());
+            }
+        }
+        return marks;
     }
 
     /**

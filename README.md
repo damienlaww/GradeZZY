@@ -1049,7 +1049,7 @@ folder of the section (`paths.output.dir.by.section`, else
 
 | Format | Class | Contents |
 |---|---|---|
-| Score sheet CSV | `CsvScoreSheetExporter` | The provided score sheet, unchanged except for `Calculated Final Grade Numerator` of each student graded in the run; a row whose student has no graded submission in the run (grading failed, or nothing was submitted or chosen) gets an empty numerator, even if the sheet held a mark, so the instructor notices, as the Export step's "left blank" count says. Columns, `#` prefixes, the `#` end marker, quotes and the encoding (UTF-8 with or without a byte order mark, or Windows-1252) stay as they were. Every line ends with `export.csv.line.ending` (CRLF by default, as in the provided sheet), so a sheet re-saved with LF endings is written with CRLF. Usernames are matched without the spaces around them. |
+| Score sheet CSV | `CsvScoreSheetExporter` | The provided score sheet, unchanged except for `Calculated Final Grade Numerator` of each student graded in the run; a row whose student has no graded submission in the run (grading failed, or nothing was submitted or chosen) gets an empty numerator, even if the sheet held a mark, so the instructor notices, as the Export step's "left blank" count says. Columns, `#` prefixes, the `#` end marker, quotes and the encoding (UTF-8 with or without a byte order mark, or Windows-1252) stay as they were. Every line ends with `export.csv.line.ending` (CRLF by default, as in the provided sheet), so a sheet re-saved with LF endings is written with CRLF. Usernames are matched without the spaces around them. With `export.csv.extra.columns=true` (off by default, as the brief asks for the provided format), each question also gets a column such as `Lab Test Q1a Points Grade` (the name eLearn reads as a grade item, `ScoreSheetColumns`) and a `Remarks` column follows with each student's similar code verdict (`CheatingRemarks`, such as "Cheated with KEVIN LIM (kevin.lim.2025)"), all just before the End-of-Line Indicator; a sheet that already has such a column is filled in place. |
 | JSON | `JsonExporter`, `JsonWriter` | Every student, question, test case and problem, written by hand without a library. |
 | Problem report | `AnomalyReportExporter` | One row per problem, with its fix status. |
 | Student reports | `StudentReportExporter` | A readable report per student: marks per question, test cases and problems. |
@@ -1283,6 +1283,7 @@ To use another file: `java -Dgradezzy.config=other.properties ...`.
 | `export.csv.line.ending` | `CRLF` | Line ending of the score sheet. |
 | `export.csv.id.prefix` | `#` | Character in front of the id and username. |
 | `export.csv.end.of.line.marker` | `#` | Value of the last column. |
+| `export.csv.extra.columns` | `false` | Adds a column for each question's mark and a Remarks column to the score sheet, before the End-of-Line Indicator. Off keeps the provided format (the brief), filling only the total. An older `config.properties` without the line counts as off; Settings (Advanced) adds it. |
 | `stats.pass.mark.percent` | `50` | Percentage that counts as a pass. |
 | `stats.mark.band.width.percent` | `10` | Width of each mark band. |
 | `database.enabled` | `true` | Save grading state to SQLite. |

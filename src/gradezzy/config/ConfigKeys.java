@@ -336,6 +336,13 @@ public final class ConfigKeys {
             "export.csv.end.of.line.marker";
 
     /**
+     * Whether the score sheet also gets a column for each question's mark
+     * and a Remarks column. Off (the default, and when missing), it keeps
+     * the provided format and only the total is filled in.
+     */
+    public static final String CSV_EXTRA_COLUMNS = "export.csv.extra.columns";
+
+    /**
      * Percentage of the maximum mark that counts as a pass.
      */
     public static final String PASS_MARK_PERCENT = "stats.pass.mark.percent";
