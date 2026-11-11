@@ -169,6 +169,11 @@ public class SqliteResultRepository implements ResultRepository {
             rollback();
             throw new PersistenceException("Run " + runId + " could not "
                     + "be saved: " + exception.getMessage(), exception);
+        } catch (RuntimeException exception) {
+            // Undone here, or turning autocommit back on would keep half
+            rollback();
+            throw new PersistenceException("Run " + runId + " could not "
+                    + "be saved: " + exception, exception);
         } finally {
             restoreAutoCommit();
         }
@@ -312,6 +317,11 @@ public class SqliteResultRepository implements ResultRepository {
             throw new PersistenceException("The result of " + username
                     + " could not be saved: " + exception.getMessage(),
                     exception);
+        } catch (RuntimeException exception) {
+            // Undone here, or turning autocommit back on would keep half
+            rollback();
+            throw new PersistenceException("The result of " + username
+                    + " could not be saved: " + exception, exception);
         } finally {
             restoreAutoCommit();
         }

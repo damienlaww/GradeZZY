@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.List;
 
 import gradezzy.model.Submission;
+import gradezzy.model.SubmissionStatus;
 
 /**
  * The figures of one set of total marks.
@@ -66,7 +67,10 @@ public class MarkStats {
             double maxTotal, double passPercent) {
         List<Double> totals = new ArrayList<>();
         for (Submission submission : submissions) {
-            if (!submission.getQuestionResults().isEmpty()) {
+            // A student whose grading stopped part way has no total yet
+            boolean graded = submission.getStatus()
+                    == SubmissionStatus.GRADED;
+            if (graded && !submission.getQuestionResults().isEmpty()) {
                 totals.add(submission.getTotalScore());
             }
         }

@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import gradezzy.model.AuditEntry;
 import gradezzy.model.GradingRun;
@@ -189,7 +190,8 @@ public class AuditLogExporter implements Exporter {
         if (timestamp == null) {
             return "";
         }
-        return String.format(TIME_FORMAT, timestamp.toLocalDate(),
+        return String.format(Locale.ROOT, TIME_FORMAT,
+                timestamp.toLocalDate(),
                 timestamp.getHour(), timestamp.getMinute(),
                 timestamp.getSecond());
     }

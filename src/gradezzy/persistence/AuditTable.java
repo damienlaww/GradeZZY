@@ -94,12 +94,15 @@ final class AuditTable {
     }
 
     // Rebuilds the entry on the current row, or returns null when its time
-    // cannot be read
+    // is missing or cannot be read
     private static AuditEntry readEntry(ResultSet rows) throws SQLException {
         LocalDateTime loggedAt = null;
         try {
             loggedAt = JdbcSupport.parseTime(rows.getString("logged_at"));
         } catch (DateTimeParseException exception) {
+            return null;
+        }
+        if (loggedAt == null) {
             return null;
         }
         return new AuditEntry(loggedAt, rows.getString("action"),

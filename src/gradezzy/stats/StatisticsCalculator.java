@@ -311,15 +311,18 @@ public class StatisticsCalculator {
     // Says whether a score reaches the pass mark from the settings
     private boolean isPass(double score, double maxScore) {
         double passMark = config.getDouble(ConfigKeys.PASS_MARK_PERCENT);
-        return maxScore > 0.0 && toPercent(score, maxScore) >= passMark;
+        // Multiplied, not divided, so 14.5 of 25 reaches 58% exactly
+        return maxScore > 0.0
+                && score * FULL_PERCENT >= passMark * maxScore;
     }
 
-    // Turns a score into a percentage of the maximum
+    // Turns a score into a percentage of the maximum, multiplying first
+    // so 14.5 of 25 is exactly 58
     private double toPercent(double score, double maxScore) {
         if (maxScore <= 0.0) {
             return 0.0;
         }
-        return score / maxScore * FULL_PERCENT;
+        return score * FULL_PERCENT / maxScore;
     }
 
     // The share of graded students who reached the pass mark on each

@@ -19,6 +19,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
@@ -354,7 +355,8 @@ public class BackupManager {
     // Writes a time such as 20261022-154250-123 for a file name
     private String timestamp(LocalDateTime time) {
         int millisecond = time.getNano() / NANOSECONDS_PER_MILLISECOND;
-        return String.format(TIMESTAMP_FORMAT, time.getYear(),
+        // Locale.ROOT keeps the digits 0 to 9 that timeOf reads back
+        return String.format(Locale.ROOT, TIMESTAMP_FORMAT, time.getYear(),
                 time.getMonthValue(), time.getDayOfMonth(), time.getHour(),
                 time.getMinute(), time.getSecond(), millisecond);
     }

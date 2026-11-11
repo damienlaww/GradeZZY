@@ -43,7 +43,8 @@ final class AdjustmentTable {
     // Lists the marks changed by hand in a run, oldest first
     private static final String SELECT_ADJUSTMENTS = "SELECT username, "
             + "question_id, previous_score, new_score, reason, saved_at "
-            + "FROM score_adjustments WHERE run_id = ? ORDER BY saved_at";
+            + "FROM score_adjustments WHERE run_id = ? "
+            + "ORDER BY saved_at, rowid";
 
     /**
      * Not used: every method here is static.
