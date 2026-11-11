@@ -259,11 +259,12 @@ public class PersistenceTest {
         check(loaded.getStartedAt().equals(run.getStartedAt()),
                 "started at with millis (" + loaded.getStartedAt() + ")");
         check(loaded.getSection().getSectionCode().equals("G1"), "section");
-        check(String.valueOf(loaded.getScoreSheetFile()).equals(
-                "/tmp/sheet with space.csv"), "score sheet path");
-        boolean foldersKept = String.valueOf(loaded.getTestersDirectory())
-                .equals("/tmp/testers") && String.valueOf(loaded
-                .getStarterDirectory()).equals("/tmp/starter");
+        // Compared as paths, so \tmp on Windows matches /tmp
+        check(Path.of("/tmp/sheet with space.csv").equals(
+                loaded.getScoreSheetFile()), "score sheet path");
+        boolean foldersKept = Path.of("/tmp/testers").equals(
+                loaded.getTestersDirectory()) && Path.of("/tmp/starter")
+                .equals(loaded.getStarterDirectory());
         check(foldersKept, "testers and starter dirs");
         check("exec.run.timeout.seconds=10\nx=y".equals(
                 loaded.getGradingSettings()), "grading settings");

@@ -10,6 +10,7 @@
  * Where it fits: Run by hand after compiling, as tests/README.md says.
  * Reads the fixed test settings. No student code runs.
  */
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
@@ -734,7 +735,9 @@ public class FixersTest {
         try {
             children = Files.newDirectoryStream(folder);
             for (Path path : children) {
-                String key = top.relativize(path).toString();
+                // Keys use / on Windows too, as the checks expect
+                String key = top.relativize(path).toString()
+                        .replace(File.separator, SLASH);
                 if (Files.isRegularFile(path)) {
                     files.put(key, Files.readAllBytes(path));
                 } else {
