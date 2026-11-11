@@ -82,14 +82,13 @@ public class CheatingRemarks implements ScoreSheetRemarks {
      * flagged when every one of its flags, both students' own, was kept
      * flagged; one that waits or was marked as fine counts as not kept.
      * An identical copy kept flagged gives "Cheated with" that student;
-     * otherwise, when every question of the
-     * two was kept flagged, "Possible cheating with" them. When the two
-     * are alike on two or more questions and one of them still waits,
-     * "Not yet reviewed: flagged with" them on that many questions.
-     * Otherwise a question that waits, or a flag marked as fine, gives
-     * nothing. The run
-     * must be the whole run, so each pair has both students' flags and
-     * names; an export of only some students passes the whole run here.
+     * otherwise, when every question of the two was kept flagged,
+     * "Possible cheating with" them. When the two are alike on two or
+     * more questions and one of them still waits, "Not yet reviewed:
+     * flagged with" them on that many questions. Otherwise a question
+     * that waits, or a flag marked as fine, gives nothing. The run must
+     * be the whole run, so each pair has both students' flags and names;
+     * an export of only some students passes the whole run here.
      *
      * <p>Tier: COULD.
      *

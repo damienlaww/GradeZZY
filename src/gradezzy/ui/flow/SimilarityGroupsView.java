@@ -129,6 +129,22 @@ public class SimilarityGroupsView {
     // Separates the two usernames in the key of a pair of students
     private static final String PAIR_SEPARATOR = "|";
 
+    // Separates the questions listed in a line of the warning
+    private static final String QUESTION_SEPARATOR = ", ";
+
+    // Separates the question from the first student in a group's key
+    private static final String KEY_SEPARATOR = "|";
+
+    // Writes a percentage with one decimal, such as 98.7
+    private static final String ONE_DECIMAL_FORMAT = "%.1f";
+
+    // Splits a name into words at spaces and dots, for its initials
+    private static final String NAME_WORD_BREAKS = "[\\s.]+";
+
+    // Each bar of the strength meter is this many steps taller than its
+    // number, so the first bar is not flat
+    private static final int BAR_EXTRA_STEPS = 1;
+
     // How many letters an initials badge holds
     private static final int INITIALS = 2;
 
@@ -143,7 +159,7 @@ public class SimilarityGroupsView {
     private static final String SORT_STUDENTS = "Students (most first)";
 
     // Comes between two numbers of a range
-    private static final String RANGE_DASH = " – ";
+    private static final String RANGE_WORD = " to ";
 
     // The window, for the backend and sheets
     private final FlowWindow window;
@@ -404,7 +420,7 @@ public class SimilarityGroupsView {
         if (repeats.isEmpty()) {
             return null;
         }
-        repeats.sort((first, second) -> second.size() - first.size());
+        repeats.sort(new SimilarityMostQuestionsComparator());
         return repeatBanner(run, repeats);
     }
 
@@ -511,7 +527,7 @@ public class SimilarityGroupsView {
                 + " and " + SimilaritySheet.nameOf(run,
                         closest.getSecondUsername());
         String what = Parts.plural(same.size(), "question") + " left to "
-                + "review (" + TextUtils.join(", ",
+                + "review (" + TextUtils.join(QUESTION_SEPARATOR,
                         inQuestionOrder(run, questions)) + ")";
         if (identical == same.size()) {
             what = what + ", all identical copies";
@@ -570,12 +586,9 @@ public class SimilarityGroupsView {
     // check gave, most alike first.
     private void sort(List<SimilarityCluster> clusters) {
         if (sortOrder.equals(SORT_STUDENTS)) {
-            clusters.sort((first, second) -> second.getUsernames().size()
-                    - first.getUsernames().size());
+            clusters.sort(new SimilarityMostStudentsComparator());
         } else if (sortOrder.equals(SORT_SIMILARITY)) {
-            clusters.sort((first, second) -> Double.compare(
-                    second.getHighestSimilarity(),
-                    first.getHighestSimilarity()));
+            clusters.sort(new SimilarityMostAlikeComparator());
         } else {
             clusters.sort((first, second) -> compareStrength(first,
                     second));
@@ -628,7 +641,7 @@ public class SimilarityGroupsView {
         }
         chevron.getStyleClass().add("error-chevron");
 
-        Label title = Parts.strong(titleOf(cluster, number));
+        Label title = Parts.strong(titleOf(number));
         title.getStyleClass().add("group-title");
         fixWidth(title, TITLE_WIDTH);
         Label words = Parts.muted(summaryOf(cluster));
@@ -920,14 +933,18 @@ public class SimilarityGroupsView {
         HBox.setHgrow(why, Priority.ALWAYS);
 
         Button full = Parts.small("Compare full code",
-                () -> window.showSheet(SimilaritySheet.create(window, run,
-                        pair)));
+                () -> openFullCode(run, pair));
         Parts.tip(full, "Open both files in a large window, with "
                 + "buttons that jump between the matching parts.");
         HBox row = Parts.row(Parts.GAP, new Node[] {similarity, why, full});
         row.getChildren().addAll(decisionButtons(flags));
         row.getStyleClass().add("similarity-footer");
         return row;
+    }
+
+    // Opens both files of a pair in the large comparison sheet.
+    private void openFullCode(GradingRun run, SimilarityPair pair) {
+        window.showSheet(SimilaritySheet.create(window, run, pair));
     }
 
     // Builds Mark as reviewed and Keep flagged, or Reopen once the group
@@ -1024,7 +1041,7 @@ public class SimilarityGroupsView {
     // ----------------------------------------------------- what is shown
 
     // Names a group by its place under its question, such as Group 2.
-    private String titleOf(SimilarityCluster cluster, int number) {
+    private String titleOf(int number) {
         return "Group " + number;
     }
 
@@ -1113,19 +1130,20 @@ public class SimilarityGroupsView {
         return line;
     }
 
-    // Says how alike a group's pairs are, such as "97.9% – 99.8%".
+    // Says how alike a group's pairs are, such as "97.9% to 99.8%".
     private String rangeOf(SimilarityCluster cluster) {
         String lowest = percentOf(lowestOf(cluster));
         String highest = percentOf(cluster.getHighestSimilarity());
         if (lowest.equals(highest)) {
             return highest;
         }
-        return lowest + RANGE_DASH + highest;
+        return lowest + RANGE_WORD + highest;
     }
 
     // Writes a share as a percentage with one decimal, such as 98.7%.
     private String percentOf(double share) {
-        return String.format("%.1f", share * PERCENT) + Parts.PERCENT_SIGN;
+        return String.format(ONE_DECIMAL_FORMAT, share * PERCENT)
+                + Parts.PERCENT_SIGN;
     }
 
     // Returns how alike the least alike pair of a group is.
@@ -1224,7 +1242,8 @@ public class SimilarityGroupsView {
         bars.setFillHeight(false);
         for (int bar = 1; bar <= STRENGTH_BARS; bar++) {
             Region step = new Region();
-            double height = BAR_STEP * (bar + 1);
+            int steps = bar + BAR_EXTRA_STEPS;
+            double height = BAR_STEP * steps;
             step.setMinSize(BAR_WIDTH, height);
             step.setMaxSize(BAR_WIDTH, height);
             step.getStyleClass().add("strength-bar");
@@ -1353,7 +1372,7 @@ public class SimilarityGroupsView {
     // Names a group by its question and first student, as a question
     // may have two groups.
     private String keyOf(SimilarityCluster cluster) {
-        return cluster.getQuestionId() + "|"
+        return cluster.getQuestionId() + KEY_SEPARATOR
                 + cluster.getUsernames().get(0);
     }
 
@@ -1371,7 +1390,7 @@ public class SimilarityGroupsView {
     // AI for aiden.toh.2025.
     private String initialsOf(String name) {
         String initials = "";
-        for (String word : name.split("[\\s.]+")) {
+        for (String word : name.split(NAME_WORD_BREAKS)) {
             boolean letter = !word.isEmpty()
                     && Character.isLetter(word.charAt(0));
             if (letter && initials.length() < INITIALS) {

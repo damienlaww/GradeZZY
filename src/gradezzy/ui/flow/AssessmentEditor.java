@@ -189,26 +189,7 @@ public final class AssessmentEditor {
     /**
      * Builds the same form to sit inside a page, such as Settings: no
      * title, close button or scroll of its own, and Save keeps the form
-     * open. Revert puts the saved values back.
-     *
-     * @param window the window that shows it
-     * @param start the assessment to fill the form from
-     * @param originalName the name of the assessment being edited, or
-     *        null when the form creates a new one
-     * @param onSaved called with the saved name after a save
-     * @return the form
-     */
-    public static Node createInline(FlowWindow window, SavedAssessment start,
-            String originalName, Consumer<String> onSaved) {
-        AssessmentEditor editor = new AssessmentEditor(window, start,
-                originalName);
-        editor.inline = true;
-        editor.onSaved = onSaved;
-        return editor.build();
-    }
-
-    /**
-     * Builds the inline form as createInline does, with what the link of
+     * open. Revert puts the saved values back. onUse is what the link of
      * the notice after a new assessment is saved does, such as Settings'
      * own Use this one. Returns the editor, so the page can ask whether
      * the form holds changes that are not saved; getView gives the form.
@@ -273,28 +254,20 @@ public final class AssessmentEditor {
     // it changed.
     private String formText() {
         SavedAssessment draft = readDraft();
-        StringBuilder text = new StringBuilder(draft.getName());
+        String text = draft.getName();
         for (Question question : draft.getQuestions()) {
-            text.append(FORM_TEXT_SEPARATOR).append(question.getId())
-                    .append(FORM_TEXT_SEPARATOR)
-                    .append(question.getFolderName())
-                    .append(FORM_TEXT_SEPARATOR)
-                    .append(question.getFileName())
-                    .append(FORM_TEXT_SEPARATOR)
-                    .append(question.getMaxScore());
+            text = text + FORM_TEXT_SEPARATOR + question.getId()
+                    + FORM_TEXT_SEPARATOR + question.getFolderName()
+                    + FORM_TEXT_SEPARATOR + question.getFileName()
+                    + FORM_TEXT_SEPARATOR + question.getMaxScore();
         }
-        text.append(FORM_TEXT_SEPARATOR).append(draft.getTestersDirectory())
-                .append(FORM_TEXT_SEPARATOR)
-                .append(draft.getStarterDirectory())
-                .append(FORM_TEXT_SEPARATOR)
-                .append(draft.getModelAnswersDirectory())
-                .append(FORM_TEXT_SEPARATOR)
-                .append(draft.getProvidedClassFiles())
-                .append(FORM_TEXT_SEPARATOR)
-                .append(draft.getTesterDataFiles())
-                .append(FORM_TEXT_SEPARATOR)
-                .append(draft.getPlaceholderFolderNames());
-        return text.toString();
+        text = text + FORM_TEXT_SEPARATOR + draft.getTestersDirectory()
+                + FORM_TEXT_SEPARATOR + draft.getStarterDirectory()
+                + FORM_TEXT_SEPARATOR + draft.getModelAnswersDirectory()
+                + FORM_TEXT_SEPARATOR + draft.getProvidedClassFiles()
+                + FORM_TEXT_SEPARATOR + draft.getTesterDataFiles()
+                + FORM_TEXT_SEPARATOR + draft.getPlaceholderFolderNames();
+        return text;
     }
 
     // Builds the form and its buttons.

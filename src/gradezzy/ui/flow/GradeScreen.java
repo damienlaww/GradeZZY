@@ -353,8 +353,9 @@ public class GradeScreen extends FlowScreen {
      * @param job the batch, ended
      */
     public void ended(GradingJob job) {
-        if (job.getFailure() == null && !job.hasUnfinished()
-                && isOnScreen()) {
+        boolean finishedHere = job.getFailure() == null
+                && !job.hasUnfinished() && isOnScreen();
+        if (finishedHere) {
             getWindow().show(Step.REVIEW);
             return;
         }

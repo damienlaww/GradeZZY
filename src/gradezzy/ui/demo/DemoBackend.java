@@ -1767,7 +1767,8 @@ public final class DemoBackend implements DashboardBackend {
         backups.add(0, DemoData.sampleBackup(backupFolder(),
                 LocalDateTime.now(), runs));
         while (backups.size() > getBackupKeepCount()) {
-            backups.remove(backups.size() - 1);
+            int oldestIndex = backups.size() - 1;
+            backups.remove(oldestIndex);
         }
     }
 

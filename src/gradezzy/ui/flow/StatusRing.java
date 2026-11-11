@@ -107,14 +107,14 @@ public class StatusRing extends Region {
         if (total > 0) {
             drawParts(total, centre, radius);
         }
-        drawTotal(total, centre);
+        drawTotal(total);
     }
 
     // Draws the number of students and the word under it in the middle.
     // A box the size of the ring centres them when it is laid out, once
     // the fonts of the stylesheet are known, so the number sits in the
     // middle whatever its width.
-    private void drawTotal(int total, double centre) {
+    private void drawTotal(int total) {
         Text number = new Text(String.valueOf(total));
         number.getStyleClass().add("ring-total");
         String unit = "students";
@@ -125,10 +125,9 @@ public class StatusRing extends Region {
         word.getStyleClass().add("chart-note");
         VBox middle = new VBox(TEXT_GAP, number, word);
         middle.setAlignment(Pos.CENTER);
-        double size = centre * HALF;
-        middle.setMinSize(size, size);
-        middle.setPrefSize(size, size);
-        middle.setMaxSize(size, size);
+        middle.setMinSize(SIZE, SIZE);
+        middle.setPrefSize(SIZE, SIZE);
+        middle.setMaxSize(SIZE, SIZE);
         middle.setMouseTransparent(true);
         getChildren().add(middle);
     }

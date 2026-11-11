@@ -469,8 +469,9 @@ public class AnswerGroupActions {
         DashboardBackend backend = window.getBackend();
         for (String username : listed) {
             Submission submission = findSubmission(run, username);
-            if (submission != null && hasOpenSimilarCode(backend,
-                    submission, question)) {
+            boolean open = submission != null
+                    && hasOpenSimilarCode(backend, submission, question);
+            if (open) {
                 return true;
             }
         }

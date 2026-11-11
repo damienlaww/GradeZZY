@@ -6,9 +6,11 @@
  * left out (starter, tester and provided files), so the instructor can
  * judge a similar pair.
  *
- * Where it fits: Opened by "Compare" in the similar code card on Export,
- * only when the backend supports comparing a pair. Reads the pair
- * through DashboardBackend.getSimilarityDetail.
+ * Where it fits: Opened by "Compare" in the similar code card on Export
+ * and in the student panel on Review, and by "Compare full code" in an
+ * open group of the Similarity view, only when the backend supports
+ * comparing a pair. Reads the pair through
+ * DashboardBackend.getSimilarityDetail.
  */
 package gradezzy.ui.flow;
 

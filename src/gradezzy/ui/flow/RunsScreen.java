@@ -102,7 +102,6 @@ public class RunsScreen extends FlowScreen {
     // Column widths of the runs table
     private static final double MODULE_WIDTH = 84.0;
     private static final double SECTION_WIDTH = 76.0;
-    private static final double ASSESSMENT_WIDTH = 150.0;
     private static final double STUDENTS_WIDTH = 84.0;
     private static final double AVERAGE_WIDTH = 190.0;
     private static final double STATUS_WIDTH = 150.0;

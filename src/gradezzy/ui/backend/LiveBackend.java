@@ -39,7 +39,6 @@ import gradezzy.grading.QuestionRerunner;
 import gradezzy.ingest.IngestException;
 import gradezzy.ingest.RosterReader;
 import gradezzy.model.Anomaly;
-import gradezzy.model.AnomalyType;
 import gradezzy.model.Assessment;
 import gradezzy.model.AuditEntry;
 import gradezzy.model.BackupInfo;
@@ -696,8 +695,9 @@ public class LiveBackend implements DashboardBackend {
             boolean matched = submission.getStudent() != null
                     && submission.getStudent().getUsername()
                     .equalsIgnoreCase(username);
-            if (matched || submission.getUsername().equalsIgnoreCase(
-                    username)) {
+            boolean named = submission.getUsername().equalsIgnoreCase(
+                    username);
+            if (matched || named) {
                 return true;
             }
         }

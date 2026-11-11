@@ -122,13 +122,6 @@ public class ImportBatch {
     }
 
     /**
-     * Removes every chosen file.
-     */
-    public void clearAll() {
-        items.clear();
-    }
-
-    /**
      * Returns the files of one group.
      *
      * @param kind the group

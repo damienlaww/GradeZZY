@@ -115,8 +115,8 @@ public class SettingsScreen extends FlowScreen {
         "Trigrams: only copies that keep the names"};
 
     // The values plagiarism.min.lines offers, and the one recommended
-    static final String[] MIN_LINES = {"10", "15", "20", "25", "30", "40",
-        "50", "60"};
+    private static final String[] MIN_LINES = {"10", "15", "20", "25",
+        "30", "40", "50", "60"};
     private static final String RECOMMENDED_MIN_LINES = "15";
 
     // The values each number setting offers in its list. A value set by
@@ -1578,8 +1578,9 @@ public class SettingsScreen extends FlowScreen {
         if (!getWindow().useAssessment(name)) {
             return;
         }
-        if (shownModule != null
-                && !shownModule.equals(getState().getModuleCode())) {
+        boolean otherModule = shownModule != null
+                && !shownModule.equals(getState().getModuleCode());
+        if (otherModule) {
             getWindow().chooseSection(shownModule,
                     getState().getSectionCode());
         }

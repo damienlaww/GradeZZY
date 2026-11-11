@@ -227,7 +227,7 @@ public class SetUpScreen extends FlowScreen {
     private static final int MOST_CONTINUE_RUNS = 3;
 
     // Comes between a run's names and where it is on the Continue card
-    private static final String CONTINUE_DASH = "\u2014 ";
+    private static final String CONTINUE_DOT = "\u00B7 ";
 
     // The names of the background threads that check files
     private static final String INSPECT_THREAD = "gradezzy-inspect";
@@ -395,6 +395,8 @@ public class SetUpScreen extends FlowScreen {
                 + "class, add the students' zip files, then start grading.");
         continueCard.getStyleClass().addAll("flow-card", "continue-card");
         showNode(continueCard, false);
+        noAssessment.getStyleClass().add("set-up-warning");
+        otherAssessment.getStyleClass().add("set-up-warning");
         view = Parts.narrowPage(new Node[] {header, continueCard,
             createClassCard(),
             createSubmissionCard(),
@@ -1526,7 +1528,6 @@ public class SetUpScreen extends FlowScreen {
                 + "tester files and starter files.");
         noAssessment.getChildren().addAll(Parts.icon(Parts.WARNING,
                 ROW_ICON_SIZE), note, add);
-        noAssessment.getStyleClass().add("set-up-warning");
     }
 
     // Warns when the section was last graded with another assessment
@@ -1556,7 +1557,6 @@ public class SetUpScreen extends FlowScreen {
         HBox.setHgrow(note, Priority.ALWAYS);
         otherAssessment.getChildren().addAll(Parts.icon(Parts.WARNING,
                 ROW_ICON_SIZE), note);
-        otherAssessment.getStyleClass().add("set-up-warning");
         String savedName = findModuleAssessment(lastName);
         if (savedName != null && !getState().isAnyGrading()) {
             Hyperlink use = smallLink("Use " + savedName,
@@ -1632,7 +1632,7 @@ public class SetUpScreen extends FlowScreen {
     }
 
     // Builds one line of the Continue card, such as "CS102 · G1 · Lab
-    // Test 2 — Review · 5 students to check", with its button.
+    // Test 2 · Review · 5 students to check", with its button.
     private HBox continueLine(GradingRun run) {
         Step step = SectionProgress.stepToOpen(getState(), getBackend(),
                 run.getSection(), run);
@@ -1641,7 +1641,7 @@ public class SetUpScreen extends FlowScreen {
                 + CONTEXT_DOT + run.getAssessment().getName());
         names.getStyleClass().add("small-text");
         names.setMinWidth(Label.USE_PREF_SIZE);
-        Label where = Parts.muted(CONTINUE_DASH + step.getLabel()
+        Label where = Parts.muted(CONTINUE_DOT + step.getLabel()
                 + CONTEXT_DOT + describeLeft(run, step));
         where.getStyleClass().add("small-text");
         where.setMinWidth(0);
@@ -2154,7 +2154,8 @@ public class SetUpScreen extends FlowScreen {
             return "";
         }
         int shownCount = Math.min(again.size(), MAX_NAMED_STUDENTS);
-        String names = String.join(", ", again.subList(0, shownCount));
+        String names = TextUtils.join(WORD_SEPARATOR,
+                again.subList(0, shownCount));
         int notNamed = again.size() - shownCount;
         if (notNamed > 0) {
             names = names + " and " + notNamed + " more";
@@ -2922,6 +2923,14 @@ public class SetUpScreen extends FlowScreen {
                 && overlap.isEmpty() && assessmentProblem.isEmpty();
         GradingRun stopped = findStoppedRun();
         boolean noneOnSheet = findMatch(InputKind.ROSTER).isNoneOnSheet();
+        showStartButtons(actions, stopped, noneOnSheet, ready);
+        actions.setStatus(describeStatus(batch, assessmentProblem, overlap,
+                unknownMarks, stopped, noneOnSheet));
+    }
+
+    // Puts Resume and Start over, or Start grading, in the action bar.
+    private void showStartButtons(ActionBar actions, GradingRun stopped,
+            boolean noneOnSheet, boolean ready) {
         if (stopped != null) {
             // The rest of the stopped run comes first; a new run is the
             // other way
@@ -2941,54 +2950,77 @@ public class SetUpScreen extends FlowScreen {
         } else {
             actions.setPrimary("Start grading", () -> confirmStart(), ready);
         }
+    }
+
+    // Returns the action bar's status: the first thing that stops
+    // grading, or what Resume or Start grading will do.
+    private String describeStatus(ImportBatch batch,
+            String assessmentProblem, String overlap,
+            List<String> unknownMarks, GradingRun stopped,
+            boolean noneOnSheet) {
         if (!assessmentProblem.isEmpty() && !getState().isGrading()) {
-            actions.setStatus(assessmentProblem);
+            return assessmentProblem;
         } else if (!overlap.isEmpty() && !getState().isGrading()) {
-            actions.setStatus("Some of these students are being graded in "
-                    + "another section now. See Submissions.");
+            return "Some of these students are being graded in "
+                    + "another section now. See Submissions.";
         } else if (getState().isGrading()) {
-            actions.setStatus("This section is being graded. See step 2, "
+            return "This section is being graded. See step 2, "
                     + "or choose another section to grade at the same "
-                    + "time.");
+                    + "time.";
         } else if (filesBeingChecked > 0) {
-            actions.setStatus("Checking " + Parts.plural(filesBeingChecked,
-                    "file") + "...");
+            return "Checking " + Parts.plural(filesBeingChecked,
+                    "file") + "...";
         } else if (!unknownMarks.isEmpty()) {
-            actions.setStatus(unknownMarks.get(0));
+            return unknownMarks.get(0);
         } else if (!batch.isReady()) {
-            List<String> reasons = batch.getBlockingReasons();
-            if (reasons.isEmpty()) {
-                actions.setStatus("");
-            } else {
-                actions.setStatus(reasons.get(0));
-            }
+            return describeFirstBlocking(batch);
         } else if (stopped != null) {
-            int waiting = SectionProgress.countWaiting(stopped);
-            int total = stopped.getSubmissions().size();
-            actions.setStatus(stopped.getSection().getLabel()
-                    + " stopped after " + (total - waiting) + " of "
-                    + Parts.plural(total, "student") + ". Resume grades "
-                    + "the rest; Start over grades these files as a new "
-                    + "run.");
+            return describeStopped(stopped);
         } else if (noneOnSheet) {
-            actions.setStatus(describeNoneOnSheet(batch.countStudents()));
-        } else {
-            String skipped = batch.describeSkipped();
-            if (!skipped.isEmpty()) {
-                skipped = " " + skipped;
-            }
-            String students = Parts.plural(batch.countStudents(),
-                    "student");
-            String mismatch = describeDenominatorMismatch(markedAssessment,
-                    getBackend().getScoreSheetDenominator(
-                            findUsableScoreSheet()));
-            if (!mismatch.isEmpty()) {
-                mismatch = " " + mismatch;
-            }
-            actions.setStatus(students + " ready to grade in "
-                    + getState().getSection().getLabel() + "." + skipped
-                    + mismatch);
+            return describeNoneOnSheet(batch.countStudents());
         }
+        return describeReady(batch);
+    }
+
+    // Returns the first reason the batch is not ready, or "".
+    private String describeFirstBlocking(ImportBatch batch) {
+        List<String> reasons = batch.getBlockingReasons();
+        if (reasons.isEmpty()) {
+            return "";
+        }
+        return reasons.get(0);
+    }
+
+    // Says how far a stopped run got and what Resume and Start over do.
+    private String describeStopped(GradingRun stopped) {
+        int waiting = SectionProgress.countWaiting(stopped);
+        int total = stopped.getSubmissions().size();
+        int graded = total - waiting;
+        return stopped.getSection().getLabel()
+                + " stopped after " + graded + " of "
+                + Parts.plural(total, "student") + ". Resume grades "
+                + "the rest; Start over grades these files as a new "
+                + "run.";
+    }
+
+    // Says how many students are ready to grade, with any skipped files
+    // and a score sheet whose maximum does not match.
+    private String describeReady(ImportBatch batch) {
+        String skipped = batch.describeSkipped();
+        if (!skipped.isEmpty()) {
+            skipped = " " + skipped;
+        }
+        String students = Parts.plural(batch.countStudents(),
+                "student");
+        String mismatch = describeDenominatorMismatch(markedAssessment,
+                getBackend().getScoreSheetDenominator(
+                        findUsableScoreSheet()));
+        if (!mismatch.isEmpty()) {
+            mismatch = " " + mismatch;
+        }
+        return students + " ready to grade in "
+                + getState().getSection().getLabel() + "." + skipped
+                + mismatch;
     }
 
     // Returns the section's run when it stopped with students not graded
