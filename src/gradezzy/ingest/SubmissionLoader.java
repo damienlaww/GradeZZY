@@ -55,6 +55,10 @@ public class SubmissionLoader {
     private static final String WINDOWS_COPY_PATTERN =
             "(?i)\\s+-\\s+copy(\\s*\\(\\d+\\))?$";
 
+    // The word macOS adds to a duplicated file, in any case, with any
+    // number after it: " copy" or " copy 2"
+    private static final String MAC_COPY_PATTERN = "(?i)\\s+copy(\\s+\\d+)?$";
+
     // The copy number of " - Copy" with no number: Windows numbers the
     // next copy (2)
     private static final int FIRST_WINDOWS_COPY = 1;
@@ -346,8 +350,9 @@ public class SubmissionLoader {
         return !name.replaceFirst(WINDOWS_COPY_PATTERN, "").equals(name);
     }
 
-    // Removes every copy mark from the end of a name: a browser's "(1)"
-    // and a Windows " - Copy", in either order, as "name (1) - Copy".
+    // Removes every copy mark from the end of a name: a browser's "(1)",
+    // a Windows " - Copy" and a macOS " copy 2", in any order, as
+    // "name (1) - Copy".
     private static String removeCopyMarks(String name) {
         String previous = "";
         String current = name.trim();
@@ -355,6 +360,7 @@ public class SubmissionLoader {
             previous = current;
             current = removeCopyNumber(current);
             current = current.replaceFirst(WINDOWS_COPY_PATTERN, "").trim();
+            current = current.replaceFirst(MAC_COPY_PATTERN, "").trim();
         }
         return current;
     }
@@ -506,13 +512,17 @@ public class SubmissionLoader {
     // Says whether a folder looks unzipped by hand: it holds a question
     // folder, directly or inside its only visible sub-folder, or at the
     // end of a chain of folders that each hold only one folder, as in
-    // s06/s06/s06/Q1. A folder that cannot be read does not.
+    // s06/s06/s06/Q1. A folder that cannot be read does not, and nor
+    // does a folder of student zips, such as the parent of the uploads.
     private boolean looksLikeSubmission(Path path) {
         if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
             return false;
         }
         if (hasQuestionFolder(path)) {
             return true;
+        }
+        if (holdsZips(path)) {
+            return false;
         }
         try {
             Path wrapper = findOnlySubfolder(path);

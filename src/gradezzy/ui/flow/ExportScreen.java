@@ -186,6 +186,9 @@ public class ExportScreen extends FlowScreen {
     // Where the files are saved
     private final Label savedTo = Parts.muted("");
 
+    // What the score sheet holds, read from the settings on each show
+    private final Label sheetAbout = Parts.muted("");
+
     // Says when graded students are not on the score sheet, with a
     // better sheet found nearby or a way back to Set up
     private final HBox sheetWarning = Parts.row(Parts.GAP);
@@ -288,6 +291,7 @@ public class ExportScreen extends FlowScreen {
         if (oldNote) {
             clearNote();
         }
+        refreshSheetAbout();
         GradingRun run = getState().getRun();
         if (run == null) {
             subtitle.setText("Grade a section first.");
@@ -371,16 +375,26 @@ public class ExportScreen extends FlowScreen {
         }
         choices.getStyleClass().add("export-choices");
 
-        Label about = Parts.muted("Your score sheet with each student's "
-                + "total filled in, in the same format, ready to upload to "
-                + "eLearn. A column with the mark of each question is "
-                + "added before the last column.");
-        about.setWrapText(true);
+        refreshSheetAbout();
+        sheetAbout.setWrapText(true);
         result.setVisible(false);
         result.setManaged(false);
-        return Parts.card("Score sheet", new Node[] {about,
+        return Parts.card("Score sheet", new Node[] {sheetAbout,
             createSheetWarning(), group("Who to export", choices),
             createOutcome(), createSavedLine(), result});
+    }
+
+    // Says what the score sheet holds; question columns only when on.
+    private void refreshSheetAbout() {
+        String about = "Your score sheet with each student's total filled "
+                + "in, in the same format, ready to upload to eLearn.";
+        String extraColumns = getBackend().getSetting(
+                ConfigKeys.CSV_EXTRA_COLUMNS);
+        if (Boolean.parseBoolean(String.valueOf(extraColumns).trim())) {
+            about += " A column with the mark of each question is added "
+                    + "before the last column.";
+        }
+        sheetAbout.setText(about);
     }
 
     // Builds the warning shown when graded students are not on the

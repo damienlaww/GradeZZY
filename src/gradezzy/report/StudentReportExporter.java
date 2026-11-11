@@ -23,6 +23,7 @@ import gradezzy.model.Section;
 import gradezzy.model.Student;
 import gradezzy.model.Submission;
 import gradezzy.model.TestCaseResult;
+import gradezzy.stats.AnswerGrouper;
 import gradezzy.util.FileUtils;
 import gradezzy.util.TextUtils;
 
@@ -240,7 +241,7 @@ public class StudentReportExporter implements Exporter {
         return report;
     }
 
-    // One line per question, with a remark for a compile error or timeout
+    // One line per question, remarking a missing answer, error or timeout
     private String writeScores(Submission submission) {
         String report = "Scores" + NEW_LINE;
         if (submission.getQuestionResults().isEmpty()) {
@@ -257,7 +258,10 @@ public class StudentReportExporter implements Exporter {
             }
 
             String remark = "";
-            if (!result.isCompiled()) {
+            String pattern = AnswerGrouper.patternOf(submission, result);
+            if (AnswerGrouper.MISSING.equals(pattern)) {
+                remark = "not handed in";
+            } else if (!result.isCompiled()) {
                 remark = "did not compile";
             } else if (result.isTimedOut()) {
                 remark = "stopped at the time limit";

@@ -7,6 +7,8 @@
  */
 package gradezzy.grading;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import gradezzy.config.ConfigKeys;
@@ -106,6 +108,7 @@ public class ScoreStage implements GradingStage {
                 submission.addQuestionResult(new QuestionResult(question));
             }
         }
+        sortByQuestionOrder(submission, assessment);
 
         for (QuestionResult questionResult
                 : submission.getQuestionResults()) {
@@ -131,6 +134,26 @@ public class ScoreStage implements GradingStage {
         String id = NO_TESTER_ID_PREFIX + UUID.randomUUID();
         submission.addAnomaly(new Anomaly(id, AnomalyType.INTERNAL_ERROR,
                 Severity.ERROR, submission.getUsername(), message, action));
+    }
+
+    // Puts the results in the assessment's question order.
+    private void sortByQuestionOrder(Submission submission,
+            Assessment assessment) {
+        List<QuestionResult> results = submission.getQuestionResults();
+        List<QuestionResult> sorted = new ArrayList<>();
+        for (Question question : assessment.getQuestions()) {
+            QuestionResult result = submission.findResult(question.getId());
+            if (result != null && !sorted.contains(result)) {
+                sorted.add(result);
+            }
+        }
+        for (QuestionResult result : results) {
+            if (!sorted.contains(result)) {
+                sorted.add(result);
+            }
+        }
+        results.clear();
+        results.addAll(sorted);
     }
 
     // Says whether the submission already has a result for a question.
