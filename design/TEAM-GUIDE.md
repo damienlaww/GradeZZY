@@ -93,7 +93,7 @@ or run on the instructor's laptop.
 | `src/` | All Java source files, plus the stylesheet of the `ui` package (`ui/css/flow.css`) and the logo as PNG files (`ui/images/`). |
 | `classes/` | Compiled classes. Created by the compile script, not in git, and must be empty at submission. |
 | `lib/` | The library jars. `lib/javafx/<platform>/` holds JavaFX for each platform. |
-| `media/` | Images and audio. `media/readme/` holds the screenshots in `README.md`, taken with `sh run.sh --snapshot` in demo mode. |
+| `media files/` | Images and audio, named as the brief asks. `media files/readme/` holds the screenshots in `README.md`, taken with `sh run.sh --snapshot` in demo mode. |
 | `design/` | `redesign/`, the design of the current window and its decisions; `UI-INTEGRATION.md`, how each backend method reaches the screens; `NIELSEN-REVIEW.md`, the window checked against Nielsen's 10 usability heuristics; `gradezzy-design.html` and `UI-REVIEW.md`, the design and review of the earlier 16-screen window, kept for reference; `concept/`, Damien's design concept and its handoff notes. |
 | `README.md` | Part 1: how to use GradeZZY, for a first-time user. Part 2: how the grading backend works. |
 | `design/TEAM-GUIDE.md` | This file: build, owners, coding rules, checklist. |
@@ -104,9 +104,8 @@ or run on the instructor's laptop.
 
 Two things to know:
 
-- The brief calls the media folder `media files`. The team chose `media`.
-  Rename it before submission if the instructors insist on the brief's
-  name.
+- The media folder is `media files/`, the name the brief asks for. Quote
+  the path in scripts and write it as `media%20files/` in Markdown links.
 - `docs/` and most of `samples/` are kept out of git because the
   documents are marked restricted and the samples hold student names.
   Only `samples/Tester-Files/` and the synthetic `samples/e2e/` set are
