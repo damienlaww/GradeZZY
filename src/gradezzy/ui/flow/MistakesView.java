@@ -1,11 +1,11 @@
 /*
  * File: MistakesView.java
  *
- * Purpose: The Errors view of the Review step. For
- * each question, one row per error, such as "Failed test 2" or "Did not
- * compile": its name, how many students, whether it was checked and the
- * buttons that act on the whole group. A row opens like a dropdown to
- * list its students, each with Open code.
+ * Purpose: The Errors view of the Review step. For each question, one
+ * row per error, such as "Failed test 2" or "Did not compile": its name,
+ * how many students, whether it was checked and the buttons that act on
+ * the whole group. A row opens like a dropdown to list its students,
+ * each with Open code.
  *
  * Where it fits: ReviewScreen shows it in place of the student table
  * when "Errors" is chosen. It reads the groups through
@@ -38,8 +38,7 @@ import gradezzy.ui.backend.Capability;
 import gradezzy.ui.backend.DashboardBackend;
 
 /**
- * Lists the errors of a run, question by
- * question.
+ * Lists the errors of a run, question by question.
  *
  * <p>Tier: COULD.
  */
@@ -80,7 +79,7 @@ public class MistakesView {
     private final List<String> openKeys = new ArrayList<>();
 
     // The line above the list, such as "31 answers lost marks, in 22
-    // errors."
+    // errors. Open an error to see its students; decide each error once."
     private String summary = "";
 
     /**
@@ -115,16 +114,16 @@ public class MistakesView {
      *
      * <p>Tier: COULD.
      *
-     * @return such as "31 answers lost marks, in 22 errors. Decide each
-     *         error once."
+     * @return such as "31 answers lost marks, in 22 errors. Open an
+     *         error to see its students; decide each error once."
      */
     public String getSummary() {
         return summary;
     }
 
     /**
-     * Shows the errors of a run, keeping
-     * the scroll position and which errors are open.
+     * Shows the errors of a run, keeping the scroll position and which
+     * errors are open.
      *
      * <p>Tier: COULD.
      *
@@ -152,8 +151,8 @@ public class MistakesView {
     }
 
     // Sums up the errors, such as "31 answers lost marks, in 22 errors.
-    // Decide each error once." A student who failed two tests is counted
-    // once for the question.
+    // Open an error to see its students; decide each error once." A
+    // student who failed two tests is counted once for the question.
     private String summaryOf(List<AnswerGroup> groups) {
         List<String> answers = new ArrayList<>();
         for (AnswerGroup group : groups) {
@@ -291,8 +290,7 @@ public class MistakesView {
         toggleKey(run, group.getKey());
     }
 
-    // Opens or closes the error of a key, and draws the view
-    // again.
+    // Opens or closes the error of a key, and draws the view again.
     private void toggleKey(GradingRun run, String key) {
         if (openKeys.contains(key)) {
             openKeys.remove(key);
@@ -437,20 +435,6 @@ public class MistakesView {
     // Opens a student's code and test output for a question.
     private void openCode(Submission submission, String questionId) {
         window.showSheet(CodeSheet.create(window, submission, questionId));
-    }
-
-    // Names a student with their email ID, such as AIDEN TOH
-    // (aiden.toh.2025), or the email ID alone when not in the run.
-    private String describe(GradingRun run, String username) {
-        Submission submission = findSubmission(run, username);
-        if (submission == null) {
-            return username;
-        }
-        String name = Students.name(submission);
-        if (name.equals(username)) {
-            return username;
-        }
-        return name + " (" + username + ")";
     }
 
     // Returns the submission of a username in a run, or null.

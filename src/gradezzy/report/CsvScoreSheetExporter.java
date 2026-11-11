@@ -63,7 +63,6 @@ public class CsvScoreSheetExporter implements Exporter {
     // Stands for a column the sheet does not have
     private static final int NO_COLUMN = -1;
 
-
     // Header of the column that holds each student's username
     private static final String USERNAME_COLUMN = "Username";
 
@@ -119,7 +118,7 @@ public class CsvScoreSheetExporter implements Exporter {
     private final Path templateScoreSheet;
 
     // Gives each student's remark, or null for a blank Remarks column
-    private ScoreSheetRemarks remarks;
+    private ScoreSheetRemarks remarks = null;
 
     /**
      * Creates a new csv score sheet exporter.
@@ -129,7 +128,6 @@ public class CsvScoreSheetExporter implements Exporter {
      *        a run that does not record the sheet it was graded against
      */
     public CsvScoreSheetExporter(AppConfig config, Path templateScoreSheet) {
-        this.remarks = null;
         this.config = config;
         this.templateScoreSheet = templateScoreSheet;
     }
@@ -215,22 +213,14 @@ public class CsvScoreSheetExporter implements Exporter {
         int usernameIndex = findColumn(header, USERNAME_COLUMN);
         int numeratorIndex = findColumn(header, NUMERATOR_COLUMN);
         boolean extraColumns = wantsExtraColumns();
-        // With the extra columns off, no question is given a column
-        Assessment columnAssessment = null;
-        if (extraColumns) {
-            columnAssessment = gradingRun.getAssessment();
-        }
-        ScoreSheetColumns columns = new ScoreSheetColumns(header,
-                usernameIndex, numeratorIndex, columnAssessment);
+        ScoreSheetColumns columns = chooseColumns(gradingRun, header,
+                usernameIndex, numeratorIndex, extraColumns);
 
         Map<String, Submission> submissionsByUsername =
                 indexByUsername(gradingRun.getSubmissions());
         String lineEnding = getLineEnding();
-        Map<String, String> remarkMap = new HashMap<>();
-        boolean remarksWanted = extraColumns && remarks != null;
-        if (remarksWanted) {
-            remarkMap = remarks.remarksFor(gradingRun);
-        }
+        Map<String, String> remarkMap = readRemarks(gradingRun,
+                extraColumns);
         int remarksIndex = header.indexOf(REMARKS_COLUMN);
         List<String> outputRecords = fillRecords(records, columns,
                 submissionsByUsername, remarkMap, remarksIndex,
@@ -247,6 +237,31 @@ public class CsvScoreSheetExporter implements Exporter {
                     + outputFile + ". Check that the folder exists and is "
                     + "not read-only.", exception);
         }
+    }
+
+    // Places the question columns of the sheet. With the extra columns
+    // off, no question is given a column.
+    private ScoreSheetColumns chooseColumns(GradingRun gradingRun,
+            List<String> header, int usernameIndex, int numeratorIndex,
+            boolean extraColumns) {
+        Assessment columnAssessment = null;
+        if (extraColumns) {
+            columnAssessment = gradingRun.getAssessment();
+        }
+        return new ScoreSheetColumns(header, usernameIndex, numeratorIndex,
+                columnAssessment);
+    }
+
+    // Maps each username to its remark, or gives an empty map when the
+    // extra columns are off or no remarks were set.
+    private Map<String, String> readRemarks(GradingRun gradingRun,
+            boolean extraColumns) {
+        Map<String, String> remarkMap = new HashMap<>();
+        boolean remarksWanted = extraColumns && remarks != null;
+        if (remarksWanted) {
+            remarkMap = remarks.remarksFor(gradingRun);
+        }
+        return remarkMap;
     }
 
     // The header with the question columns added, then every other

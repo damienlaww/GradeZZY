@@ -2,7 +2,8 @@
  * File: TabBar.java
  *
  * Purpose: The row of tabs in the middle of the top bar. The tab of the
- * page on screen is underlined in blue.
+ * page on screen is underlined in blue, and a dot on a tab says its page
+ * has changes that are not saved.
  *
  * Where it fits: FlowWindow puts it in the top bar and calls select when
  * the page changes.

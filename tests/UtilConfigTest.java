@@ -222,15 +222,16 @@ public class UtilConfigTest {
         boolean allRound = true;
         for (int round = 0; round < ROUNDS; round++) {
             List<String> fields = new ArrayList<>();
-            int fieldCount = 1 + random.nextInt(MAX_FIELDS);
+            int extraFields = random.nextInt(MAX_FIELDS);
+            int fieldCount = 1 + extraFields;
             for (int i = 0; i < fieldCount; i++) {
-                StringBuilder field = new StringBuilder();
+                String field = "";
                 int length = random.nextInt(MAX_FIELD_LENGTH);
                 for (int j = 0; j < length; j++) {
-                    field.append(alphabet.charAt(
-                            random.nextInt(alphabet.length())));
+                    int letter = random.nextInt(alphabet.length());
+                    field = field + alphabet.charAt(letter);
                 }
-                fields.add(field.toString());
+                fields.add(field);
             }
             String line = TextUtils.joinCsvLine(fields);
             try {
@@ -261,8 +262,9 @@ public class UtilConfigTest {
 
     // Checks how source bytes are decoded in each encoding.
     private static void checkDecodeSource() {
-        check(TextUtils.isUtf16(UTF16_LE_HI) && TextUtils.isUtf16(
-                UTF16_BE_HI), "UTF-16 marks found");
+        boolean marksFound = TextUtils.isUtf16(UTF16_LE_HI)
+                && TextUtils.isUtf16(UTF16_BE_HI);
+        check(marksFound, "UTF-16 marks found");
         check(!TextUtils.isUtf16(ONE_BYTE), "one byte is not UTF-16");
         check(!TextUtils.isUtf16(new byte[0]), "empty is not UTF-16");
         check(TextUtils.decodeSource(UTF16_LE_HI).equals(GREETING),
@@ -286,9 +288,9 @@ public class UtilConfigTest {
         Files.writeString(source.resolve(TOP_FILE), "t");
         Path copy = root.resolve("copy");
         FileUtils.copyDirectory(source, copy);
-        check(Files.readString(copy.resolve("a/b/x.java")).equals(SHORT_TEXT)
-                && Files.exists(copy.resolve(TOP_FILE)),
-                "copyDirectory copies nested files");
+        boolean nestedCopied = Files.readString(copy.resolve("a/b/x.java"))
+                .equals(SHORT_TEXT) && Files.exists(copy.resolve(TOP_FILE));
+        check(nestedCopied, "copyDirectory copies nested files");
         boolean overlapRefused = false;
         try {
             FileUtils.copyDirectory(source, source.resolve("a/inner"));
@@ -319,8 +321,9 @@ public class UtilConfigTest {
         Files.createDirectories(holder);
         Files.createSymbolicLink(holder.resolve("toOutside"), outside);
         FileUtils.deleteDirectory(holder);
-        check(!Files.exists(holder) && Files.exists(outside.resolve(
-                "keep.txt")), "deleteDirectory does not follow a link");
+        boolean linkOnly = !Files.exists(holder)
+                && Files.exists(outside.resolve("keep.txt"));
+        check(linkOnly, "deleteDirectory does not follow a link");
         FileUtils.deleteDirectory(root.resolve("never-existed"));
         check(true, "deleteDirectory of a missing folder is quiet");
         Path latin = root.resolve("latin.txt");
@@ -344,9 +347,9 @@ public class UtilConfigTest {
         Files.writeString(list.resolve("c.txt"), "");
         List<Path> javas = FileUtils.listFiles(list, ".java");
         int expectedJavas = 2;
-        check(javas.size() == expectedJavas && javas.get(0).getFileName()
-                .toString().equals("a.java"),
-                "listFiles sorted, files only, by suffix");
+        boolean sortedFiles = javas.size() == expectedJavas
+                && javas.get(0).getFileName().toString().equals("a.java");
+        check(sortedFiles, "listFiles sorted, files only, by suffix");
         check(FileUtils.listFiles(list, ".JAVA").isEmpty(),
                 "listFiles suffix is case sensitive (B.JAVA not listed)");
     }
@@ -427,6 +430,13 @@ public class UtilConfigTest {
                 + "Settings");
         check(config.getString("winPathEscaped").equals("C:\\Users\\ann"),
                 "escaped Windows path read");
+        checkConfigExtras(config);
+    }
+
+    // Checks setString, splitList, the key order and the shipped
+    // settings.
+    private static void checkConfigExtras(AppConfig config)
+            throws Exception {
         config.setString("new", "v");
         check(config.getString("new").equals("v"), "setString in memory");
         check(AppConfig.splitList(SHORT_TEXT).equals(
@@ -436,9 +446,9 @@ public class UtilConfigTest {
                 < 0, "getKeys sorted");
         // The shipped config parses and has the core keys
         AppConfig shipped = TestConfig.load();
-        check(shipped.getInt(ConfigKeys.MAX_ZIP_ENTRIES) > 0
-                && shipped.getLong(ConfigKeys.MAX_ZIP_SIZE_MB) > 0,
-                "committed config has zip limits");
+        boolean zipLimits = shipped.getInt(ConfigKeys.MAX_ZIP_ENTRIES) > 0
+                && shipped.getLong(ConfigKeys.MAX_ZIP_SIZE_MB) > 0;
+        check(zipLimits, "committed config has zip limits");
         check(!shipped.getList(ConfigKeys.QUESTION_IDS).isEmpty(),
                 "committed config has question ids");
     }
@@ -491,8 +501,9 @@ public class UtilConfigTest {
 
     // Checks which own-section values validate accepts.
     private static void checkSectionValidate() {
-        check(ModuleSections.validate("").isEmpty()
-                && ModuleSections.validate(null).isEmpty(), "validate blank");
+        boolean blankValid = ModuleSections.validate("").isEmpty()
+                && ModuleSections.validate(null).isEmpty();
+        check(blankValid, "validate blank");
         check(ModuleSections.validate("CS102:G5|G6;IS442:G1").isEmpty(),
                 "validate good value");
         check(!ModuleSections.validate("CS102=G5").isEmpty(),
@@ -544,9 +555,10 @@ public class UtilConfigTest {
         String replaced = ExportFolders.put("CS102/G1=/a;CS102=/m",
                 "cs102/g1", "/b");
         int expectedEntries = 2;
-        check(ExportFolders.list(replaced).size() == expectedEntries
-                && ExportFolders.exact(replaced, SECTION_KEY).equals("/b"),
-                "put replaces ignoring case");
+        boolean replacedOne = ExportFolders.list(replaced).size()
+                == expectedEntries
+                && ExportFolders.exact(replaced, SECTION_KEY).equals("/b");
+        check(replacedOne, "put replaces ignoring case");
         // Known limitation: put never writes the same section twice, so
         // a repeated entry only comes from a hand-edited file; the first
         // one is used
@@ -574,17 +586,17 @@ public class UtilConfigTest {
         String alphabet = "a;%3Bb%25=/ ";
         boolean allRound = true;
         for (int round = 0; round < ROUNDS && allRound; round++) {
-            StringBuilder folder = new StringBuilder(SHORT_TEXT);
+            String folder = SHORT_TEXT;
             int length = random.nextInt(MAX_FOLDER_LENGTH);
             for (int i = 0; i < length; i++) {
-                folder.append(alphabet.charAt(random.nextInt(
-                        alphabet.length())));
+                int letter = random.nextInt(alphabet.length());
+                folder = folder + alphabet.charAt(letter);
             }
-            folder.append("y");
+            folder = folder + "y";
             String value = ExportFolders.put("CS102=/m", OTHER_SECTION_KEY,
-                    folder.toString());
+                    folder);
             String readBack = ExportFolders.exact(value, OTHER_SECTION_KEY);
-            if (!readBack.equals(folder.toString())) {
+            if (!readBack.equals(folder)) {
                 allRound = false;
                 System.out.println("   round trip lost: '" + folder
                         + "' -> '" + readBack + "'");

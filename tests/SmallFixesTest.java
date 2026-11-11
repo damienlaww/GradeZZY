@@ -44,7 +44,7 @@ public class SmallFixesTest {
     private static final String FILE_NAME = "Q1.java";
 
     // The mark some editors put at the very start of a UTF-8 file
-    private static final String BYTE_ORDER_MARK = "﻿";
+    private static final String BYTE_ORDER_MARK = "\uFEFF";
 
     // The code every student hands in
     private static final String CODE = "public class Q1 {\n"
@@ -58,6 +58,11 @@ public class SmallFixesTest {
 
     // The section every student is in
     private static final Section SECTION = new Section("CS102", "G1");
+
+    // The most marks the question gives, and ann's mark, which the score
+    // sheet check looks for
+    private static final double MAX_SCORE = 10;
+    private static final double ANN_SCORE = 7;
 
     // The number of checks passed so far
     private static int checks = 0;
@@ -77,7 +82,7 @@ public class SmallFixesTest {
             AppConfig config = new AppConfig(configCopy.toString());
             Assessment assessment = new Assessment("Small Test", "CS102");
             assessment.addQuestion(new Question(QUESTION, QUESTION,
-                    FILE_NAME, 10));
+                    FILE_NAME, MAX_SCORE));
 
             checkIdenticalCopies(root, config, assessment);
             checkByteOrderMark(root, config, assessment);
@@ -147,7 +152,7 @@ public class SmallFixesTest {
         ann.setStatus(SubmissionStatus.GRADED);
         QuestionResult result = new QuestionResult(
                 assessment.getQuestions().get(0));
-        result.setScore(7);
+        result.setScore(ANN_SCORE);
         ann.addQuestionResult(result);
         run.addSubmission(ann);
 
@@ -165,9 +170,10 @@ public class SmallFixesTest {
             text = new String(Files.readAllBytes(output),
                     StandardCharsets.UTF_8);
         }
-        check(text.startsWith(BYTE_ORDER_MARK + "Username,")
-                && text.indexOf(BYTE_ORDER_MARK, 1) < 0,
-                "The byte order mark is written back once");
+        int afterMark = BYTE_ORDER_MARK.length();
+        boolean markOnce = text.startsWith(BYTE_ORDER_MARK + "Username,")
+                && text.indexOf(BYTE_ORDER_MARK, afterMark) < 0;
+        check(markOnce, "The byte order mark is written back once");
         check(text.contains("#ann,#1,L,A,a@x,7"),
                 "The student's mark is filled in");
     }
@@ -186,7 +192,8 @@ public class SmallFixesTest {
             submission.setStatus(statuses[i]);
             run.addSubmission(submission);
         }
-        check(SectionProgress.countWaiting(run) == 3,
+        int waiting = 3;
+        check(SectionProgress.countWaiting(run) == waiting,
                 "Pending, running and cancelled students are waiting");
     }
 

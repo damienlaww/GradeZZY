@@ -659,8 +659,9 @@ public class GradingService {
     // null when that run object is not the one loaded.
     private synchronized GradingContext findLoadedContext(
             GradingRun gradingRun) {
-        if (gradingRun == null
-                || loadedRuns.get(gradingRun.getId()) != gradingRun) {
+        boolean notLoaded = gradingRun == null
+                || loadedRuns.get(gradingRun.getId()) != gradingRun;
+        if (notLoaded) {
             return null;
         }
         return loadedContexts.get(gradingRun.getId());

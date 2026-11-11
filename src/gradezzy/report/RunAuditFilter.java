@@ -314,15 +314,17 @@ public class RunAuditFilter {
     private static boolean containsId(String text, String id) {
         int from = text.indexOf(id);
         while (from >= 0) {
+            int before = from - 1;
             int after = from + id.length();
             boolean startsClean = from == 0
-                    || !Character.isLetterOrDigit(text.charAt(from - 1));
+                    || !Character.isLetterOrDigit(text.charAt(before));
             boolean endsClean = after >= text.length()
                     || !Character.isLetterOrDigit(text.charAt(after));
             if (startsClean && endsClean) {
                 return true;
             }
-            from = text.indexOf(id, from + 1);
+            int nextFrom = from + 1;
+            from = text.indexOf(id, nextFrom);
         }
         return false;
     }
@@ -332,13 +334,15 @@ public class RunAuditFilter {
     private static boolean containsName(String text, String name) {
         int from = text.indexOf(name);
         while (from >= 0) {
+            int before = from - 1;
             int after = from + name.length();
-            boolean startsClean = from == 0 || !isNameCharAt(text, from - 1);
+            boolean startsClean = from == 0 || !isNameCharAt(text, before);
             boolean endsClean = !isNameCharAt(text, after);
             if (startsClean && endsClean) {
                 return true;
             }
-            from = text.indexOf(name, from + 1);
+            int nextFrom = from + 1;
+            from = text.indexOf(name, nextFrom);
         }
         return false;
     }

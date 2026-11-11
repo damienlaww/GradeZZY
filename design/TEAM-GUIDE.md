@@ -888,6 +888,7 @@ from Maven Central.
 | JavaFX (`javafx-base`, `-graphics`, `-controls`, `-fxml`) | 25.0.4 | GPL v2 with Classpath Exception | The desktop window. It matches JDK 25 and has tables, shapes for the charts, file pickers and drag and drop. The screens are plain JavaFX code; `javafx-fxml` stays on the module path but no screen uses FXML any more. |
 | AtlantaFX (`atlantafx-base`) | 3.0.0 | MIT | Modern themes for JavaFX. Its Cupertino Light and Dark themes give light and dark mode with one line of code. |
 | ControlsFX (`controlsfx`) | 11.2.5 | BSD 3-Clause | Extra controls JavaFX lacks. It was used by the earlier window's search fields; the current window does not use it, and it stays on the classpath with its run flags. |
+| Ikonli (`ikonli-core`, `ikonli-javafx`, `ikonli-fontawesome6-pack`) | 12.4.0 | Apache 2.0 | Font Awesome 6 icons as JavaFX nodes. `Parts.icon` turns an icon code such as `fas-check` into a `FontIcon`, so every icon is sharp at any size and takes its colour from the style sheet. |
 | SQLite JDBC (`sqlite-jdbc`) | 3.53.4.0 | Apache 2.0 | A database in a single file with no server to install, for saved state, history, resume and backup. |
 
 Notes:

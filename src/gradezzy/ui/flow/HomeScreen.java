@@ -508,10 +508,11 @@ public class HomeScreen extends FlowScreen {
         int waiting = countWaiting(stopped);
         int graded = total - waiting;
         nextUpSection = stopped.getSection().getSectionCode();
-        return nextUpRow(stopped.getSection().getLabel() + DOT
+        String words = stopped.getSection().getLabel() + DOT
                 + stopped.getAssessment().getName() + " stopped after "
                 + graded + " of " + total
-                + " students. Marks already given are kept.", "Resume",
+                + " students. Marks already given are kept.";
+        return nextUpRow(words, "Resume",
                 () -> getWindow().resumeRun(stopped));
     }
 
@@ -740,15 +741,14 @@ public class HomeScreen extends FlowScreen {
     // results on the step they need, or set up grading.
     private void setCardAction(VBox card, String section, GradingRun run) {
         if (isGradingNow(section)) {
-            makeClickable(card, () -> getWindow().watchGrading(
-                    sectionOf(section)), "Watch " + section
-                    + " being graded");
+            makeClickable(card,
+                    () -> getWindow().watchGrading(sectionOf(section)),
+                    "Watch " + section + " being graded");
         } else if (run != null) {
             Step step = SectionProgress.stepToOpen(getState(), getBackend(),
                     sectionOf(section), run);
             makeClickable(card, () -> getWindow().openSectionStep(run),
-                    "Open " + section + "'s results on "
-                    + step.getLabel());
+                    "Open " + section + "'s results on " + step.getLabel());
         } else {
             makeClickable(card, () -> openSetUp(section),
                     "Set up grading for " + section);

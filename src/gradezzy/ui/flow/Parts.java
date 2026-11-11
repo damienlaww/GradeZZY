@@ -149,6 +149,11 @@ public final class Parts {
     // share of the size asked for, to match the space around other icons
     private static final double GLYPH_SCALE = 0.8;
 
+    // The style rule added to a glyph's own style to set its size: it
+    // starts before the pixels and ends after them
+    private static final String ICON_SIZE_START = "; -fx-icon-size: ";
+    private static final String ICON_SIZE_END = "px;";
+
     // The radius of the dot inside a status pill
     private static final double DOT_RADIUS = 3.5;
 
@@ -440,8 +445,8 @@ public final class Parts {
         // theme's -fx-icon-size would win over setIconSize
         long pixels = Math.round(size * GLYPH_SCALE);
         glyph.setIconSize((int) pixels);
-        glyph.setStyle(glyph.getStyle() + "; -fx-icon-size: " + pixels
-                + "px;");
+        glyph.setStyle(glyph.getStyle() + ICON_SIZE_START + pixels
+                + ICON_SIZE_END);
         glyph.getStyleClass().add("icon");
         Group group = new Group(glyph);
         group.getStyleClass().add("icon-box");

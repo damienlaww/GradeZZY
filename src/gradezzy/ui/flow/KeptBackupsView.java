@@ -69,7 +69,8 @@ public class KeptBackupsView {
     // Bytes in a kilobyte, and kilobytes in a megabyte
     private static final double BYTES_PER_KILOBYTE = 1024.0;
 
-    // Writes a size with one decimal place, such as 21.1 MB
+    // Writes a size in whole kilobytes, such as 840 KB, or in megabytes
+    // with one decimal place, such as 21.1 MB
     private static final String KILOBYTES_FORMAT = "%.0f KB";
     private static final String MEGABYTES_FORMAT = "%.1f MB";
 
@@ -78,6 +79,9 @@ public class KeptBackupsView {
 
     // Shown in place of a value that was not saved
     private static final String NO_VALUE = "-";
+
+    // Where the runs list sits in an open row, after its header
+    private static final int RUNS_LIST_INDEX = 1;
 
     // The backups that are open, by file
     private final Set<Path> openFiles = new HashSet<>();
@@ -311,7 +315,8 @@ public class KeptBackupsView {
         if (openFiles.contains(file)) {
             openFiles.remove(file);
             row.getStyleClass().remove("open");
-            row.getChildren().remove(1, row.getChildren().size());
+            row.getChildren().remove(RUNS_LIST_INDEX,
+                    row.getChildren().size());
             chevron.setRotate(0);
             return;
         }
@@ -421,8 +426,9 @@ public class KeptBackupsView {
 
     // The name of a backup's file
     private String fileName(BackupInfo backup) {
-        if (backup.getFile() == null || backup.getFile().getFileName()
-                == null) {
+        boolean noName = backup.getFile() == null
+                || backup.getFile().getFileName() == null;
+        if (noName) {
             return NO_VALUE;
         }
         return backup.getFile().getFileName().toString();

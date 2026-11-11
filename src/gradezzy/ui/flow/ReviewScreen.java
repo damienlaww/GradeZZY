@@ -148,9 +148,6 @@ public class ReviewScreen extends FlowScreen {
     // The table is never shorter than this, so its empty note fits
     private static final double MIN_TABLE_HEIGHT = 160.0;
 
-    // The corner of the table box (twice the 12 pixel radius)
-    private static final double CORNER_ARC = 24.0;
-
     // The corner of the table's clip, a little tighter than the frame
     private static final double CLIP_ARC = 22.0;
 
@@ -706,7 +703,7 @@ public class ReviewScreen extends FlowScreen {
         applyFilter();
     }
 
-    // Builds the Students | Errors switch.
+    // Builds the Students | Errors | Similarity switch.
     private void createModeBar() {
         ToggleGroup group = new ToggleGroup();
         studentsButton.setToggleGroup(group);

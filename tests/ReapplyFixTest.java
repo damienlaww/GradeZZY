@@ -9,8 +9,7 @@
  * It grades one sample upload with an answer file saved in the wrong
  * question folder, in a temporary folder with a copy of the fixed test
  * settings and a temporary database, so no real setting or result is
- * changed. A
- * restart is a new ApplicationContext on the same database.
+ * changed. A restart is a new ApplicationContext on the same database.
  */
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -126,23 +125,36 @@ public class ReapplyFixTest {
     // misplaced file fix moves back to Q1.
     private static Path makeMisplacedUpload(Path root) throws Exception {
         Path upload = root.resolve(SAMPLE_UPLOAD.getFileName());
-        try (InputStream in = Files.newInputStream(SAMPLE_UPLOAD);
-                ZipInputStream zipIn = new ZipInputStream(in);
-                OutputStream out = Files.newOutputStream(upload);
-                ZipOutputStream zipOut = new ZipOutputStream(out)) {
-            ZipEntry entry = zipIn.getNextEntry();
-            while (entry != null) {
-                String name = entry.getName();
-                if (name.equals(ANSWER_ENTRY)) {
-                    name = MISPLACED_ENTRY;
-                }
-                zipOut.putNextEntry(new ZipEntry(name));
-                zipIn.transferTo(zipOut);
-                zipOut.closeEntry();
-                entry = zipIn.getNextEntry();
-            }
+        ZipInputStream zipIn = null;
+        ZipOutputStream zipOut = null;
+        try {
+            InputStream in = Files.newInputStream(SAMPLE_UPLOAD);
+            zipIn = new ZipInputStream(in);
+            OutputStream out = Files.newOutputStream(upload);
+            zipOut = new ZipOutputStream(out);
+            copyEntries(zipIn, zipOut);
+        } finally {
+            FileUtils.closeIfOpen(zipOut);
+            FileUtils.closeIfOpen(zipIn);
         }
         return upload;
+    }
+
+    // Copies every entry of one zip into another, moving the answer
+    // file into the wrong question folder.
+    private static void copyEntries(ZipInputStream zipIn,
+            ZipOutputStream zipOut) throws Exception {
+        ZipEntry entry = zipIn.getNextEntry();
+        while (entry != null) {
+            String name = entry.getName();
+            if (name.equals(ANSWER_ENTRY)) {
+                name = MISPLACED_ENTRY;
+            }
+            zipOut.putNextEntry(new ZipEntry(name));
+            zipIn.transferTo(zipOut);
+            zipOut.closeEntry();
+            entry = zipIn.getNextEntry();
+        }
     }
 
     // Grades the upload once, as in an earlier session, and returns the

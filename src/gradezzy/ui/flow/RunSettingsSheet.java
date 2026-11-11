@@ -137,9 +137,10 @@ public final class RunSettingsSheet {
         }
         Assessment assessment = run.getAssessment();
         if (assessment != null) {
-            text += assessment.getName() + DOT
-                    + Parts.plural(assessment.getQuestions().size(),
-                    "question") + ", " + Parts.mark(assessment.getMaxTotal())
+            String questions = Parts.plural(
+                    assessment.getQuestions().size(), "question");
+            String marks = Parts.mark(assessment.getMaxTotal());
+            text += assessment.getName() + DOT + questions + ", " + marks
                     + " marks" + DOT;
         }
         if (run.getStartedAt() == null) {
@@ -303,8 +304,9 @@ public final class RunSettingsSheet {
     // Writes a share from 0 to 1 as a percentage, such as "80% alike".
     private static String describeShare(String text) {
         try {
-            long percent = Math.round(Double.parseDouble(text) * PERCENT);
-            return percent + "% alike";
+            double share = Double.parseDouble(text);
+            long percent = Math.round(share * PERCENT);
+            return percent + Parts.PERCENT_SIGN + " alike";
         } catch (NumberFormatException exception) {
             return text;
         }

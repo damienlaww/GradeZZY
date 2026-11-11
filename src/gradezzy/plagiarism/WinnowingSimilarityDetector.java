@@ -249,7 +249,11 @@ public class WinnowingSimilarityDetector implements SimilarityDetector {
         Map<Integer, Integer> answerCounts = new HashMap<>();
         for (Set<Integer> answer : answers) {
             for (Integer hash : answer) {
-                answerCounts.merge(hash, 1, Integer::sum);
+                Integer count = answerCounts.get(hash);
+                if (count == null) {
+                    count = 0;
+                }
+                answerCounts.put(hash, count + 1);
             }
         }
 

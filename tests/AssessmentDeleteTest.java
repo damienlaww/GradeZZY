@@ -160,20 +160,22 @@ public class AssessmentDeleteTest {
         check(deleted.hadChosenFiles(), "The delete notes the chosen files");
         check(find(library, NAME) == null, "The assessment is deleted");
         Map<String, List<Path>> left = submissions.load();
-        check(!left.containsKey("CS102/G1/" + NAME)
+        boolean ownCleared = !left.containsKey("CS102/G1/" + NAME)
                 && !left.containsKey("CS102/G2/" + NAME)
-                && !left.containsKey("IS111/G1/" + NAME),
-                "Its submissions are cleared in every section: " + left);
-        check(left.containsKey("CS102/G1/" + OTHER)
+                && !left.containsKey("IS111/G1/" + NAME);
+        check(ownCleared, "Its submissions are cleared in every section: "
+                + left);
+        boolean othersStay = left.containsKey("CS102/G1/" + OTHER)
                 && left.containsKey("CS102/G1/" + LONGER)
-                && left.containsKey("CS102/G1"),
-                "Other assessments' submissions stay: " + left);
+                && left.containsKey("CS102/G1");
+        check(othersStay, "Other assessments' submissions stay: " + left);
         Map<String, List<Path>> leftClassFiles = classFiles.load();
-        check(!leftClassFiles.containsKey("CS102/G1/" + NAME + "|ROSTER")
+        boolean classFilesCleared = !leftClassFiles.containsKey("CS102/G1/"
+                + NAME + "|ROSTER")
                 && !leftClassFiles.containsKey("CS102/G2/" + NAME
-                        + "|TESTERS"),
-                "Its score sheet and testers are cleared: "
-                        + leftClassFiles);
+                + "|TESTERS");
+        check(classFilesCleared, "Its score sheet and testers are cleared: "
+                + leftClassFiles);
         check(leftClassFiles.containsKey("CS102/G1/" + OTHER + "|ROSTER"),
                 "Another assessment's score sheet stays");
 
@@ -202,10 +204,10 @@ public class AssessmentDeleteTest {
         again.setScoreSheetsBySection(OWN_SHEETS);
         library.save(again, null);
         SavedAssessment made = find(library, NAME);
-        check("".equals(made.getScoreSheetsBySection())
+        boolean emptySheets = "".equals(made.getScoreSheetsBySection())
                 && "".equals(made.getScoreSheetFile())
-                && made.isScoreSheetsSaved(),
-                "The new one has empty score sheets of its own");
+                && made.isScoreSheetsSaved();
+        check(emptySheets, "The new one has empty score sheets of its own");
         for (String key : submissions.load().keySet()) {
             check(!ChosenSubmissionsStore.isKeyOf(key, NAME),
                     "The new one inherits no submissions: " + key);
@@ -214,9 +216,9 @@ public class AssessmentDeleteTest {
             check(!ChosenSubmissionsStore.isKeyOf(key, NAME),
                     "The new one inherits no class files: " + key);
         }
-        check(made.getCreatedAt() != null
-                && !made.getCreatedAt().isBefore(firstMade),
-                "The new one is newer than the deleted one");
+        boolean newer = made.getCreatedAt() != null
+                && !made.getCreatedAt().isBefore(firstMade);
+        check(newer, "The new one is newer than the deleted one");
     }
 
     // Checks that a rename moves the chosen files to the new name.
@@ -230,17 +232,19 @@ public class AssessmentDeleteTest {
         library.save(edit, NAME);
 
         Map<String, List<Path>> moved = submissions.load();
-        check(!moved.containsKey("CS102/G1/" + NAME)
+        boolean submissionsMoved = !moved.containsKey("CS102/G1/" + NAME)
                 && moved.containsKey("CS102/G1/" + NEW_NAME)
-                && moved.containsKey("CS102/G2/" + NEW_NAME),
-                "A rename moves its submissions: " + moved);
+                && moved.containsKey("CS102/G2/" + NEW_NAME);
+        check(submissionsMoved, "A rename moves its submissions: " + moved);
         check(moved.containsKey("CS102/G1/" + LONGER),
                 "A rename leaves a longer name alone");
         Map<String, List<Path>> movedClassFiles = classFiles.load();
-        check(movedClassFiles.containsKey("CS102/G1/" + NEW_NAME
-                + "|ROSTER") && !movedClassFiles.containsKey("CS102/G1/"
-                        + NAME + "|ROSTER"),
-                "A rename moves its score sheet: " + movedClassFiles);
+        boolean sheetMoved = movedClassFiles.containsKey("CS102/G1/"
+                + NEW_NAME + "|ROSTER")
+                && !movedClassFiles.containsKey("CS102/G1/" + NAME
+                + "|ROSTER");
+        check(sheetMoved, "A rename moves its score sheet: "
+                + movedClassFiles);
     }
 
     // Checks that the window's state forgets and moves the files kept
@@ -255,10 +259,11 @@ public class AssessmentDeleteTest {
 
         state.moveAssessment(NAME, NEW_NAME);
         Map<String, List<Path>> moved = state.listChosenPaths();
-        check(moved.containsKey("CS102/G1/" + NEW_NAME)
+        boolean stateMoved = moved.containsKey("CS102/G1/" + NEW_NAME)
                 && moved.containsKey("CS102/G2/" + NEW_NAME)
-                && !moved.containsKey("CS102/G1/" + NAME),
-                "The state moves a renamed assessment's files: " + moved);
+                && !moved.containsKey("CS102/G1/" + NAME);
+        check(stateMoved, "The state moves a renamed assessment's files: "
+                + moved);
 
         state.forgetAssessment(NEW_NAME);
         Map<String, List<Path>> left = state.listChosenPaths();

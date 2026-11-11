@@ -9,6 +9,8 @@
  */
 package gradezzy.modelanswer;
 
+import gradezzy.util.TextUtils;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,9 +27,10 @@ public class QuestionStrength {
     // Follows a share printed as a percentage
     private static final String PERCENT_SIGN = "%";
 
-    // Comes between the names in a list, and between the two parts of
-    // the summary of every question
+    // Comes between the names in a list
     private static final String LIST_SEPARATOR = ", ";
+
+    // Comes between the two parts of the summary of every question
     private static final String SUMMARY_SEPARATOR = "; ";
 
     // The question, such as Q2b
@@ -154,11 +157,11 @@ public class QuestionStrength {
             return text;
         }
         text = text + ": the model answer for "
-                + String.join(LIST_SEPARATOR, notCompiling)
+                + TextUtils.join(LIST_SEPARATOR, notCompiling)
                 + " does not compile";
         if (!missing.isEmpty()) {
-            text = text + " (missing " + String.join(LIST_SEPARATOR,
-                    missing) + ")";
+            text = text + " (missing "
+                    + TextUtils.join(LIST_SEPARATOR, missing) + ")";
         }
         return text;
     }

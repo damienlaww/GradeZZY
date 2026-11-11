@@ -50,6 +50,9 @@ public final class RunSettings {
     private static final String LINE_END = "\n";
     private static final String KEY_VALUE_SEPARATOR = "=";
 
+    // Stands in for a line end inside a value, so it stays on one line
+    private static final String LINE_END_STAND_IN = " ";
+
     // Not used: every method is static.
     private RunSettings() {
     }
@@ -82,7 +85,8 @@ public final class RunSettings {
         List<String> lines = new ArrayList<>();
         for (String key : KEYS) {
             if (config.hasKey(key)) {
-                String value = config.getString(key).replace(LINE_END, " ");
+                String value = config.getString(key).replace(LINE_END,
+                        LINE_END_STAND_IN);
                 lines.add(key + KEY_VALUE_SEPARATOR + value);
             }
         }
@@ -114,7 +118,8 @@ public final class RunSettings {
         }
         for (String key : keys) {
             if (config.hasKey(key)) {
-                String value = config.getString(key).replace(LINE_END, " ");
+                String value = config.getString(key).replace(LINE_END,
+                        LINE_END_STAND_IN);
                 replaceLine(lines, key, key + KEY_VALUE_SEPARATOR + value);
             }
         }

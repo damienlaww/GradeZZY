@@ -100,8 +100,8 @@ public class TesterGenerator {
         // Alpha), which is not always the question id
         String studentClass = question.getFileName();
         if (studentClass.endsWith(SOURCE_EXTENSION)) {
-            studentClass = studentClass.substring(0,
-                    studentClass.length() - SOURCE_EXTENSION.length());
+            int nameEnd = studentClass.length() - SOURCE_EXTENSION.length();
+            studentClass = studentClass.substring(0, nameEnd);
         }
         addLine(source, "public class " + getClassName(question)
                 + " extends " + studentClass + " {");

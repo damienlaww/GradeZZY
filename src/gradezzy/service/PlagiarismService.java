@@ -289,13 +289,16 @@ public class PlagiarismService {
             List<SimilarityPair> headerPairs) {
         List<SimilarityPair> pairs = new ArrayList<>();
         List<String> headerKeys = new ArrayList<>();
-        for (SimilarityPair pair : headerPairs) {
-            headerKeys.add(makePairKey(pair));
-            SimilarityPair checked = findByKey(found, makePairKey(pair));
-            if (checked != null && !pair.isIdentical()) {
-                pair = new SimilarityPair(pair.getFirstUsername(),
-                        pair.getSecondUsername(), pair.getQuestionId(),
-                        checked.getSimilarity(), false, true);
+        for (SimilarityPair headerPair : headerPairs) {
+            String key = makePairKey(headerPair);
+            headerKeys.add(key);
+            SimilarityPair checked = findByKey(found, key);
+            SimilarityPair pair = headerPair;
+            if (checked != null && !headerPair.isIdentical()) {
+                pair = new SimilarityPair(headerPair.getFirstUsername(),
+                        headerPair.getSecondUsername(),
+                        headerPair.getQuestionId(), checked.getSimilarity(),
+                        false, true);
             }
             pairs.add(pair);
         }

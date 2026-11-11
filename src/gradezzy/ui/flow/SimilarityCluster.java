@@ -6,9 +6,9 @@
  * student, with the pairs that link them. Also builds the clusters of a
  * list of pairs.
  *
- * Where it fits: MistakesView shows each cluster above the questions on
- * the Errors view of Review, so the instructor can pick two of its
- * students and compare their code.
+ * Where it fits: SimilarityGroupsView shows each cluster as a group
+ * under its question on the Similarity view of Review, so the
+ * instructor can pick two of its students and compare their code.
  */
 package gradezzy.ui.flow;
 

@@ -33,6 +33,12 @@ public final class StudentMatcher {
     // letter before the one just before
     private static final int TWO_LETTERS_BACK = 2;
 
+    // What one removal, addition, change or swap of letters costs
+    private static final int ONE_CHANGE = 1;
+
+    // What a letter that already matches costs
+    private static final int NO_CHANGE = 0;
+
     // Not used: every method is static.
     private StudentMatcher() {
     }
@@ -90,7 +96,9 @@ public final class StudentMatcher {
     public static int countChanges(String first, String second) {
         String left = first.toLowerCase(Locale.ROOT);
         String right = second.toLowerCase(Locale.ROOT);
-        int[][] cost = new int[left.length() + 1][right.length() + 1];
+        int rows = left.length() + 1;
+        int columns = right.length() + 1;
+        int[][] cost = new int[rows][columns];
         for (int row = 0; row <= left.length(); row++) {
             cost[row][0] = row;
         }
@@ -111,22 +119,28 @@ public final class StudentMatcher {
     // remove, add, change, or swap two letters next to each other.
     private static int cheapestStep(String left, String right,
             int[][] cost, int row, int column) {
-        int change = 1;
-        if (left.charAt(row - 1) == right.charAt(column - 1)) {
-            change = 0;
+        int previousRow = row - 1;
+        int previousColumn = column - 1;
+        char leftLetter = left.charAt(previousRow);
+        char rightLetter = right.charAt(previousColumn);
+        int change = ONE_CHANGE;
+        if (leftLetter == rightLetter) {
+            change = NO_CHANGE;
         }
-        int best = Math.min(cost[row - 1][column] + 1,
-                cost[row][column - 1] + 1);
-        best = Math.min(best, cost[row - 1][column - 1] + change);
+        int removed = cost[previousRow][column] + ONE_CHANGE;
+        int added = cost[row][previousColumn] + ONE_CHANGE;
+        int changed = cost[previousRow][previousColumn] + change;
+        int best = Math.min(removed, added);
+        best = Math.min(best, changed);
+
+        int rowTwoBack = row - TWO_LETTERS_BACK;
+        int columnTwoBack = column - TWO_LETTERS_BACK;
         boolean swapped = row > 1 && column > 1
-                && left.charAt(row - 1)
-                        == right.charAt(column - TWO_LETTERS_BACK)
-                && left.charAt(row - TWO_LETTERS_BACK)
-                        == right.charAt(column - 1);
+                && leftLetter == right.charAt(columnTwoBack)
+                && left.charAt(rowTwoBack) == rightLetter;
         if (swapped) {
-            int beforeSwap = cost[row - TWO_LETTERS_BACK]
-                    [column - TWO_LETTERS_BACK];
-            best = Math.min(best, beforeSwap + 1);
+            int swappedCost = cost[rowTwoBack][columnTwoBack] + ONE_CHANGE;
+            best = Math.min(best, swappedCost);
         }
         return best;
     }

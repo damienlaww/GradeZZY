@@ -103,6 +103,10 @@ public class StudentPanel extends ScrollPane {
     // Starts each line of the Similar code card
     private static final String BULLET = "\u2022 ";
 
+    // Joins names in a title, and the last name to the rest
+    private static final String NAME_SEPARATOR = ", ";
+    private static final String LAST_NAME_SEPARATOR = " and ";
+
     // Turns a similarity share into a percentage
     private static final double PERCENT = 100.0;
 
@@ -1065,12 +1069,15 @@ public class StudentPanel extends ScrollPane {
 
     // Joins names as "A", "A and B" or "A, B and C".
     private static String joinWithAnd(List<String> names) {
-        int lastIndex = names.size() - 1;
-        if (lastIndex <= 0) {
-            return TextUtils.join("", names);
+        if (names.isEmpty()) {
+            return "";
         }
-        return TextUtils.join(", ", names.subList(0, lastIndex)) + " and "
-                + names.get(lastIndex);
+        int lastIndex = names.size() - 1;
+        if (lastIndex == 0) {
+            return names.get(0);
+        }
+        return TextUtils.join(NAME_SEPARATOR, names.subList(0, lastIndex))
+                + LAST_NAME_SEPARATOR + names.get(lastIndex);
     }
 
     // Adds Open code for the one question of a group, or a list of its

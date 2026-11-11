@@ -46,6 +46,11 @@ public class ClassFilesTest {
     // How many students the compile failure runs grade
     private static final int STUDENTS = 6;
 
+    // The most marks Q2a, Q3 and Q4 of Lab Test 3 give
+    private static final int Q2A_MAX = 4;
+    private static final int Q3_MAX = 6;
+    private static final int Q4_MAX = 4;
+
     // The number of checks passed so far
     private static int checks = 0;
 
@@ -75,9 +80,10 @@ public class ClassFilesTest {
     // Builds an assessment like Lab Test 3: Q2a in Q2, Q3 and Q4.
     private static Assessment createAssessment() {
         Assessment assessment = new Assessment("Lab Test 3", "CS102");
-        assessment.addQuestion(new Question("Q2a", "Q2", "Q2a.java", 4));
-        assessment.addQuestion(new Question("Q3", "Q3", "Q3.java", 6));
-        assessment.addQuestion(new Question("Q4", "Q4", "Q4.java", 4));
+        assessment.addQuestion(new Question("Q2a", "Q2", "Q2a.java",
+                Q2A_MAX));
+        assessment.addQuestion(new Question("Q3", "Q3", "Q3.java", Q3_MAX));
+        assessment.addQuestion(new Question("Q4", "Q4", "Q4.java", Q4_MAX));
         return assessment;
     }
 
@@ -125,10 +131,10 @@ public class ClassFilesTest {
                 "Member.class without source is kept");
         check(!Files.exists(q2.resolve("Q2a.class")),
                 "Q2a.class with Q2a.java is deleted");
-        check(!Files.exists(q2.resolve("Helper.class"))
-                && !Files.exists(q2.resolve("Helper$Inner.class")),
-                "Helper.class and Helper$Inner.class with Helper.java "
-                + "are deleted");
+        boolean helperDeleted = !Files.exists(q2.resolve("Helper.class"))
+                && !Files.exists(q2.resolve("Helper$Inner.class"));
+        check(helperDeleted, "Helper.class and Helper$Inner.class with "
+                + "Helper.java are deleted");
         check(!Files.exists(q2.resolve("Q2aTester.class")),
                 "a precompiled tester is always deleted");
         check(Files.exists(q2.resolve("Shape.class")),
@@ -208,14 +214,16 @@ public class ClassFilesTest {
         }
         CompileFailureCheck failureCheck = new CompileFailureCheck();
         List<String> warnings = failureCheck.findWarnings(run);
-        check(warnings.size() == 1 && warnings.get(0).startsWith(
-                "Q3 did not compile for 5 of 6 graded students"),
-                "Q3 failing for 5 of 6 is warned about (" + warnings + ")");
+        boolean warned = warnings.size() == 1 && warnings.get(0).startsWith(
+                "Q3 did not compile for 5 of 6 graded students");
+        check(warned, "Q3 failing for 5 of 6 is warned about (" + warnings
+                + ")");
         failureCheck.refresh(run);
         failureCheck.refresh(run);
-        check(countWarnings(run.getSubmissions().get(0)) == 1
-                && countWarnings(run.getSubmissions().get(STUDENTS - 1))
-                == 1, "every graded student gets the warning once, even "
+        int lastStudent = STUDENTS - 1;
+        boolean warnedOnce = countWarnings(run.getSubmissions().get(0)) == 1
+                && countWarnings(run.getSubmissions().get(lastStudent)) == 1;
+        check(warnedOnce, "every graded student gets the warning once, even "
                 + "after two saves");
 
         run.getSubmissions().get(1).findResult("Q3").setCompiled(true);

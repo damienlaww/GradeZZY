@@ -55,6 +55,9 @@ public class WorkingCopyManager {
     // copy and in the starter folder
     private static final int MAX_SOURCE_DEPTH = 16;
 
+    // The depth of the folder a search for Java source starts in
+    private static final int TOP_DEPTH = 0;
+
     // Start of the name of a macOS resource fork file, as in ._Q1a.java
     private static final String RESOURCE_FORK_PREFIX = "._";
 
@@ -488,7 +491,7 @@ public class WorkingCopyManager {
     private List<String> listSourceNames(Path workingCopy, Path starter,
             Assessment assessment) throws IOException {
         List<String> names = new ArrayList<>();
-        addSourceNames(workingCopy, 0, names);
+        addSourceNames(workingCopy, TOP_DEPTH, names);
         if (assessment != null) {
             for (Question question : assessment.getQuestions()) {
                 addSourceName(question.getFileName(), names);
@@ -496,7 +499,7 @@ public class WorkingCopyManager {
         }
         try {
             if (Files.isDirectory(starter, LinkOption.NOFOLLOW_LINKS)) {
-                addSourceNames(starter, 0, names);
+                addSourceNames(starter, TOP_DEPTH, names);
             }
         } catch (IOException exception) {
             // A starter folder that cannot be read adds no names; the

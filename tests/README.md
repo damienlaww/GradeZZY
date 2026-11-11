@@ -13,6 +13,10 @@ java -cp "classes:lib/*:/tmp/gradezzy-tests" IngestRegressionTest
 
 On Windows, use `compile.bat` and `;` as the Java classpath separator.
 Replace `IngestRegressionTest` with the name of any other test below.
+The other files are helper classes the checks share, with no `main`:
+`TestConfig`, `ExtractOnlyPipelineFactory`, `NoTestersSource`,
+`FixOnlyPipelineFactory`, `FixCaseOutcome`, `FixedRemarks` and
+`FakeBackendHandler`.
 
 ## Fixed test settings
 

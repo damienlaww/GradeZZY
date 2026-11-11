@@ -83,6 +83,10 @@ public class ReportTest {
     private static final double BOB_Q1 = 2;
     private static final double BOB_Q2 = 3;
 
+    // The most marks Q1 and Q2a give
+    private static final double Q1_MAX = 2;
+    private static final double Q2A_MAX = 3;
+
     // Ann's Q1 mark and total as written on the score sheet
     private static final String ANN_Q1_TEXT = "1.5";
     private static final String ANN_TOTAL = "3.75";
@@ -127,6 +131,21 @@ public class ReportTest {
     // The line break inside the written sheets
     private static final String NEWLINE = "\n";
 
+    // The line ending of a score sheet from eLearn, and its first half
+    private static final String CRLF = "\r\n";
+    private static final String CARRIAGE_RETURN = "\r";
+
+    // How a carriage return is shown in a printed line
+    private static final String SHOWN_CARRIAGE_RETURN = "\\r";
+
+    // The character that starts and ends a quoted CSV field or JSON
+    // string, and the one that escapes the next in JSON
+    private static final char QUOTE = '"';
+    private static final char ESCAPE = '\\';
+
+    // The character that ends a CSV record
+    private static final char LINE_FEED = '\n';
+
     // The lowest character JSON may hold in a string without escaping
     private static final char FIRST_PLAIN_CHAR = 0x20;
 
@@ -137,7 +156,7 @@ public class ReportTest {
     private static int failed = 0;
 
     // The fixed test settings
-    private static AppConfig config;
+    private static AppConfig config = null;
 
     // The text of the last score sheet written by export
     private static String lastOutput = "";
@@ -174,8 +193,9 @@ public class ReportTest {
     private static void checkFormatter() {
         check(ScoreFormatter.format(3).equals("3"), "3");
         check(ScoreFormatter.format(2.5).equals("2.5"), "2.5");
-        check(ScoreFormatter.format(0.125).equals("0.13")
-                || ScoreFormatter.format(0.125).equals("0.12"), "0.125");
+        boolean eighthRounded = ScoreFormatter.format(0.125).equals("0.13")
+                || ScoreFormatter.format(0.125).equals("0.12");
+        check(eighthRounded, "0.125");
         check(ScoreFormatter.format(1.0 / 3).equals("0.33"), "1/3");
         check(ScoreFormatter.format(-0.001).equals("0"), "-0 is 0");
         check(ScoreFormatter.format(10.0).equals("10"),
@@ -189,8 +209,9 @@ public class ReportTest {
     // Builds an assessment with Q1 (out of 2) and Q2a (out of 3).
     private static Assessment assessment(String name) {
         Assessment assessment = new Assessment(name, MODULE);
-        assessment.addQuestion(new Question("Q1", "Q1", "Q1.java", 2));
-        assessment.addQuestion(new Question("Q2a", "Q2", "Q2a.java", 3));
+        assessment.addQuestion(new Question("Q1", "Q1", "Q1.java", Q1_MAX));
+        assessment.addQuestion(new Question("Q2a", "Q2", "Q2a.java",
+                Q2A_MAX));
         return assessment;
     }
 
@@ -269,22 +290,25 @@ public class ReportTest {
         Path lfOut = root.resolve("lf-out.csv");
         new CsvScoreSheetExporter(lfConfig, lfSheet).export(run(lfSheet,
                 LAB), lfOut);
-        check(!Files.readString(lfOut).contains("\r"), "LF setting");
+        check(!Files.readString(lfOut).contains(CARRIAGE_RETURN),
+                "LF setting");
         // windows-1252 template
         String latin = HEADER
                 + "\r\n#1,#ann,M\u00fcller,Zo\u00eb,ann@x,,5,#\r\n";
         Charset latinCharset = Charset.forName("windows-1252");
         List<List<String>> latinRows = export(root, "latin", latin,
                 latinCharset, null, null);
-        check(latinRows.get(1).get(LAST_NAME_COLUMN).equals("M\u00fcller")
-                && latinRows.get(1).get(NUMERATOR_COLUMN).equals(ANN_TOTAL),
-                "windows-1252 template written back in windows-1252");
+        List<String> latinAnn = latinRows.get(1);
+        boolean latinKept = latinAnn.get(LAST_NAME_COLUMN).equals("M\u00fcller")
+                && latinAnn.get(NUMERATOR_COLUMN).equals(ANN_TOTAL);
+        check(latinKept, "windows-1252 template written back in windows-1252");
         checkOddTemplates(root);
         checkOddRuns(root, body);
         // Chinese remark into a windows-1252 sheet
         Map<String, String> chinese = new HashMap<>();
         chinese.put(ANN, "\u6284\u88ad");
-        export(root, "latin2", latin, latinCharset, null, run2 -> chinese);
+        export(root, "latin2", latin, latinCharset, null,
+                new FixedRemarks(chinese));
         // Known limitation: the sheet is written back in its own encoding,
         // so a remark it cannot hold is written as ?. Save the score sheet
         // as "CSV UTF-8" to keep such remarks.
@@ -304,19 +328,23 @@ public class ReportTest {
         Path out = root.resolve("plain-out.csv");
         CsvScoreSheetExporter exporter = new CsvScoreSheetExporter(
                 plainConfig, sheet);
-        exporter.setRemarks(run -> new HashMap<String, String>());
+        exporter.setRemarks(new FixedRemarks(new HashMap<String, String>()));
         exporter.export(run(sheet, LAB_TEST), out);
         String text = Files.readString(out);
-        String[] lines = text.split("\r\n");
+        String[] lines = text.split(CRLF);
         check(lines[0].equals(HEADER), "extra columns off: header kept: "
                 + lines[0]);
         check(lines[1].equals("#1,#ann,Lee,Ann,ann@x," + ANN_TOTAL
                 + ",5,#"), "extra columns off: only the total is filled: "
                 + lines[1]);
-        check(lines[4].equals("#4,#dan,D,Dan,dan@x,,5,#"), "extra columns "
-                + "off: a student not in the run is blanked: " + lines[4]);
+        int danLine = 4;
+        check(lines[danLine].equals("#4,#dan,D,Dan,dan@x,,5,#"), "extra "
+                + "columns off: a student not in the run is blanked: "
+                + lines[danLine]);
     }
 
+    // Checks the columns, marks and line endings of an export with the
+    // question and Remarks columns.
     private static void checkBasicSheet(Path root, String body)
             throws Exception {
         List<List<String>> rows = export(root, "basic", body,
@@ -329,24 +357,28 @@ public class ReportTest {
         int q1 = header.indexOf(q1Name);
         int remarks = header.indexOf("Remarks");
         int end = header.indexOf("End-of-Line Indicator");
-        check(q1 > 0 && remarks > q1 && end == header.size() - 1,
-                "question and Remarks columns inserted before End-of-Line: "
-                + header);
-        check(lastOutput.contains("\r\n") && !lastOutput.replace("\r\n", "")
-                .contains(NEWLINE), "CRLF line endings kept");
+        int lastColumn = header.size() - 1;
+        boolean inserted = q1 > 0 && remarks > q1 && end == lastColumn;
+        check(inserted, "question and Remarks columns inserted before "
+                + "End-of-Line: " + header);
+        boolean crlfKept = lastOutput.contains(CRLF)
+                && !lastOutput.replace(CRLF, "").contains(NEWLINE);
+        check(crlfKept, "CRLF line endings kept");
         List<String> ann = rows.get(1);
         check(ann.get(NUMERATOR_COLUMN).equals(ANN_TOTAL), "ann total 3.75 ("
                 + ann.get(NUMERATOR_COLUMN) + ")");
-        check(ann.get(q1).equals(ANN_Q1_TEXT)
-                && ann.get(q1 + 1).equals("2.25"), "ann question marks");
+        int q2a = q1 + 1;
+        boolean annMarks = ann.get(q1).equals(ANN_Q1_TEXT)
+                && ann.get(q2a).equals("2.25");
+        check(annMarks, "ann question marks");
         check(ann.size() == header.size(), "ann row as wide as header");
         int bobRow = 2;
         int catRow = 3;
         int danRow = 4;
         List<String> bob = rows.get(bobRow);
-        check(bob.get(LAST_NAME_COLUMN).equals("Tan, Jr.")
-                && bob.get(NUMERATOR_COLUMN).equals("5"),
-                "quoted last name kept, bob total 5");
+        boolean bobKept = bob.get(LAST_NAME_COLUMN).equals("Tan, Jr.")
+                && bob.get(NUMERATOR_COLUMN).equals("5");
+        check(bobKept, "quoted last name kept, bob total 5");
         check(rows.get(catRow).get(NUMERATOR_COLUMN).isEmpty(),
                 "failed cat left blank");
         check(rows.get(danRow).get(NUMERATOR_COLUMN).isEmpty(),
@@ -367,14 +399,14 @@ public class ReportTest {
         Map<String, String> remarkMap = new HashMap<>();
         remarkMap.put(ANN, remark);
         List<List<String>> fullRows = export(root, "full", full,
-                StandardCharsets.UTF_8, null, run2 -> remarkMap);
+                StandardCharsets.UTF_8, null, new FixedRemarks(remarkMap));
         int fullWidth = 10;
         check(fullRows.get(0).size() == fullWidth, "no column added twice ("
                 + fullRows.get(0) + ")");
         int headerAndRest = 2;
         System.out.println("   remark with newline written as: "
-                + lastOutput.split(NEWLINE, headerAndRest)[1].replace("\r",
-                "\\r"));
+                + lastOutput.split(NEWLINE, headerAndRest)[1].replace(
+                CARRIAGE_RETURN, SHOWN_CARRIAGE_RETURN));
         // Remark with a newline: the row must still read back
         int fullQ1Column = 6;
         int fullRemarksColumn = 8;
@@ -386,8 +418,9 @@ public class ReportTest {
         } catch (RuntimeException exception) {
             rowReads = false;
         }
-        check(rowReads || lastOutput.contains(
-                "\"Copied, \"\"maybe\"\"\nsee Q1\""),
+        boolean remarkQuoted = rowReads || lastOutput.contains(
+                "\"Copied, \"\"maybe\"\"\nsee Q1\"");
+        check(remarkQuoted,
                 "remark with comma, quote and newline quoted in the file");
     }
 
@@ -447,10 +480,11 @@ public class ReportTest {
         List<List<String>> shortRows = export(root, "short", shortRow,
                 StandardCharsets.UTF_8, null, null);
         int shortQ1 = shortRows.get(0).indexOf(Q1_COLUMN);
-        check(shortRows.get(1).size() > shortQ1
-                && shortRows.get(1).get(shortQ1).equals(ANN_Q1_TEXT),
-                "row without End-of-Line gets its marks in the right column: "
-                + shortRows.get(1));
+        List<String> shortAnn = shortRows.get(1);
+        boolean rightColumn = shortAnn.size() > shortQ1
+                && shortAnn.get(shortQ1).equals(ANN_Q1_TEXT);
+        check(rightColumn, "row without End-of-Line gets its marks in the "
+                + "right column: " + shortAnn);
     }
 
     // Checks an assessment name with odd characters and a student who
@@ -539,6 +573,42 @@ public class ReportTest {
     // Checks the JSON, anomaly CSV and student report exporters on a run
     // with quotes, control characters and newlines.
     private static void checkOtherExporters(Path root) throws Exception {
+        GradingRun run = exportRun(root);
+        String keep = System.getProperty("report.out");
+        Path folder = root;
+        if (keep != null) {
+            folder = Path.of(keep);
+        }
+        Files.createDirectories(folder);
+        Path json = folder.resolve("run.json");
+        new JsonExporter(new JsonWriter()).export(run, json);
+        String text = Files.readString(json);
+        boolean escaped = text.contains("\\\"3\\\"") && text.contains("\\r\\n")
+                && text.contains("\\u0001") && text.contains("\\t");
+        check(escaped, "JSON escapes quotes, CR LF, control chars and tabs");
+        check(balanced(text), "JSON brackets balanced");
+        checkAnomalyCsv(root, run);
+        Path report = root.resolve("ann.txt");
+        new StudentReportExporter(ANN).export(run, report);
+        check(Files.readString(report).contains(ANN),
+                "student report written");
+        boolean nullRun = false;
+        try {
+            new JsonExporter(new JsonWriter()).export(null, json);
+        } catch (ExportException expected) {
+            nullRun = true;
+        } catch (RuntimeException unexpected) {
+            nullRun = false;
+        }
+        check(nullRun, "JSON export of null run refused cleanly");
+        boolean quoted = new JsonWriter().quote(null).equals("null")
+                && new JsonWriter().quote("\\").equals("\"\\\\\"");
+        check(quoted, "JsonWriter quote");
+    }
+
+    // Builds the run the other exporters write: Ann graded, with quotes,
+    // control characters and newlines in her details, and Zed failed.
+    private static GradingRun exportRun(Path root) {
         GradingRun run = new GradingRun("RUN-json", assessment("Lab \"3\""),
                 SECTION, JSON_RUN_AT);
         double annQ2 = 2;
@@ -557,19 +627,13 @@ public class ReportTest {
         Submission empty = new Submission("zed", SECTION, root);
         empty.setStatus(SubmissionStatus.FAILED);
         run.addSubmission(empty);
-        String keep = System.getProperty("report.out");
-        Path folder = root;
-        if (keep != null) {
-            folder = Path.of(keep);
-        }
-        Files.createDirectories(folder);
-        Path json = folder.resolve("run.json");
-        new JsonExporter(new JsonWriter()).export(run, json);
-        String text = Files.readString(json);
-        check(text.contains("\\\"3\\\"") && text.contains("\\r\\n")
-                && text.contains("\\u0001") && text.contains("\\t"),
-                "JSON escapes quotes, CR LF, control chars and tabs");
-        check(balanced(text), "JSON brackets balanced");
+        return run;
+    }
+
+    // Checks that the anomaly CSV reads back as CSV and quotes a message
+    // with a comma, quotes and a newline.
+    private static void checkAnomalyCsv(Path root, GradingRun run)
+            throws Exception {
         Path anomalies = root.resolve("anomalies.csv");
         new AnomalyReportExporter().export(run, anomalies);
         String csv = Files.readString(anomalies);
@@ -587,44 +651,28 @@ public class ReportTest {
                 "anomaly CSV is valid CSV (" + records.size() + " records)");
         check(csv.contains("\"Q1 is 90% similar, \"\"see\"\"\nnow\""),
                 "anomaly message quoted");
-        Path report = root.resolve("ann.txt");
-        new StudentReportExporter(ANN).export(run, report);
-        check(Files.readString(report).contains(ANN),
-                "student report written");
-        boolean nullRun = false;
-        try {
-            new JsonExporter(new JsonWriter()).export(null, json);
-        } catch (ExportException expected) {
-            nullRun = true;
-        } catch (RuntimeException unexpected) {
-            nullRun = false;
-        }
-        check(nullRun, "JSON export of null run refused cleanly");
-        check(new JsonWriter().quote(null).equals("null")
-                && new JsonWriter().quote("\\").equals("\"\\\\\""),
-                "JsonWriter quote");
     }
 
     // Splits CSV text into records, keeping quoted newlines.
     private static List<String> splitRecords(String text) {
         List<String> records = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
+        String current = "";
         boolean quoted = false;
         String normal = TextUtils.normaliseLineEndings(text);
         for (int i = 0; i < normal.length(); i++) {
             char character = normal.charAt(i);
-            if (character == '"') {
+            if (character == QUOTE) {
                 quoted = !quoted;
             }
-            if (character == '\n' && !quoted) {
-                records.add(current.toString());
-                current = new StringBuilder();
+            if (character == LINE_FEED && !quoted) {
+                records.add(current);
+                current = "";
             } else {
-                current.append(character);
+                current = current + character;
             }
         }
-        if (current.length() > 0) {
-            records.add(current.toString());
+        if (!current.isEmpty()) {
+            records.add(current);
         }
         return records;
     }
@@ -636,14 +684,14 @@ public class ReportTest {
         for (int i = 0; i < json.length(); i++) {
             char character = json.charAt(i);
             if (inString) {
-                if (character == '\\') {
+                if (character == ESCAPE) {
                     i++;
-                } else if (character == '"') {
+                } else if (character == QUOTE) {
                     inString = false;
                 } else if (character < FIRST_PLAIN_CHAR) {
                     return false;
                 }
-            } else if (character == '"') {
+            } else if (character == QUOTE) {
                 inString = true;
             } else if (character == '{' || character == '[') {
                 depth++;
