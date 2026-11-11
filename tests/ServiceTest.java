@@ -31,14 +31,6 @@ import gradezzy.fix.FolderHierarchyFixer;
 import gradezzy.fix.FolderNameFixer;
 import gradezzy.fix.HeaderNameFixer;
 import gradezzy.fix.MisplacedFileFixer;
-import gradezzy.grading.CancellationToken;
-import gradezzy.grading.ExtractStage;
-import gradezzy.grading.FixStage;
-import gradezzy.grading.GradingPipeline;
-import gradezzy.grading.ValidateStage;
-import gradezzy.ingest.RosterReader;
-import gradezzy.ingest.WorkingCopyManager;
-import gradezzy.ingest.ZipExtractor;
 import gradezzy.model.Anomaly;
 import gradezzy.model.AnomalyType;
 import gradezzy.model.FixStatus;
@@ -52,16 +44,10 @@ import gradezzy.service.AnomalyService;
 import gradezzy.service.AssessmentFactory;
 import gradezzy.service.AssessmentLibrary;
 import gradezzy.service.GradingService;
-import gradezzy.service.PipelineFactory;
 import gradezzy.service.QuietProgressListener;
 import gradezzy.service.SettingsService;
 import gradezzy.service.UndoResult;
 import gradezzy.util.FileUtils;
-import gradezzy.validation.FileNameValidator;
-import gradezzy.validation.HeaderNameValidator;
-import gradezzy.validation.RequiredFilesValidator;
-import gradezzy.validation.StructureValidator;
-import gradezzy.validation.ValidationRunner;
 
 /**
  * Runs the service checks and prints how many passed.
@@ -87,6 +73,19 @@ public class ServiceTest {
 
     // How many strings zipBytes takes for each entry: a name and a text
     private static final int ENTRY_PARTS = 2;
+
+    // Where the folder and the class name sit in a row of ANSWERS
+    private static final int ANSWER_FOLDER = 0;
+    private static final int ANSWER_CLASS = 1;
+
+    // The ending of a Java source file name
+    private static final String JAVA_SUFFIX = ".java";
+
+    // What separates a key from its value in a settings file
+    private static final String KEY_VALUE_SEPARATOR = "=";
+
+    // What a line break is shown as in a check message
+    private static final String SHOWN_LINE_BREAK = "|";
 
     // The folder separator, also the root folder
     private static final String SLASH = "/";
@@ -116,65 +115,6 @@ public class ServiceTest {
     // The number of checks that passed and failed
     private static int passed = 0;
     private static int failed = 0;
-
-    /**
-     * A pipeline that unpacks, checks and fixes, and runs no code.
-     */
-    static class FixOnlyPipelineFactory extends PipelineFactory {
-        // The settings the stages read
-        private final AppConfig config;
-
-        // The fixes the fix stage makes
-        private final FixManager fixManager;
-
-        // Makes a factory for these settings and fixes.
-        FixOnlyPipelineFactory(AppConfig config, FixManager fixManager) {
-            super(config, fixManager, null);
-            this.config = config;
-            this.fixManager = fixManager;
-        }
-
-        /**
-         * Makes the pipeline with no starter folder.
-         *
-         * @param token stops the pipeline when cancelled
-         * @return the pipeline
-         */
-        @Override
-        public GradingPipeline createPipeline(CancellationToken token) {
-            return createPipeline(token, null);
-        }
-
-        /**
-         * Makes the pipeline: unpack, check, then fix.
-         *
-         * @param token stops the pipeline when cancelled
-         * @param starterDirectory the starter code folder, or null
-         * @return the pipeline
-         */
-        @Override
-        public GradingPipeline createPipeline(CancellationToken token,
-                Path starterDirectory) {
-            GradingPipeline pipeline = new GradingPipeline(token);
-            WorkingCopyManager copies = new WorkingCopyManager(config,
-                    new ZipExtractor(config));
-            pipeline.addStage(new ExtractStage(copies,
-                    new RosterReader(config)));
-            ValidationRunner all = new ValidationRunner();
-            all.addValidator(new StructureValidator());
-            all.addValidator(new FileNameValidator());
-            all.addValidator(new RequiredFilesValidator());
-            all.addValidator(new HeaderNameValidator(config));
-            pipeline.addStage(new ValidateStage(all));
-            ValidationRunner files = new ValidationRunner();
-            files.addValidator(new FileNameValidator());
-            files.addValidator(new RequiredFilesValidator());
-            files.addValidator(new HeaderNameValidator(config));
-            pipeline.addStage(new FixStage(fixManager, files, copies,
-                    starterDirectory));
-            return pipeline;
-        }
-    }
 
     /**
      * Runs every check.
@@ -217,6 +157,15 @@ public class ServiceTest {
         Files.writeString(file, original);
         AppConfig config = new AppConfig(file.toString());
         SettingsService settings = new SettingsService(config);
+        checkRefusedValues(settings, config);
+        checkSaving(root, file, settings);
+        checkContinuedEntry(root);
+    }
+
+    // Checks which values SettingsService refuses and that the fixed
+    // settings have no problem.
+    private static void checkRefusedValues(SettingsService settings,
+            AppConfig config) {
         check(settings.validate("nope.key", "1").contains("no setting"),
                 "unknown key refused");
         check(!settings.validate(ConfigKeys.MAX_ZIP_ENTRIES, "0").isEmpty(),
@@ -260,6 +209,12 @@ public class ServiceTest {
                 "CR line ending refused");
         check(settings.findProblems().isEmpty(), "committed config has no "
                 + "problems: " + settings.findProblems());
+    }
+
+    // Checks that a bad value is refused, and that saving keeps CRLF,
+    // comments, Windows paths, unicode and each key once.
+    private static void checkSaving(Path root, Path file,
+            SettingsService settings) throws Exception {
         boolean thrown = false;
         try {
             settings.updateSetting(ConfigKeys.MAX_ZIP_ENTRIES, FILLER);
@@ -295,7 +250,8 @@ public class ServiceTest {
                 "no temp file left");
         int countKeys = 0;
         for (String line : saved.split(CRLF)) {
-            if (line.startsWith(ConfigKeys.MAX_ZIP_ENTRIES + "=")) {
+            if (line.startsWith(ConfigKeys.MAX_ZIP_ENTRIES
+                    + KEY_VALUE_SEPARATOR)) {
                 countKeys++;
             }
         }
@@ -305,7 +261,11 @@ public class ServiceTest {
         settings.save();
         check(new AppConfig(file.toString()).getString(
                 ConfigKeys.CSV_ID_PREFIX).equals("#"), "# value kept");
-        // Continuation line in the file is replaced as one entry
+    }
+
+    // Checks that an entry continued on the next line of the file is
+    // replaced as one entry.
+    private static void checkContinuedEntry(Path root) throws Exception {
         Path cont = root.resolve("cont.properties");
         Files.writeString(cont, "a.b=1\n" + ConfigKeys.ASSESSMENT_NAME
                 + "=Lab \\\n    Test\nz=2\n");
@@ -316,16 +276,17 @@ public class ServiceTest {
         String contText = Files.readString(cont);
         check(contText.equals("a.b=1\n" + ConfigKeys.ASSESSMENT_NAME
                 + "=New\nz=2\n"), "continued entry replaced whole: "
-                + contText.replace(LF, "|"));
+                + contText.replace(LF, SHOWN_LINE_BREAK));
     }
 
     // Makes a zip in memory from entry names, each followed by its text.
-    private static byte[] zipBytes(String... pairs) throws Exception {
+    private static byte[] zipBytes(String[] pairs) throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         ZipOutputStream out = new ZipOutputStream(bytes);
         for (int i = 0; i < pairs.length; i += ENTRY_PARTS) {
+            int textIndex = i + 1;
             out.putNextEntry(new ZipEntry(pairs[i]));
-            out.write(pairs[i + 1].getBytes(StandardCharsets.UTF_8));
+            out.write(pairs[textIndex].getBytes(StandardCharsets.UTF_8));
             out.closeEntry();
         }
         out.close();
@@ -381,16 +342,30 @@ public class ServiceTest {
         Path db = root.resolve("anomaly.db");
         config.setString(ConfigKeys.DATABASE_FILE, db.toString());
         Path upload = root.resolve("2023-2024-amy.zip");
+        writeUpload(upload);
+
+        String runId = checkFirstSession(config, db, upload);
+        checkSecondSession(config, db, runId);
+        checkThirdSession(config, db, runId);
+    }
+
+    // Writes amy's upload: every answer with a good header, inside the
+    // starter's top folder, which the folder name fix renames.
+    private static void writeUpload(Path upload) throws Exception {
         String good = header("Amy Ong", "amy@x.edu");
         List<String> pairs = new ArrayList<>();
         for (String[] answer : ANSWERS) {
-            pairs.add(TEMPLATE_FOLDER + SLASH + answer[0] + SLASH
-                    + answer[1] + ".java");
-            pairs.add(good + "class " + answer[1] + " {}\n");
+            pairs.add(TEMPLATE_FOLDER + SLASH + answer[ANSWER_FOLDER] + SLASH
+                    + answer[ANSWER_CLASS] + JAVA_SUFFIX);
+            pairs.add(good + "class " + answer[ANSWER_CLASS] + " {}\n");
         }
         Files.write(upload, zipBytes(pairs.toArray(new String[0])));
+    }
 
-        // Session 1: grade, the folder is renamed, approve then reopen
+    // Session 1: grades, the folder is renamed, then approves and reopens
+    // the fix. Returns the id of the run.
+    private static String checkFirstSession(AppConfig config, Path db,
+            Path upload) throws Exception {
         SqliteResultRepository repo1 = new SqliteResultRepository(
                 db.toString());
         repo1.open();
@@ -408,13 +383,19 @@ public class ServiceTest {
                 grading1);
         anomalies1.approveFix(folder);
         check(folder.getFixStatus() == FixStatus.APPROVED, "approve");
-        check(anomalies1.reopenFix(folder)
-                && folder.getFixStatus() == FixStatus.APPLIED, "reopen");
+        boolean reopened = anomalies1.reopenFix(folder)
+                && folder.getFixStatus() == FixStatus.APPLIED;
+        check(reopened, "reopen");
         check(!anomalies1.reopenFix(folder), "reopen twice false");
         String runId = run1.getId();
         repo1.close();
+        return runId;
+    }
 
-        // Session 2: a new FixManager, the run read back from the database
+    // Session 2: a new FixManager and the run read back from the
+    // database; approves with no record, then undoes the earlier fix.
+    private static void checkSecondSession(AppConfig config, Path db,
+            String runId) throws Exception {
         SqliteResultRepository repo2 = new SqliteResultRepository(
                 db.toString());
         repo2.open();
@@ -422,9 +403,9 @@ public class ServiceTest {
         Submission loadedAmy = loaded.findLoaded(AMY);
         Anomaly loadedFolder = findType(loadedAmy,
                 AnomalyType.WRONG_FOLDER_NAME);
-        check(loadedFolder != null
-                && loadedFolder.getFixStatus() == FixStatus.APPLIED,
-                "session 2: fix status read back APPLIED");
+        boolean readBackApplied = loadedFolder != null
+                && loadedFolder.getFixStatus() == FixStatus.APPLIED;
+        check(readBackApplied, "session 2: fix status read back APPLIED");
         FixManager fix2 = fixManager(config);
         GradingService grading2 = service(config, fix2, repo2);
         AnomalyService anomalies2 = new AnomalyService(fix2, repo2, null,
@@ -435,17 +416,20 @@ public class ServiceTest {
         anomalies2.approveFix(loadedFolder);
         check(loadedFolder.getFixStatus() == FixStatus.APPROVED,
                 "session 2: approve without a record");
-        check(repo2.loadRun(runId).findLoaded(AMY) != null
+        boolean approveSaved = repo2.loadRun(runId).findLoaded(AMY) != null
                 && findType(repo2.loadRun(runId).findLoaded(AMY),
                 AnomalyType.WRONG_FOLDER_NAME).getFixStatus()
-                == FixStatus.APPROVED, "session 2: approve saved");
+                == FixStatus.APPROVED;
+        check(approveSaved, "session 2: approve saved");
         UndoResult undone = anomalies2.undoEarlierFix(loaded, loadedFolder);
         check(undone != null, "session 2: undoEarlierFix works");
         check(loadedFolder.getFixStatus() == FixStatus.UNDONE,
                 "session 2: card shows UNDONE");
         Submission afterUndo = loaded.findLoaded(AMY);
-        check(afterUndo != null && Files.isDirectory(afterUndo
-                .getWorkingCopyPath().resolve(TEMPLATE_FOLDER)),
+        boolean originalFolderBack = afterUndo != null
+                && Files.isDirectory(afterUndo.getWorkingCopyPath()
+                .resolve(TEMPLATE_FOLDER));
+        check(originalFolderBack,
                 "session 2: working copy has the original folder again");
         String rejected = "";
         if (afterUndo != null) {
@@ -454,8 +438,12 @@ public class ServiceTest {
         check(afterUndo != null && !afterUndo.getRejectedFixes().isEmpty(),
                 "session 2: the fix is rejected for next time " + rejected);
         repo2.close();
+    }
 
-        // Session 3: read back, grade again: the fix stays undone
+    // Session 3: reads the run back and grades again; the fix stays
+    // undone and can be applied again.
+    private static void checkThirdSession(AppConfig config, Path db,
+            String runId) throws Exception {
         SqliteResultRepository repo3 = new SqliteResultRepository(
                 db.toString());
         repo3.open();
@@ -467,8 +455,9 @@ public class ServiceTest {
         if (thirdFolder != null) {
             thirdStatus = String.valueOf(thirdFolder.getFixStatus());
         }
-        check(thirdFolder != null
-                && thirdFolder.getFixStatus() == FixStatus.UNDONE,
+        boolean undoneReadBack = thirdFolder != null
+                && thirdFolder.getFixStatus() == FixStatus.UNDONE;
+        check(undoneReadBack,
                 "session 3: UNDONE read back (" + thirdStatus + ")");
         check(!thirdAmy.getRejectedFixes().isEmpty(),
                 "session 3: rejected fix read back");
@@ -479,20 +468,23 @@ public class ServiceTest {
         Submission regraded = third.findLoaded(AMY);
         Anomaly regradedFolder = findType(regraded,
                 AnomalyType.WRONG_FOLDER_NAME);
-        check(regradedFolder != null && regradedFolder.getFixStatus()
-                != FixStatus.APPLIED && Files.isDirectory(regraded
-                .getWorkingCopyPath().resolve(TEMPLATE_FOLDER)),
+        boolean notMadeAgain = regradedFolder != null
+                && regradedFolder.getFixStatus() != FixStatus.APPLIED
+                && Files.isDirectory(regraded.getWorkingCopyPath()
+                .resolve(TEMPLATE_FOLDER));
+        check(notMadeAgain,
                 "session 3: regrade does not make the undone fix again");
         AnomalyService anomalies3 = new AnomalyService(fix3, repo3, null,
                 grading3);
-        check(regradedFolder != null && anomalies3.canReapplyFix(
-                regradedFolder), "session 3: fix can be reapplied");
+        boolean canReapply = regradedFolder != null
+                && anomalies3.canReapplyFix(regradedFolder);
+        check(canReapply, "session 3: fix can be reapplied");
         repo3.close();
         check(anomalies3.listAnomalies(null).isEmpty(), "listAnomalies null");
         anomalies3.approveFix(null);
-        check(anomalies3.undoFix(null) == null
-                && anomalies3.undoEarlierFix(null, null) == null,
-                "null anomalies quiet");
+        boolean nullQuiet = anomalies3.undoFix(null) == null
+                && anomalies3.undoEarlierFix(null, null) == null;
+        check(nullQuiet, "null anomalies quiet");
     }
 
     // Checks AssessmentLibrary: validate, save, list, rename and delete.
@@ -514,6 +506,15 @@ public class ServiceTest {
         draft.setModuleCode("CS102");
         draft.getQuestions().add(new Question(Q1A, Q1_FOLDER, "Q1a.java",
                 0));
+        checkValidate(library, draft);
+        checkFolders(library, draft, testersFolder);
+        checkSaveAndRename(root, library, draft);
+        checkOddNames(root, library, draft);
+    }
+
+    // Checks which drafts AssessmentLibrary.validate refuses.
+    private static void checkValidate(AssessmentLibrary library,
+            SavedAssessment draft) {
         check(library.validate(draft, null, new ArrayList<String>())
                 .isEmpty(), "valid draft: " + library.validate(draft, null,
                 new ArrayList<String>()));
@@ -538,6 +539,12 @@ public class ServiceTest {
         noQ.getQuestions().clear();
         check(!library.validate(noQ, null, new ArrayList<String>())
                 .isEmpty(), "no questions refused");
+    }
+
+    // Checks the tester and starter folder check and the max score read
+    // from a tester.
+    private static void checkFolders(AssessmentLibrary library,
+            SavedAssessment draft, String testersFolder) {
         check(library.checkFolders(draft).isEmpty(), "folders ok: "
                 + library.checkFolders(draft));
         check(library.readMaxScore(testersFolder, Q1A) > 0,
@@ -547,6 +554,13 @@ public class ServiceTest {
                 0));
         check(library.checkFolders(missingTester).contains("Q9Tester"),
                 "missing tester named");
+    }
+
+    // Checks saving, the file name chosen, two names with one file name
+    // and a rename.
+    private static void checkSaveAndRename(Path root,
+            AssessmentLibrary library, SavedAssessment draft)
+            throws Exception {
         library.save(draft, null);
         List<SavedAssessment> saved = library.list();
         SavedAssessment found = null;
@@ -561,10 +575,10 @@ public class ServiceTest {
         SavedAssessment same = draft.copy();
         same.setName("Lab-Test-9!");
         library.save(same, null);
-        check(Files.exists(root.resolve(LAB_FILE))
+        boolean ownFile = Files.exists(root.resolve(LAB_FILE))
                 && Files.exists(root.resolve(
-                "assessments/lab-test-9-2.properties")),
-                "a name with the same file name gets its own file");
+                "assessments/lab-test-9-2.properties"));
+        check(ownFile, "a name with the same file name gets its own file");
         int expectedListed = 2;
         check(library.list().size() >= expectedListed, "both listed");
         // Rename
@@ -579,6 +593,12 @@ public class ServiceTest {
         }
         check(oldGone && !Files.exists(root.resolve(LAB_FILE)),
                 "rename moves file");
+    }
+
+    // Checks a junk file in the folder, a name of only symbols and a
+    // delete.
+    private static void checkOddNames(Path root, AssessmentLibrary library,
+            SavedAssessment draft) throws Exception {
         // A saved file that is not an assessment is skipped
         Files.writeString(root.resolve("assessments/junk.properties"),
                 "nonsense=1\n\u0000\u0001");
@@ -596,7 +616,7 @@ public class ServiceTest {
         boolean hiddenFile = Files.exists(root.resolve(
                 "assessments/.properties"));
         check(!hiddenFile, "a name of symbols does not make a hidden file");
-        // Delete and restore
+        // Delete
         library.delete(RENAMED_LAB);
         boolean deleted = true;
         for (SavedAssessment entry : library.list()) {

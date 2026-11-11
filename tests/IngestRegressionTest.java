@@ -8,6 +8,7 @@
  * Where it fits: Run by hand after compiling, as tests/README.md says.
  * It grades with a pipeline that only unpacks, so no student code runs.
  */
+import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -16,7 +17,9 @@ import java.nio.file.attribute.FileTime;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -74,6 +77,14 @@ public class IngestRegressionTest {
 
     // The content of a zip entry that holds nothing
     private static final byte[] NO_BYTES = new byte[0];
+
+    // The line ending of a score sheet from eLearn
+    private static final String CRLF = "\r\n";
+
+    // The separator between the values of a CSV row, and the one some
+    // spreadsheet programs use instead
+    private static final char COMMA = ',';
+    private static final char SEMICOLON = ';';
 
     // The number of checks passed so far
     private static int checks = 0;
@@ -289,6 +300,20 @@ public class IngestRegressionTest {
                 + "#1,#bob,B,Bob,bob@example.com,,7,#\r\n"
                 + "#2,#carl,C,Carl,carl@example.com,3,7,#\r\n"
                 + "#3,#dave,D,Dave,dave@example.com,,7,#\r\n");
+        GradingRun run = columnsRun(sheet);
+        config.setString(ConfigKeys.CSV_LINE_ENDING, "CRLF");
+
+        // The extra columns setting, put back once these checks are done
+        String extraColumns = config.getString(ConfigKeys.CSV_EXTRA_COLUMNS);
+        checkPlainColumns(root, config, sheet, run);
+        checkAddedColumns(root, config, sheet, run);
+        checkRemarksColumn(root, config, sheet, run);
+        config.setString(ConfigKeys.CSV_EXTRA_COLUMNS, extraColumns);
+    }
+
+    // Returns a run of Lab Test 2 where bob is graded and carl failed,
+    // with the score sheet given.
+    private static GradingRun columnsRun(Path sheet) {
         Assessment assessment = new Assessment("Lab Test 2", "CS102");
         int firstMaxScore = 4;
         int secondMaxScore = 3;
@@ -306,17 +331,22 @@ public class IngestRegressionTest {
         bobFirst.setScore(firstMaxScore);
         bob.addQuestionResult(bobFirst);
         QuestionResult bobSecond = new QuestionResult(second);
-        bobSecond.setScore(1.5);
+        double bobSecondScore = 1.5;
+        bobSecond.setScore(bobSecondScore);
         bob.addQuestionResult(bobSecond);
         run.addSubmission(bob);
         Submission carl = new Submission("carl", SECTION, sheet);
         carl.setStatus(SubmissionStatus.FAILED);
         run.addSubmission(carl);
         run.setScoreSheetFile(sheet);
-        config.setString(ConfigKeys.CSV_LINE_ENDING, "CRLF");
+        return run;
+    }
 
+    // Checks that with the extra columns off the export keeps the
+    // provided format.
+    private static void checkPlainColumns(Path root, AppConfig config,
+            Path sheet, GradingRun run) throws Exception {
         // Off, as by default, the sheet keeps the provided columns
-        String extraColumns = config.getString(ConfigKeys.CSV_EXTRA_COLUMNS);
         config.setString(ConfigKeys.CSV_EXTRA_COLUMNS, "false");
         Path plain = root.resolve("question-export-plain.csv");
         new CsvScoreSheetExporter(config, sheet).export(run, plain);
@@ -331,7 +361,13 @@ public class IngestRegressionTest {
         check(plainExported.equals(plainExpected), "with the extra columns "
                 + "off the CSV export keeps the provided format: "
                 + plainExported);
+    }
 
+    // Checks that with the extra columns on the export adds a column per
+    // question and a Remarks column, and fills them in place when the
+    // template already has them.
+    private static void checkAddedColumns(Path root, AppConfig config,
+            Path sheet, GradingRun run) throws Exception {
         config.setString(ConfigKeys.CSV_EXTRA_COLUMNS, "true");
         Path csv = root.resolve("question-export.csv");
         new CsvScoreSheetExporter(config, sheet).export(run, csv);
@@ -354,13 +390,17 @@ public class IngestRegressionTest {
         new CsvScoreSheetExporter(config, csv).export(run, again);
         check(Files.readString(again).equals(expected), "question columns "
                 + "the template already has are filled in place");
+    }
 
-        // A remark is written, in quotes when it holds a comma
+    // Checks that a remark is written in the Remarks column, in quotes
+    // when it holds a comma.
+    private static void checkRemarksColumn(Path root, AppConfig config,
+            Path sheet, GradingRun run) throws Exception {
         CsvScoreSheetExporter withRemarks =
                 new CsvScoreSheetExporter(config, sheet);
-        withRemarks.setRemarks(gradingRun -> remarksOf("bob",
+        withRemarks.setRemarks(new FixedRemarks(remarksOf("bob",
                 "Cheated with CARL C (carl)", "carl",
-                "Possible cheating with BOB B (bob), DAVE D (dave)"));
+                "Possible cheating with BOB B (bob), DAVE D (dave)")));
         run.setScoreSheetFile(sheet);
         Path remarked = root.resolve("question-export-remarks.csv");
         withRemarks.export(run, remarked);
@@ -371,13 +411,12 @@ public class IngestRegressionTest {
         check(withRemark.contains(",\"Possible cheating with BOB B (bob), "
                 + "DAVE D (dave)\",#\r\n"), "a remark with a comma is "
                 + "quoted: " + withRemark);
-        config.setString(ConfigKeys.CSV_EXTRA_COLUMNS, extraColumns);
     }
 
     // Returns two students' remarks by username.
-    private static java.util.Map<String, String> remarksOf(String first,
+    private static Map<String, String> remarksOf(String first,
             String firstRemark, String second, String secondRemark) {
-        java.util.Map<String, String> remarks = new java.util.HashMap<>();
+        Map<String, String> remarks = new HashMap<>();
         remarks.put(first, firstRemark);
         remarks.put(second, secondRemark);
         return remarks;
@@ -406,8 +445,14 @@ public class IngestRegressionTest {
         GradingRun third = new GradingRun("RUN-300", assessment, SECTION,
                 start.plusMinutes(10));
         third.addSubmission(new Submission("bob.2025", SECTION, null));
-        List<GradingRun> runs = Arrays.asList(third, second, first);
+        checkAuditLines(start, first, second, third);
+    }
 
+    // Checks which lines of a made-up audit log the filter keeps for each
+    // of the three runs, the third being the newest.
+    private static void checkAuditLines(LocalDateTime start,
+            GradingRun first, GradingRun second, GradingRun third) {
+        List<GradingRun> runs = Arrays.asList(third, second, first);
         AuditEntry byRun = new AuditEntry(start.plusMinutes(20),
                 "Question graded again", AuditEntry.withReference(
                 "bob.2025 Q1a: 0 to 4.", "RUN-100"));
@@ -528,7 +573,7 @@ public class IngestRegressionTest {
         boolean refused = false;
         try {
             manager.removeStudentClassFiles(tooDeep, null);
-        } catch (java.io.UncheckedIOException exception) {
+        } catch (UncheckedIOException exception) {
             refused = true;
         }
         check(refused, "a folder deeper than a run's copy is refused");
@@ -728,24 +773,26 @@ public class IngestRegressionTest {
         RosterReader reader = new RosterReader(config);
 
         Path semicolons = root.resolve("semicolons.csv");
-        Files.writeString(semicolons, header.replace(',', ';') + "\r\n"
-                + row.replace(',', ';') + "\r\n");
+        Files.writeString(semicolons, header.replace(COMMA, SEMICOLON) + CRLF
+                + row.replace(COMMA, SEMICOLON) + CRLF);
         String problem = reader.findProblem(semicolons);
-        check(problem.startsWith("No OrgDefinedId column.")
-                && problem.contains(";"), "a score sheet with ; between "
+        boolean semicolonsNamed = problem.startsWith("No OrgDefinedId column.")
+                && problem.contains(String.valueOf(SEMICOLON));
+        check(semicolonsNamed, "a score sheet with ; between "
                 + "values cannot be used, and the reason says so");
 
         Path noId = root.resolve("no-id.csv");
-        Files.writeString(noId, "Username,Last Name,First Name,Email\r\n"
-                + "#aaron,KOH,AARON,a@example.com\r\n");
+        Files.writeString(noId, "Username,Last Name,First Name,Email" + CRLF
+                + "#aaron,KOH,AARON,a@example.com" + CRLF);
         check(reader.findProblem(noId).equals("No OrgDefinedId column."),
                 "a score sheet with no OrgDefinedId column says so");
 
         Path outOfTwenty = root.resolve("denominator-20.csv");
-        Files.writeString(outOfTwenty, header + "\r\n" + row + "\r\n");
+        Files.writeString(outOfTwenty, header + CRLF + row + CRLF);
         check(reader.findProblem(outOfTwenty).isEmpty(),
                 "a good score sheet has no problem");
-        check(reader.readDenominator(outOfTwenty) == 20.0,
+        double denominator = 20.0;
+        check(reader.readDenominator(outOfTwenty) == denominator,
                 "the score sheet's denominator is read for Set up");
 
         ImportBatch batch = new ImportBatch();
@@ -757,9 +804,9 @@ public class IngestRegressionTest {
         batch.add(new ImportItem(InputKind.TESTERS, root, "",
                 ImportState.ACCEPTED, "Ready"));
         List<String> reasons = batch.getBlockingReasons();
-        check(!batch.isReady() && reasons.size() == 1
-                && reasons.get(0).contains(problem),
-                "a score sheet that cannot be used blocks Start grading "
+        boolean blocked = !batch.isReady() && reasons.size() == 1
+                && reasons.get(0).contains(problem);
+        check(blocked, "a score sheet that cannot be used blocks Start grading "
                 + "with its reason");
     }
 

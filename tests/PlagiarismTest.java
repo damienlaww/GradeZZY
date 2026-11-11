@@ -119,18 +119,26 @@ public class PlagiarismTest {
     private static final String CLOSE_BRACKET = ")";
     private static final String NEWLINE = "\n";
 
+    // The line ending of a file saved on Windows
+    private static final String CRLF = "\r\n";
+
+    // A threshold over 1, which no pair can reach, and a minimum lines
+    // value longer than any answer here
+    private static final String OVER_FULL_THRESHOLD = "1.01";
+    private static final String LONG_MIN_LINES = "500";
+
     // The number of checks that passed and failed
     private static int passed = 0;
     private static int failed = 0;
 
     // The folder every working copy is built in
-    private static Path working;
+    private static Path working = null;
 
     // The fixed test settings
-    private static AppConfig config;
+    private static AppConfig config = null;
 
     // The assessment the settings describe
-    private static Assessment assessment;
+    private static Assessment assessment = null;
 
     /**
      * Runs every check.
@@ -205,13 +213,13 @@ public class PlagiarismTest {
                 "\"中文\""), "unicode string");
         check(JavaTokenizer.split("").isEmpty(), "empty source");
         check(JavaTokenizer.split("   \n\t ").isEmpty(), "spaces only");
-        check(JavaTokenizer.shapeToken("count").equals("ID")
+        boolean shapeKinds = JavaTokenizer.shapeToken("count").equals("ID")
                 && JavaTokenizer.shapeToken(INT_KEYWORD).equals(INT_KEYWORD)
                 && JavaTokenizer.shapeToken("\"x\"").equals("STR")
                 && JavaTokenizer.shapeToken("'x'").equals("STR")
                 && JavaTokenizer.shapeToken("42").equals("42")
-                && JavaTokenizer.shapeToken("{").equals("{"),
-                "shapeToken kinds");
+                && JavaTokenizer.shapeToken("{").equals("{");
+        check(shapeKinds, "shapeToken kinds");
         check(JavaTokenizer.shapeOf("int a = b + 1;").equals(
                 JavaTokenizer.shapeOf("int zz = qq + 1;")),
                 "renamed names give the same shape");
@@ -223,10 +231,10 @@ public class PlagiarismTest {
         List<JavaToken> tokens = JavaTokenizer.tokenize("a\n/* x\ny */\nb");
         int expectedTokens = 2;
         int lastLine = 4;
-        check(tokens.size() == expectedTokens
+        boolean linesCounted = tokens.size() == expectedTokens
                 && tokens.get(0).getLine() == 1
-                && tokens.get(1).getLine() == lastLine,
-                "line numbers count lines inside comments");
+                && tokens.get(1).getLine() == lastLine;
+        check(linesCounted, "line numbers count lines inside comments");
         List<JavaToken> crTokens = JavaTokenizer.tokenize("a\r\nb\r\nc");
         int thirdToken = 2;
         int thirdLine = 3;
@@ -240,9 +248,9 @@ public class PlagiarismTest {
                 + oldMac.get(thirdToken).getLine());
         int expectedStart = 12;
         int expectedEnd = 13;
-        check(tokens.get(1).getStart() == expectedStart
-                && tokens.get(1).getEnd() == expectedEnd,
-                "token start/end offsets");
+        boolean offsets = tokens.get(1).getStart() == expectedStart
+                && tokens.get(1).getEnd() == expectedEnd;
+        check(offsets, "token start/end offsets");
         List<String> textBlock = JavaTokenizer.split(
                 "String s = \"\"\"\n  hello // x\n  \"\"\";\nint y;");
         // Known limitation: text blocks (\"\"\") are read as empty
@@ -255,8 +263,8 @@ public class PlagiarismTest {
         List<String> shapes = Winnowing.normalise(JavaTokenizer.tokenize(
                 "int a = b + c * d - e / f;"));
         List<Integer> hashes = Winnowing.hashKGrams(shapes, KGRAM_SIZE);
-        check(hashes.size() == shapes.size() - KGRAM_SIZE + 1,
-                "k-gram count n-k+1");
+        int kGrams = shapes.size() - KGRAM_SIZE + 1;
+        check(hashes.size() == kGrams, "k-gram count n-k+1");
         int fewTokens = 3;
         check(Winnowing.hashKGrams(shapes.subList(0, fewTokens), KGRAM_SIZE)
                 .isEmpty(), "fewer tokens than k gives none");
@@ -309,9 +317,9 @@ public class PlagiarismTest {
                 + "  int b;\n}\n");
         Set<String> lines = CodeLineCounter.readLines(folder, question);
         int expectedLines = 3;
-        check(lines.contains("class Q1a {") && lines.contains("int a ;")
-                && lines.size() == expectedLines,
-                "lines of code, layout lines dropped: " + lines);
+        boolean codeOnly = lines.contains("class Q1a {")
+                && lines.contains("int a ;") && lines.size() == expectedLines;
+        check(codeOnly, "lines of code, layout lines dropped: " + lines);
         Set<String> starter = new HashSet<>(Arrays.asList("int a ;"));
         int expectedNew = 2;
         check(CodeLineCounter.countNewLines(folder, question, starter)
@@ -359,7 +367,7 @@ public class PlagiarismTest {
         check(empty.getFirstKinds().size() == empty.getFirstLines().size(),
                 "empty files");
         LineComparison crlf = new LineComparison(firstFile.replace(NEWLINE,
-                "\r\n"), secondFile, starter);
+                CRLF), secondFile, starter);
         check(crlf.getFirstKinds().equals(comparison.getFirstKinds()),
                 "CRLF first file marked the same as LF");
     }
@@ -396,24 +404,39 @@ public class PlagiarismTest {
                 "winnowing ignores short answers under min lines");
         boolean sorted = true;
         for (int i = 1; i < pairs.size(); i++) {
-            if (pairs.get(i - 1).getSimilarity() < pairs.get(i)
+            int previous = i - 1;
+            if (pairs.get(previous).getSimilarity() < pairs.get(i)
                     .getSimilarity()) {
                 sorted = false;
             }
         }
         check(sorted, "pairs most similar first");
+        checkDetectorLimits(subs, starterDir);
+        checkTokenDetector(starterDir);
+        checkMissingCopies(winnow, subs, pairs, starterDir);
+    }
+
+    // Checks that a threshold over 1 and a long minimum lines flag
+    // nothing.
+    private static void checkDetectorLimits(List<Submission> subs,
+            Path starterDir) throws Exception {
         AppConfig strict = TestConfig.load();
         strict.setString(ConfigKeys.PLAGIARISM_MIN_LINES, MIN_LINES);
-        strict.setString(ConfigKeys.PLAGIARISM_THRESHOLD, "1.01");
+        strict.setString(ConfigKeys.PLAGIARISM_THRESHOLD, OVER_FULL_THRESHOLD);
         check(new WinnowingSimilarityDetector(strict).findSimilar(subs,
                 assessment, starterDir).isEmpty(), "threshold over 1 flags "
                 + "nothing");
         AppConfig longMin = TestConfig.load();
-        longMin.setString(ConfigKeys.PLAGIARISM_MIN_LINES, "500");
+        longMin.setString(ConfigKeys.PLAGIARISM_MIN_LINES, LONG_MIN_LINES);
         check(new WinnowingSimilarityDetector(longMin).findSimilar(subs,
                 assessment, starterDir).isEmpty(), "min lines 500 flags "
                 + "nothing");
-        // Token detector: a verbatim copy is flagged, an unrelated one not
+    }
+
+    // Checks that the token detector flags a verbatim copy and not an
+    // unrelated answer.
+    private static void checkTokenDetector(Path starterDir)
+            throws Exception {
         List<Submission> verbatim = new ArrayList<>();
         verbatim.add(student(HAL, header("Hal", "hal@x"),
                 longAnswer(MAIN_PREFIX)));
@@ -428,6 +451,13 @@ public class PlagiarismTest {
                 + describe(tokenPairs));
         check(!hasPair(tokenPairs, HAL, "jay", QUESTION),
                 "token detector ignores a different answer");
+    }
+
+    // Checks that a student with no files is ignored, not an error, and
+    // that one submission gives no pairs.
+    private static void checkMissingCopies(WinnowingSimilarityDetector winnow,
+            List<Submission> subs, List<SimilarityPair> pairs,
+            Path starterDir) {
         // A student with no files is ignored, not an error
         Submission nobody = new Submission("kim", SECTION, working);
         nobody.setWorkingCopyPath(working.resolve("kim-missing"));
@@ -458,24 +488,36 @@ public class PlagiarismTest {
         SimilarityPair nameCase = find(pairs, FIRST_COPY, SECOND_COPY,
                 QUESTION);
         double fullMatch = 1.0;
-        check(nameCase != null && nameCase.isIdentical()
+        boolean identical = nameCase != null && nameCase.isIdentical()
                 && nameCase.isSameEmail()
-                && nameCase.getSimilarity() == fullMatch,
-                "same name (case/space) + email + code is identical");
+                && nameCase.getSimilarity() == fullMatch;
+        check(identical, "same name (case/space) + email + code is identical");
         SimilarityPair renamed = find(pairs, FIRST_COPY, "id3", QUESTION);
-        check(renamed != null && !renamed.isIdentical()
-                && renamed.isSameEmail(),
-                "renamed variables: same Email ID only");
-        check(find(pairs, FIRST_COPY, NO_HEADER, QUESTION) == null
-                && find(pairs, SECOND_COPY, NO_HEADER, QUESTION) == null,
-                "missing header gives nothing");
+        boolean emailOnly = renamed != null && !renamed.isIdentical()
+                && renamed.isSameEmail();
+        check(emailOnly, "renamed variables: same Email ID only");
+        boolean noHeaderPair = find(pairs, FIRST_COPY, NO_HEADER, QUESTION)
+                == null && find(pairs, SECOND_COPY, NO_HEADER, QUESTION)
+                == null;
+        check(noHeaderPair, "missing header gives nothing");
         SimilarityPair blankName = find(pairs, FIRST_COPY, "id5", QUESTION);
-        check(blankName != null && !blankName.isIdentical()
-                && blankName.isSameEmail(),
+        boolean blankEmailOnly = blankName != null
+                && !blankName.isIdentical() && blankName.isSameEmail();
+        check(blankEmailOnly,
                 "blank name with same email: same Email ID, not identical");
         check(find(pairs, FIRST_COPY, SECOND_COPY, "Q1b") == null,
                 "no pair for a question where nobody has the file");
-        // Different domain, same local part
+        printDomains(finder, code);
+        checkLabelSpelling(finder, code);
+        checkCommentsOnly(finder, code);
+        check(finder.find(subs, null).isEmpty(), "null assessment");
+        checkCrlfCopy(finder, code);
+    }
+
+    // Prints what the finder makes of the same local part with different
+    // email domains.
+    private static void printDomains(IdenticalCopyFinder finder,
+            String code) throws Exception {
         List<Submission> domains = new ArrayList<>();
         domains.add(student("dm1", header("Bo", "bo@smu.edu.sg"), code));
         domains.add(student("dm2", header("Bo", "bo@gmail.com"), code));
@@ -487,8 +529,12 @@ public class PlagiarismTest {
         }
         System.out.println("   bo@smu.edu.sg vs bo@gmail.com: "
                 + domainResult);
-        checkLabelSpelling(finder, code);
-        // Code differs only by comments and whitespace: identical
+    }
+
+    // Checks that code differing only by comments and whitespace is still
+    // an identical copy.
+    private static void checkCommentsOnly(IdenticalCopyFinder finder,
+            String code) throws Exception {
         List<Submission> comments = new ArrayList<>();
         comments.add(student("cm1", header("Ed", "ed@x"), code));
         comments.add(student("cm2", header("Ed", "ed@x"),
@@ -497,8 +543,12 @@ public class PlagiarismTest {
                 "cm1", "cm2", QUESTION);
         check(commentPair != null && commentPair.isIdentical(),
                 "comments and spacing do not stop identical");
-        check(finder.find(subs, null).isEmpty(), "null assessment");
-        // CRLF and windows-1252 file
+    }
+
+    // Checks that a copy saved with CRLF line endings is still an
+    // identical copy.
+    private static void checkCrlfCopy(IdenticalCopyFinder finder,
+            String code) throws Exception {
         List<Submission> crlf = new ArrayList<>();
         crlf.add(student("cr1", header("Fo", "fo@x"), code));
         String crlfUser = "cr2";
@@ -506,7 +556,7 @@ public class PlagiarismTest {
         Path file = crlfCopy.getWorkingCopyPath().resolve(crlfUser)
                 .resolve(QUESTION_FOLDER).resolve(QUESTION_FILE);
         Files.writeString(file, Files.readString(file).replace(NEWLINE,
-                "\r\n"));
+                CRLF));
         crlf.add(crlfCopy);
         SimilarityPair crlfPair = find(finder.find(crlf, assessment), "cr1",
                 crlfUser, QUESTION);
@@ -567,9 +617,10 @@ public class PlagiarismTest {
         PlagiarismService service = new PlagiarismService(config,
                 new WinnowingSimilarityDetector(config), null);
         List<SimilarityPair> pairs = service.check(run);
-        check(find(pairs, SAM_FIRST, SAM_COPY, QUESTION) != null
-                && find(pairs, SAM_FIRST, SAM_COPY, QUESTION).isIdentical(),
-                "service: identical pair found");
+        boolean identicalFound = find(pairs, SAM_FIRST, SAM_COPY, QUESTION)
+                != null
+                && find(pairs, SAM_FIRST, SAM_COPY, QUESTION).isIdentical();
+        check(identicalFound, "service: identical pair found");
         // sa, sb and sc share the same rename-proof code, and code three
         // answers share proves nothing (WinnowingSimilarityDetector)
         check(find(pairs, SAM_FIRST, SAM_RENAMED, QUESTION) == null,
@@ -577,27 +628,52 @@ public class PlagiarismTest {
         check(find(pairs, SAM_FIRST, "se", QUESTION) == null,
                 "service: a running submission is not compared");
         int flagsFirst = countFlags(first);
-        check(flagsFirst == pairs.size() - countPairsWithout(pairs,
-                SAM_FIRST), "service: one flag on sa per pair it is in");
+        int pairsWithFirst = pairs.size() - countPairsWithout(pairs,
+                SAM_FIRST);
+        check(flagsFirst == pairsWithFirst,
+                "service: one flag on sa per pair it is in");
         check(messageOf(copy, SAM_FIRST).contains("Sam A (sa)"),
                 "flag names the other student with full name: "
                 + messageOf(copy, SAM_FIRST));
         check(messageOf(first, SAM_COPY)
                 .endsWith("same Name, Email ID and code."),
                 "identical note in message");
+        checkReadBack(service, run, pairs);
+        checkSameEmail(service, starterDir);
+        checkRecheck(service, run, first, flagsFirst);
+        checkPlagiarismOff(starterDir, code);
+        boolean nullRun = service.listPairs(null).isEmpty()
+                && service.check(null).isEmpty();
+        check(nullRun, "null run");
+        // listPairs ignores flags from another run
+        check(service.listPairs(new GradingRun("RUN-other", assessment,
+                SECTION, LocalDateTime.now())).isEmpty(),
+                "listPairs of an empty run");
+        checkDottedNames(service, starterDir, code);
+    }
+
+    // Checks that listPairs reads back every pair the check found, with
+    // its identical and same Email ID marks.
+    private static void checkReadBack(PlagiarismService service,
+            GradingRun run, List<SimilarityPair> pairs) {
         List<SimilarityPair> readBack = service.listPairs(run);
         check(readBack.size() == pairs.size(), "listPairs reads back all "
                 + "pairs (" + readBack.size() + " of " + pairs.size()
                 + CLOSE_BRACKET);
         SimilarityPair back = find(readBack, SAM_FIRST, SAM_COPY, QUESTION);
-        check(back != null && back.isIdentical() && back.isSameEmail(),
-                "listPairs: identical read back");
+        boolean identicalBack = back != null && back.isIdentical()
+                && back.isSameEmail();
+        check(identicalBack, "listPairs: identical read back");
         SimilarityPair backRenamed = find(readBack, SAM_FIRST, SAM_RENAMED,
                 QUESTION);
         check(backRenamed == null,
                 "listPairs: no pair kept for the shared renamed copy");
-        checkSameEmail(service, starterDir);
-        // Re-check keeps fix status of earlier flags, and no duplicates
+    }
+
+    // Checks that checking again keeps the review status of earlier flags
+    // and adds no duplicates.
+    private static void checkRecheck(PlagiarismService service,
+            GradingRun run, Submission first, int flagsFirst) {
         for (Anomaly anomaly : first.getAnomalies()) {
             if (anomaly.getType() == AnomalyType.SIMILAR_CODE) {
                 anomaly.setFixStatus(FixStatus.APPROVED);
@@ -614,14 +690,6 @@ public class PlagiarismTest {
             }
         }
         check(kept, "re-check keeps the earlier review status");
-        checkPlagiarismOff(starterDir, code);
-        check(service.listPairs(null).isEmpty()
-                && service.check(null).isEmpty(), "null run");
-        // listPairs ignores flags from another run
-        check(service.listPairs(new GradingRun("RUN-other", assessment,
-                SECTION, LocalDateTime.now())).isEmpty(),
-                "listPairs of an empty run");
-        checkDottedNames(service, starterDir, code);
     }
 
     // Same email, different code: the pair read back says same Email ID.
@@ -639,9 +707,9 @@ public class PlagiarismTest {
         service.check(emailRun);
         SimilarityPair emailPair = find(service.listPairs(emailRun), "e1",
                 "e2", QUESTION);
-        check(emailPair != null && emailPair.isSameEmail()
-                && !emailPair.isIdentical(),
-                "listPairs: same Email ID read back");
+        boolean sameEmailBack = emailPair != null && emailPair.isSameEmail()
+                && !emailPair.isIdentical();
+        check(sameEmailBack, "listPairs: same Email ID read back");
     }
 
     // With plagiarism.enabled=false, identical copies are still flagged.
@@ -664,8 +732,9 @@ public class PlagiarismTest {
         offRun.addSubmission(offRenamed);
         List<SimilarityPair> offPairs = new PlagiarismService(off,
                 new WinnowingSimilarityDetector(off), null).check(offRun);
-        check(find(offPairs, OFF_FIRST, "o2", QUESTION) != null
-                && find(offPairs, OFF_FIRST, "o3", QUESTION) == null,
+        boolean identicalOnly = find(offPairs, OFF_FIRST, "o2", QUESTION)
+                != null && find(offPairs, OFF_FIRST, "o3", QUESTION) == null;
+        check(identicalOnly,
                 "plagiarism off: identical still flagged, renamed not");
     }
 
@@ -782,49 +851,45 @@ public class PlagiarismTest {
     // A long answer whose names start with the prefix; two prefixes give
     // the same code with renamed variables.
     private static String longAnswer(String prefix) {
-        StringBuilder code = new StringBuilder();
-        code.append("  public static int ").append(prefix)
-                .append("Sum(int[] ").append(prefix).append("Values) {\n");
-        code.append("    int ").append(prefix).append("Total = 0;\n");
+        String code = "  public static int " + prefix + "Sum(int[] " + prefix
+                + "Values) {\n";
+        code = code + "    int " + prefix + "Total = 0;\n";
         for (int i = 0; i < REPEATS; i++) {
-            code.append("    if (").append(prefix).append("Values.length > ")
-                    .append(i).append(") { ").append(prefix)
-                    .append("Total += ").append(prefix).append("Values[")
-                    .append(i).append("] * ").append(i + 1)
-                    .append("; }\n");
+            int factor = i + 1;
+            code = code + "    if (" + prefix + "Values.length > " + i
+                    + ") { " + prefix + "Total += " + prefix + "Values[" + i
+                    + "] * " + factor + "; }\n";
         }
-        code.append("    while (").append(prefix).append("Total > 1000) { ")
-                .append(prefix).append("Total = ").append(prefix)
-                .append("Total / 2; }\n");
-        code.append("    return ").append(prefix).append("Total;\n  }\n");
-        return code.toString();
+        code = code + "    while (" + prefix + "Total > 1000) { " + prefix
+                + "Total = " + prefix + "Total / 2; }\n";
+        code = code + "    return " + prefix + "Total;\n  }\n";
+        return code;
     }
 
     // A long answer that shares no plan with longAnswer.
     private static String otherAnswer() {
-        StringBuilder code = new StringBuilder();
-        code.append("  public static String join(String[] words) {\n");
-        code.append("    StringBuilder out = new StringBuilder();\n");
+        String code = "  public static String join(String[] words) {\n";
+        code = code + "    StringBuilder out = new StringBuilder();\n";
         for (int i = 0; i < REPEATS; i++) {
-            code.append("    try { out.append(words[").append(i)
-                    .append("].toUpperCase()).append(\"-").append(i)
-                    .append("\"); } catch (RuntimeException e").append(i)
-                    .append(") { out.append('?'); }\n");
+            code = code + "    try { out.append(words[" + i
+                    + "].toUpperCase()).append(\"-" + i
+                    + "\"); } catch (RuntimeException e" + i
+                    + ") { out.append('?'); }\n";
         }
-        code.append("    return out.toString().trim();\n  }\n");
-        return code.toString();
+        code = code + "    return out.toString().trim();\n  }\n";
+        return code;
     }
 
     // The long starter code that untouched answers keep.
     private static String longStarter() {
-        StringBuilder code = new StringBuilder();
+        String code = "";
         for (int i = 0; i < REPEATS; i++) {
-            code.append("  public static double helper").append(i)
-                    .append("(double x, double y) {\n    return x * ")
-                    .append(i).append(" + y / ").append(i + 1)
-                    .append(" - Math.sqrt(x);\n  }\n");
+            int divisor = i + 1;
+            code = code + "  public static double helper" + i
+                    + "(double x, double y) {\n    return x * " + i
+                    + " + y / " + divisor + " - Math.sqrt(x);\n  }\n";
         }
-        return code.toString();
+        return code;
     }
 
     // A short answer, under the min lines, as a method with this name.

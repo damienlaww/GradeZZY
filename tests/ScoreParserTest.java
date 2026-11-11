@@ -9,7 +9,6 @@
  */
 import java.util.List;
 
-import gradezzy.config.AppConfig;
 import gradezzy.exec.ProcessResult;
 import gradezzy.exec.TesterRunner;
 import gradezzy.grading.ScoreCalculator;
@@ -40,6 +39,10 @@ public class ScoreParserTest {
     // The marker that starts a case header
     private static final String MARKER = "Test";
 
+    // The line endings of output on macOS and on Windows
+    private static final String LF = "\n";
+    private static final String CRLF = "\r\n";
+
     // The most marks the question gives
     private static final double MAX_MARKS = 4.0;
 
@@ -47,7 +50,7 @@ public class ScoreParserTest {
     private static final long RUN_MILLIS = 10;
 
     // The parser under test, made from the fixed settings
-    private static TesterOutputScoreParser parser;
+    private static TesterOutputScoreParser parser = null;
 
     // The question every made-up run is for
     private static final Question QUESTION = new Question("Q2a", "Q2",
@@ -93,9 +96,12 @@ public class ScoreParserTest {
         List<TestCaseResult> cases = result.getTestCaseResults();
         check(cases.size() == expectedCases, "four cases (" + cases.size()
                 + ")");
-        check(cases.get(0).isPassed() && !cases.get(1).isPassed()
-                && !cases.get(2).isPassed() && cases.get(3).isPassed(),
-                "pass/fail per case");
+        int thirdCase = 2;
+        int fourthCase = 3;
+        boolean verdicts = cases.get(0).isPassed() && !cases.get(1).isPassed()
+                && !cases.get(thirdCase).isPassed()
+                && cases.get(fourthCase).isPassed();
+        check(verdicts, "pass/fail per case");
         check(result.getScore() == printedTotal, "printed total 2.0 used ("
                 + result.getScore() + ")");
         check("getTotalSpent(nosuchfile.csv, Bob)".equals(cases.get(0)
@@ -104,11 +110,11 @@ public class ScoreParserTest {
         check(result.isCompiled() && !result.isTimedOut(),
                 "compiled, not timed out");
         // CRLF output
-        QuestionResult crlf = parse(0, out.replace("\n", "\r\n"), NO_ERROR,
+        QuestionResult crlf = parse(0, out.replace(LF, CRLF), NO_ERROR,
                 false);
-        check(crlf.getTestCaseResults().size() == expectedCases
-                && crlf.getScore() == printedTotal,
-                "CRLF output parsed the same");
+        boolean sameAsLf = crlf.getTestCaseResults().size() == expectedCases
+                && crlf.getScore() == printedTotal;
+        check(sameAsLf, "CRLF output parsed the same");
         // stderr kept in the log
         QuestionResult withErr = parse(0, out, "java.lang.Exception: x",
                 false);
@@ -119,27 +125,42 @@ public class ScoreParserTest {
     // Checks odd output: student lines, no output, time outs, crashes,
     // odd headers and verdicts, and other line endings.
     private static void checkOdd() {
+        checkStudentLines();
+        checkTimeOutAndCrash();
+        checkVerdicts();
+        checkHeaders();
+        checkOtherOutput();
+    }
+
+    // Checks that lines the student printed never count, and that no
+    // output gives 0.
+    private static void checkStudentLines() {
         // Student prints fake verdicts and a fake total
         String out = "Test 1: f()\n" + STUDENT + "Passed\n" + STUDENT
                 + "Test 2: g()\n" + "Failed\n" + STUDENT + "4.0\n" + "0.0\n";
         QuestionResult result = parse(0, out, NO_ERROR, false);
-        check(result.getTestCaseResults().size() == 1
-                && !result.getTestCaseResults().get(0).isPassed(),
-                "student lines never count as verdicts or headers");
+        boolean ignored = result.getTestCaseResults().size() == 1
+                && !result.getTestCaseResults().get(0).isPassed();
+        check(ignored, "student lines never count as verdicts or headers");
         check(result.getScore() == 0.0, "student-printed total ignored ("
                 + result.getScore() + ")");
         // No output at all
         QuestionResult none = parse(0, "", NO_ERROR, false);
         check(none.getTestCaseResults().isEmpty() && none.getScore() == 0.0,
                 "empty output gives 0");
+    }
+
+    // Checks a tester stopped by the time out, and one that crashed.
+    private static void checkTimeOutAndCrash() {
         // Timed out after case 2 started
         String partial = "Test 1: a\nPassed\nTest 2: b\n";
         int startedCases = 2;
-        QuestionResult timed = parse(-1, partial, NO_ERROR, true);
-        check(timed.getTestCaseResults().size() == startedCases
+        int killedExit = -1;
+        QuestionResult timed = parse(killedExit, partial, NO_ERROR, true);
+        boolean unfinished = timed.getTestCaseResults().size() == startedCases
                 && timed.getTestCaseResults().get(1).getDetail().equals(
-                TesterOutputScoreParser.NOT_FINISHED),
-                "unfinished case marked not finished");
+                TesterOutputScoreParser.NOT_FINISHED);
+        check(unfinished, "unfinished case marked not finished");
         check(timed.getScore() == 1.0 && timed.isTimedOut(),
                 "timed out: score is pass count (" + timed.getScore() + ")");
         // Crash: non-zero exit with a number as last line
@@ -148,14 +169,19 @@ public class ScoreParserTest {
         check(crashed.getScore() == 1.0,
                 "non-zero exit ignores printed total (" + crashed.getScore()
                 + ")");
+    }
+
+    // Checks verdicts with no header, two after one header, indented and
+    // in lower case.
+    private static void checkVerdicts() {
         // No headers, only verdicts
         int bareCases = 3;
         double barePasses = 2.0;
         QuestionResult bare = parse(0, "Passed\nPassed\nFailed\n", NO_ERROR,
                 false);
-        check(bare.getTestCaseResults().size() == bareCases
-                && bare.getScore() == barePasses,
-                "verdicts without headers count ("
+        boolean bareCounted = bare.getTestCaseResults().size() == bareCases
+                && bare.getScore() == barePasses;
+        check(bareCounted, "verdicts without headers count ("
                 + bare.getTestCaseResults().size() + ", " + bare.getScore()
                 + ")");
         // Two verdicts after one header: the second has no open case, so
@@ -163,9 +189,10 @@ public class ScoreParserTest {
         int twiceCases = 2;
         QuestionResult twice = parse(0, "Test 1: a\nPassed\nFailed\n",
                 NO_ERROR, false);
-        check(twice.getTestCaseResults().size() == twiceCases
+        boolean ownCase = twice.getTestCaseResults().size() == twiceCases
                 && twice.getTestCaseResults().get(0).isPassed()
-                && !twice.getTestCaseResults().get(1).isPassed(),
+                && !twice.getTestCaseResults().get(1).isPassed();
+        check(ownCase,
                 "a second verdict after one header is a case of its own");
         // Verdict with leading spaces
         QuestionResult spaced = parse(0, "Test 1: a\n   Passed!  \n",
@@ -177,6 +204,11 @@ public class ScoreParserTest {
                 false);
         check(!lower.getTestCaseResults().get(0).isPassed(),
                 "lower-case 'passed' is not a pass (markers are exact)");
+    }
+
+    // Checks which lines are case headers, names in unicode and verdicts
+    // with text after the marker.
+    private static void checkHeaders() {
         // "Testing" is not a header
         QuestionResult testing = parse(0, "Testing the class\nTest 1: a\n"
                 + "Passed\n", NO_ERROR, false);
@@ -196,9 +228,14 @@ public class ScoreParserTest {
         // Verdict line saying "Passed: false" counts as a pass (startsWith)
         QuestionResult tricky = parse(0, "Test 1: a\nFailed: expected x\n"
                 + "Test 2: b\nPassed (partial)\n", NO_ERROR, false);
-        check(!tricky.getTestCaseResults().get(0).isPassed()
-                && tricky.getTestCaseResults().get(1).isPassed(),
-                "verdicts with text after the marker");
+        boolean markerFirst = !tricky.getTestCaseResults().get(0).isPassed()
+                && tricky.getTestCaseResults().get(1).isPassed();
+        check(markerFirst, "verdicts with text after the marker");
+    }
+
+    // Checks a null process result, CR-only output and tab-indented
+    // output.
+    private static void checkOtherOutput() {
         // Null process result
         QuestionResult nothing = parser.parse(QUESTION, null);
         check(nothing != null && nothing.getTestCaseResults().isEmpty(),
@@ -209,9 +246,9 @@ public class ScoreParserTest {
         double crTotal = 2.0;
         QuestionResult carriage = parse(0, "Test 1: a\rPassed\rTest 2: b\r"
                 + "Passed\r2\r", NO_ERROR, false);
-        check(carriage.getTestCaseResults().size() == crCases
-                && carriage.getScore() == crTotal,
-                "CR-only output");
+        boolean crRead = carriage.getTestCaseResults().size() == crCases
+                && carriage.getScore() == crTotal;
+        check(crRead, "CR-only output");
         // Tab-indented student-looking output that is not prefixed
         QuestionResult tabbed = parse(0, "\tTest 1: a\n\tPassed\n", NO_ERROR,
                 false);
@@ -250,11 +287,11 @@ public class ScoreParserTest {
                 "comma decimal falls back to pass count");
         // Pass count capped at max
         int passingCases = 6;
-        StringBuilder many = new StringBuilder();
+        String many = "";
         for (int i = 1; i <= passingCases; i++) {
-            many.append("Test ").append(i).append(": x\nPassed\n");
+            many = many + "Test " + i + ": x\nPassed\n";
         }
-        check(scoreOf(many.toString()) == MAX_MARKS,
+        check(scoreOf(many) == MAX_MARKS,
                 "pass count capped at max");
         // Printed total disagrees with verdicts
         Double disagree = scoreOf("Test 1: a\nFailed\nTest 2: b\nFailed\n"

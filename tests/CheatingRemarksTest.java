@@ -48,7 +48,7 @@ import gradezzy.util.FileUtils;
  */
 public class CheatingRemarksTest {
 
-    // The run, its section and its question
+    // The run and its question
     private static final String RUN_ID = "RUN-77";
     private static final String QUESTION = "Q1";
 
@@ -65,8 +65,24 @@ public class CheatingRemarksTest {
     private static final String DAPHNE_REMARK =
             "Cheated with ELIJAH WEE (elijah.wee.2025)";
 
+    // Where the username, last name and first name sit in a row of the
+    // students of makeRun
+    private static final int USERNAME = 0;
+    private static final int LAST_NAME = 1;
+    private static final int FIRST_NAME = 2;
+
     // The format names ExportService knows
     private static final String CSV = "CSV";
+
+    // A line break in an exported score sheet, with or without a
+    // carriage return before it, and what follows a username in a row
+    private static final String LINE_BREAK = "\r?\n";
+    private static final String FIELD_SEPARATOR = ",";
+
+    // The start of the id of every similar code flag, and the separator
+    // between the run, the two students and the question in it
+    private static final String FLAG_ID_PREFIX = "SIMILAR-";
+    private static final String ID_SEPARATOR = "/";
 
     // The number of checks passed so far
     private static int checks = 0;
@@ -203,10 +219,10 @@ public class CheatingRemarksTest {
         check(lineOf(partText, DAPHNE).contains(DAPHNE_REMARK),
                 "the export of only some students gives daphne the same "
                 + "remark with elijah's name: " + lineOf(partText, DAPHNE));
-        check(!lineOf(partText, FIONA).contains("cheating")
-                && !lineOf(partText, FIONA).contains("Cheated"),
-                "fiona, whose decisions do not agree, has no remark: "
-                + lineOf(partText, FIONA));
+        boolean fionaPlain = !lineOf(partText, FIONA).contains("cheating")
+                && !lineOf(partText, FIONA).contains("Cheated");
+        check(fionaPlain, "fiona, whose decisions do not agree, has no "
+                + "remark: " + lineOf(partText, FIONA));
         check(!lineOf(partText, ELIJAH).contains("Cheated"),
                 "elijah, not exported, has no remark in that export: "
                 + lineOf(partText, ELIJAH));
@@ -223,15 +239,14 @@ public class CheatingRemarksTest {
                 StandardCharsets.UTF_8);
     }
 
-    // Returns the line of a CSV that names a username, or "".
+    // Returns the first line of a CSV that names a username, or "".
     private static String lineOf(String csv, String username) {
-        String found = "";
-        for (String line : csv.split("\r?\n")) {
-            if (found.isEmpty() && line.contains(username + ",")) {
-                found = line;
+        for (String line : csv.split(LINE_BREAK)) {
+            if (line.contains(username + FIELD_SEPARATOR)) {
+                return line;
             }
         }
-        return found;
+        return "";
     }
 
     // Builds a graded run of four named students, with a score sheet.
@@ -249,16 +264,17 @@ public class CheatingRemarksTest {
             {ELIJAH, "WEE", "ELIJAH"}, {FIONA, "LIM", "FIONA"},
             {GUS, "ONG", "GUS"}};
         for (int i = 0; i < students.length; i++) {
-            String username = students[i][0];
+            String username = students[i][USERNAME];
             Submission submission = new Submission(username, section,
                     root.resolve(username));
             submission.setStatus(SubmissionStatus.GRADED);
-            submission.setStudent(new Student("#0" + i, username,
-                    students[i][1], students[i][2], username + "@x"));
+            String lastName = students[i][LAST_NAME];
+            String firstName = students[i][FIRST_NAME];
+            submission.setStudent(new Student("#0" + i, username, lastName,
+                    firstName, username + "@x"));
             run.addSubmission(submission);
-            sheet = sheet + "#0" + i + ",#" + username + ","
-                    + students[i][1] + "," + students[i][2] + ","
-                    + username + "@x,,1,#\n";
+            sheet = sheet + "#0" + i + ",#" + username + "," + lastName + ","
+                    + firstName + "," + username + "@x,,1,#\n";
         }
         Path sheetFile = root.resolve("sheet.csv");
         Files.write(sheetFile, sheet.getBytes(StandardCharsets.UTF_8));
@@ -274,15 +290,17 @@ public class CheatingRemarksTest {
         String[] users = {first, second};
         for (int i = 0; i < users.length; i++) {
             String me = users[i];
-            String other = users[users.length - 1 - i];
+            int otherIndex = users.length - 1 - i;
+            String other = users[otherIndex];
             String message = QUESTION + " is 95% similar to " + other
                     + ". This is a review aid, not a finding.";
             if (identical) {
                 message = message + " Identical copy: both files have the "
                         + "same Name, Email ID and code.";
             }
-            Anomaly anomaly = new Anomaly("SIMILAR-" + RUN_ID + "/" + me
-                    + "/" + other + "/" + QUESTION,
+            Anomaly anomaly = new Anomaly(FLAG_ID_PREFIX + RUN_ID
+                    + ID_SEPARATOR + me + ID_SEPARATOR + other + ID_SEPARATOR
+                    + QUESTION,
                     AnomalyType.SIMILAR_CODE, Severity.INFO, me, message,
                     "Compare");
             run.findLoaded(me).addAnomaly(anomaly);

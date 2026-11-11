@@ -11,7 +11,7 @@
  * the live config.properties. No student code runs.
  */
 import java.io.ByteArrayOutputStream;
-import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -19,8 +19,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
 import java.util.zip.ZipOutputStream;
 
 import gradezzy.config.AppConfig;
@@ -149,47 +149,69 @@ public class IngestUnitTest {
     private static void checkExtractor(Path root, AppConfig config)
             throws Exception {
         ZipExtractor extractor = new ZipExtractor(config);
+        Path plain = checkPlainZips(root, extractor);
+        checkZipSlip(root, extractor);
+        checkSafeEntries(root, extractor);
+        checkEntryNames(root, extractor);
+        checkEmptyZips(root, extractor);
+        checkDamagedZips(root, extractor, plain);
+        checkRefusedEntries(root, extractor);
+        checkOtherEntries(root, extractor, plain);
+    }
+
+    // Checks a plain zip and a zip holding a zip; returns the plain zip.
+    private static Path checkPlainZips(Path root, ZipExtractor extractor)
+            throws Exception {
         // Plain zip
-        Path plain = zip(root, "plain.zip", ANSWER, "class Q1a{}",
-                "u/Q2/Q2a.java", "class Q2a{}");
+        Path plain = zip(root, "plain.zip", new String[] {ANSWER,
+                "class Q1a{}", "u/Q2/Q2a.java", "class Q2a{}"});
         Path target = extractor.extract(plain, root.resolve("t-plain"));
         check(Files.readString(target.resolve(ANSWER))
                 .equals("class Q1a{}"), "plain zip unpacked");
         // Nested zip is written as a file, not unpacked by ZipExtractor
         byte[] inner = zipBytes(StandardCharsets.UTF_8, false,
-                QUESTION_ANSWER, TEXT_X);
+                new String[] {QUESTION_ANSWER, TEXT_X});
         Path nested = zipRaw(root, "nested.zip", StandardCharsets.UTF_8,
                 false, new String[] {INNER_ZIP}, new byte[][] {inner});
         Path nestedTarget = extractor.extract(nested,
                 root.resolve("t-nested"));
         check(Files.isRegularFile(nestedTarget.resolve(INNER_ZIP)),
                 "nested zip kept as a file by the extractor");
-        // Zip slip
+        return plain;
+    }
+
+    // Checks that entries leaving the target folder are refused and
+    // write nothing outside it.
+    private static void checkZipSlip(Path root, ZipExtractor extractor)
+            throws Exception {
         check(extractFails(extractor, zip(root, "slip1.zip",
-                "../evil.java", TEXT_X), root.resolve("t-slip1")),
-                "../ entry refused");
+                new String[] {"../evil.java", TEXT_X}),
+                root.resolve("t-slip1")), "../ entry refused");
         check(!Files.exists(root.resolve("evil.java")),
                 "../ entry wrote nothing outside");
         check(!Files.exists(root.resolve("t-slip1")),
                 "refused zip leaves no target folder");
         check(extractFails(extractor, zip(root, "slip2.zip",
-                "u/../../evil2.java", TEXT_X), root.resolve("t-slip2")),
-                "nested ../ entry refused");
+                new String[] {"u/../../evil2.java", TEXT_X}),
+                root.resolve("t-slip2")), "nested ../ entry refused");
         check(extractFails(extractor, zip(root, "slip3.zip",
-                "/tmp/evil3.java", TEXT_X), root.resolve("t-slip3")),
-                "absolute entry refused");
+                new String[] {"/tmp/evil3.java", TEXT_X}),
+                root.resolve("t-slip3")), "absolute entry refused");
         check(extractFails(extractor, zip(root, "slip4.zip",
-                "C:/evil4.java", TEXT_X), root.resolve("t-slip4")),
-                "drive entry refused");
+                new String[] {"C:/evil4.java", TEXT_X}),
+                root.resolve("t-slip4")), "drive entry refused");
         check(extractFails(extractor, zip(root, "slip5.zip",
-                "..\\evil5.java", TEXT_X), root.resolve("t-slip5")),
-                "backslash ../ entry refused");
+                new String[] {"..\\evil5.java", TEXT_X}),
+                root.resolve("t-slip5")), "backslash ../ entry refused");
         check(extractFails(extractor, zip(root, "slip6.zip",
-                "u\\..\\..\\evil6.java", TEXT_X), root.resolve("t-slip6")),
-                "backslash nested ../ refused");
+                new String[] {"u\\..\\..\\evil6.java", TEXT_X}),
+                root.resolve("t-slip6")), "backslash nested ../ refused");
         check(!Files.exists(root.getParent().resolve("evil6.java")),
                 "backslash slip wrote nothing outside");
-        // isSafeEntry directly
+    }
+
+    // Checks which entry names isSafeEntry accepts.
+    private static void checkSafeEntries(Path root, ZipExtractor extractor) {
         Path probe = root.resolve("probe");
         check(!extractor.isSafeEntry("a:b", probe), "colon unsafe");
         check(!extractor.isSafeEntry(EMPTY, probe), "empty unsafe");
@@ -202,8 +224,14 @@ public class IngestUnitTest {
                 "trailing dot unsafe");
         check(extractor.isSafeEntry("Q1/console.java", probe),
                 "console.java safe");
+    }
+
+    // Checks names with backslashes, names in CP437 and names in UTF-8.
+    private static void checkEntryNames(Path root, ZipExtractor extractor)
+            throws Exception {
         // Backslash names
-        Path backslash = zip(root, "back.zip", "u\\Q1\\Q1a.java", TEXT_B);
+        Path backslash = zip(root, "back.zip",
+                new String[] {"u\\Q1\\Q1a.java", TEXT_B});
         Path backTarget = extractor.extract(backslash,
                 root.resolve("t-back"));
         check(Files.exists(backTarget.resolve(ANSWER)),
@@ -218,9 +246,16 @@ public class IngestUnitTest {
         check(Files.exists(cpTarget.resolve("Jos\u00e9/Q1/Q1a.java")),
                 "CP437 name read as Jos\u00e9");
         // UTF-8 name
-        Path utf = zip(root, "utf.zip", "\u674e\u534e/Q1/Q1a.java", "u");
+        Path utf = zip(root, "utf.zip",
+                new String[] {"\u674e\u534e/Q1/Q1a.java", "u"});
         check(Files.exists(extractor.extract(utf, root.resolve("t-utf"))
                 .resolve("\u674e\u534e/Q1/Q1a.java")), "UTF-8 name");
+    }
+
+    // Checks zips with nothing to grade, and the macOS and Windows extra
+    // files that are left out.
+    private static void checkEmptyZips(Path root, ZipExtractor extractor)
+            throws Exception {
         // Empty zip
         Path empty = zipRaw(root, "empty.zip", StandardCharsets.UTF_8,
                 false, new String[0], new byte[0][]);
@@ -233,29 +268,35 @@ public class IngestUnitTest {
         check(extractThrowsInvalid(extractor, folders,
                 root.resolve("t-folders")), "folders-only zip refused");
         // Only __MACOSX
-        Path mac = zip(root, "mac.zip", "__MACOSX/u/._Q1a.java", TEXT_M,
-                DS_STORE, TEXT_D);
+        Path mac = zip(root, "mac.zip", new String[] {
+                "__MACOSX/u/._Q1a.java", TEXT_M, DS_STORE, TEXT_D});
         check(extractThrowsInvalid(extractor, mac, root.resolve("t-mac")),
                 "zip of only ignored files refused");
         // macOS extras ignored beside real files
-        Path macReal = zip(root, "macreal.zip", ANSWER, TEXT_A,
-                "__MACOSX/u/Q1/._Q1a.java", TEXT_M, "u/Q1/._Q1a.java", TEXT_M,
-                "u/.DS_Store", TEXT_D, "u/Thumbs.db", "t");
+        Path macReal = zip(root, "macreal.zip", new String[] {ANSWER, TEXT_A,
+                "__MACOSX/u/Q1/._Q1a.java", TEXT_M, "u/Q1/._Q1a.java",
+                TEXT_M, "u/.DS_Store", TEXT_D, "u/Thumbs.db", "t"});
         Path macTarget = extractor.extract(macReal, root.resolve("t-macr"));
-        check(Files.exists(macTarget.resolve(ANSWER))
+        boolean extrasLeftOut = Files.exists(macTarget.resolve(ANSWER))
                 && !Files.exists(macTarget.resolve("__MACOSX"))
                 && !Files.exists(macTarget.resolve("u/Q1/._Q1a.java"))
                 && !Files.exists(macTarget.resolve("u/.DS_Store"))
-                && !Files.exists(macTarget.resolve("u/Thumbs.db")),
-                "macOS and Windows extras left out");
-        Path macCase = zip(root, "maccase.zip", ANSWER, TEXT_A,
-                "u/thumbs.db", "t", "u/.ds_store", TEXT_D);
+                && !Files.exists(macTarget.resolve("u/Thumbs.db"));
+        check(extrasLeftOut, "macOS and Windows extras left out");
+        Path macCase = zip(root, "maccase.zip", new String[] {ANSWER, TEXT_A,
+                "u/thumbs.db", "t", "u/.ds_store", TEXT_D});
         Path macCaseTarget = extractor.extract(macCase,
                 root.resolve("t-maccase"));
         // Known limitation: ingest.ignored.file.names is matched exactly,
         // and Windows always writes the name as Thumbs.db
         note("thumbs.db in lower case is kept (names are matched exactly): "
                 + Files.exists(macCaseTarget.resolve("u/thumbs.db")));
+    }
+
+    // Checks zero-byte, junk and truncated zips, and a target folder
+    // that already holds a file.
+    private static void checkDamagedZips(Path root, ZipExtractor extractor,
+            Path plain) throws Exception {
         // Zero-byte and junk files
         Path zero = root.resolve("zero.zip");
         Files.write(zero, new byte[0]);
@@ -275,43 +316,56 @@ public class IngestUnitTest {
         // Truncated zip
         byte[] good = Files.readAllBytes(plain);
         Path cut = root.resolve("cut.zip");
-        Files.write(cut, Arrays.copyOf(good, good.length / TRUNCATE_PARTS));
+        int cutLength = good.length / TRUNCATE_PARTS;
+        Files.write(cut, Arrays.copyOf(good, cutLength));
         check(extractFails(extractor, cut, root.resolve("t-cut")),
                 "truncated zip refused");
         // Non-empty target
         Path busy = root.resolve("t-busy");
         Files.createDirectories(busy);
         Files.writeString(busy.resolve("keep.txt"), "keep");
-        check(extractFails(extractor, plain, busy)
-                && Files.readString(busy.resolve("keep.txt")).equals("keep"),
-                "non-empty target refused and kept");
+        boolean busyKept = extractFails(extractor, plain, busy)
+                && Files.readString(busy.resolve("keep.txt")).equals("keep");
+        check(busyKept, "non-empty target refused and kept");
+    }
+
+    // Checks entries that clash or are named as devices, and a name
+    // with a control character.
+    private static void checkRefusedEntries(Path root,
+            ZipExtractor extractor) throws Exception {
         // Case clash
         check(extractThrowsInvalid(extractor, zip(root, "clash.zip",
-                CLASH_FILE, TEXT_1, "u/q1/a.java", TEXT_2),
+                new String[] {CLASH_FILE, TEXT_1, "u/q1/a.java", TEXT_2}),
                 root.resolve("t-clash")), "case clash refused");
         // Known limitation: a zip naming one file twice is refused as a
         // zip that cannot be unpacked, not as a damaged zip
         note("a zip naming one file twice is refused as damaged: "
                 + extractThrowsInvalid(extractor, zip(root, "dup.zip",
-                CLASH_FILE, TEXT_1, CLASH_FILE, TEXT_2),
+                new String[] {CLASH_FILE, TEXT_1, CLASH_FILE, TEXT_2}),
                 root.resolve("t-dup")));
         // Device name outside a question folder is skipped, inside stops
         List<String> skipped = new ArrayList<>();
-        Path device = zip(root, "device.zip", ANSWER, TEXT_A,
-                "u/notes/CON.txt", TEXT_C);
+        Path device = zip(root, "device.zip", new String[] {ANSWER, TEXT_A,
+                "u/notes/CON.txt", TEXT_C});
         extractor.extract(device, root.resolve("t-device"), skipped);
         check(skipped.size() == 1 && skipped.get(0).contains("CON"),
                 "device name outside question folder skipped and named");
         check(extractThrowsInvalid(extractor, zip(root, "device2.zip",
-                "u/Q1/AUX.java", TEXT_A, "u/Q2/Q2a.java", TEXT_B),
-                root.resolve("t-device2")),
+                new String[] {"u/Q1/AUX.java", TEXT_A, "u/Q2/Q2a.java",
+                TEXT_B}), root.resolve("t-device2")),
                 "device name inside a question folder stops the zip");
         // Control char name (macOS Icon\r) skipped
         List<String> iconSkipped = new ArrayList<>();
-        extractor.extract(zip(root, "icon.zip", "u/Icon\r", EMPTY,
-                ANSWER, TEXT_A), root.resolve("t-icon"), iconSkipped);
+        extractor.extract(zip(root, "icon.zip", new String[] {"u/Icon\r",
+                EMPTY, ANSWER, TEXT_A}), root.resolve("t-icon"), iconSkipped);
         check(iconSkipped.size() == 1 && iconSkipped.get(0).equals("u/Icon?"),
                 "Icon\\r skipped and shown printable");
+    }
+
+    // Checks ./ prefixes, a zip inside its own target, a file and folder
+    // with one name, and the file times read from a zip.
+    private static void checkOtherEntries(Path root, ZipExtractor extractor,
+            Path plain) throws Exception {
         // ./ prefixes
         Path dot = zipRaw(root, "dot.zip", StandardCharsets.UTF_8, false,
                 new String[] {"./", "./u/Q1/Q1a.java"},
@@ -327,7 +381,7 @@ public class IngestUnitTest {
         check(Files.exists(selfZip), "archive inside its target not deleted");
         // File and folder with the same name
         check(extractFails(extractor, zip(root, "filefolder.zip",
-                "u/Q1", "file", ANSWER, TEXT_A),
+                new String[] {"u/Q1", "file", ANSWER, TEXT_A}),
                 root.resolve("t-ff")), "file and folder same name refused");
         // readFileTimes
         check(!extractor.readFileTimes(plain).isEmpty(),
@@ -340,7 +394,8 @@ public class IngestUnitTest {
         small.setString(ConfigKeys.MAX_ZIP_SIZE_MB, SIZE_LIMIT_MB);
         small.setString(ConfigKeys.MAX_ZIP_ENTRIES, ENTRY_LIMIT);
         ZipExtractor extractor = new ZipExtractor(small);
-        byte[] big = new byte[MEGABYTE + 1];
+        int overLimit = MEGABYTE + 1;
+        byte[] big = new byte[overLimit];
         Path bomb = zipRaw(root, "bomb.zip", StandardCharsets.UTF_8, false,
                 new String[] {ANSWER}, new byte[][] {big});
         check(Files.size(bomb) < SMALL_ZIP_BYTES, "bomb compresses small");
@@ -359,14 +414,14 @@ public class IngestUnitTest {
         check(extractThrowsInvalid(extractor, skippedBig,
                 root.resolve("t-skipbig")),
                 "ignored entries still count towards the size limit");
-        check(!extractFails(extractor, zip(root, "three.zip", "a/Q1/1",
-                TEXT_1, "a/Q1/2", TEXT_2, "a/Q1/3", "3"),
-                root.resolve("t-three")),
+        check(!extractFails(extractor, zip(root, "three.zip",
+                new String[] {"a/Q1/1", TEXT_1, "a/Q1/2", TEXT_2, "a/Q1/3",
+                "3"}), root.resolve("t-three")),
                 "exactly 3 entries accepted");
         check(extractThrowsInvalid(extractor, zip(root, "four.zip",
-                "a/Q1/1", TEXT_1, "a/Q1/2", TEXT_2, "a/Q1/3", "3", "a/Q1/4",
-                "4"),
-                root.resolve("t-four")), "4 entries over limit 3 refused");
+                new String[] {"a/Q1/1", TEXT_1, "a/Q1/2", TEXT_2, "a/Q1/3",
+                "3", "a/Q1/4", "4"}), root.resolve("t-four")),
+                "4 entries over limit 3 refused");
         AppConfig zeroLimit = TestConfig.load();
         zeroLimit.setString(ConfigKeys.MAX_ZIP_SIZE_MB, "0");
         check(extractFails(new ZipExtractor(zeroLimit), exactZip,
@@ -379,6 +434,16 @@ public class IngestUnitTest {
             throws Exception {
         RosterReader reader = new RosterReader(config);
         String header = "OrgDefinedId,Username,Last Name,First Name,Email";
+        List<Student> basic = checkRosterNames(root, reader, header);
+        checkRosterLayouts(root, reader, header);
+        checkRosterLookups(root, reader, header, basic);
+    }
+
+    // Checks how names are read: prefixes, zeros, a byte order mark,
+    // windows-1252, quotes and a newline inside quotes. Returns the
+    // students of the basic roster.
+    private static List<Student> checkRosterNames(Path root,
+            RosterReader reader, String header) throws Exception {
         List<Student> basic = reader.readRoster(write(root, "r1.csv",
                 header + "\n#001,#ann,Lee,Ann,ann@x.edu\n"));
         check(basic.size() == 1 && basic.get(0).getUsername().equals("ann"),
@@ -396,20 +461,29 @@ public class IngestUnitTest {
                 + "\r\n#1,#zoe,M\u00fcller,Zo\u00eb,z@x\r\n")
                 .getBytes("windows-1252"));
         List<Student> winStudents = reader.readRoster(win);
-        check(winStudents.get(0).getLastName().equals("M\u00fcller")
-                && winStudents.get(0).getFirstName().equals("Zo\u00eb"),
-                "windows-1252 names decoded");
+        boolean winDecoded = winStudents.get(0).getLastName()
+                .equals("M\u00fcller")
+                && winStudents.get(0).getFirstName().equals("Zo\u00eb");
+        check(winDecoded, "windows-1252 names decoded");
         List<Student> quoted = reader.readRoster(write(root, "q.csv",
                 header + "\n#1,#cat,\"Tan, Jr\",\"Ah \"\"Cat\"\"\",c@x\n"));
-        check(quoted.get(0).getLastName().equals("Tan, Jr")
-                && quoted.get(0).getFirstName().equals("Ah \"Cat\""),
-                "quoted names with comma and quotes");
+        boolean quotesRead = quoted.get(0).getLastName().equals("Tan, Jr")
+                && quoted.get(0).getFirstName().equals("Ah \"Cat\"");
+        check(quotesRead, "quoted names with comma and quotes");
         List<Student> multi = reader.readRoster(write(root, "m.csv",
                 header + "\n#1,#dan,\"Two\nLines\",Dan,d@x\n"
                 + "#2,#eve,E,Eve,e@x\n"));
-        check(multi.size() == TWO_ROWS
-                && multi.get(1).getUsername().equals("eve"),
+        boolean recordsApart = multi.size() == TWO_ROWS
+                && multi.get(1).getUsername().equals("eve");
+        check(recordsApart,
                 "quoted newline inside a name keeps records apart");
+        return basic;
+    }
+
+    // Checks line endings, column orders, missing and repeated columns,
+    // short and long rows, prefixes, blank rows and encodings.
+    private static void checkRosterLayouts(Path root, RosterReader reader,
+            String header) throws Exception {
         check(readsOk(reader, write(root, "cr.csv",
                 header + "\r#1,#fay,F,Fay,f@x\r#2,#gus,G,Gus,g@x\r"),
                 TWO_ROWS),
@@ -468,6 +542,12 @@ public class IngestUnitTest {
         note("a UTF-16 roster is read: " + readsOk(reader, utf16, 1));
         check(!readsOk(reader, write(root, "unclosed.csv", header
                 + "\n#1,#a,\"A,A,a@x\n"), 1), "unclosed quote refused");
+    }
+
+    // Checks a missing or null roster, findByUsername and the grade
+    // denominator.
+    private static void checkRosterLookups(Path root, RosterReader reader,
+            String header, List<Student> basic) throws Exception {
         boolean missingFile = false;
         try {
             reader.readRoster(root.resolve("nope.csv"));
@@ -482,10 +562,10 @@ public class IngestUnitTest {
             noSheet = true;
         }
         check(noSheet, "null roster path refused");
-        check(reader.findByUsername(basic, "ANN") != null
+        boolean foundIgnoringCase = reader.findByUsername(basic, "ANN") != null
                 && reader.findByUsername(basic, "zed") == null
-                && reader.findByUsername(null, TEXT_A) == null,
-                "findByUsername ignoring case");
+                && reader.findByUsername(null, TEXT_A) == null;
+        check(foundIgnoringCase, "findByUsername ignoring case");
         Path denom = write(root, "denom.csv", header
                 + ",Calculated Final Grade Denominator\n#1,#a,A,A,a@x,20\n"
                 + "#2,#b,B,B,b@x,20\n,,,,,\n");
@@ -500,8 +580,12 @@ public class IngestUnitTest {
         check(reader.readDenominator(root.resolve("nope.csv"))
                 == RosterReader.UNKNOWN_DENOMINATOR,
                 "missing file denominator unknown");
-        check(reader.readDenominator(basic.isEmpty() ? null
-                : write(root, "nodenom.csv", header + "\n#1,#a,A,A,a@x\n"))
+        Path noDenominator = null;
+        if (!basic.isEmpty()) {
+            noDenominator = write(root, "nodenom.csv", header
+                    + "\n#1,#a,A,A,a@x\n");
+        }
+        check(reader.readDenominator(noDenominator)
                 == RosterReader.UNKNOWN_DENOMINATOR, "no denominator column");
         // Real eLearn sample shipped with the project
         Path sample = Path.of("samples/IS442-ScoreSheet.csv");
@@ -547,10 +631,10 @@ public class IngestUnitTest {
         check(SubmissionLoader.readCopyNumber("alice (99999999999).zip")
                 == Integer.MAX_VALUE, "huge copy number newest");
         check(SubmissionLoader.readCopyNumber(null) == 0, "null copy number");
-        check(SubmissionLoader.isWindowsCopyName("a - copy.zip")
+        boolean windowsCopy = SubmissionLoader.isWindowsCopyName("a - copy.zip")
                 && !SubmissionLoader.isWindowsCopyName("a-copy.zip")
-                && !SubmissionLoader.isWindowsCopyName("copy.zip"),
-                "isWindowsCopyName");
+                && !SubmissionLoader.isWindowsCopyName("copy.zip");
+        check(windowsCopy, "isWindowsCopyName");
     }
 
     // Checks loading submissions from folders, zips and bulk zips,
@@ -558,15 +642,28 @@ public class IngestUnitTest {
     private static void checkLoader(Path root, AppConfig config)
             throws Exception {
         SubmissionLoader loader = new SubmissionLoader(config);
+        Path benLower = checkFolderLoad(root, loader);
+        checkOddInputs(root, loader, benLower);
+        checkBulkZips(root, loader);
+    }
+
+    // Checks loading a folder of uploads: copies of one student, a name
+    // in two cases and the files that are skipped. Returns ben's upload
+    // in lower case.
+    private static Path checkFolderLoad(Path root, SubmissionLoader loader)
+            throws Exception {
         Path folder = root.resolve("uploads");
         Files.createDirectories(folder);
-        zip(folder, "2023-2024-amy.zip", "amy/Q1/Q1a.java", TEXT_1);
-        Path amy1 = zip(folder, "2023-2024-amy (1).zip", "amy/Q1/Q1a.java",
-                TEXT_2);
-        Path benLower = zip(folder, "ben.zip", "ben/Q1/Q1a.java", TEXT_1);
+        zip(folder, "2023-2024-amy.zip",
+                new String[] {"amy/Q1/Q1a.java", TEXT_1});
+        Path amy1 = zip(folder, "2023-2024-amy (1).zip",
+                new String[] {"amy/Q1/Q1a.java", TEXT_2});
+        Path benLower = zip(folder, "ben.zip",
+                new String[] {"ben/Q1/Q1a.java", TEXT_1});
         Path upperFolder = root.resolve("upper");
         Files.createDirectories(upperFolder);
-        Path benUpper = zip(upperFolder, "Ben.zip", "ben/Q1/Q1a.java", TEXT_1);
+        Path benUpper = zip(upperFolder, "Ben.zip",
+                new String[] {"ben/Q1/Q1a.java", TEXT_1});
         Files.writeString(folder.resolve("notes.txt"), "hi");
         Files.writeString(folder.resolve(".hidden.zip"), TEXT_X);
         Files.createDirectories(folder.resolve("RenameToYourUsername/Q1"));
@@ -579,20 +676,26 @@ public class IngestUnitTest {
             names.add(submission.getUsername());
         }
         int expectedStudents = 3;
-        check(names.size() == expectedStudents && names.contains("amy")
-                && names.contains("ben") && names.contains("cal"),
-                "three students from a folder, got " + names);
+        boolean threeStudents = names.size() == expectedStudents
+                && names.contains("amy") && names.contains("ben")
+                && names.contains("cal");
+        check(threeStudents, "three students from a folder, got " + names);
         Submission amy = find(loaded, "amy");
-        check(amy != null && amy.getOriginalPath().getFileName().equals(
-                amy1.getFileName()), "amy (1) graded over amy");
+        boolean newestAmy = amy != null && amy.getOriginalPath()
+                .getFileName().equals(amy1.getFileName());
+        check(newestAmy, "amy (1) graded over amy");
         check(amy != null && hasMessage(amy, "Another file"),
                 "the dropped amy file is named");
         Submission ben = find(loader.loadSubmissions(Arrays.asList(benUpper,
                 benLower), SECTION), "ben");
-        check(ben != null && ben.getOriginalPath().getFileName().toString()
-                .equals("ben.zip"), "lower-case ben.zip preferred over Ben.zip"
-                + " (got " + (ben == null ? null
-                : ben.getOriginalPath().getFileName()) + ")");
+        Path benFile = null;
+        if (ben != null) {
+            benFile = ben.getOriginalPath().getFileName();
+        }
+        boolean lowerPreferred = ben != null
+                && benFile.toString().equals("ben.zip");
+        check(lowerPreferred, "lower-case ben.zip preferred over Ben.zip"
+                + " (got " + benFile + ")");
         List<Path> skipped = loader.listSkipped(folder);
         boolean notesSkipped = false;
         for (Path path : skipped) {
@@ -601,28 +704,39 @@ public class IngestUnitTest {
             }
         }
         check(notesSkipped, "notes.txt listed as skipped");
+        return benLower;
+    }
+
+    // Checks a file chosen twice, a file that is not a zip, two nameless
+    // uploads, an empty folder and a folder of zips one level down.
+    private static void checkOddInputs(Path root, SubmissionLoader loader,
+            Path benLower) throws Exception {
         // Same path chosen twice
         List<Submission> twice = loader.loadSubmissions(Arrays.asList(
                 benLower, benLower), SECTION);
-        check(twice.size() == 1 && hasMessage(twice.get(0),
-                "chosen more than once"), "same file chosen twice");
+        boolean chosenTwice = twice.size() == 1
+                && hasMessage(twice.get(0), "chosen more than once");
+        check(chosenTwice, "same file chosen twice");
         // A non-zip file chosen directly
         Path text = Files.writeString(root.resolve("dora.txt"), TEXT_X);
         List<Submission> notZip = loader.loadSubmissions(Arrays.asList(text),
                 SECTION);
-        check(notZip.size() == 1 && notZip.get(0).getStatus()
-                == SubmissionStatus.FAILED, "a text file is rejected");
+        boolean textRejected = notZip.size() == 1
+                && notZip.get(0).getStatus() == SubmissionStatus.FAILED;
+        check(textRejected, "a text file is rejected");
         // Two nameless uploads
-        Path nameless1 = zip(root, "2023-2024-.zip", "x/Q1/Q1a.java", TEXT_1);
+        Path nameless1 = zip(root, "2023-2024-.zip",
+                new String[] {"x/Q1/Q1a.java", TEXT_1});
         Path otherFolder = root.resolve("other");
         Files.createDirectories(otherFolder);
-        Path nameless2 = zip(otherFolder, "0000-0000-.zip", "x/Q1/Q1a.java",
-                TEXT_1);
+        Path nameless2 = zip(otherFolder, "0000-0000-.zip",
+                new String[] {"x/Q1/Q1a.java", TEXT_1});
         List<Submission> nameless = loader.loadSubmissions(Arrays.asList(
                 nameless1, nameless2), SECTION);
         int expectedNotes = 2;
-        check(nameless.size() == 1 && nameless.get(0).getAnomalies().size()
-                == expectedNotes,
+        boolean oneWithTwoNotes = nameless.size() == 1
+                && nameless.get(0).getAnomalies().size() == expectedNotes;
+        check(oneWithTwoNotes,
                 "two nameless uploads give one failed with two notes");
         // An empty folder
         Path emptyFolder = root.resolve("emptyfolder");
@@ -637,7 +751,8 @@ public class IngestUnitTest {
         // Folder of zips one level down
         Path wrapper = root.resolve("wrapper");
         Files.createDirectories(wrapper.resolve("zips"));
-        zip(wrapper.resolve("zips"), "zed.zip", "zed/Q1/Q1a.java", TEXT_1);
+        zip(wrapper.resolve("zips"), "zed.zip",
+                new String[] {"zed/Q1/Q1a.java", TEXT_1});
         String hint = EMPTY;
         try {
             loader.loadSubmissions(Arrays.asList(wrapper), SECTION);
@@ -645,11 +760,16 @@ public class IngestUnitTest {
             hint = expected.getMessage();
         }
         check(hint.contains("\"zips\""), "folder of zips one down is named");
-        // Bulk zip
+    }
+
+    // Checks which zips are bulk zips of a whole section, and how one is
+    // listed and loaded.
+    private static void checkBulkZips(Path root, SubmissionLoader loader)
+            throws Exception {
         byte[] firstStudent = zipBytes(StandardCharsets.UTF_8, false,
-                "s1/Q1/Q1a.java", TEXT_1);
+                new String[] {"s1/Q1/Q1a.java", TEXT_1});
         byte[] secondStudent = zipBytes(StandardCharsets.UTF_8, false,
-                "s2/Q1/Q1a.java", TEXT_1);
+                new String[] {"s2/Q1/Q1a.java", TEXT_1});
         Path bulk = zipRaw(root, "section.zip", StandardCharsets.UTF_8, false,
                 new String[] {"G1/2023-2024-s1.zip", "G1/2023-2024-s2.zip",
                 "readme.txt"}, new byte[][] {firstStudent, secondStudent,
@@ -691,13 +811,13 @@ public class IngestUnitTest {
             throws Exception {
         ZipExtractor extractor = new ZipExtractor(config);
         WorkingCopyManager manager = new WorkingCopyManager(config, extractor);
-        Path zipFile = zip(root, "wc.zip", WC_ANSWER, TEXT_A,
-                "wc/Q1/Q1a.class", TEXT_C, "wc/Q1/Shape.class", TEXT_B);
+        Path zipFile = zip(root, "wc.zip", new String[] {WC_ANSWER, TEXT_A,
+                "wc/Q1/Q1a.class", TEXT_C, "wc/Q1/Shape.class", TEXT_B});
         Submission submission = new Submission("wc", SECTION, zipFile);
         Path copy = manager.createWorkingCopy(submission);
-        check(copy.equals(root.resolve("working/wc"))
-                && Files.exists(copy.resolve(WC_ANSWER)),
-                "working copy created under the working folder");
+        boolean madeInWorking = copy.equals(root.resolve("working/wc"))
+                && Files.exists(copy.resolve(WC_ANSWER));
+        check(madeInWorking, "working copy created under the working folder");
         Path again = manager.createWorkingCopy(submission);
         check(again.equals(copy), "second working copy replaces the first");
         Path starter = root.resolve(STARTER);
@@ -705,30 +825,13 @@ public class IngestUnitTest {
         Files.writeString(starter.resolve("Q1/Shape.class"), STARTER);
         manager.removeStudentClassFiles(copy,
                 new AssessmentFactory(config).create(), starter);
-        check(!Files.exists(copy.resolve("wc/Q1/Q1a.class"))
+        boolean classesCleaned = !Files.exists(copy.resolve("wc/Q1/Q1a.class"))
                 && Files.readString(copy.resolve("wc/Q1/Shape.class"))
-                .equals(STARTER),
+                .equals(STARTER);
+        check(classesCleaned,
                 "student class removed and provided class replaced");
-        // Zip of a zip
-        byte[] innerBytes = zipBytes(StandardCharsets.UTF_8, false,
-                "zz/Q1/Q1a.java", "inner");
-        Path outer = zipRaw(root, "zz.zip", StandardCharsets.UTF_8, false,
-                new String[] {"zz.zip"}, new byte[][] {innerBytes});
-        Path zzCopy = manager.createWorkingCopy(new Submission("zz", SECTION,
-                outer));
-        check(Files.exists(zzCopy.resolve("zz/Q1/Q1a.java")),
-                "zip holding only a zip is unpacked once more");
-        // Bad usernames
-        for (String bad : new String[] {"..", ".", "a/b", "a\\b", "c:d", " "}) {
-            boolean refused = false;
-            try {
-                manager.createWorkingCopy(new Submission(bad, SECTION,
-                        zipFile));
-            } catch (IngestException expected) {
-                refused = true;
-            }
-            check(refused, "username '" + bad + "' refused");
-        }
+        checkZipOfZip(root, manager);
+        checkBadUsernames(manager, zipFile);
         // A damaged retry keeps the previous copy
         Path junk = root.resolve("junk2.zip");
         Files.writeString(junk, "junk");
@@ -740,7 +843,48 @@ public class IngestUnitTest {
         }
         check(junkRefused && Files.exists(copy.resolve(WC_ANSWER)),
                 "a damaged retry keeps the previous working copy");
-        // Folder upload drops ignored names
+        checkFolderUpload(root, manager);
+        // Outside working folder
+        boolean outside = false;
+        try {
+            manager.removeStudentClassFiles(root, null);
+        } catch (UncheckedIOException expected) {
+            outside = true;
+        }
+        check(outside, "removeStudentClassFiles refuses a path outside");
+    }
+
+    // Checks that a zip holding only a zip is unpacked once more.
+    private static void checkZipOfZip(Path root, WorkingCopyManager manager)
+            throws Exception {
+        byte[] innerBytes = zipBytes(StandardCharsets.UTF_8, false,
+                new String[] {"zz/Q1/Q1a.java", "inner"});
+        Path outer = zipRaw(root, "zz.zip", StandardCharsets.UTF_8, false,
+                new String[] {"zz.zip"}, new byte[][] {innerBytes});
+        Path zzCopy = manager.createWorkingCopy(new Submission("zz", SECTION,
+                outer));
+        check(Files.exists(zzCopy.resolve("zz/Q1/Q1a.java")),
+                "zip holding only a zip is unpacked once more");
+    }
+
+    // Checks that usernames that are not a plain folder name are refused.
+    private static void checkBadUsernames(WorkingCopyManager manager,
+            Path zipFile) {
+        for (String bad : new String[] {"..", ".", "a/b", "a\\b", "c:d", " "}) {
+            boolean refused = false;
+            try {
+                manager.createWorkingCopy(new Submission(bad, SECTION,
+                        zipFile));
+            } catch (IngestException expected) {
+                refused = true;
+            }
+            check(refused, "username '" + bad + "' refused");
+        }
+    }
+
+    // Checks that a folder upload drops the names a zip would drop.
+    private static void checkFolderUpload(Path root,
+            WorkingCopyManager manager) throws Exception {
         Path folderUpload = root.resolve("fu");
         Files.createDirectories(folderUpload.resolve("Q1"));
         Files.writeString(folderUpload.resolve(QUESTION_ANSWER), "f");
@@ -752,14 +896,6 @@ public class IngestUnitTest {
                 "folder upload drops .DS_Store");
         check(!Files.exists(fuCopy.resolve("Q1/._Q1a.java")),
                 "folder upload drops ._ resource forks like a zip does");
-        // Outside working folder
-        boolean outside = false;
-        try {
-            manager.removeStudentClassFiles(root, null);
-        } catch (java.io.UncheckedIOException expected) {
-            outside = true;
-        }
-        check(outside, "removeStudentClassFiles refuses a path outside");
     }
 
     // --- helpers -----------------------------------------------------
@@ -843,19 +979,21 @@ public class IngestUnitTest {
     }
 
     // Writes a zip of name/text pairs with UTF-8 names.
-    private static Path zip(Path folder, String name, String... pairs)
+    private static Path zip(Path folder, String name, String[] pairs)
             throws Exception {
-        String[] names = new String[pairs.length / PAIR_SIZE];
-        byte[][] data = new byte[pairs.length / PAIR_SIZE][];
+        int entries = pairs.length / PAIR_SIZE;
+        String[] names = new String[entries];
+        byte[][] data = new byte[entries][];
         for (int i = 0; i < names.length; i++) {
-            names[i] = pairs[PAIR_SIZE * i];
-            data[i] = pairs[PAIR_SIZE * i + 1].getBytes(
-                    StandardCharsets.UTF_8);
+            int nameIndex = PAIR_SIZE * i;
+            int textIndex = nameIndex + 1;
+            names[i] = pairs[nameIndex];
+            data[i] = pairs[textIndex].getBytes(StandardCharsets.UTF_8);
         }
         try {
             return zipRaw(folder, name, StandardCharsets.UTF_8, false, names,
                     data);
-        } catch (java.util.zip.ZipException duplicate) {
+        } catch (ZipException duplicate) {
             return folder.resolve(name);
         }
     }
@@ -870,13 +1008,15 @@ public class IngestUnitTest {
 
     // Makes the bytes of a zip of name/text pairs.
     private static byte[] zipBytes(Charset charset, boolean stored,
-            String... pairs) throws Exception {
-        String[] names = new String[pairs.length / PAIR_SIZE];
-        byte[][] data = new byte[pairs.length / PAIR_SIZE][];
+            String[] pairs) throws Exception {
+        int entries = pairs.length / PAIR_SIZE;
+        String[] names = new String[entries];
+        byte[][] data = new byte[entries][];
         for (int i = 0; i < names.length; i++) {
-            names[i] = pairs[PAIR_SIZE * i];
-            data[i] = pairs[PAIR_SIZE * i + 1].getBytes(
-                    StandardCharsets.UTF_8);
+            int nameIndex = PAIR_SIZE * i;
+            int textIndex = nameIndex + 1;
+            names[i] = pairs[nameIndex];
+            data[i] = pairs[textIndex].getBytes(StandardCharsets.UTF_8);
         }
         return zipBytes(charset, stored, names, data);
     }

@@ -63,9 +63,12 @@ public class TesterStrengthSummaryTest {
                 JAVAC_ERRORS, false, 0);
         List<String> names = TesterStrengthChecker.findMissingNames(
                 compiled);
-        check(names.size() == 2, "two names are missing, Member once");
-        check(names.get(0).equals("InvalidOrderException")
-                && names.get(1).equals("Member"),
+        int expectedNames = 2;
+        check(names.size() == expectedNames,
+                "two names are missing, Member once");
+        boolean namesFound = names.get(0).equals("InvalidOrderException")
+                && names.get(1).equals("Member");
+        check(namesFound,
                 "the missing names are InvalidOrderException and Member");
         ProcessResult clean = new ProcessResult(0, "", "", false, 0);
         check(TesterStrengthChecker.findMissingNames(clean).isEmpty(),

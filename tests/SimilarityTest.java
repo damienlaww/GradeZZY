@@ -49,6 +49,14 @@ public class SimilarityTest {
     // A model answers folder chosen for one run
     private static final String CHOSEN_ANSWERS = "chosen/answers";
 
+    // The most marks the question gives
+    private static final double MAX_SCORE = 10;
+
+    // The plagiarism.threshold and plagiarism.min.lines values the checks
+    // use
+    private static final String THRESHOLD = "0.80";
+    private static final String MIN_LINES = "10";
+
     // The plagiarism.algorithm values
     private static final String WINNOWING = "winnowing";
     private static final String TRIGRAMS =
@@ -154,8 +162,8 @@ public class SimilarityTest {
         try {
             AppConfig config = TestConfig.copyInto(root);
             config.setString(ConfigKeys.PLAGIARISM_ENABLED, "true");
-            config.setString(ConfigKeys.PLAGIARISM_THRESHOLD, "0.80");
-            config.setString(ConfigKeys.PLAGIARISM_MIN_LINES, "10");
+            config.setString(ConfigKeys.PLAGIARISM_THRESHOLD, THRESHOLD);
+            config.setString(ConfigKeys.PLAGIARISM_MIN_LINES, MIN_LINES);
             config.setString(ConfigKeys.PLAGIARISM_ALGORITHM, WINNOWING);
             config.setString(ConfigKeys.DATABASE_ENABLED, "false");
 
@@ -164,7 +172,7 @@ public class SimilarityTest {
             List<Submission> submissions = writeStudents(root);
             Assessment assessment = new Assessment("Similar Test", "CS102");
             assessment.addQuestion(new Question(QUESTION, QUESTION,
-                    FILE_NAME, 10));
+                    FILE_NAME, MAX_SCORE));
 
             checkWinnowing(config, submissions, assessment, starter);
             checkTrigrams(config, submissions, assessment, starter);
@@ -193,7 +201,8 @@ public class SimilarityTest {
         check(countHonestPairs(pairs) == 0, "Winnowing flags no pair of "
                 + "honest answers that follow the same plan in their own "
                 + "words, found " + countHonestPairs(pairs));
-        check(pairs.size() == 2, "Winnowing flags only the two copies, "
+        int copies = 2;
+        check(pairs.size() == copies, "Winnowing flags only the two copies, "
                 + "found " + pairs.size());
     }
 
@@ -285,15 +294,17 @@ public class SimilarityTest {
         check("".equals(RunSettings.update("", config, keys)),
                 "A run that kept no settings is not given some");
         String added = RunSettings.update("a.key=1", config, keys);
-        check(WINNOWING.equals(RunSettings.valueOf(added,
+        boolean addedAfter = WINNOWING.equals(RunSettings.valueOf(added,
                 ConfigKeys.PLAGIARISM_ALGORITHM))
-                && "1".equals(RunSettings.valueOf(added, "a.key")),
+                && "1".equals(RunSettings.valueOf(added, "a.key"));
+        check(addedAfter,
                 "A setting the run did not keep is added after the rest");
         String answers = RunSettings.put(added,
                 ConfigKeys.MODEL_ANSWERS_DIR, CHOSEN_ANSWERS);
-        check(CHOSEN_ANSWERS.equals(RunSettings.valueOf(answers,
-                ConfigKeys.MODEL_ANSWERS_DIR))
-                && "1".equals(RunSettings.valueOf(answers, "a.key")),
+        boolean folderWritten = CHOSEN_ANSWERS.equals(
+                RunSettings.valueOf(answers, ConfigKeys.MODEL_ANSWERS_DIR))
+                && "1".equals(RunSettings.valueOf(answers, "a.key"));
+        check(folderWritten,
                 "A folder chosen for a run is written into its settings");
         check("".equals(RunSettings.put("", ConfigKeys.MODEL_ANSWERS_DIR,
                 CHOSEN_ANSWERS)),

@@ -9,7 +9,6 @@
  * Where it fits: Run by hand after compiling, with lib/* on the
  * classpath, as tests/README.md says.
  */
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -88,8 +87,22 @@ public class PersistenceTest {
     // Ann's Q1a mark after the adjustment
     private static final double ADJUSTED_SCORE = 2.0;
 
-    // The max score of Q1a
+    // The max score of Q1a and of Q2
     private static final double Q1A_MAX = 2.5;
+    private static final double Q2_MAX = 4;
+
+    // A character outside Latin-1 in Ann's Q1a output, which must be
+    // read back as it was saved
+    private static final String OUTPUT_MARK = "\u2192";
+
+    // The endings of the files SQLite and a restore may leave beside a
+    // database
+    private static final String RESTORING_SUFFIX = ".restoring";
+    private static final String JOURNAL_SUFFIX = "-journal";
+    private static final String WAL_SUFFIX = "-wal";
+
+    // How digest writes each byte of a hash: two hex digits
+    private static final String HEX_BYTE = "%02x";
 
     // How many questions, students, test cases and anomalies a sample
     // run has, and how many sample runs the listing checks save
@@ -149,7 +162,7 @@ public class PersistenceTest {
                 "CS102");
         assessment.addQuestion(new Question(Q1A, "Q1", "Q1a.java",
                 Q1A_MAX));
-        assessment.addQuestion(new Question(Q2, Q2, "Q2.java", 4));
+        assessment.addQuestion(new Question(Q2, Q2, "Q2.java", Q2_MAX));
         GradingRun run = new GradingRun(id, assessment,
                 new Section("CS102", "G1"), STARTED_AT);
         run.setScoreSheetFile(Path.of("/tmp/sheet with space.csv"));
@@ -166,7 +179,7 @@ public class PersistenceTest {
                 .get(0));
         q1.setCompiled(true);
         q1.setScore(ANN_SCORE);
-        q1.setOutput("Test 1: f()\nPassed\n✓ é\n");
+        q1.setOutput("Test 1: f()\nPassed\n" + OUTPUT_MARK + " é\n");
         q1.addTestCaseResult(new TestCaseResult(1, true, "Passed", "f()"));
         q1.addTestCaseResult(new TestCaseResult(2, false, "Failed", null));
         ann.addQuestionResult(q1);
@@ -208,60 +221,19 @@ public class PersistenceTest {
         repo.saveRun(run);
         GradingRun loaded = repo.loadRun(RUN_ID);
         check(loaded != null, "run loaded");
-        check(loaded.getAssessment().getName().equals(
-                "Lab \"Test\" 3, part 1"), "assessment name with quotes");
-        check(loaded.getAssessment().getQuestions().size() == QUESTIONS
-                && loaded.getAssessment().getQuestions().get(0).getMaxScore()
-                == Q1A_MAX, "questions and max score");
-        check(loaded.getStartedAt().equals(run.getStartedAt()),
-                "started at with millis (" + loaded.getStartedAt() + ")");
-        check(loaded.getSection().getSectionCode().equals("G1"), "section");
-        check(String.valueOf(loaded.getScoreSheetFile()).equals(
-                "/tmp/sheet with space.csv"), "score sheet path");
-        check(String.valueOf(loaded.getTestersDirectory()).equals(
-                "/tmp/testers") && String.valueOf(loaded
-                .getStarterDirectory()).equals("/tmp/starter"),
-                "testers and starter dirs");
-        check("exec.run.timeout.seconds=10\nx=y".equals(
-                loaded.getGradingSettings()), "grading settings");
-        check(loaded.getSubmissions().size() == STUDENTS
-                && loaded.getSubmissions().get(0).getUsername().equals(ANN),
-                "submissions in order");
-        Submission ann = loaded.getSubmissions().get(0);
-        check(ann.getStudent() != null && ann.getStudent().getLastName()
-                .equals("O'Neill, Jr") && ann.getStudent().getFirstName()
-                .equals("Ann 李") && ann.getStudent().getOrgDefinedId()
-                .equals("0012"), "student with quote, comma, unicode, zeros");
-        check(ann.getStatus() == SubmissionStatus.GRADED, "status");
-        check(ann.getQuestionResults().size() == QUESTIONS,
-                "question results");
-        QuestionResult q1 = ann.findResult(Q1A);
-        check(q1 != null && q1.getScore() == ANN_SCORE && q1.isCompiled()
-                && q1.getOutput().contains("✓"), "q1 result");
-        check(q1 != null && q1.getTestCaseResults().size() == TEST_CASES
-                && "f()".equals(q1.getTestCaseResults().get(0).getName())
-                && q1.getTestCaseResults().get(1).getName() == null,
-                "test cases with names");
-        QuestionResult q2 = ann.findResult(Q2);
-        check(q2 != null && q2.isTimedOut() && !q2.isCompiled(), "q2 flags");
-        check(ann.getTotalScore() == ANN_SCORE, "total score");
-        check(ann.getAnomalies().size() == ANOMALIES
-                && ann.getAnomalies().get(0).getFixStatus()
-                == FixStatus.APPLIED, "anomalies with fix status");
-        System.out.println("   fix description after reload: '"
-                + ann.getAnomalies().get(0).describeFix() + "'");
-        check(ann.getRejectedFixes().equals(Arrays.asList(
-                "Fix letter case:q3", "Rename folder:RenameToYourUsername")),
-                "rejected fixes " + ann.getRejectedFixes());
+        checkLoadedRun(loaded, run);
+        checkLoadedAnn(loaded.getSubmissions().get(0));
         Submission bob = loaded.getSubmissions().get(1);
-        check(bob.getStudent() == null && "This zip file is damaged."
-                .equals(bob.getIngestFailure()), "student null, failure");
+        boolean bobFailed = bob.getStudent() == null
+                && "This zip file is damaged.".equals(bob.getIngestFailure());
+        check(bobFailed, "student null, failure");
         checkSavedAgain(repo, run);
         checkSideTables(repo);
         // listRuns / headers
         repo.saveRun(sampleRun("RUN-2"));
-        check(repo.listRuns().size() == RUNS && repo.listRunHeaders().size()
-                == RUNS, "two runs listed");
+        boolean twoListed = repo.listRuns().size() == RUNS
+                && repo.listRunHeaders().size() == RUNS;
+        check(twoListed, "two runs listed");
         check(repo.loadRun("RUN-missing") == null, "missing run null");
         repo.close();
         boolean closed = false;
@@ -276,16 +248,75 @@ public class PersistenceTest {
         checkReopen(root, dbFile);
     }
 
+    // Checks the parts of the run read back that belong to the run.
+    private static void checkLoadedRun(GradingRun loaded, GradingRun run) {
+        check(loaded.getAssessment().getName().equals(
+                "Lab \"Test\" 3, part 1"), "assessment name with quotes");
+        boolean questionsKept = loaded.getAssessment().getQuestions().size()
+                == QUESTIONS && loaded.getAssessment().getQuestions().get(0)
+                .getMaxScore() == Q1A_MAX;
+        check(questionsKept, "questions and max score");
+        check(loaded.getStartedAt().equals(run.getStartedAt()),
+                "started at with millis (" + loaded.getStartedAt() + ")");
+        check(loaded.getSection().getSectionCode().equals("G1"), "section");
+        check(String.valueOf(loaded.getScoreSheetFile()).equals(
+                "/tmp/sheet with space.csv"), "score sheet path");
+        boolean foldersKept = String.valueOf(loaded.getTestersDirectory())
+                .equals("/tmp/testers") && String.valueOf(loaded
+                .getStarterDirectory()).equals("/tmp/starter");
+        check(foldersKept, "testers and starter dirs");
+        check("exec.run.timeout.seconds=10\nx=y".equals(
+                loaded.getGradingSettings()), "grading settings");
+        boolean inOrder = loaded.getSubmissions().size() == STUDENTS
+                && loaded.getSubmissions().get(0).getUsername().equals(ANN);
+        check(inOrder, "submissions in order");
+    }
+
+    // Checks Ann's student, results, anomalies and rejected fixes read
+    // back.
+    private static void checkLoadedAnn(Submission ann) {
+        boolean studentKept = ann.getStudent() != null
+                && ann.getStudent().getLastName().equals("O'Neill, Jr")
+                && ann.getStudent().getFirstName().equals("Ann 李")
+                && ann.getStudent().getOrgDefinedId().equals("0012");
+        check(studentKept, "student with quote, comma, unicode, zeros");
+        check(ann.getStatus() == SubmissionStatus.GRADED, "status");
+        check(ann.getQuestionResults().size() == QUESTIONS,
+                "question results");
+        QuestionResult q1 = ann.findResult(Q1A);
+        boolean q1Kept = q1 != null && q1.getScore() == ANN_SCORE
+                && q1.isCompiled() && q1.getOutput().contains(OUTPUT_MARK);
+        check(q1Kept, "q1 result");
+        boolean namesKept = q1 != null
+                && q1.getTestCaseResults().size() == TEST_CASES
+                && "f()".equals(q1.getTestCaseResults().get(0).getName())
+                && q1.getTestCaseResults().get(1).getName() == null;
+        check(namesKept, "test cases with names");
+        QuestionResult q2 = ann.findResult(Q2);
+        boolean q2Flags = q2 != null && q2.isTimedOut() && !q2.isCompiled();
+        check(q2Flags, "q2 flags");
+        check(ann.getTotalScore() == ANN_SCORE, "total score");
+        boolean anomaliesKept = ann.getAnomalies().size() == ANOMALIES
+                && ann.getAnomalies().get(0).getFixStatus()
+                == FixStatus.APPLIED;
+        check(anomaliesKept, "anomalies with fix status");
+        System.out.println("   fix description after reload: '"
+                + ann.getAnomalies().get(0).describeFix() + "'");
+        check(ann.getRejectedFixes().equals(Arrays.asList(
+                "Fix letter case:q3", "Rename folder:RenameToYourUsername")),
+                "rejected fixes " + ann.getRejectedFixes());
+    }
+
     // Saves the run again, then without one student, and checks fix
     // statuses and decisions.
     private static void checkSavedAgain(SqliteResultRepository repo,
             GradingRun run) throws Exception {
         // Save again: no duplicates
         repo.saveRun(run);
-        check(repo.loadRun(RUN_ID).getSubmissions().size() == STUDENTS
-                && repo.loadRun(RUN_ID).getSubmissions().get(0)
-                .getAnomalies().size() == ANOMALIES,
-                "save twice no duplicates");
+        boolean noDuplicates = repo.loadRun(RUN_ID).getSubmissions().size()
+                == STUDENTS && repo.loadRun(RUN_ID).getSubmissions().get(0)
+                .getAnomalies().size() == ANOMALIES;
+        check(noDuplicates, "save twice no duplicates");
         // Remove a submission and save: it disappears
         run.removeSubmission(run.getSubmissions().get(1));
         repo.saveRun(run);
@@ -322,11 +353,11 @@ public class PersistenceTest {
                 ADJUSTED_SCORE, "Regex too strict; \"fair\"", ADJUSTED_AT);
         repo.saveAdjustment(RUN_ID, adjustment);
         List<ScoreAdjustment> adjustments = repo.listAdjustments(RUN_ID);
-        check(adjustments.size() == 1
+        boolean adjustmentKept = adjustments.size() == 1
                 && adjustments.get(0).getNewScore() == ADJUSTED_SCORE
                 && adjustments.get(0).getReason().equals(
-                "Regex too strict; \"fair\""),
-                "adjustment round trip");
+                "Regex too strict; \"fair\"");
+        check(adjustmentKept, "adjustment round trip");
         repo.deleteAdjustment(RUN_ID, adjustment);
         check(repo.listAdjustments(RUN_ID).isEmpty(), "adjustment deleted");
         // Answer group notes
@@ -335,14 +366,17 @@ public class PersistenceTest {
         repo.saveAnswerGroupNote(RUN_ID, new AnswerGroupNote(Q1A,
                 "ID = ID ;", "Off by two", Arrays.asList("c")));
         List<AnswerGroupNote> notes = repo.listAnswerGroupNotes(RUN_ID);
-        check(notes.size() == 1 && notes.get(0).getLabel().equals(
-                "Off by two"), "answer group note replaced");
+        boolean noteReplaced = notes.size() == 1
+                && notes.get(0).getLabel().equals("Off by two");
+        check(noteReplaced, "answer group note replaced");
         // Audit
         repo.appendAudit(new AuditEntry(AUDIT_AT, "EXPORT", AUDIT_DETAIL));
         List<AuditEntry> audit = repo.listAudit();
-        check(!audit.isEmpty() && audit.get(audit.size() - 1).getDetail()
-                .equals(AUDIT_DETAIL) || audit.get(0).getDetail()
-                .equals(AUDIT_DETAIL), "audit round trip");
+        int lastEntry = audit.size() - 1;
+        boolean auditKept = !audit.isEmpty()
+                && audit.get(lastEntry).getDetail().equals(AUDIT_DETAIL)
+                || audit.get(0).getDetail().equals(AUDIT_DETAIL);
+        check(auditKept, "audit round trip");
     }
 
     // Reopens the database, and opens one in a missing folder and one
@@ -385,6 +419,37 @@ public class PersistenceTest {
     // takes new runs and gains the decision column.
     private static void checkMigration(Path root) throws Exception {
         Path old = root.resolve("old.db");
+        makeOldDatabase(old);
+        SqliteResultRepository repo = new SqliteResultRepository(
+                old.toString());
+        try {
+            repo.open();
+            GradingRun loaded = repo.loadRun("OLD-1");
+            check(loaded != null && loaded.getSubmissions().size() == 1,
+                    "old database run loads after migration");
+            if (loaded != null) {
+                System.out.println("   old run anomalies loaded: "
+                        + loaded.getSubmissions().get(0).getAnomalies().size()
+                        + " (one has an unknown type)");
+                check(loaded.getSubmissions().get(0).getRejectedFixes()
+                        .isEmpty(), "missing rejected_fixes column reads as "
+                        + "none");
+            }
+            repo.saveRun(sampleRun("NEW-1"));
+            check(repo.loadRun("NEW-1").getGradingSettings() != null,
+                    "new run saved into migrated db");
+            repo.updateDecision("X-1", "OK");
+            check("OK".equals(repo.loadDecisions("OLD-1").get("X-1")),
+                    "decision column added by migration");
+            repo.close();
+        } catch (PersistenceException exception) {
+            check(false, "old database opens: " + exception.getMessage());
+        }
+    }
+
+    // Writes a database with the tables of an older GradeZZY, holding one
+    // run with one student and two anomalies, one of an unknown type.
+    private static void makeOldDatabase(Path old) throws Exception {
         Connection connection = DriverManager.getConnection(
                 SqliteResultRepository.JDBC_URL_PREFIX + old);
         Statement statement = connection.createStatement();
@@ -421,31 +486,6 @@ public class PersistenceTest {
                 + "'APPLIED')");
         statement.close();
         connection.close();
-        SqliteResultRepository repo = new SqliteResultRepository(
-                old.toString());
-        try {
-            repo.open();
-            GradingRun loaded = repo.loadRun("OLD-1");
-            check(loaded != null && loaded.getSubmissions().size() == 1,
-                    "old database run loads after migration");
-            if (loaded != null) {
-                System.out.println("   old run anomalies loaded: "
-                        + loaded.getSubmissions().get(0).getAnomalies().size()
-                        + " (one has an unknown type)");
-                check(loaded.getSubmissions().get(0).getRejectedFixes()
-                        .isEmpty(), "missing rejected_fixes column reads as "
-                        + "none");
-            }
-            repo.saveRun(sampleRun("NEW-1"));
-            check(repo.loadRun("NEW-1").getGradingSettings() != null,
-                    "new run saved into migrated db");
-            repo.updateDecision("X-1", "OK");
-            check("OK".equals(repo.loadDecisions("OLD-1").get("X-1")),
-                    "decision column added by migration");
-            repo.close();
-        } catch (PersistenceException exception) {
-            check(false, "old database opens: " + exception.getMessage());
-        }
     }
 
     // Reads a copy of a real database when one is in the workspace, and
@@ -505,12 +545,9 @@ public class PersistenceTest {
             noDb = true;
         }
         check(noDb, "backup of a missing db refused");
-        Path first = null;
-        for (int i = 0; i < BACKUPS_MADE; i++) {
-            Path made = manager.backup(liveDb);
-            if (first == null) {
-                first = made;
-            }
+        Path first = manager.backup(liveDb);
+        for (int i = 1; i < BACKUPS_MADE; i++) {
+            manager.backup(liveDb);
         }
         List<Path> backups = manager.listBackups();
         check(backups.size() == KEEP_COUNT, "pruned to keep count 3 ("
@@ -521,9 +558,10 @@ public class PersistenceTest {
                 "newest first");
         check(BackupManager.timeOf(Path.of("gradezzy-20261111-093015-123.db"))
                 .equals(STARTED_AT), "timeOf parses the name");
-        check(BackupManager.timeOf(Path.of("gradezzy-garbage.db")) == null
-                && BackupManager.timeOf(Path.of("other.db")) == null
-                && BackupManager.timeOf(null) == null, "timeOf odd names");
+        boolean oddNames = BackupManager.timeOf(Path.of("gradezzy-garbage.db"))
+                == null && BackupManager.timeOf(Path.of("other.db")) == null
+                && BackupManager.timeOf(null) == null;
+        check(oddNames, "timeOf odd names");
         Files.writeString(backupDir.resolve("notes.db"), "x");
         Files.writeString(backupDir.resolve("gradezzy-notes.txt"), "x");
         check(manager.listBackups().size() == KEEP_COUNT,
@@ -554,7 +592,7 @@ public class PersistenceTest {
         manager.restore(latest, target);
         check(Arrays.equals(Files.readAllBytes(latest), Files.readAllBytes(
                 target)), "restore copies the backup");
-        check(!Files.exists(Path.of(target + ".restoring")),
+        check(!Files.exists(Path.of(target + RESTORING_SUFFIX)),
                 "no temporary file left");
         boolean missing = false;
         try {
@@ -580,15 +618,22 @@ public class PersistenceTest {
         BackupInfo info = BackupReader.read(readerDb);
         check(info.isReadable() && info.getRuns().size() == RUNS,
                 "reader lists two runs: " + info.getProblem());
-        check(digest(readerDb).equals(before) && Files.getLastModifiedTime(
-                readerDb).toMillis() == modified,
-                "reader leaves the file unchanged");
-        check(!Files.exists(Path.of(readerDb + "-journal"))
-                && !Files.exists(Path.of(readerDb + "-wal")),
-                "reader leaves no journal or wal file");
-        check(info.getRuns().get(0).getStudentCount() == STUDENTS
-                && info.getRuns().get(0).getGradedCount() == 1,
-                "reader counts students and graded");
+        boolean unchanged = digest(readerDb).equals(before)
+                && Files.getLastModifiedTime(readerDb).toMillis() == modified;
+        check(unchanged, "reader leaves the file unchanged");
+        boolean noJournal = !Files.exists(Path.of(readerDb + JOURNAL_SUFFIX))
+                && !Files.exists(Path.of(readerDb + WAL_SUFFIX));
+        check(noJournal, "reader leaves no journal or wal file");
+        boolean counted = info.getRuns().get(0).getStudentCount() == STUDENTS
+                && info.getRuns().get(0).getGradedCount() == 1;
+        check(counted, "reader counts students and graded");
+        checkBadFiles(root, readerDb);
+    }
+
+    // Checks that BackupReader refuses junk, empty, missing, foreign and
+    // truncated files, and changes none of them.
+    private static void checkBadFiles(Path root, Path readerDb)
+            throws Exception {
         Path junk = root.resolve("gradezzy-20260101-000000-000.db");
         Files.writeString(junk, "garbage garbage garbage garbage garbage");
         String junkBefore = digest(junk);
@@ -597,9 +642,9 @@ public class PersistenceTest {
                 "junk file not readable: " + bad.getProblem());
         check(digest(junk).equals(junkBefore), "junk file unchanged");
         int expectedYear = 2026;
-        check(bad.getMadeAt() != null
-                && bad.getMadeAt().getYear() == expectedYear,
-                "made-at read from the name");
+        boolean madeAtRead = bad.getMadeAt() != null
+                && bad.getMadeAt().getYear() == expectedYear;
+        check(madeAtRead, "made-at read from the name");
         Path empty = root.resolve("empty.db");
         Files.write(empty, new byte[0]);
         BackupInfo emptyInfo = BackupReader.read(empty);
@@ -621,8 +666,9 @@ public class PersistenceTest {
         // Truncated real backup
         byte[] full = Files.readAllBytes(readerDb);
         Path cut = root.resolve("cut.db");
-        Files.write(cut, Arrays.copyOf(full, Math.max(MIN_CUT_BYTES,
-                full.length / CUT_PARTS)));
+        int third = full.length / CUT_PARTS;
+        int cutLength = Math.max(MIN_CUT_BYTES, third);
+        Files.write(cut, Arrays.copyOf(full, cutLength));
         BackupInfo cutInfo = BackupReader.read(cut);
         System.out.println("   truncated backup: readable="
                 + cutInfo.isReadable() + " runs=" + cutInfo.getRuns().size()
@@ -633,11 +679,11 @@ public class PersistenceTest {
     private static String digest(Path file) throws Exception {
         MessageDigest sha = MessageDigest.getInstance("SHA-256");
         byte[] hash = sha.digest(Files.readAllBytes(file));
-        StringBuilder text = new StringBuilder();
+        String text = "";
         for (byte hashByte : hash) {
-            text.append(String.format("%02x", hashByte));
+            text = text + String.format(HEX_BYTE, hashByte);
         }
-        return text.toString();
+        return text;
     }
 
     // Prints a known limitation: behaviour that is kept on purpose or is

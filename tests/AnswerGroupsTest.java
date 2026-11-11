@@ -383,9 +383,10 @@ public class AnswerGroupsTest {
                 "  Test 12 - getHighest with an empty array:", "Test");
         check("getHighest with an empty array".equals(name),
                 "dash and end colon dropped: " + name);
-        check(TesterOutputScoreParser.readCaseName("Test 3", "Test") == null
-                && TesterOutputScoreParser.readCaseName("Test 4:", "Test")
-                        == null, "a header with no words has no name");
+        boolean noName = TesterOutputScoreParser.readCaseName("Test 3", "Test")
+                == null && TesterOutputScoreParser.readCaseName("Test 4:",
+                "Test") == null;
+        check(noName, "a header with no words has no name");
 
         TesterOutputScoreParser parser = new TesterOutputScoreParser(
                 TestConfig.load());
@@ -445,10 +446,11 @@ public class AnswerGroupsTest {
 
         List<AnswerGroup> groups = AnswerGrouper.group(run);
         AnswerGroup first = groups.get(0);
-        check(first.getTitle().equals("Failed test 3: getTopStudent(case 3)")
+        boolean namedSameKey = first.getTitle()
+                .equals("Failed test 3: getTopStudent(case 3)")
                 && first.getKey().equals("Q2b|F:3")
-                && first.getUsernames().equals(Arrays.asList("amy", "ben")),
-                "named title, same key: " + first.getTitle());
+                && first.getUsernames().equals(Arrays.asList("amy", "ben"));
+        check(namedSameKey, "named title, same key: " + first.getTitle());
         check(groups.get(1).getTitle()
                 .equals("Failed test 5: getTopStudent(case 5)"),
                 "second named title: " + groups.get(1).getTitle());

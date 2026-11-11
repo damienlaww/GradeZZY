@@ -57,6 +57,13 @@ public class BackupRestoreTest {
     // The start time of every run added here
     private static final String STARTED_AT = "2026-11-11T10:00:00";
 
+    // The start of the id of every run added here
+    private static final String RUN_ID_PREFIX = "run-";
+
+    // The ending of the file a restore writes before it replaces the
+    // database
+    private static final String RESTORING_SUFFIX = ".restoring";
+
     // The number of checks passed so far
     private static int checks = 0;
 
@@ -106,16 +113,16 @@ public class BackupRestoreTest {
     private static List<Path> makeBackups(SqliteResultRepository repository,
             Path databaseFile, HistoryService history) throws Exception {
         List<Path> backups = new ArrayList<>();
-        for (int index = 1; index <= KEEP_COUNT + 1; index++) {
-            addRun(repository, databaseFile, "run-" + index);
-            if (index <= KEEP_COUNT) {
-                Path backup = history.backupNow();
-                check(backup != null, "Back up now makes backup " + index);
-                backups.add(backup);
-            }
+        for (int index = 1; index <= KEEP_COUNT; index++) {
+            addRun(repository, databaseFile, RUN_ID_PREFIX + index);
+            Path backup = history.backupNow();
+            check(backup != null, "Back up now makes backup " + index);
+            backups.add(backup);
         }
-        check(history.listRuns().size() == KEEP_COUNT + 1,
-                "The database holds " + (KEEP_COUNT + 1) + " runs");
+        int runCount = KEEP_COUNT + 1;
+        addRun(repository, databaseFile, RUN_ID_PREFIX + runCount);
+        check(history.listRuns().size() == runCount,
+                "The database holds " + runCount + " runs");
         check(history.listBackups().size() == KEEP_COUNT,
                 "Every backup is kept up to the limit");
         return backups;
@@ -133,12 +140,7 @@ public class BackupRestoreTest {
         Path empty = root.resolve("empty.db");
         Files.createFile(empty);
         Path foreign = root.resolve("other.db");
-        try (Connection connection = DriverManager.getConnection(JDBC
-                + foreign); Statement statement =
-                connection.createStatement()) {
-            statement.execute("CREATE TABLE foo (bar TEXT)");
-            statement.execute("INSERT INTO foo VALUES ('baz')");
-        }
+        writeForeignDatabase(foreign);
         Path settings = Path.of(config.getConfigFile());
         Path[] wrongFiles = {text, settings, empty, foreign};
 
@@ -167,7 +169,7 @@ public class BackupRestoreTest {
                     "The database still opens with its runs after " + name);
             check(manager.listBackups().equals(before),
                     "Restoring " + name + " makes no copy and deletes none");
-            check(!Files.exists(Path.of(databaseFile + ".restoring")),
+            check(!Files.exists(Path.of(databaseFile + RESTORING_SUFFIX)),
                     "No half restored file is left after " + name);
         }
 
@@ -184,6 +186,23 @@ public class BackupRestoreTest {
                 Files.readAllBytes(databaseFile)),
                 "BackupManager.restore leaves the database as it was");
         repository.open();
+    }
+
+    // Writes a SQLite file of another program, with one table and row.
+    private static void writeForeignDatabase(Path foreign)
+            throws Exception {
+        Connection connection = DriverManager.getConnection(JDBC + foreign);
+        try {
+            Statement statement = connection.createStatement();
+            try {
+                statement.execute("CREATE TABLE foo (bar TEXT)");
+                statement.execute("INSERT INTO foo VALUES ('baz')");
+            } finally {
+                statement.close();
+            }
+        } finally {
+            connection.close();
+        }
     }
 
     // Restores the oldest kept backup: no backup is deleted, the copy made
@@ -261,12 +280,20 @@ public class BackupRestoreTest {
     private static void addRun(SqliteResultRepository repository,
             Path databaseFile, String runId) throws Exception {
         repository.close();
-        try (Connection connection = DriverManager.getConnection(JDBC
-                + databaseFile); PreparedStatement statement =
-                connection.prepareStatement(INSERT_RUN)) {
-            statement.setString(1, runId);
-            statement.setString(2, STARTED_AT);
-            statement.executeUpdate();
+        Connection connection = DriverManager.getConnection(JDBC
+                + databaseFile);
+        try {
+            PreparedStatement statement = connection.prepareStatement(
+                    INSERT_RUN);
+            try {
+                statement.setString(1, runId);
+                statement.setString(2, STARTED_AT);
+                statement.executeUpdate();
+            } finally {
+                statement.close();
+            }
+        } finally {
+            connection.close();
         }
         repository.open();
     }

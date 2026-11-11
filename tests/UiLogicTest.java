@@ -9,8 +9,6 @@
  * Where it fits: Run by hand after compiling, as tests/README.md says.
  * The JavaFX jars are not needed on the classpath.
  */
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -81,6 +79,17 @@ public class UiLogicTest {
     // Turns a similarity from 0 to 1 into a percentage
     private static final int PERCENT = 100;
 
+    // The start of the id of every similar code flag, and the separator
+    // between the run, the two students and the question in it
+    private static final String FLAG_ID_PREFIX = "SIMILAR-";
+    private static final String ID_SEPARATOR = "/";
+
+    // The separator between a first name and a last name, and where
+    // each sits in a full name
+    private static final String NAME_SEPARATOR = " ";
+    private static final int FIRST_NAME = 0;
+    private static final int LAST_NAME = 1;
+
     // The year, month, hour and minute the progress runs were made
     private static final int YEAR = 2026;
     private static final int MONTH = 1;
@@ -101,7 +110,7 @@ public class UiLogicTest {
             new HashMap<>();
 
     // The service the fake backend reads similar pairs with
-    private static PlagiarismService plagiarism;
+    private static PlagiarismService plagiarism = null;
 
     /**
      * Runs every check.
@@ -126,30 +135,9 @@ public class UiLogicTest {
     // Makes a fake backend that answers only the calls CheatingRemarks
     // makes, with the given pairs and the decisions in DECISIONS.
     private static DashboardBackend fakeBackend(
-            final List<SimilarityPair> pairs) {
-        InvocationHandler handler = new InvocationHandler() {
-            // Answers one call made on the fake backend
-            @Override
-            public Object invoke(Object proxy, Method method, Object[] args) {
-                String name = method.getName();
-                if (name.equals("listSimilarPairs")) {
-                    return pairs;
-                } else if (name.equals("findSimilarPair")) {
-                    return plagiarism.readPair((GradingRun) args[0],
-                            (Anomaly) args[1]);
-                } else if (name.equals("getDecision")) {
-                    ReviewDecision decision = DECISIONS.get(
-                            ((Anomaly) args[0]).getId());
-                    return decision == null ? ReviewDecision.OPEN : decision;
-                } else if (name.equals("needsReview")) {
-                    return !DECISIONS.containsKey(((Anomaly) args[0])
-                            .getId());
-                } else if (name.equals("toString")) {
-                    return "fake backend";
-                }
-                throw new UnsupportedOperationException(name);
-            }
-        };
+            List<SimilarityPair> pairs) {
+        FakeBackendHandler handler = new FakeBackendHandler(pairs, DECISIONS,
+                plagiarism);
         return (DashboardBackend) Proxy.newProxyInstance(
                 DashboardBackend.class.getClassLoader(),
                 new Class<?>[] {DashboardBackend.class}, handler);
@@ -162,9 +150,9 @@ public class UiLogicTest {
                 Path.of("/tmp/" + user));
         submission.setStatus(SubmissionStatus.GRADED);
         if (full != null) {
-            String[] parts = full.split(" ");
-            submission.setStudent(new Student("1", user, parts[1], parts[0],
-                    user + "@x"));
+            String[] parts = full.split(NAME_SEPARATOR);
+            submission.setStudent(new Student("1", user, parts[LAST_NAME],
+                    parts[FIRST_NAME], user + "@x"));
         }
         return submission;
     }
@@ -176,7 +164,8 @@ public class UiLogicTest {
         Anomaly[] flags = new Anomaly[users.length];
         for (int i = 0; i < users.length; i++) {
             String owner = users[i];
-            String other = users[1 - i];
+            int otherIndex = users.length - 1 - i;
+            String other = users[otherIndex];
             String message = pair.getQuestionId() + " is "
                     + Math.round(pair.getSimilarity() * PERCENT)
                     + "% similar to " + other + ". This is a review aid, not "
@@ -188,8 +177,9 @@ public class UiLogicTest {
                 message += " Same Email ID: both files give the same Email "
                         + "ID in their header.";
             }
-            Anomaly anomaly = new Anomaly("SIMILAR-" + run.getId() + "/"
-                    + owner + "/" + other + "/" + pair.getQuestionId(),
+            Anomaly anomaly = new Anomaly(FLAG_ID_PREFIX + run.getId()
+                    + ID_SEPARATOR + owner + ID_SEPARATOR + other
+                    + ID_SEPARATOR + pair.getQuestionId(),
                     AnomalyType.SIMILAR_CODE, Severity.INFO, owner, message,
                     "Compare");
             run.findLoaded(owner).addAnomaly(anomaly);
@@ -236,6 +226,22 @@ public class UiLogicTest {
         Anomaly[] deQ1Flags = flag(run, deQ1);
         DashboardBackend backend = fakeBackend(pairs);
         CheatingRemarks remarks = new CheatingRemarks(backend);
+        checkPendingRemarks(remarks, run, abQ1);
+        checkKeptRemarks(remarks, run, abQ1, abQ1Flags, acQ1Flags,
+                acQ2Flags);
+        checkSinglePair(remarks, run, deQ1Flags);
+        checkUpperCaseKey(assessment, backend);
+        // Resolved by retry counts as not kept
+        DECISIONS.put(abQ1Flags[0].getId(), ReviewDecision.RESOLVED);
+        Map<String, String> remarkMap = remarks.remarksFor(run);
+        System.out.println("   after ann's identical flag is RESOLVED: "
+                + "ann='" + remarkMap.get(ANN) + "' bob='"
+                + remarkMap.get(BOB) + "'");
+    }
+
+    // Checks the remarks while nothing is reviewed.
+    private static void checkPendingRemarks(CheatingRemarks remarks,
+            GradingRun run, SimilarityPair abQ1) {
         Map<String, String> pending = remarks.remarksFor(run);
         check(("Not yet reviewed: flagged with Bob Tan (bob) on 2 questions"
                 + ", cat on 2 questions").equals(pending.get(ANN)),
@@ -246,6 +252,13 @@ public class UiLogicTest {
         check(!pending.containsKey(DAN) && !pending.containsKey(EVE),
                 "alike on one question, not reviewed: no remark " + pending);
         check(remarks.isWaiting(run, abQ1), "unreviewed pair waits");
+    }
+
+    // Checks the remarks as ann's flags with bob and with cat are kept
+    // flagged on both sides, and when one side says it looks fine.
+    private static void checkKeptRemarks(CheatingRemarks remarks,
+            GradingRun run, SimilarityPair abQ1, Anomaly[] abQ1Flags,
+            Anomaly[] acQ1Flags, Anomaly[] acQ2Flags) {
         // Keep ann/bob Q1 (identical) flagged on both sides
         DECISIONS.put(abQ1Flags[0].getId(), ReviewDecision.REVIEWED);
         check(!remarks.remarksFor(run).get(BOB).contains("Cheated"),
@@ -278,16 +291,30 @@ public class UiLogicTest {
         System.out.println("   ann/cat Q2 kept by ann's flag, rejected on "
                 + "cat's: ann='" + remarkMap.get(ANN) + "' cat='"
                 + remarkMap.get(CAT) + "'");
-        check(remarkMap.get(ANN).equals(remarkMap.getOrDefault(ANN, NO_TEXT))
+        boolean matching = remarkMap.get(ANN).equals(
+                remarkMap.getOrDefault(ANN, NO_TEXT))
                 && sameMention(remarkMap.get(ANN), CAT, remarkMap.get(CAT),
-                ANN), "the two students of a pair get matching remarks");
+                ANN);
+        check(matching, "the two students of a pair get matching remarks");
+    }
+
+    // Checks the remark of a pair alike on one question only, once both
+    // of its flags are kept.
+    private static void checkSinglePair(CheatingRemarks remarks,
+            GradingRun run, Anomaly[] deQ1Flags) {
         // dan/eve both kept on their only question
         DECISIONS.put(deQ1Flags[0].getId(), ReviewDecision.REVIEWED);
         DECISIONS.put(deQ1Flags[1].getId(), ReviewDecision.REVIEWED);
-        remarkMap = remarks.remarksFor(run);
+        Map<String, String> remarkMap = remarks.remarksFor(run);
         check("Possible cheating with Eve Ho (eve)".equals(
                 remarkMap.get(DAN)), "single-question similar pair kept: "
                 + remarkMap.get(DAN));
+    }
+
+    // Checks that an upload name in upper case gives a lower-case remark
+    // key, and that a null run has no remarks.
+    private static void checkUpperCaseKey(Assessment assessment,
+            DashboardBackend backend) {
         // Upper-case upload name maps to lower-case key
         GradingRun upper = new GradingRun("RUN-8", assessment, SECTION,
                 LocalDateTime.now());
@@ -303,12 +330,6 @@ public class UiLogicTest {
         check(upperRemarks.containsKey("zed"), "remark key is lower case");
         check(new CheatingRemarks(backend).remarksFor(null).isEmpty(),
                 "null run");
-        // Resolved by retry counts as not kept
-        DECISIONS.put(abQ1Flags[0].getId(), ReviewDecision.RESOLVED);
-        remarkMap = remarks.remarksFor(run);
-        System.out.println("   after ann's identical flag is RESOLVED: "
-                + "ann='" + remarkMap.get(ANN) + "' bob='"
-                + remarkMap.get(BOB) + "'");
     }
 
     // Says whether both remarks name the other student, or neither does.
@@ -353,10 +374,10 @@ public class UiLogicTest {
                 false)), COURSE, LAB_TEST);
         check(noCurrent.get(GROUP_ONE) == g1New, "without a current run, "
                 + "the first listed wins");
-        check(!SectionProgress.isGradedWith(other, LAB_TEST)
+        boolean gradedWith = !SectionProgress.isGradedWith(other, LAB_TEST)
                 && SectionProgress.isGradedWith(g1New, "LAB TEST 3")
-                && !SectionProgress.isGradedWith(g1New, null),
-                "isGradedWith");
+                && !SectionProgress.isGradedWith(g1New, null);
+        check(gradedWith, "isGradedWith");
         GradingRun waiting = new GradingRun("RUN-9", lab, SECTION,
                 LocalDateTime.now());
         Submission pending = student("p", null);

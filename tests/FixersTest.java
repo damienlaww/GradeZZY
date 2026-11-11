@@ -10,8 +10,12 @@
  * Where it fits: Run by hand after compiling, as tests/README.md says.
  * Reads the fixed test settings. No student code runs.
  */
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,12 +23,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.stream.Stream;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.fix.CaseNameFixer;
 import gradezzy.fix.EncodingFixer;
+import gradezzy.fix.FixException;
 import gradezzy.fix.FixManager;
 import gradezzy.fix.FixRecord;
 import gradezzy.fix.FolderHierarchyFixer;
@@ -118,18 +122,27 @@ public class FixersTest {
     // The end of a bracketed count in a check message
     private static final String CLOSE_BRACKET = ")";
 
+    // The line break that splits a file into lines
+    private static final String NEWLINE = "\n";
+
+    // What firstLines puts after each line it shows
+    private static final String LINE_SEPARATOR = " | ";
+
+    // What goes between the kind of an open problem and its message
+    private static final String TYPE_SEPARATOR = ":";
+
     // The number of checks that passed and failed
     private static int passed = 0;
     private static int failed = 0;
 
     // The fixed test settings
-    private static AppConfig config;
+    private static AppConfig config = null;
 
     // The assessment the settings describe
-    private static Assessment assessment;
+    private static Assessment assessment = null;
 
     // The folder every working copy is built in
-    private static Path working;
+    private static Path working = null;
 
     /**
      * Runs every check.
@@ -174,33 +187,34 @@ public class FixersTest {
     private static void checkFolderFixes() throws Exception {
         // 1. Wrong top folder name
         Map<String, byte[]> files = all(TEMPLATE_FOLDER, GOOD_HEADER);
-        Outcome outcome = fixCase("ann", files);
-        check(outcome.has("ann" + Q1A_PATH)
-                && !outcome.has(TEMPLATE_FOLDER),
-                "wrong top folder renamed to username: " + outcome.after);
+        FixCaseOutcome outcome = fixCase("ann", files);
+        boolean topRenamed = outcome.has("ann" + Q1A_PATH)
+                && !outcome.has(TEMPLATE_FOLDER);
+        check(topRenamed, "wrong top folder renamed to username: "
+                + outcome.getAfter());
         check(outcome.fixed(AnomalyType.WRONG_FOLDER_NAME),
                 "WRONG_FOLDER_NAME marked applied");
-        check(outcome.undoneEqual, "undo restores the wrong folder name");
+        check(outcome.isUndoneEqual(), "undo restores the wrong folder name");
         // 2. No wrapper folder
         files = all("", GOOD_HEADER);
         outcome = fixCase("ben", files);
         check(outcome.has("ben" + Q1A_PATH),
-                "missing wrapper added: " + outcome.after);
-        check(outcome.undoneEqual, "undo removes the added wrapper");
+                "missing wrapper added: " + outcome.getAfter());
+        check(outcome.isUndoneEqual(), "undo removes the added wrapper");
         // 3. Double wrapper
         files = all("cat/cat", GOOD_HEADER);
         outcome = fixCase("cat", files);
         check(outcome.has("cat" + Q1A_PATH), "double wrapper flattened: "
-                + outcome.after);
-        check(outcome.undoneEqual, "undo restores the double wrapper");
+                + outcome.getAfter());
+        check(outcome.isUndoneEqual(), "undo restores the double wrapper");
         // 4. Folder in the wrong case
         files = all(DAN, GOOD_HEADER);
         rename(files, DAN + "/Q1/", DAN + "/q1/");
         outcome = fixCase(DAN, files);
-        check(outcome.has(DAN + Q1A_PATH)
-                && outcome.has(DAN + "/Q1/Q1b.java"),
-                "q1 renamed to Q1: " + outcome.after);
-        check(outcome.undoneEqual, "undo restores q1");
+        boolean folderRenamed = outcome.has(DAN + Q1A_PATH)
+                && outcome.has(DAN + "/Q1/Q1b.java");
+        check(folderRenamed, "q1 renamed to Q1: " + outcome.getAfter());
+        check(outcome.isUndoneEqual(), "undo restores q1");
     }
 
     // Cases 5 to 8: the answer files have the wrong names or places.
@@ -208,26 +222,28 @@ public class FixersTest {
         // 5. File in the wrong case
         Map<String, byte[]> files = all("eve", GOOD_HEADER);
         rename(files, "eve/Q2/Q2a.java", "eve/Q2/q2A.java");
-        Outcome outcome = fixCase("eve", files);
-        check(outcome.has("eve/Q2/Q2a.java")
-                && !outcome.has("eve/Q2/q2A.java"),
-                "q2A.java renamed to Q2a.java: " + outcome.after);
-        check(outcome.undoneEqual, "undo restores q2A.java");
+        FixCaseOutcome outcome = fixCase("eve", files);
+        boolean fileRenamed = outcome.has("eve/Q2/Q2a.java")
+                && !outcome.has("eve/Q2/q2A.java");
+        check(fileRenamed, "q2A.java renamed to Q2a.java: "
+                + outcome.getAfter());
+        check(outcome.isUndoneEqual(), "undo restores q2A.java");
         // 6. Browser copy name
         files = all("fay", GOOD_HEADER);
         rename(files, "fay/Q3/Q3.java", "fay/Q3/Q3 (1).java");
         outcome = fixCase("fay", files);
         check(outcome.has("fay/Q3/Q3.java"),
-                "Q3 (1).java renamed: " + outcome.after);
-        check(outcome.undoneEqual, "undo restores Q3 (1).java");
+                "Q3 (1).java renamed: " + outcome.getAfter());
+        check(outcome.isUndoneEqual(), "undo restores Q3 (1).java");
         // 7. File in the wrong question folder
         files = all(GUS, GOOD_HEADER);
         rename(files, GUS + Q2B_PATH, GUS + "/Q1/Q2b.java");
         outcome = fixCase(GUS, files);
-        check(outcome.has(GUS + Q2B_PATH)
-                && !outcome.has(GUS + "/Q1/Q2b.java"),
-                "Q2b.java moved from Q1 to Q2: " + outcome.after);
-        check(outcome.undoneEqual, "undo moves Q2b.java back");
+        boolean fileMoved = outcome.has(GUS + Q2B_PATH)
+                && !outcome.has(GUS + "/Q1/Q2b.java");
+        check(fileMoved, "Q2b.java moved from Q1 to Q2: "
+                + outcome.getAfter());
+        check(outcome.isUndoneEqual(), "undo moves Q2b.java back");
         // 8. Answer files with no question folders
         files = new TreeMap<>();
         for (String[] question : questions()) {
@@ -235,39 +251,42 @@ public class FixersTest {
                     + "class " + question[CLASS_PART] + " {}\n"));
         }
         outcome = fixCase(HAL, files);
-        check(outcome.has(HAL + Q1A_PATH) && outcome.has(HAL + Q2B_PATH)
-                && outcome.has(HAL + "/Q3/Q3.java"),
-                "loose files put into question folders: " + outcome.after);
-        check(outcome.undoneEqual, "undo puts loose files back");
+        boolean looseFiled = outcome.has(HAL + Q1A_PATH)
+                && outcome.has(HAL + Q2B_PATH)
+                && outcome.has(HAL + "/Q3/Q3.java");
+        check(looseFiled, "loose files put into question folders: "
+                + outcome.getAfter());
+        check(outcome.isUndoneEqual(), "undo puts loose files back");
     }
 
     // Cases 9 to 11: the header is blank, half filled or has no labels.
     private static void checkHeaderFixes() throws Exception {
         // 9. Blank header filled from the roster
         Map<String, byte[]> files = all(IVY, header("", ""));
-        Outcome outcome = fixCase(IVY, files);
+        FixCaseOutcome outcome = fixCase(IVY, files);
         String q1a = outcome.text(IVY + Q1A_PATH);
         check(q1a.contains("Ivy Tan") && q1a.contains("ivy@x.edu"),
                 "header filled from roster: " + firstLines(q1a));
         check(outcome.fixed(AnomalyType.MISSING_HEADER_NAME),
                 "MISSING_HEADER_NAME marked applied");
-        check(outcome.undoneEqual, "undo restores the blank header");
-        check(!outcome.afterUndo.keySet().toString().contains("backup"),
+        check(outcome.isUndoneEqual(), "undo restores the blank header");
+        String undonePaths = outcome.getAfterUndo().keySet().toString();
+        check(!undonePaths.contains("backup"),
                 "no backup file left in the working copy after undo");
         // 10. Header with only email missing
         files = all(JAY, header("Jay Ong", ""));
         outcome = fixCase(JAY, files);
         String jayAnswer = outcome.text(JAY + Q1A_PATH);
-        check(jayAnswer.contains("jay@x.edu")
-                && jayAnswer.contains("Jay Ong"),
-                "email filled, name kept");
-        check(outcome.undoneEqual, "undo of email fill");
+        boolean emailFilled = jayAnswer.contains("jay@x.edu")
+                && jayAnswer.contains("Jay Ong");
+        check(emailFilled, "email filled, name kept");
+        check(outcome.isUndoneEqual(), "undo of email fill");
         // 11. Header without labels at all
         files = all(KIM, "public class X {}\n");
         outcome = fixCase(KIM, files);
         System.out.println("   no-label header after fix: "
                 + firstLines(outcome.text(KIM + Q1A_PATH)));
-        check(outcome.undoneEqual, "undo of header with no labels");
+        check(outcome.isUndoneEqual(), "undo of header with no labels");
     }
 
     // Cases 12 to 14: the answer is not saved in plain UTF-8.
@@ -277,13 +296,13 @@ public class FixersTest {
         String leePath = LEE + Q1A_PATH;
         files.put(leePath, (GOOD_HEADER + "// café\nclass Q1a {}\n")
                 .getBytes(WINDOWS_1252));
-        Outcome outcome = fixCase(LEE, files);
-        check(outcome.text(leePath).contains("café")
-                && isUtf8(outcome.afterBytes.get(leePath)),
-                "windows-1252 file saved as UTF-8");
+        FixCaseOutcome outcome = fixCase(LEE, files);
+        boolean savedAsUtf8 = outcome.text(leePath).contains("café")
+                && isUtf8(outcome.getAfterBytes().get(leePath));
+        check(savedAsUtf8, "windows-1252 file saved as UTF-8");
         check(outcome.fixed(AnomalyType.WRONG_ENCODING),
                 "WRONG_ENCODING applied");
-        check(outcome.undoneEqual, "undo restores windows-1252 bytes");
+        check(outcome.isUndoneEqual(), "undo restores windows-1252 bytes");
         // 13. UTF-8 with BOM
         files = all(MAY, GOOD_HEADER);
         byte[] plain = bytes(GOOD_HEADER + "class Q1a {}\n");
@@ -293,18 +312,18 @@ public class FixersTest {
         System.arraycopy(plain, 0, withBom, bom.length, plain.length);
         files.put(MAY + Q1A_PATH, withBom);
         outcome = fixCase(MAY, files);
-        check(Arrays.equals(outcome.afterBytes.get(MAY + Q1A_PATH), plain),
-                "BOM removed");
-        check(outcome.undoneEqual, "undo puts the BOM back");
+        byte[] mayAnswer = outcome.getAfterBytes().get(MAY + Q1A_PATH);
+        check(Arrays.equals(mayAnswer, plain), "BOM removed");
+        check(outcome.isUndoneEqual(), "undo puts the BOM back");
         // 14. UTF-16
         files = all(NED, GOOD_HEADER);
         byte[] utf16 = (GOOD_HEADER + "class Q1a {}\n").getBytes(
                 StandardCharsets.UTF_16);
         files.put(NED + Q1A_PATH, utf16);
         outcome = fixCase(NED, files);
-        check(Arrays.equals(outcome.afterBytes.get(NED + Q1A_PATH), plain),
-                "UTF-16 saved as UTF-8");
-        check(outcome.undoneEqual, "undo puts UTF-16 back");
+        byte[] nedAnswer = outcome.getAfterBytes().get(NED + Q1A_PATH);
+        check(Arrays.equals(nedAnswer, plain), "UTF-16 saved as UTF-8");
+        check(outcome.isUndoneEqual(), "undo puts UTF-16 back");
     }
 
     // Cases 15 to 17: everything wrong at once, a student not on the
@@ -317,25 +336,25 @@ public class FixersTest {
                 TEMPLATE_FOLDER + "/Q3/Q2b.java");
         files.put(TEMPLATE_FOLDER + "/q1/Q1a.java",
                 (header("", "") + "// naïve\n").getBytes(WINDOWS_1252));
-        Outcome outcome = fixCase(OLI, files);
+        FixCaseOutcome outcome = fixCase(OLI, files);
         String oliPath = OLI + Q1A_PATH;
         check(outcome.has(oliPath) && outcome.has(OLI + Q2B_PATH),
-                "combined: layout fixed: " + outcome.after);
-        check(outcome.text(oliPath).contains("Oli Wu")
-                && outcome.text(oliPath).contains("naïve"),
-                "combined: header and encoding fixed");
-        check(outcome.undoneEqual, "combined: undo restores everything");
-        check(outcome.openAfter == 0,
+                "combined: layout fixed: " + outcome.getAfter());
+        boolean headerAndEncoding = outcome.text(oliPath).contains("Oli Wu")
+                && outcome.text(oliPath).contains("naïve");
+        check(headerAndEncoding, "combined: header and encoding fixed");
+        check(outcome.isUndoneEqual(), "combined: undo restores everything");
+        check(outcome.getOpenAfter() == 0,
                 "combined: no open structure problems left ("
-                + outcome.openAfter + ": " + outcome.openMessages
+                + outcome.getOpenAfter() + ": " + outcome.getOpenMessages()
                 + CLOSE_BRACKET);
         // 16. Student not on the roster: header left alone
         files = all(PAT, header("", ""));
         outcome = fixCaseWith(PAT, files, false);
-        check(Arrays.equals(outcome.afterBytes.get(PAT + Q1A_PATH),
+        check(Arrays.equals(outcome.getAfterBytes().get(PAT + Q1A_PATH),
                 files.get(PAT + Q1A_PATH)),
                 "header not changed for a student not on the roster");
-        check(outcome.failureReasons.toString()
+        check(outcome.getFailureReasons().toString()
                 .contains("not on the roster"),
                 "failure reason names the roster");
         // 17. Two candidate files in a case clash
@@ -345,14 +364,24 @@ public class FixersTest {
         files.put(QUY + "/Q1/Q1A.JAVA", bytes("class Q1A {}"));
         outcome = fixCaseLenient(QUY, files);
         System.out.println("   two case-variant candidates for Q1a.java: "
-                + outcome.after + " reasons=" + outcome.failureReasons);
-        check(outcome.undoneEqual, "undo with two case variants");
+                + outcome.getAfter() + " reasons="
+                + outcome.getFailureReasons());
+        check(outcome.isUndoneEqual(), "undo with two case variants");
     }
 
     // Checks undo, approve and rejected fix keys on FixManager.
     private static void checkRejectedKeys() throws Exception {
         Map<String, byte[]> files = all(TEMPLATE_FOLDER,
                 header("Ray Koh", "ray@x.edu"));
+        FixRecord record = checkUndo(files);
+        checkRejected(files, record);
+        checkApprove(files);
+    }
+
+    // Checks that a fix is recorded with a key and that undo marks it
+    // undone, quietly the second time; returns the fix's record.
+    private static FixRecord checkUndo(Map<String, byte[]> files)
+            throws Exception {
         Submission submission = build(RAY, files, true);
         FixManager manager = manager();
         runStages(submission, manager);
@@ -368,6 +397,13 @@ public class FixersTest {
         manager.undo(record);
         check(true, "second undo is quiet");
         submission.rejectFix(record.getFixKey());
+        return record;
+    }
+
+    // Checks that a rejected fix is not applied again when the student
+    // is graded again, and that the skipped fix can be named.
+    private static void checkRejected(Map<String, byte[]> files,
+            FixRecord record) throws Exception {
         // Run again from a fresh working copy, as a re-grade does
         Submission again = build(RAY, files, true);
         again.rejectFix(record.getFixKey());
@@ -384,7 +420,12 @@ public class FixersTest {
             }
         }
         check(skippedNamed, "findRejectedKey names the skipped fix");
-        // Approve
+    }
+
+    // Checks approve, undo with no fixer, applyAll again, and undo once
+    // the working copy is gone.
+    private static void checkApprove(Map<String, byte[]> files)
+            throws Exception {
         Submission third = build(RAY, files, true);
         FixManager approveManager = manager();
         runStages(third, approveManager);
@@ -400,7 +441,7 @@ public class FixersTest {
         boolean noFixer = false;
         try {
             empty.undo(approved);
-        } catch (gradezzy.fix.FixException expected) {
+        } catch (FixException expected) {
             noFixer = true;
         }
         check(noFixer, "undo without the fixer throws FixException");
@@ -420,7 +461,7 @@ public class FixersTest {
         boolean goneRefused = false;
         try {
             approveManager.undo(approved);
-        } catch (gradezzy.fix.FixException expected) {
+        } catch (FixException expected) {
             goneRefused = true;
         }
         check(goneRefused,
@@ -452,123 +493,78 @@ public class FixersTest {
                 "describeProblem starts with the path");
     }
 
-    // What one fix case left behind: the files after the fix and after
-    // the undo, and what the fixers and validators said.
-    private static class Outcome {
-        // Every file and folder after the fix, by path
-        private Map<String, byte[]> afterBytes = new TreeMap<>();
-
-        // Every file and folder after every fix was undone
-        private Map<String, byte[]> afterUndo = new TreeMap<>();
-
-        // The paths after the fix, as one line of text
-        private String after = "";
-
-        // Whether the undo gave back exactly what the student sent
-        private boolean undoneEqual = false;
-
-        // The problems the checks found
-        private List<Anomaly> anomalies = new ArrayList<>();
-
-        // The kinds of problem whose fix was applied
-        private List<AnomalyType> appliedTypes = new ArrayList<>();
-
-        // Why each fix that could not be made was not made, by kind
-        private Map<String, String> failureReasons = new TreeMap<>();
-
-        // How many problems the checks still found after the fix
-        private int openAfter = 0;
-
-        // The problems the checks still found after the fix
-        private List<String> openMessages = new ArrayList<>();
-
-        // Says whether a file or folder is there after the fix.
-        private boolean has(String path) {
-            for (String key : afterBytes.keySet()) {
-                if (key.equals(path) || key.startsWith(path + SLASH)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // Reads a file after the fix as UTF-8 text.
-        private String text(String path) {
-            byte[] data = afterBytes.get(path);
-            if (data == null) {
-                return "<missing>";
-            }
-            return new String(data, StandardCharsets.UTF_8);
-        }
-
-        // Says whether a fix of this kind was applied.
-        private boolean fixed(AnomalyType type) {
-            return appliedTypes.contains(type);
-        }
-    }
-
     // Runs one case for a student on the roster.
-    private static Outcome fixCase(String user, Map<String, byte[]> files)
-            throws Exception {
+    private static FixCaseOutcome fixCase(String user,
+            Map<String, byte[]> files) throws Exception {
         return fixCaseWith(user, files, true);
     }
 
     // Runs one case where the fixers may not agree on a fix.
-    private static Outcome fixCaseLenient(String user,
+    private static FixCaseOutcome fixCaseLenient(String user,
             Map<String, byte[]> files) throws Exception {
         return fixCaseWith(user, files, true);
     }
 
     // Builds the working copy, fixes it, checks it again, undoes every
     // fix and says what happened at each step.
-    private static Outcome fixCaseWith(String user,
+    private static FixCaseOutcome fixCaseWith(String user,
             Map<String, byte[]> files, boolean onRoster) throws Exception {
         Submission submission = build(user, files, onRoster);
         Map<String, byte[]> before = snapshot(
                 submission.getWorkingCopyPath());
         FixManager manager = manager();
         runStages(submission, manager);
-        Outcome outcome = new Outcome();
-        outcome.anomalies = new ArrayList<>(submission.getAnomalies());
-        for (Anomaly anomaly : outcome.anomalies) {
+        FixCaseOutcome outcome = new FixCaseOutcome();
+        List<Anomaly> anomalies = new ArrayList<>(submission.getAnomalies());
+        for (Anomaly anomaly : anomalies) {
             if (anomaly.getFixStatus() == FixStatus.APPLIED) {
-                outcome.appliedTypes.add(anomaly.getType());
+                outcome.addAppliedType(anomaly.getType());
             }
         }
-        outcome.afterBytes = snapshot(submission.getWorkingCopyPath());
-        outcome.after = outcome.afterBytes.keySet().toString();
+        outcome.setAfterBytes(snapshot(submission.getWorkingCopyPath()));
         for (Anomaly anomaly : submission.getAnomalies()) {
             String reason = manager.getFailureReason(anomaly);
             if (reason != null) {
-                outcome.failureReasons.put(anomaly.getType().toString(),
+                outcome.putFailureReason(anomaly.getType().toString(),
                         reason);
             }
         }
-        // Re-validate to count open structure problems
+        recheck(user, submission, outcome);
+        undoEvery(user, manager);
+        outcome.setAfterUndo(snapshot(submission.getWorkingCopyPath()));
+        outcome.setUndoneEqual(sameTree(before, outcome.getAfterUndo()));
+        if (!outcome.isUndoneEqual()) {
+            System.out.println("   " + user + " before=" + before.keySet()
+                    + " afterUndo=" + outcome.getAfterUndo().keySet());
+        }
+        return outcome;
+    }
+
+    // Validates the fixed working copy again and notes every structure
+    // problem still open.
+    private static void recheck(String user, Submission submission,
+            FixCaseOutcome outcome) {
         Submission recheck = new Submission(user, SECTION,
                 submission.getOriginalPath());
         recheck.setWorkingCopyPath(submission.getWorkingCopyPath());
         recheck.setStudent(submission.getStudent());
         for (Anomaly anomaly : validators().runAll(recheck, assessment)) {
-            outcome.openAfter++;
-            outcome.openMessages.add(anomaly.getType() + ":"
+            outcome.addOpenMessage(anomaly.getType() + TYPE_SEPARATOR
                     + anomaly.getMessage());
         }
+    }
+
+    // Undoes every fix the manager made, newest first, and prints why
+    // when the undo fails.
+    private static void undoEvery(String user, FixManager manager) {
         List<FixRecord> records = new ArrayList<>(manager.getFixRecords());
         Collections.reverse(records);
         try {
             manager.undoAll(records);
-        } catch (gradezzy.fix.FixException exception) {
+        } catch (FixException exception) {
             System.out.println("   undo failed for " + user + ": "
                     + exception.getMessage());
         }
-        outcome.afterUndo = snapshot(submission.getWorkingCopyPath());
-        outcome.undoneEqual = sameTree(before, outcome.afterUndo);
-        if (!outcome.undoneEqual) {
-            System.out.println("   " + user + " before=" + before.keySet()
-                    + " afterUndo=" + outcome.afterUndo.keySet());
-        }
-        return outcome;
     }
 
     // Makes a FixManager with every fixer the app uses.
@@ -614,10 +610,10 @@ public class FixersTest {
             boolean onRoster) throws Exception {
         Path copy = working.resolve(user);
         FileUtils.deleteDirectory(copy);
-        for (Map.Entry<String, byte[]> entry : files.entrySet()) {
-            Path file = copy.resolve(entry.getKey());
+        for (String key : files.keySet()) {
+            Path file = copy.resolve(key);
             Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue());
+            Files.write(file, files.get(key));
         }
         Files.createDirectories(copy);
         Submission submission = new Submission(user, SECTION, copy);
@@ -677,12 +673,12 @@ public class FixersTest {
             String to) {
         Map<String, byte[]> copy = new TreeMap<>(files);
         files.clear();
-        for (Map.Entry<String, byte[]> entry : copy.entrySet()) {
-            String key = entry.getKey();
+        for (String oldKey : copy.keySet()) {
+            String key = oldKey;
             if (key.startsWith(from)) {
                 key = to + key.substring(from.length());
             }
-            files.put(key, entry.getValue());
+            files.put(key, copy.get(oldKey));
         }
     }
 
@@ -700,21 +696,22 @@ public class FixersTest {
     private static boolean isUtf8(byte[] data) {
         try {
             StandardCharsets.UTF_8.newDecoder().decode(
-                    java.nio.ByteBuffer.wrap(data));
+                    ByteBuffer.wrap(data));
             return true;
-        } catch (java.nio.charset.CharacterCodingException exception) {
+        } catch (CharacterCodingException exception) {
             return false;
         }
     }
 
     // Gives the first few lines of a file on one line.
     private static String firstLines(String text) {
-        String[] lines = text.split("\n");
-        StringBuilder shown = new StringBuilder();
-        for (int i = 0; i < Math.min(SHOWN_LINES, lines.length); i++) {
-            shown.append(lines[i]).append(" | ");
+        String[] lines = text.split(NEWLINE);
+        int shownCount = Math.min(SHOWN_LINES, lines.length);
+        String shown = "";
+        for (int i = 0; i < shownCount; i++) {
+            shown = shown + lines[i] + LINE_SEPARATOR;
         }
-        return shown.toString();
+        return shown;
     }
 
     // Reads every file and folder below a folder, by relative path;
@@ -725,17 +722,31 @@ public class FixersTest {
         if (!Files.exists(folder)) {
             return files;
         }
-        try (Stream<Path> walk = Files.walk(folder)) {
-            for (Path path : (Iterable<Path>) walk::iterator) {
-                String key = folder.relativize(path).toString();
+        addEntries(folder, folder, files);
+        return files;
+    }
+
+    // Adds every file and folder inside one folder to a snapshot, by its
+    // path from the top folder, then the entries of each folder inside.
+    private static void addEntries(Path top, Path folder,
+            Map<String, byte[]> files) throws Exception {
+        DirectoryStream<Path> children = null;
+        try {
+            children = Files.newDirectoryStream(folder);
+            for (Path path : children) {
+                String key = top.relativize(path).toString();
                 if (Files.isRegularFile(path)) {
                     files.put(key, Files.readAllBytes(path));
-                } else if (!key.isEmpty()) {
+                } else {
                     files.put(key + SLASH, new byte[0]);
                 }
+                if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+                    addEntries(top, path, files);
+                }
             }
+        } finally {
+            FileUtils.closeIfOpen(children);
         }
-        return files;
     }
 
     // Says whether two snapshots have the same paths and bytes.
