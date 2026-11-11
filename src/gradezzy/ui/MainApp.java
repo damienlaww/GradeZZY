@@ -184,7 +184,7 @@ public class MainApp extends Application {
         Scene scene = window.build(width, height);
 
         stage.setTitle(title);
-        stage.getIcons().addAll(AppIcons.loadWindowIcons());
+        AppIcons.addTo(stage);
         stage.setMinWidth(MIN_WIDTH);
         stage.setMinHeight(MIN_HEIGHT);
         stage.setScene(scene);
@@ -218,6 +218,7 @@ public class MainApp extends Application {
         exitCode = FAILURE_EXIT_CODE;
         if (showDialog) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
+            AppIcons.addTo(alert);
             alert.setTitle("GradeZZY could not start");
             alert.setHeaderText("GradeZZY could not start");
             alert.setContentText(message + "\n\nCheck config.properties, "

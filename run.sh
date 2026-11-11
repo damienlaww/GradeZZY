@@ -29,10 +29,16 @@ case "$(uname -s)" in
         else
             JAVAFX_DIR="lib/javafx/mac"
         fi
+        # The Dock ignores the window icons, so the launcher is given the
+        # logo and the name; otherwise it shows the Java icon.
+        DOCK_ICON="classes/gradezzy/ui/images/logo-256.png"
+        DOCK_OPTIONS="-Xdock:name=GradeZZY -Xdock:icon=$DOCK_ICON"
         ;;
     MINGW*|MSYS*|CYGWIN*)
         SEPARATOR=";"
         JAVAFX_DIR="lib/javafx/win"
+        # Windows takes the taskbar icon from the window icons
+        DOCK_OPTIONS=""
         ;;
     *)
         echo "Unsupported system: $(uname -s). Use Windows or macOS."
@@ -61,7 +67,9 @@ fi
 #   its controls (AutoCompletionBinding, BreadCrumbBar, NotificationPane,
 #   GlyphFont, GridView, FilterPanel, TableRowExpanderColumn). ControlsFX
 #   is on the classpath, so the target is ALL-UNNAMED.
-exec java \
+# $DOCK_OPTIONS: the Dock name and icon on macOS, nothing on Windows. It is
+#   left unquoted so its two options stay two words.
+exec java $DOCK_OPTIONS \
     --module-path "$JAVAFX_DIR" \
     --add-modules javafx.controls,javafx.fxml \
     --enable-native-access=javafx.graphics,ALL-UNNAMED \

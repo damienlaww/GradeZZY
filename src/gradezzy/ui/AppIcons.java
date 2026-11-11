@@ -4,9 +4,9 @@
  * Purpose: Loads the GradeZZY logo: the window and taskbar icons in
  * several sizes, and the small logo in the top bar.
  *
- * Where it fits: MainApp gives the window icons to the main window,
- * FlowWindow shows the top bar logo, and FlowCheck makes sure every
- * file was found. The pictures are in gradezzy/ui/images.
+ * Where it fits: MainApp gives the window icons to the main window and
+ * its dialogs, FlowWindow shows the top bar logo, and FlowCheck makes
+ * sure every file was found. The pictures are in gradezzy/ui/images.
  */
 package gradezzy.ui;
 
@@ -14,7 +14,10 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
+import javafx.scene.control.Dialog;
 import javafx.scene.image.Image;
+import javafx.stage.Stage;
+import javafx.stage.Window;
 
 /**
  * Loads the logo pictures from the class path.
@@ -53,6 +56,28 @@ public final class AppIcons {
             }
         }
         return icons;
+    }
+
+    /**
+     * Gives a window the logo icons, for its title bar and the taskbar.
+     *
+     * @param stage the window
+     */
+    public static void addTo(Stage stage) {
+        stage.getIcons().addAll(loadWindowIcons());
+    }
+
+    /**
+     * Gives a dialog's own window the logo icons, so it does not show the
+     * default Java icon.
+     *
+     * @param dialog the dialog, such as an Alert
+     */
+    public static void addTo(Dialog<?> dialog) {
+        Window window = dialog.getDialogPane().getScene().getWindow();
+        if (window instanceof Stage) {
+            addTo((Stage) window);
+        }
     }
 
     /**

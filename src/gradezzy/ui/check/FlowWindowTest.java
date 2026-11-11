@@ -31,6 +31,7 @@ import javafx.scene.effect.Effect;
 import javafx.stage.Stage;
 
 import gradezzy.service.ServiceRegistry;
+import gradezzy.ui.AppIcons;
 import gradezzy.ui.demo.DemoBackend;
 import gradezzy.ui.flow.FlowWindow;
 import gradezzy.ui.flow.Page;
@@ -109,6 +110,7 @@ public class FlowWindowTest {
         window = new FlowWindow(new DemoBackend(services), false);
         Scene scene = window.build(WIDTH, HEIGHT);
         stage.setTitle("GradeZZY (window test, demo data)");
+        AppIcons.addTo(stage);
         stage.setScene(scene);
         stage.show();
         stage.toFront();
