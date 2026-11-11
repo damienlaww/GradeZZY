@@ -87,6 +87,8 @@ public class CheatingRemarksTest {
             TestConfig.copyTo(configCopy);
             AppConfig config = new AppConfig(configCopy.toString());
             config.setString(ConfigKeys.DATABASE_ENABLED, "true");
+            // The Remarks column is written only with the extra columns on
+            config.setString(ConfigKeys.CSV_EXTRA_COLUMNS, "true");
             config.setString(ConfigKeys.DATABASE_FILE,
                     root.resolve("gradezzy.db").toString());
             config.setString(ConfigKeys.BACKUP_DIR,

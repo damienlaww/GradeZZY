@@ -99,13 +99,14 @@ public class SettingsService {
     // The values plagiarism.algorithm accepts
     private static final String[] ALGORITHMS = {"winnowing", "trigrams"};
 
-    // Newer list settings an older config.properties may not have yet;
+    // Newer settings an older config.properties may not have yet;
     // saving one adds its line at the end of the file.
     private static final String[] ADDABLE_KEYS = {
         ConfigKeys.MODULE_SECTION_CODES,
         ConfigKeys.OWN_SECTIONS_ONLY_MODULES,
         ConfigKeys.OUTPUT_DIR_BY_SECTION,
-        ConfigKeys.SCORE_SHEET_BY_SECTION
+        ConfigKeys.SCORE_SHEET_BY_SECTION,
+        ConfigKeys.CSV_EXTRA_COLUMNS
     };
 
     // Settings that hold a whole number of at least 1
@@ -144,7 +145,8 @@ public class SettingsService {
         ConfigKeys.AUDIT_ENABLED,
         ConfigKeys.ANIMATIONS_ENABLED,
         ConfigKeys.TESTER_STRENGTH_ENABLED,
-        ConfigKeys.RANDOM_INPUTS_ENABLED
+        ConfigKeys.RANDOM_INPUTS_ENABLED,
+        ConfigKeys.CSV_EXTRA_COLUMNS
     };
 
     // Settings that name a folder which must already exist
@@ -316,7 +318,7 @@ public class SettingsService {
     /**
      * Checks a new value before it is accepted. Spaces at both ends of
      * the value are ignored. Only settings already in config.properties,
-     * or one of the newer per-module lists, can be changed.
+     * or one of the newer settings an older file may lack, can be changed.
      *
      * <p>Tier: SHOULD.
      *

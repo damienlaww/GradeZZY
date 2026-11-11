@@ -153,6 +153,9 @@ public class ReportTest {
                 .toRealPath();
         try {
             config = TestConfig.load();
+            // Most checks are of the question and Remarks columns, which
+            // are off in the fixed test settings, as by default
+            config.setString(ConfigKeys.CSV_EXTRA_COLUMNS, "true");
             checkFormatter();
             checkCsv(root);
             checkAudit();
@@ -255,6 +258,7 @@ public class ReportTest {
                 + "#2,#bob,\"Tan, Jr.\",Bob,bob@x,,5,#\r\n"
                 + "#3,#cat,C,Cat,cat@x,,5,#\r\n"
                 + "#4,#dan,D,Dan,dan@x,7,5,#\r\n";
+        checkProvidedFormat(root, body);
         checkBasicSheet(root, body);
         checkFullTemplate(root);
         // LF setting
@@ -289,6 +293,30 @@ public class ReportTest {
     }
 
     // Checks the columns, marks and line endings of a plain export.
+    // With export.csv.extra.columns off, as by default, the sheet keeps
+    // the provided format: the same header and columns, and only the
+    // total filled in.
+    private static void checkProvidedFormat(Path root, String body)
+            throws Exception {
+        AppConfig plainConfig = TestConfig.load();
+        Path sheet = root.resolve("plain.csv");
+        Files.writeString(sheet, body);
+        Path out = root.resolve("plain-out.csv");
+        CsvScoreSheetExporter exporter = new CsvScoreSheetExporter(
+                plainConfig, sheet);
+        exporter.setRemarks(run -> new HashMap<String, String>());
+        exporter.export(run(sheet, LAB_TEST), out);
+        String text = Files.readString(out);
+        String[] lines = text.split("\r\n");
+        check(lines[0].equals(HEADER), "extra columns off: header kept: "
+                + lines[0]);
+        check(lines[1].equals("#1,#ann,Lee,Ann,ann@x," + ANN_TOTAL
+                + ",5,#"), "extra columns off: only the total is filled: "
+                + lines[1]);
+        check(lines[4].equals("#4,#dan,D,Dan,dan@x,,5,#"), "extra columns "
+                + "off: a student not in the run is blanked: " + lines[4]);
+    }
+
     private static void checkBasicSheet(Path root, String body)
             throws Exception {
         List<List<String>> rows = export(root, "basic", body,

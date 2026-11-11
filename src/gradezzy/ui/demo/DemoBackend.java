@@ -131,6 +131,9 @@ public final class DemoBackend implements DashboardBackend {
     private static final String JSON_FORMAT = "json";
     private static final String CSV_FORMAT = "csv";
 
+    // The value of a true or false setting that means on
+    private static final String TRUE_SETTING = "true";
+
     // Positions of the action and the detail in a row of AUDIT_SEED
     private static final int SEED_ACTION = 0;
     private static final int SEED_DETAIL = 1;
@@ -1057,8 +1060,11 @@ public final class DemoBackend implements DashboardBackend {
         if (JSON_FORMAT.equalsIgnoreCase(formatName)) {
             preview = DemoExports.toJson(gradingRun, scope);
         } else if (CSV_FORMAT.equalsIgnoreCase(formatName)) {
+            boolean extraColumns = TRUE_SETTING.equalsIgnoreCase(
+                    getSetting(ConfigKeys.CSV_EXTRA_COLUMNS).trim());
             preview = DemoExports.toCsv(gradingRun, scope,
-                    new CheatingRemarks(this).remarksFor(gradingRun));
+                    new CheatingRemarks(this).remarksFor(gradingRun),
+                    extraColumns);
         } else {
             // The reports have no preview; live mode writes them
             return ActionResult.done("Demo mode writes no " + formatName

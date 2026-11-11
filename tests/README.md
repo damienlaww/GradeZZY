@@ -116,7 +116,10 @@ files).
 
 CsvScoreSheetExporter on many score sheet templates (encodings, column
 orders, odd rows, Remarks column), ScoreFormatter, RunAuditFilter, and
-the JSON and anomaly exporters on a small run. Pass
+the JSON and anomaly exporters on a small run. The fixed test settings
+have `export.csv.extra.columns=false`, as by default; one check exports
+with it off and expects the provided format, and the others turn it on
+to check the question and Remarks columns. Pass
 `-Dreport.out=folder` to keep the JSON file.
 
 ## Service checks (ServiceTest)

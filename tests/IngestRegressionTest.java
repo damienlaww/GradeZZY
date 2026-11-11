@@ -315,6 +315,24 @@ public class IngestRegressionTest {
         run.setScoreSheetFile(sheet);
         config.setString(ConfigKeys.CSV_LINE_ENDING, "CRLF");
 
+        // Off, as by default, the sheet keeps the provided columns
+        String extraColumns = config.getString(ConfigKeys.CSV_EXTRA_COLUMNS);
+        config.setString(ConfigKeys.CSV_EXTRA_COLUMNS, "false");
+        Path plain = root.resolve("question-export-plain.csv");
+        new CsvScoreSheetExporter(config, sheet).export(run, plain);
+        String plainExpected = "OrgDefinedId,Username,Last Name,"
+                + "First Name,Email,Calculated Final Grade Numerator,"
+                + "Calculated Final Grade Denominator,"
+                + "End-of-Line Indicator\r\n"
+                + "#1,#bob,B,Bob,bob@example.com,5.5,7,#\r\n"
+                + "#2,#carl,C,Carl,carl@example.com,,7,#\r\n"
+                + "#3,#dave,D,Dave,dave@example.com,,7,#\r\n";
+        String plainExported = Files.readString(plain);
+        check(plainExported.equals(plainExpected), "with the extra columns "
+                + "off the CSV export keeps the provided format: "
+                + plainExported);
+
+        config.setString(ConfigKeys.CSV_EXTRA_COLUMNS, "true");
         Path csv = root.resolve("question-export.csv");
         new CsvScoreSheetExporter(config, sheet).export(run, csv);
         String expected = "OrgDefinedId,Username,Last Name,First Name,"
@@ -353,6 +371,7 @@ public class IngestRegressionTest {
         check(withRemark.contains(",\"Possible cheating with BOB B (bob), "
                 + "DAVE D (dave)\",#\r\n"), "a remark with a comma is "
                 + "quoted: " + withRemark);
+        config.setString(ConfigKeys.CSV_EXTRA_COLUMNS, extraColumns);
     }
 
     // Returns two students' remarks by username.

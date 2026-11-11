@@ -773,6 +773,10 @@ public class SettingsScreen extends FlowScreen {
                 "In front of the OrgDefinedId and Username values.");
         text(ConfigKeys.CSV_END_OF_LINE_MARKER, "CSV end-of-line value",
                 "Value of the End-of-Line Indicator column.");
+        toggle(ConfigKeys.CSV_EXTRA_COLUMNS, "Question marks and remarks",
+                "Adds a column for each question's mark and a Remarks "
+                + "column to the score sheet. Off keeps the provided "
+                + "format.");
     }
 
     // Starts a new group with a card and an entry in the list.

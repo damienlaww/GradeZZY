@@ -1,13 +1,15 @@
 /*
  * File: CsvScoreSheetExporter.java
  *
- * Purpose: Writes the provided score sheet with the final grade, and the
- * mark of every question, filled in.
+ * Purpose: Writes the provided score sheet with the final grade filled
+ * in, and, when export.csv.extra.columns is on, the mark of every
+ * question and a remark too.
  *
  * Where it fits: The export required by the brief. Columns, the id prefix, the
  * end marker, quotes, the encoding and the line ending stay exactly as
- * provided. One "Points Grade" column per question is added just before
- * the End-of-Line Indicator, which stays last (see ScoreSheetColumns).
+ * provided. With export.csv.extra.columns on, one "Points Grade" column
+ * per question and a Remarks column are added just before the
+ * End-of-Line Indicator, which stays last (see ScoreSheetColumns).
  */
 package gradezzy.report;
 
@@ -29,6 +31,7 @@ import java.util.Map;
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
 import gradezzy.config.ExportFolders;
+import gradezzy.model.Assessment;
 import gradezzy.model.GradingRun;
 import gradezzy.model.Question;
 import gradezzy.model.QuestionResult;
@@ -167,11 +170,12 @@ public class CsvScoreSheetExporter implements Exporter {
      *
      * <p>Every row and value of the template is kept as it is, quotes
      * included, apart from the numerator, which receives the student's
-     * total. Each question of the run's assessment gets a column, such
-     * as "Lab Test 2 Q1a Points Grade", in assessment order, just before
-     * the End-of-Line Indicator; a column the template already has is
-     * filled in place. A Remarks column follows them, with each student's
-     * remark from setRemarks, such as "Possible cheating with KEVIN LIM
+     * total. Only when export.csv.extra.columns is on, each question of
+     * the run's assessment also gets a column, such as "Lab Test 2 Q1a
+     * Points Grade", in assessment order, just before the End-of-Line
+     * Indicator; a column the template already has is filled in place.
+     * A Remarks column follows them, with each student's remark from
+     * setRemarks, such as "Possible cheating with KEVIN LIM
      * (kevin.lim.2025)"; a sheet that has one already is filled in place.
      * A student without a graded submission is left
      * blank so the instructor notices, even if the template held a mark.
@@ -210,19 +214,27 @@ public class CsvScoreSheetExporter implements Exporter {
         List<String> header = splitLine(records.get(0), HEADER_RECORD_NUMBER);
         int usernameIndex = findColumn(header, USERNAME_COLUMN);
         int numeratorIndex = findColumn(header, NUMERATOR_COLUMN);
+        boolean extraColumns = wantsExtraColumns();
+        // With the extra columns off, no question is given a column
+        Assessment columnAssessment = null;
+        if (extraColumns) {
+            columnAssessment = gradingRun.getAssessment();
+        }
         ScoreSheetColumns columns = new ScoreSheetColumns(header,
-                usernameIndex, numeratorIndex, gradingRun.getAssessment());
+                usernameIndex, numeratorIndex, columnAssessment);
 
         Map<String, Submission> submissionsByUsername =
                 indexByUsername(gradingRun.getSubmissions());
         String lineEnding = getLineEnding();
         Map<String, String> remarkMap = new HashMap<>();
-        if (remarks != null) {
+        boolean remarksWanted = extraColumns && remarks != null;
+        if (remarksWanted) {
             remarkMap = remarks.remarksFor(gradingRun);
         }
         int remarksIndex = header.indexOf(REMARKS_COLUMN);
         List<String> outputRecords = fillRecords(records, columns,
-                submissionsByUsername, remarkMap, remarksIndex);
+                submissionsByUsername, remarkMap, remarksIndex,
+                extraColumns);
 
         // Every record, the header included, ends with the line ending
         String output = byteOrderMark
@@ -238,15 +250,18 @@ public class CsvScoreSheetExporter implements Exporter {
     }
 
     // The header with the question columns added, then every other
-    // record with its marks filled in, in the template's order
+    // record with its marks filled in, in the template's order. With the
+    // extra columns off, the header is kept and only the total is filled.
     private List<String> fillRecords(List<String> records,
             ScoreSheetColumns columns,
             Map<String, Submission> submissionsByUsername,
-            Map<String, String> remarkMap, int remarksIndex)
-            throws ExportException {
+            Map<String, String> remarkMap, int remarksIndex,
+            boolean extraColumns) throws ExportException {
         List<String> outputRecords = new ArrayList<>();
         List<String> addedNames = new ArrayList<>(columns.listAddedNames());
-        if (remarksIndex == NO_COLUMN) {
+        boolean addRemarksColumn = extraColumns
+                && remarksIndex == NO_COLUMN;
+        if (addRemarksColumn) {
             addedNames.add(REMARKS_COLUMN);
         }
         String header = insertFields(records.get(0),
@@ -257,7 +272,8 @@ public class CsvScoreSheetExporter implements Exporter {
             String record = records.get(index);
             int recordNumber = index + 1;
             String filledRecord = fillRow(record, recordNumber, columns,
-                    submissionsByUsername, remarkMap, remarksIndex);
+                    submissionsByUsername, remarkMap, remarksIndex,
+                    extraColumns);
             outputRecords.add(filledRecord);
         }
         return outputRecords;
@@ -387,12 +403,13 @@ public class CsvScoreSheetExporter implements Exporter {
     // before the End-of-Line Indicator; every other character, quotes
     // included, is copied as it is. The username is matched without the
     // spaces around it. A blank record, or one too short to hold the
-    // username and the total, is kept exactly as it was.
+    // username and the total, is kept exactly as it was. With the extra
+    // columns off, only the total is filled in.
     private String fillRow(String record, int recordNumber,
             ScoreSheetColumns columns,
             Map<String, Submission> submissionsByUsername,
-            Map<String, String> remarkMap, int remarksIndex)
-            throws ExportException {
+            Map<String, String> remarkMap, int remarksIndex,
+            boolean extraColumns) throws ExportException {
         if (TextUtils.isBlank(record)) {
             return record;
         }
@@ -415,6 +432,10 @@ public class CsvScoreSheetExporter implements Exporter {
 
         String filled = replaceField(record, columns.getNumeratorIndex(),
                 formatScore(submission));
+        if (!extraColumns) {
+            return filled;
+        }
+
         List<String> addedMarks = new ArrayList<>();
         List<Question> questions = columns.getQuestions();
         for (int position = 0; position < questions.size(); position++) {
@@ -567,6 +588,15 @@ public class CsvScoreSheetExporter implements Exporter {
             return NO_SCORE;
         }
         return ScoreFormatter.format(result.getScore());
+    }
+
+    // Reads export.csv.extra.columns; an older config.properties without
+    // the line keeps the provided format
+    private boolean wantsExtraColumns() {
+        if (!config.hasKey(ConfigKeys.CSV_EXTRA_COLUMNS)) {
+            return false;
+        }
+        return config.getBoolean(ConfigKeys.CSV_EXTRA_COLUMNS);
     }
 
     // Reads the line ending setting: CRLF as provided, or LF
