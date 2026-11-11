@@ -46,7 +46,7 @@ public class RosterReader {
             "Calculated Final Grade Denominator";
 
     // The mark some editors put at the very start of a UTF-8 file
-    private static final String BYTE_ORDER_MARK = "﻿";
+    private static final String BYTE_ORDER_MARK = "\uFEFF";
 
     // Opens and closes a quoted CSV field
     private static final char QUOTE = '"';

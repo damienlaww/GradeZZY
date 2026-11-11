@@ -71,6 +71,9 @@ public class ChosenSubmissionsStore {
     // module and after the section
     private static final int SEPARATORS_BEFORE_NAME = 2;
 
+    // Stands for a key that names no assessment, as indexOf does
+    private static final int NOT_FOUND = -1;
+
     // Comes between the paths of one section; a path holds no new line
     private static final String SEPARATOR = "\n";
 
@@ -211,7 +214,7 @@ public class ChosenSubmissionsStore {
         int found = 0;
         while (found < SEPARATORS_BEFORE_NAME && start >= 0) {
             int separator = key.indexOf(KEY_SEPARATOR, start);
-            start = -1;
+            start = NOT_FOUND;
             if (separator >= 0) {
                 start = separator + KEY_SEPARATOR.length();
             }

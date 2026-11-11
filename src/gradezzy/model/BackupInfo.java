@@ -170,8 +170,11 @@ public class BackupInfo {
      * @return true for a copy made before a restore
      */
     public static boolean isBeforeRestore(Path file) {
-        return file != null && file.getFileName() != null
-                && file.getFileName().toString().endsWith(
-                BEFORE_RESTORE_ENDING);
+        boolean noName = file == null || file.getFileName() == null;
+        if (noName) {
+            return false;
+        }
+        String name = file.getFileName().toString();
+        return name.endsWith(BEFORE_RESTORE_ENDING);
     }
 }

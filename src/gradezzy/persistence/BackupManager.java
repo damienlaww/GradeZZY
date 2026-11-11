@@ -295,8 +295,8 @@ public class BackupManager {
         if (fileName.length() < BACKUP_PREFIX.length() + ending.length()) {
             return null;
         }
-        String stamp = fileName.substring(BACKUP_PREFIX.length(),
-                fileName.length() - ending.length());
+        int stampEnd = fileName.length() - ending.length();
+        String stamp = fileName.substring(BACKUP_PREFIX.length(), stampEnd);
         try {
             return LocalDateTime.parse(stamp, NAME_TIME);
         } catch (DateTimeParseException exception) {

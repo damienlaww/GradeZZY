@@ -406,8 +406,9 @@ public class AnomalyService {
      */
     public ReapplyResult reapplyEarlierFix(GradingRun gradingRun,
             Anomaly anomaly) {
-        if (!canReapplyEarlierFix(gradingRun, anomaly)
-                || !canGradeAgain(anomaly)) {
+        boolean canReapply = canReapplyEarlierFix(gradingRun, anomaly)
+                && canGradeAgain(anomaly);
+        if (!canReapply) {
             return null;
         }
 

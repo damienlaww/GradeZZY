@@ -40,6 +40,12 @@ public class TesterOutputScoreParser implements ScoreParser {
     // as the colon of "Test 1: getIsogramWords([alice])"
     private static final String NAME_SEPARATORS = ":-.)]#=>|";
 
+    // Ends a call, as in "getHighest([])", so it stays at a name's end
+    private static final char CLOSING_PARENTHESIS = ')';
+
+    // Ends an array, as in "getHighest([])", so it stays at a name's end
+    private static final char CLOSING_BRACKET = ']';
+
     /**
      * Detail of a test case that was still running when the tester stopped.
      */
@@ -261,15 +267,13 @@ public class TesterOutputScoreParser implements ScoreParser {
         // Past the marker, the spaces and the case's number
         int index = headerMarker.length();
         index = skipSpaces(text, index);
-        while (index < text.length()
-                && Character.isDigit(text.charAt(index))) {
+        while (isDigitAt(text, index)) {
             index++;
         }
 
         // Past the marks and spaces between the number and the name
         index = skipSpaces(text, index);
-        while (index < text.length()
-                && NAME_SEPARATORS.indexOf(text.charAt(index)) >= 0) {
+        while (isNameSeparatorAt(text, index)) {
             index++;
             index = skipSpaces(text, index);
         }
@@ -284,27 +288,47 @@ public class TesterOutputScoreParser implements ScoreParser {
     // Returns the first position at or after index that is not a space.
     private static int skipSpaces(String text, int index) {
         int position = index;
-        while (position < text.length()
-                && Character.isWhitespace(text.charAt(position))) {
+        while (isSpaceAt(text, position)) {
             position++;
         }
         return position;
     }
 
+    // Says whether the text has a space at a position.
+    private static boolean isSpaceAt(String text, int position) {
+        boolean inText = position < text.length();
+        return inText && Character.isWhitespace(text.charAt(position));
+    }
+
+    // Says whether the text has a digit at a position.
+    private static boolean isDigitAt(String text, int position) {
+        boolean inText = position < text.length();
+        return inText && Character.isDigit(text.charAt(position));
+    }
+
+    // Says whether the text has one of NAME_SEPARATORS at a position.
+    private static boolean isNameSeparatorAt(String text, int position) {
+        boolean inText = position < text.length();
+        return inText
+                && NAME_SEPARATORS.indexOf(text.charAt(position)) >= 0;
+    }
+
     // Removes the spaces and colons or dashes at the end of a name, such
     // as the colon of "getHighest with an empty array:".
     private static String trimEndSeparators(String name) {
-        int end = name.length();
-        while (end > 0 && isEndSeparator(name.charAt(end - 1))) {
-            end--;
+        int lastIndex = name.length() - 1;
+        while (lastIndex >= 0 && isEndSeparator(name.charAt(lastIndex))) {
+            lastIndex--;
         }
+        int end = lastIndex + 1;
         return name.substring(0, end);
     }
 
     // Says whether a character is cut from the end of a name. A closing
     // bracket is kept, as it ends a call such as "getHighest([])".
     private static boolean isEndSeparator(char character) {
-        boolean bracket = character == ')' || character == ']';
+        boolean bracket = character == CLOSING_PARENTHESIS
+                || character == CLOSING_BRACKET;
         boolean separator = NAME_SEPARATORS.indexOf(character) >= 0
                 && !bracket;
         return separator || Character.isWhitespace(character);

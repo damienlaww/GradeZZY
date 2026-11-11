@@ -379,7 +379,8 @@ public class TesterStrengthChecker {
             String trimmed = line.trim();
             if (trimmed.startsWith(SYMBOL_PREFIX)) {
                 String[] words = trimmed.split(SPACES);
-                String name = words[words.length - 1];
+                int lastWord = words.length - 1;
+                String name = words[lastWord];
                 boolean named = words.length > 1 && !names.contains(name);
                 if (named) {
                     names.add(name);

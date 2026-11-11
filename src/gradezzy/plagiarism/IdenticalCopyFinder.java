@@ -125,7 +125,7 @@ public class IdenticalCopyFinder {
             AnswerHeader answer, Question question,
             List<SimilarityPair> pairs) {
         for (AnswerHeader earlier : answers) {
-            if (sameEmail(earlier.email, answer.email)) {
+            if (sameEmail(earlier.getEmail(), answer.getEmail())) {
                 pairs.add(pairOf(earlier, answer, question));
             }
         }
@@ -135,16 +135,17 @@ public class IdenticalCopyFinder {
     // copy, or a pair scored by how alike its code is.
     private SimilarityPair pairOf(AnswerHeader first, AnswerHeader second,
             Question question) {
-        boolean identical = !first.name.isEmpty()
-                && first.name.equals(second.name)
-                && first.code.equals(second.code);
+        boolean identical = !first.getName().isEmpty()
+                && first.getName().equals(second.getName())
+                && first.getCode().equals(second.getCode());
         if (identical) {
-            return new SimilarityPair(first.username, second.username,
-                    question.getId(), IDENTICAL, true, true);
+            return new SimilarityPair(first.getUsername(),
+                    second.getUsername(), question.getId(), IDENTICAL, true,
+                    true);
         }
-        double similarity = jaccard(first.fingerprints,
-                second.fingerprints);
-        return new SimilarityPair(first.username, second.username,
+        double similarity = jaccard(first.getFingerprints(),
+                second.getFingerprints());
+        return new SimilarityPair(first.getUsername(), second.getUsername(),
                 question.getId(), similarity, false, true);
     }
 
@@ -165,15 +166,14 @@ public class IdenticalCopyFinder {
             return null;
         }
 
-        AnswerHeader answer = new AnswerHeader();
-        answer.username = submission.getUsername();
-        answer.email = email;
-        answer.name = normaliseName(findValueAfter(header,
+        String name = normaliseName(findValueAfter(header,
                 config.getString(ConfigKeys.HEADER_NAME_LABEL)));
         List<JavaToken> tokens = JavaTokenizer.tokenize(source);
-        answer.code = TextUtils.join(SPACE, JavaTokenizer.split(source));
-        answer.fingerprints = fingerprintsOf(Winnowing.normalise(tokens));
-        return answer;
+        String code = TextUtils.join(SPACE, JavaTokenizer.split(source));
+        Set<Integer> fingerprints = fingerprintsOf(
+                Winnowing.normalise(tokens));
+        return new AnswerHeader(submission.getUsername(), email, name, code,
+                fingerprints);
     }
 
     // Returns the hashes of the fingerprints winnowing picks in a file's
@@ -287,24 +287,5 @@ public class IdenticalCopyFinder {
             return "";
         }
         return TextUtils.join(SPACE, trimmed.split(SPACES));
-    }
-
-    // What one answer file's header and code say, for comparing
-    private static class AnswerHeader {
-
-        // The student who handed the file in
-        private String username = "";
-
-        // The Email ID, trimmed and in lower case
-        private String email = "";
-
-        // The Name, in lower case with single spaces, or ""
-        private String name = "";
-
-        // The tokens of the code, spaces and comments left out
-        private String code = "";
-
-        // The fingerprints of the code, names set aside
-        private Set<Integer> fingerprints = new HashSet<>();
     }
 }

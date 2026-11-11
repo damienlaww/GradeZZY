@@ -575,8 +575,9 @@ public final class AnswerGrouper {
                     && !isFixed(anomaly);
             boolean namesAnswer = anomaly.getMessage() != null
                     && anomaly.getMessage().contains(answerFile);
-            if (unfixed && namesAnswer
-                    && isAbout(anomaly, submission, question)) {
+            boolean missingAnswer = unfixed && namesAnswer
+                    && isAbout(anomaly, submission, question);
+            if (missingAnswer) {
                 return true;
             }
         }

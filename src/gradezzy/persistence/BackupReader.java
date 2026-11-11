@@ -17,6 +17,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
@@ -186,8 +187,9 @@ public final class BackupReader {
             return named;
         }
         try {
-            return LocalDateTime.ofInstant(Files.getLastModifiedTime(
-                    backupFile).toInstant(), ZoneId.systemDefault());
+            Instant changedAt = Files.getLastModifiedTime(backupFile)
+                    .toInstant();
+            return LocalDateTime.ofInstant(changedAt, ZoneId.systemDefault());
         } catch (IOException exception) {
             return null;
         }

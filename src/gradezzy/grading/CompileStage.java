@@ -38,6 +38,7 @@ import gradezzy.testcase.TesterInstaller;
 import gradezzy.testcase.TesterMarks;
 import gradezzy.testcase.UploadedTesterSource;
 import gradezzy.util.FileUtils;
+import gradezzy.util.TextUtils;
 
 /**
  * Compiles the student's code and the testers, one question at a time.
@@ -275,15 +276,16 @@ public class CompileStage implements GradingStage {
      * @return one sentence for the tester row on Set up
      */
     private String describeMissingTypes(List<String> missingTypes) {
-        String classFiles = "";
-        int last = missingTypes.size() - 1;
-        for (int i = 0; i < missingTypes.size(); i++) {
-            if (i > 0 && i == last) {
-                classFiles = classFiles + LAST_NAME_SEPARATOR;
-            } else if (i > 0) {
-                classFiles = classFiles + NAME_SEPARATOR;
-            }
-            classFiles = classFiles + missingTypes.get(i) + CLASS_EXTENSION;
+        List<String> fileNames = new ArrayList<>();
+        for (String missingType : missingTypes) {
+            fileNames.add(missingType + CLASS_EXTENSION);
+        }
+        int lastIndex = fileNames.size() - 1;
+        String lastFile = fileNames.remove(lastIndex);
+        String classFiles = lastFile;
+        if (!fileNames.isEmpty()) {
+            classFiles = TextUtils.join(NAME_SEPARATOR, fileNames)
+                    + LAST_NAME_SEPARATOR + lastFile;
         }
         // javac stops before it reads every method once a class is
         // missing, so the list may not be complete

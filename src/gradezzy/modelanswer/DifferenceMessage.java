@@ -65,6 +65,9 @@ class DifferenceMessage {
     private static final char ESCAPE = '\\';
     private static final char NOT_IN_QUOTE = ' ';
 
+    // Returned by indexOf when the text is not found
+    private static final int NOT_FOUND = -1;
+
     // Says how many of the compared inputs gave a different answer, then
     // lists the examples, one a line, such as:
     // Q5: 37 of 200 random inputs gave a different answer from the model
@@ -142,7 +145,7 @@ class DifferenceMessage {
         int index = 0;
         while (index < text.length()) {
             int start = text.indexOf(LIST_START, index);
-            int typeEnd = -1;
+            int typeEnd = NOT_FOUND;
             if (start >= 0) {
                 typeEnd = text.indexOf(TYPE_END, start);
             }
@@ -158,11 +161,12 @@ class DifferenceMessage {
                 int close = findClosingParenthesis(text, open);
                 result += text.substring(index, start) + LIST_OPEN
                         + text.substring(open, close) + LIST_CLOSE;
-                index = Math.min(text.length(),
-                        close + FILLED_LIST_END.length());
+                int afterList = close + FILLED_LIST_END.length();
+                index = Math.min(text.length(), afterList);
             } else {
-                result += text.substring(index, typeEnd + 1);
-                index = typeEnd + 1;
+                int afterType = typeEnd + 1;
+                result += text.substring(index, afterType);
+                index = afterType;
             }
         }
         return result;
@@ -180,6 +184,7 @@ class DifferenceMessage {
             boolean inQuote = quote != NOT_IN_QUOTE;
             boolean opensQuote = next == DOUBLE_QUOTE
                     || next == SINGLE_QUOTE;
+            boolean closing = !inQuote && next == CLOSE_PARENTHESIS;
             if (inQuote && next == ESCAPE) {
                 // The escaped character is skipped with this one
                 index++;
@@ -189,10 +194,9 @@ class DifferenceMessage {
                 quote = next;
             } else if (!inQuote && next == OPEN_PARENTHESIS) {
                 depth++;
-            } else if (!inQuote && next == CLOSE_PARENTHESIS
-                    && depth == 0) {
+            } else if (closing && depth == 0) {
                 return index;
-            } else if (!inQuote && next == CLOSE_PARENTHESIS) {
+            } else if (closing) {
                 depth--;
             }
             index++;
