@@ -136,10 +136,11 @@ public class RequiredFilesValidator extends AbstractValidator {
         if (endingStart > 0) {
             prefix = fileName.substring(0, endingStart) + ENDING_SEPARATOR;
         }
-        prefix = prefix.toLowerCase();
+        prefix = prefix.toLowerCase(Locale.ROOT);
 
         for (Path file : listFiles(folder)) {
-            String name = file.getFileName().toString().toLowerCase();
+            String name = file.getFileName().toString()
+                    .toLowerCase(Locale.ROOT);
 
             if (name.startsWith(prefix) && !name.endsWith(CLASS_ENDING)) {
                 return file;

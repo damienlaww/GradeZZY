@@ -34,6 +34,7 @@ import gradezzy.model.Submission;
 import gradezzy.testcase.QuestionFolderFinder;
 import gradezzy.util.FileUtils;
 import gradezzy.util.TextUtils;
+import gradezzy.validation.HeaderNameValidator;
 
 /**
  * Flags file headers that name another student.
@@ -67,6 +68,9 @@ public class CopiedHeaderDetector implements RosterCheck {
 
     // Put between the words of a name
     private static final String SPACE = " ";
+
+    // What the score sheet puts in an empty name column
+    private static final String EMPTY_NAME_PART = "_";
 
     // Put between the files and the names listed in the message
     private static final String LIST_SEPARATOR = ", ";
@@ -252,9 +256,8 @@ public class CopiedHeaderDetector implements RosterCheck {
     // trimmed, or an empty string when no line holds it.
     private String findValueAfter(List<String> header, String label) {
         for (String line : header) {
-            int start = line.indexOf(label);
-            if (start >= 0) {
-                int valueStart = start + label.length();
+            int valueStart = HeaderNameValidator.findValueStart(line, label);
+            if (valueStart >= 0) {
                 return line.substring(valueStart).trim();
             }
         }
@@ -299,9 +302,11 @@ public class CopiedHeaderDetector implements RosterCheck {
         return null;
     }
 
-    // Returns a name part, or an empty string for a missing one.
+    // Returns a name part, or an empty string for a missing one or "_".
     private String textOf(String namePart) {
-        if (namePart == null) {
+        boolean missing = namePart == null
+                || namePart.trim().equals(EMPTY_NAME_PART);
+        if (missing) {
             return "";
         }
         return namePart;

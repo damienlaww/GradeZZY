@@ -14,7 +14,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import gradezzy.config.AppConfig;
 import gradezzy.config.ConfigKeys;
@@ -200,10 +202,40 @@ public class HeaderNameFixer extends AbstractFixer {
             file = findByName(listFiles(folder), fileName);
         }
         if (file == null) {
+            // An undone move may have put it back in another folder
+            file = findOnlyFileNamed(workingCopy, fileName);
+        }
+        if (file == null) {
             throw new FixException("Could not find " + folderName
                     + FOLDER_SEPARATOR + fileName + " in the working copy.");
         }
         return file;
+    }
+
+    // Finds the one Java file with this name anywhere in the working
+    // copy, or returns null when there is none or more than one.
+    private Path findOnlyFileNamed(Path workingCopy, String fileName)
+            throws FixException {
+        List<Path> javaFiles = null;
+        try {
+            javaFiles = EncodingFixer.findJavaFiles(workingCopy);
+        } catch (IOException exception) {
+            throw new FixException("Could not list the working copy: "
+                    + exception.getMessage(), exception);
+        }
+
+        List<Path> matches = new ArrayList<>();
+        for (Path candidate : javaFiles) {
+            String candidateName = candidate.getFileName().toString();
+            if (candidateName.equalsIgnoreCase(fileName)) {
+                matches.add(candidate);
+            }
+        }
+
+        if (matches.size() != 1) {
+            return null;
+        }
+        return matches.get(0);
     }
 
     // Writes the value after the label if nothing follows it yet.
