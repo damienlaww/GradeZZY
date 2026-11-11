@@ -504,10 +504,13 @@ public class ServiceTest {
                 root.resolve("chosen.properties").toString());
         AssessmentLibrary library = new AssessmentLibrary(config,
                 new SettingsService(config));
+        // The sample Lab Test's folders, from the fixed test settings
+        String testersFolder = config.getString(ConfigKeys.TESTERS_DIR);
+        String starterFolder = config.getString(ConfigKeys.STARTER_DIR);
         SavedAssessment draft = new SavedAssessment();
         draft.setName("  Lab Test 9  ");
-        draft.setTestersDirectory("samples/lab-test-2/Tester-Files");
-        draft.setStarterDirectory("samples/lab-test-2/RenameToYourUsername");
+        draft.setTestersDirectory(testersFolder);
+        draft.setStarterDirectory(starterFolder);
         draft.setModuleCode("CS102");
         draft.getQuestions().add(new Question(Q1A, Q1_FOLDER, "Q1a.java",
                 0));
@@ -537,8 +540,8 @@ public class ServiceTest {
                 .isEmpty(), "no questions refused");
         check(library.checkFolders(draft).isEmpty(), "folders ok: "
                 + library.checkFolders(draft));
-        check(library.readMaxScore("samples/lab-test-2/Tester-Files", Q1A)
-                > 0, "max score read from tester");
+        check(library.readMaxScore(testersFolder, Q1A) > 0,
+                "max score read from tester");
         SavedAssessment missingTester = draft.copy();
         missingTester.getQuestions().add(new Question("Q9", "Q9", "Q9.java",
                 0));
