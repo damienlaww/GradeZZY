@@ -1309,8 +1309,8 @@ The backend uses one library:
 
 Everything else is the JDK. JSON is written by the hand-written
 `JsonWriter`, so there is no JSON library, and there is no Excel export.
-The window's libraries (JavaFX, AtlantaFX, ControlsFX) and the Java used
-beyond the CS102 syllabus are listed in `design/TEAM-GUIDE.md`.
+The window's libraries (JavaFX, AtlantaFX, ControlsFX, Ikonli) and the Java
+used beyond the CS102 syllabus are listed in `design/TEAM-GUIDE.md`.
 
 ## How the backend was tested
 
