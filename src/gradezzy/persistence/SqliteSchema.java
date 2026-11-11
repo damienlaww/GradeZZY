@@ -30,6 +30,7 @@ final class SqliteSchema {
     static final String STARTER_DIR_COLUMN = "starter_dir";
     static final String GRADING_SETTINGS_COLUMN = "grading_settings";
     static final String DECISION_COLUMN = "decision";
+    static final String FIX_DESCRIPTION_COLUMN = "fix_description";
     static final String REJECTED_FIXES_COLUMN = "rejected_fixes";
     static final String CASE_NAME_COLUMN = "case_name";
 
@@ -101,6 +102,7 @@ final class SqliteSchema {
                 + "suggested_action TEXT, "
                 + "fix_status TEXT, "
                 + "decision TEXT, "
+                + "fix_description TEXT, "
                 + "PRIMARY KEY (run_id, username, position))",
         "CREATE INDEX IF NOT EXISTS anomalies_by_id "
                 + "ON anomalies (anomaly_id)",
@@ -164,6 +166,11 @@ final class SqliteSchema {
     private static final String ADD_DECISION_COLUMN = "ALTER TABLE "
             + "anomalies ADD COLUMN decision TEXT";
 
+    // What the fix of an anomaly changed, such as which folder was
+    // renamed to what
+    private static final String ADD_FIX_DESCRIPTION_COLUMN = "ALTER TABLE "
+            + "anomalies ADD COLUMN fix_description TEXT";
+
     // The fixes a student's grading skips
     private static final String ADD_REJECTED_FIXES_COLUMN = "ALTER TABLE "
             + "submissions ADD COLUMN rejected_fixes TEXT";
@@ -214,6 +221,8 @@ final class SqliteSchema {
                     GRADING_SETTINGS_COLUMN, ADD_GRADING_SETTINGS_COLUMN);
             addColumnIfMissing(statement, LIST_ANOMALY_COLUMNS,
                     DECISION_COLUMN, ADD_DECISION_COLUMN);
+            addColumnIfMissing(statement, LIST_ANOMALY_COLUMNS,
+                    FIX_DESCRIPTION_COLUMN, ADD_FIX_DESCRIPTION_COLUMN);
             addColumnIfMissing(statement, LIST_SUBMISSION_COLUMNS,
                     REJECTED_FIXES_COLUMN, ADD_REJECTED_FIXES_COLUMN);
             addColumnIfMissing(statement, LIST_TEST_CASE_COLUMNS,

@@ -13,6 +13,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -64,7 +66,8 @@ final class AuditTable {
     }
 
     /**
-     * Reads the whole audit log, oldest first.
+     * Reads the whole audit log, oldest first. A row whose time cannot be
+     * read is left out, so one damaged row does not hide the others.
      *
      * @param connection the open connection
      * @return the audit entries
@@ -79,14 +82,27 @@ final class AuditTable {
             statement = connection.prepareStatement(SELECT_AUDIT);
             rows = statement.executeQuery();
             while (rows.next()) {
-                entries.add(new AuditEntry(
-                        JdbcSupport.parseTime(rows.getString("logged_at")),
-                        rows.getString("action"),
-                        rows.getString("detail")));
+                AuditEntry entry = readEntry(rows);
+                if (entry != null) {
+                    entries.add(entry);
+                }
             }
         } finally {
             JdbcSupport.closeQuery(rows, statement);
         }
         return entries;
+    }
+
+    // Rebuilds the entry on the current row, or returns null when its time
+    // cannot be read
+    private static AuditEntry readEntry(ResultSet rows) throws SQLException {
+        LocalDateTime loggedAt = null;
+        try {
+            loggedAt = JdbcSupport.parseTime(rows.getString("logged_at"));
+        } catch (DateTimeParseException exception) {
+            return null;
+        }
+        return new AuditEntry(loggedAt, rows.getString("action"),
+                rows.getString("detail"));
     }
 }

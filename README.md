@@ -1129,6 +1129,7 @@ erDiagram
         text message
         text fix_status
         text decision
+        text fix_description
     }
     score_adjustments {
         real previous_score

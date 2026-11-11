@@ -65,8 +65,8 @@ final class SubmissionTables {
     // Saves one anomaly of a submission
     private static final String INSERT_ANOMALY = "INSERT INTO anomalies "
             + "(run_id, username, position, anomaly_id, type, severity, "
-            + "message, suggested_action, fix_status) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            + "message, suggested_action, fix_status, fix_description) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     // Removes every submission of a run before the run is written again
     private static final String[] DELETE_RUN_SUBMISSIONS = {
@@ -106,7 +106,7 @@ final class SubmissionTables {
     // Lists the anomalies of a run
     private static final String SELECT_ANOMALIES = "SELECT username, "
             + "anomaly_id, type, severity, message, suggested_action, "
-            + "fix_status FROM anomalies WHERE run_id = ? "
+            + "fix_status, fix_description FROM anomalies WHERE run_id = ? "
             + "ORDER BY username, position";
 
     // Keeps a submission's place in the run when it is saved again
@@ -357,6 +357,9 @@ final class SubmissionTables {
                 statement.setString(8, anomaly.getSuggestedAction());
                 statement.setString(9,
                         JdbcSupport.textOf(anomaly.getFixStatus()));
+                // What the fix changed, so Review and the exports still
+                // say it after a restart; empty when no fix was made
+                statement.setString(10, anomaly.describeFix());
                 statement.executeUpdate();
             }
         } finally {
@@ -560,6 +563,15 @@ final class SubmissionTables {
         FixStatus fixStatus = fixStatusOf(row.getString("fix_status"));
         if (fixStatus != null) {
             anomaly.setFixStatus(fixStatus);
+        }
+
+        // A row saved before the column existed has none
+        String fixDescription = row.getString(
+                SqliteSchema.FIX_DESCRIPTION_COLUMN);
+        boolean described = fixDescription != null
+                && !fixDescription.isEmpty();
+        if (described) {
+            anomaly.setFixDescription(fixDescription);
         }
         return anomaly;
     }
