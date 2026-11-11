@@ -590,15 +590,12 @@ public class SqliteResultRepository implements ResultRepository {
             throws PersistenceException {
         requireOpen();
 
+        // A row whose time cannot be read is left out by AuditTable
         try {
             return AuditTable.readAudit(connection);
         } catch (SQLException exception) {
             throw new PersistenceException("The audit log could not be "
                     + "read: " + exception.getMessage(), exception);
-        } catch (DateTimeParseException exception) {
-            throw new PersistenceException("The audit log holds a time "
-                    + "that cannot be read: " + exception.getMessage(),
-                    exception);
         }
     }
 
