@@ -6,15 +6,25 @@ zips, the tester files and the score sheet. GradeZZY checks and repairs
 every submission, compiles and runs it against the testers with a time
 limit, works out the marks and fills in the score sheet.
 
-This README explains the **grading backend**: everything that runs
-without the window. The JavaFX window is a thin layer on top of it, and
-the console entry point (`sh run.sh console`) drives exactly the same
-backend. Build details for each platform, the window's packages, each
-teammate's part and the coding rules are in `design/TEAM-GUIDE.md`.
+This README explains how to set GradeZZY up and run it on macOS and
+Windows, and then the **grading backend**: everything that runs without
+the window. The JavaFX window is a thin layer on top of it, and the
+console entry point (`sh run.sh console`) drives exactly the same
+backend. The window's packages, each teammate's part, the coding rules
+and the Java used beyond the CS102 syllabus are in
+`design/TEAM-GUIDE.md`.
 
 ## Contents
 
-- [Build and run](#build-and-run)
+- [Setup and run](#setup-and-run)
+  - [What you need](#what-you-need)
+  - [Get the code and the course files](#get-the-code-and-the-course-files)
+  - [macOS](#macos)
+  - [Windows](#windows)
+  - [What each command does](#what-each-command-does)
+  - [Running the checks in tests/](#running-the-checks-in-tests)
+  - [Troubleshooting](#troubleshooting)
+- [Team, ownership and the CS102 syllabus table](#team-ownership-and-the-cs102-syllabus-table)
 - [What the backend does](#what-the-backend-does)
 - [Architecture](#architecture)
 - [One grading run, start to finish](#one-grading-run-start-to-finish)
@@ -33,27 +43,293 @@ teammate's part and the coding rules are in `design/TEAM-GUIDE.md`.
 - [Configuration](#configuration)
 - [Libraries](#libraries)
 - [How the backend was tested](#how-the-backend-was-tested)
+- [AI attribution](#ai-attribution)
 
-## Build and run
+## Setup and run
 
-Needs JDK 25 with `java` and `javac` on the PATH. Every library is in
-`lib/`. Run from the `GradeZZY` folder; on Windows use the `.bat` twin of
-each script (`compile.bat`, `run.bat`, `clean.bat`).
+### What you need
+
+- **JDK 25** (Java Development Kit, not only a runtime), with `java` and
+  `javac` on the PATH. `java -version` and `javac -version` must both
+  say 25. A plain JDK such as Eclipse Temurin 25 is enough; the team
+  used Temurin 25.0.4. A JDK that bundles its own JavaFX is not needed.
+- **Nothing else to install.** JavaFX 25.0.4, AtlantaFX, ControlsFX,
+  Ikonli and the SQLite driver are already in `lib/` (about 40 MB). See
+  [Libraries](#libraries).
+- **Windows** (64-bit Intel or AMD) **or macOS** (Apple Silicon or
+  Intel). Linux is not supported, because its JavaFX jars are not in
+  `lib/`.
+- **Git**, to get the code. On Windows, Git for Windows also installs
+  Git Bash, which can run the `.sh` scripts.
+
+`lib/` holds one set of JavaFX jars per platform. The scripts choose
+the set; you never pick one by hand:
+
+| Folder | Used on | Chosen by |
+|---|---|---|
+| `lib/javafx/mac-aarch64` | Apple Silicon Mac with an Apple Silicon (aarch64) JDK | `compile.sh`, `run.sh` |
+| `lib/javafx/mac` | Intel Mac, or any Mac running an Intel (x64) JDK | `compile.sh`, `run.sh` |
+| `lib/javafx/win` | Windows, 64-bit | `compile.bat`, `run.bat`, and the `.sh` scripts in Git Bash |
+
+The other jars in `lib/` (`atlantafx-base`, `controlsfx`, the three
+`ikonli` jars and `sqlite-jdbc`) are the same on every platform and are
+always on the classpath.
+
+### Get the code and the course files
 
 ```sh
-sh compile.sh            # compile everything into classes/
-sh compile.sh core       # compile only the backend, with no JavaFX
-sh run.sh console        # grade paths.submissions.dir from the terminal
-sh run.sh console G2     # the same, for section G2
-sh run.sh console CS102 G2   # the same, for module CS102, section G2
-sh run.sh console --testers  # only check how strong each tester is
-sh run.sh                # open the window
-sh clean.sh              # empty classes/ and remove workspace/
+git clone https://github.com/damienlaww/GradeZZY.git
+cd GradeZZY
 ```
 
-`compile.sh core` builds every package except `ui`. It proves the
-backend has no dependency on the window. It empties `classes/` first, so
-run `sh compile.sh` again before opening the window.
+Run every command below from this `GradeZZY` folder.
+
+`docs/` and most of `samples/` are **not in git**: the course documents
+are marked restricted and the samples hold student names. Only
+`samples/Tester-Files/` and the synthetic `samples/e2e/` set are
+tracked. Copy the rest in from eLearn so the folders look like this,
+because `config.properties` points at these paths:
+
+```text
+GradeZZY/
+  docs/
+    CS102-Project-Auto_Grading_System.pdf   the brief
+    CS102_Coding_Style.pdf                  the coding style
+  samples/
+    IS442-ScoreSheet.csv        paths.score.sheet.file
+    RenameToYourUsername/       paths.starter.dir (Q1, Q2, Q3 folders)
+    student-submission/         paths.submissions.dir (the six zips)
+    groundtruth.txt             expected totals, for checking only
+    Tester-Files/               in git: paths.testers.dir
+    e2e/                        in git: the 42-student test set
+```
+
+Without `samples/`, the window still opens (you choose every folder on
+Set up), but `run.sh console` has nothing to grade. Nothing in GradeZZY
+writes to `samples/` or `docs/`; working copies, exports and the
+database go to `workspace/`, which is created on the first run.
+
+### macOS
+
+1. **Install JDK 25** for your processor. On an Apple Silicon Mac (M1
+   and later) choose the **aarch64** (ARM64) `.pkg`; on an Intel Mac
+   choose the **x64** `.pkg`. The installer puts it in
+   `/Library/Java/JavaVirtualMachines/`.
+2. **Check it** in Terminal:
+
+   ```sh
+   java -version
+   javac -version
+   java -XshowSettings:properties -version 2>&1 | grep os.arch
+   ```
+
+   Both versions must be 25. `os.arch` is what the scripts read to pick
+   the JavaFX jars: `aarch64` uses `lib/javafx/mac-aarch64`, anything
+   else (`x86_64`) uses `lib/javafx/mac`. An Intel JDK on an Apple
+   Silicon Mac also works, through Rosetta, with the Intel jars.
+3. **If an older Java comes first**, point the shell at JDK 25 (add the
+   two lines to `~/.zshrc` to keep them):
+
+   ```sh
+   export JAVA_HOME=$(/usr/libexec/java_home -v 25)
+   export PATH="$JAVA_HOME/bin:$PATH"
+   ```
+
+4. **Compile and run:**
+
+   ```sh
+   sh compile.sh          # compile everything into classes/
+   sh run.sh --check      # load every screen once and exit
+   sh run.sh console      # grade samples/student-submission in Terminal
+   sh run.sh              # open the window
+   ```
+
+   The scripts are run with `sh`, so they need no execute permission.
+   They are stored as executable in git, so `./run.sh` also works; if it
+   says "permission denied" (for example after copying the folder from
+   a zip), run `chmod +x compile.sh run.sh clean.sh` once.
+5. **If macOS blocks a file** with "cannot be opened because the
+   developer cannot be verified" after the project was downloaded as a
+   zip through a browser, remove the download flag from the folder once
+   and run again:
+
+   ```sh
+   xattr -dr com.apple.quarantine .
+   ```
+
+   A `git clone` does not set this flag.
+
+On macOS each tester run is placed in `sandbox-exec`, which is part of
+macOS, so student code can write only in its own question folder (see
+[Execute](#7-execute-running-the-testers-safely)). `run.sh --windowtest`
+needs the app that runs `java` (Terminal, or your editor) to be allowed
+under System Settings, Privacy and Security, Accessibility and Screen
+Recording.
+
+### Windows
+
+1. **Install JDK 25** for x64, for example the Eclipse Temurin 25 `.msi`.
+   In the installer, keep "Add to PATH" and also choose "Set JAVA_HOME
+   variable". Temurin 25.0.4, for example, installs to
+   `C:\Program Files\Eclipse Adoptium\jdk-25.0.4.7-hotspot`.
+2. **Set the PATH by hand** if the installer did not: open "Edit the
+   system environment variables", then Environment Variables. Set
+   `JAVA_HOME` to the JDK folder, and add `%JAVA_HOME%\bin` to `Path`,
+   **above** any other Java entry (such as
+   `C:\Program Files\Common Files\Oracle\Java\javapath`). Open a new
+   terminal afterwards; a terminal that was already open keeps the old
+   PATH.
+3. **Check it** in a new Command Prompt:
+
+   ```bat
+   java -version
+   javac -version
+   where java
+   ```
+
+   Both versions must be 25, and the first line of `where java` must be
+   inside the JDK 25 folder.
+4. **Compile and run** in **Command Prompt**:
+
+   ```bat
+   compile.bat
+   run.bat --check
+   run.bat console
+   run.bat
+   ```
+
+   In **PowerShell** (the default terminal of VS Code and Windows
+   Terminal), put `.\` in front of each script, or PowerShell says the
+   script "is not recognized":
+
+   ```powershell
+   .\compile.bat
+   .\run.bat --check
+   .\run.bat console
+   .\run.bat
+   ```
+
+   In **Git Bash**, the `.sh` scripts work too and pick
+   `lib/javafx/win` themselves:
+
+   ```sh
+   sh compile.sh
+   sh run.sh --check
+   sh run.sh console
+   sh run.sh
+   ```
+
+Windows has no built-in sandbox for student code, so the console prints
+once per run: "Note: student code is not sandboxed, because this system
+has no sandbox or java could not start inside it, so it can reach any
+file the instructor can." This is expected. The time, memory and output
+limits still apply.
+
+### What each command does
+
+On Windows, every `sh x.sh` below is `x.bat` in Command Prompt and
+`.\x.bat` in PowerShell, with the same arguments.
+
+| Command | What it does |
+|---|---|
+| `sh compile.sh` | Empties `classes/`, compiles every source file into it with `javac --release 25`, and copies the stylesheets, fonts and logo pictures the window needs. Prints `Compiled GradeZZY into classes/ using lib/javafx/...`. |
+| `sh compile.sh core` | Empties `classes/` and compiles every package except `ui`, with no JavaFX and no jar on the classpath. This proves the backend does not depend on the window. Run `sh compile.sh` again before opening the window. |
+| `sh run.sh` | Opens the window. |
+| `sh run.sh console` | Grades `paths.submissions.dir` with the score sheet, testers and starter folder in `config.properties`, for the first module and section in the settings, and prints each student's total and problems. Needs no JavaFX. |
+| `sh run.sh console G2` | The same, for section G2. |
+| `sh run.sh console CS102 G2` | The same, for module CS102, section G2. |
+| `sh run.sh console --testers` | Only checks how strong each tester is, with broken copies of the model answer (needs `paths.model.answers.dir`). |
+| `sh run.sh --check` | Opens every tab, step and sheet once, live and demo, in both themes and two sizes, off screen, then exits. Use it after a change to the window. |
+| `sh run.sh --demo` | The window with synthetic data only. Reads, grades and saves no real files. |
+| `sh run.sh --selftest` | Runs the demo flows and prints PASS or FAIL for each. |
+| `sh run.sh --snapshot [folder]` | Saves a picture of every screen (default `workspace/ui-snapshots`). |
+| `sh run.sh --windowtest [folder]` | Drives the real window with the mouse and keyboard. Leave both alone while it runs. |
+| `sh clean.sh` | Empties `classes/` and deletes `workspace/` (working copies, exports, the database and its backups). Run it before zipping the project for submission; the brief requires `classes/` to be empty. |
+
+`run.sh` refuses to start with "Nothing is compiled yet. Run: sh
+compile.sh" (`run.bat`: "Run: compile.bat") when `classes/` is empty.
+`--demo`, `--selftest`, `--snapshot` and `--windowtest` are developer
+checks, described in `design/UI-INTEGRATION.md`.
+
+To use another settings file, start `java` yourself with the options in
+`run.sh` plus `-Dgradezzy.config=other.properties`; the scripts always
+use `config.properties`.
+
+### Running the checks in tests/
+
+`tests/` holds plain Java programs, one per area, each with a `main`
+that prints a line such as `UtilConfigTest: 129 passed, 0 failed` and
+exits with 1 when a check fails. There is no test framework.
+`tests/README.md` says what each one covers. Compile the project first,
+then compile the tests into `build/tests` (ignored by git) and run one by
+name. The only difference between systems is the classpath separator:
+`:` on macOS, `;` on Windows (Git Bash included).
+
+macOS:
+
+```sh
+sh compile.sh
+mkdir -p build/tests
+javac -encoding UTF-8 -cp "classes:lib/*" -d build/tests tests/*.java
+java --enable-native-access=ALL-UNNAMED \
+    -cp "classes:lib/*:build/tests" UtilConfigTest
+```
+
+Windows, Command Prompt:
+
+```bat
+compile.bat
+mkdir build\tests
+javac -encoding UTF-8 -cp "classes;lib\*" -d build\tests tests\*.java
+java --enable-native-access=ALL-UNNAMED -cp "classes;lib\*;build\tests" UtilConfigTest
+```
+
+Windows, Git Bash:
+
+```sh
+sh compile.sh
+mkdir -p build/tests
+javac -encoding UTF-8 -cp "classes;lib/*" -d build/tests tests/*.java
+java --enable-native-access=ALL-UNNAMED \
+    -cp "classes;lib/*;build/tests" UtilConfigTest
+```
+
+Replace `UtilConfigTest` with any other `*Test` file name in `tests/`.
+In Git Bash, keep the test folder inside the project as above: a
+`/tmp/...` path inside a `;` classpath is not translated for the
+Windows `java`, which then says "Could not find or load main class".
+The tests read `tests/test-config.properties`, never the live
+`config.properties`, and use `samples/`, so copy the course files in
+first. `clean.sh` does not delete `build/`; delete it by hand when done.
+
+### Troubleshooting
+
+| What you see | Cause and fix |
+|---|---|
+| `error: release version 25 not supported` while compiling | `javac` is older than 25. Install JDK 25 and put its `bin` first on the PATH (see the steps for your system). |
+| `GradeZZY needs JDK 25 or newer; this is JDK 21.` (or another number) | `java` is older than 25, often because another Java comes first on the PATH. On Windows check `where java`; on macOS set `JAVA_HOME` as above. |
+| `'compile.bat' is not recognized ...` in PowerShell | Type `.\compile.bat`. PowerShell does not run scripts from the current folder by name. |
+| `Nothing is compiled yet. Run: sh compile.sh` | Run the compile script first. `clean.sh` and `clean.bat` empty `classes/`. |
+| The window does not start right after `compile.sh core` | `core` leaves out the `ui` package. Run `sh compile.sh` (or `compile.bat`) again. |
+| An error that names a `javafx` module or a JavaFX native library | JavaFX was not found or does not match the JDK. Start GradeZZY with `run.sh` or `run.bat`, which add `--module-path lib/javafx/<platform>`; running `java gradezzy.ui.MainApp` by hand leaves JavaFX out. Check that `lib/javafx/` holds `mac`, `mac-aarch64` and `win`, each with four jars. On a Mac, check `os.arch` as in step 2. |
+| `No suitable driver found for jdbc:sqlite:...` in a database error | The SQLite driver jar is not on the classpath. Keep `lib/sqlite-jdbc-3.53.4.0.jar` in `lib/` and start with the scripts, which put `lib/*` on the classpath. |
+| A warning about a "restricted method" or native access when running `java` yourself | Add `--enable-native-access=ALL-UNNAMED`, as the scripts and the test commands above do. The SQLite driver and JavaFX load native code. |
+| `workspace\ could not be removed completely. Close GradeZZY and run clean.bat again.` | GradeZZY is still open and Windows keeps `workspace\gradezzy.db` locked. Close the window, then run `clean.bat` again. |
+| `$'\r': command not found` when running a `.sh` script | The script has Windows line endings, which happens when it was copied without git. Get the project with `git clone`; `.gitattributes` keeps the `.sh` files with LF endings. |
+| `GradeZZY could not run: The score sheet could not be read: ... does not exist` or `GradeZZY could not run: The submissions could not be read` from `run.sh console` | The course files are not in `samples/`. See [Get the code and the course files](#get-the-code-and-the-course-files). |
+
+## Team, ownership and the CS102 syllabus table
+
+These live in `design/TEAM-GUIDE.md`, so there is one copy of each:
+
+- **Who owns what:** "What each teammate needs to do", one part per
+  teammate (Damien, Seth, Jun Sheng, Zach, Jing Yuan, Huxley), and "Who
+  is waiting on whom".
+- **Java beyond the CS102 syllabus:** the table under "Libraries", with
+  one row per untaught construct: where it is used, why, and how to
+  explain it. Add new constructs there as a new row.
+- **Coding rules, the feature checklist and the steps before
+  submission:** the last sections of that file.
 
 ## What the backend does
 
@@ -784,8 +1060,9 @@ own with `run.sh console --testers`:
    the report is saved as `tester-strength.txt` in the section's export
    folder.
 
-On Lab Test 3 (`samples/lab-test-3`) it takes about 20 seconds with 4
-threads and finds, for example:
+On Lab Test 3 (a 45-student set kept outside git, so it is not in every
+copy of `samples/`) it takes about 20 seconds with 4 threads and finds,
+for example:
 
 ```text
 Q5: the tester gave full marks to 3 of 19 broken copies (caught 84%).
@@ -1335,5 +1612,18 @@ used beyond the CS102 syllabus are listed in `design/TEAM-GUIDE.md`.
   copied and hard-coded uploads, two uploads from people not on the
   sheet, and a score sheet re-saved by Excel. `make_e2e.py` rebuilds it
   and its `README.md` lists the expected marks.
+- **Unit and regression checks.** `tests/` holds one program per area
+  (ingestion, fixers, score parsing, similar code, persistence, reports,
+  services and more). See
+  [Running the checks in tests/](#running-the-checks-in-tests) and
+  `tests/README.md`.
 - **Compile checks.** `sh compile.sh core` and `sh compile.sh` finish
   with no error or warning.
+
+## AI attribution
+
+To be filled in by the team.
+
+| Tool | Used for | By whom |
+|---|---|---|
+| | | |
