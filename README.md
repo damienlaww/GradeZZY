@@ -2086,3 +2086,14 @@ AI tools (Claude) were used while building GradeZZY, in these ways:
 - **Test cases.** AI was used to identify test cases, including edge
   cases.
 - **Improving code.** AI was used to improve certain parts of the code.
+
+**Example prompts used for major design decisions:**
+
+- "Design the grading backend for a Java auto-grader as an ordered list
+  of stages (extract, validate, fix, compile, run testers, score, save)
+  so that one student's failure never stops the batch."
+- "Redesign the JavaFX window as guided steps (Set up, Grade, Review,
+  Export) instead of many separate screens, so a new instructor knows
+  what to do next."
+- "Suggest a way to detect similar code between students that still
+  works when variable names are changed."
