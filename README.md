@@ -71,8 +71,6 @@ This README has two parts:
 - [Libraries](#libraries)
 - [How the backend was tested](#how-the-backend-was-tested)
 
-**[AI use](#ai-use)**
-
 # Part 1: Using GradeZZY
 
 ## Words used in this guide
@@ -749,14 +747,14 @@ first. `clean.sh` does not delete `build/`; delete it by hand when done.
 
 These live in `design/TEAM-GUIDE.md`, so there is one copy of each:
 
-- **Who owns what:** "What each teammate needs to do", one part per
-  teammate (Damien, Seth, Jun Sheng, Zach, Jing Yuan, Huxley), and "Who
-  is waiting on whom".
+- **Who owns what:** "Who owns what", one row per teammate (Damien,
+  Seth, Jun Sheng, Zach, Jing Yuan, Huxley) with the packages they
+  built.
 - **Java beyond the CS102 syllabus:** the table under "Libraries", with
   one row per untaught construct: where it is used, why, and how to
   explain it. Add new constructs there as a new row.
-- **Coding rules, the feature checklist and the steps before
-  submission:** the last sections of that file.
+- **Coding rules and the feature checklist:** the last sections of
+  that file.
 
 ## How GradeZZY meets the brief
 
@@ -2066,16 +2064,3 @@ used beyond the CS102 syllabus are listed in `design/TEAM-GUIDE.md`.
   `tests/README.md`.
 - **Compile checks.** `sh compile.sh core` and `sh compile.sh` finish
   with no error or warning.
-
-# AI use
-
-AI tools were used while building GradeZZY, in these ways:
-
-- **Creating the user interface.** AI was used to create the window
-  (the JavaFX screens in the `gradezzy.ui` package).
-- **Planning.** AI helped plan the features and the design.
-- **Debugging.** AI helped find and fix bugs.
-- **Suggestions.** AI suggested ideas and alternatives.
-- **Test cases.** AI was used to identify test cases, including edge
-  cases.
-- **Improving code.** AI was used to improve certain parts of the code.
