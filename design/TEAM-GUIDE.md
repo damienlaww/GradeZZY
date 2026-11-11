@@ -93,9 +93,9 @@ or run on the instructor's laptop.
 | `src/` | All Java source files, plus the stylesheet of the `ui` package (`ui/css/flow.css`) and the logo as PNG files (`ui/images/`). |
 | `classes/` | Compiled classes. Created by the compile script, not in git, and must be empty at submission. |
 | `lib/` | The library jars. `lib/javafx/<platform>/` holds JavaFX for each platform. |
-| `media/` | Images and audio used by the application. Empty for now. |
+| `media/` | Images and audio. `media/readme/` holds the screenshots in `README.md`, taken with `sh run.sh --snapshot` in demo mode. |
 | `design/` | `redesign/`, the design of the current window and its decisions; `UI-INTEGRATION.md`, how each backend method reaches the screens; `NIELSEN-REVIEW.md`, the window checked against Nielsen's 10 usability heuristics; `gradezzy-design.html` and `UI-REVIEW.md`, the design and review of the earlier 16-screen window, kept for reference; `concept/`, Damien's design concept and its handoff notes. |
-| `README.md` | How the grading backend works. |
+| `README.md` | Part 1: how to use GradeZZY, for a first-time user. Part 2: how the grading backend works. |
 | `design/TEAM-GUIDE.md` | This file: build, team parts, coding rules, checklist. |
 | `docs/` | The project brief and coding style PDFs. Not in git. |
 | `samples/` | The provided testers, score sheet, starter folder and six sample submissions. Only `Tester-Files/` and `e2e/` are in git; the score sheet, starter folder and submissions are not. |

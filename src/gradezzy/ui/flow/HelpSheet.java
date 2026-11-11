@@ -74,10 +74,11 @@ public final class HelpSheet {
         {"Settings", "Everything in config.properties."},
     };
 
-    // The keyboard shortcuts that FlowWindow adds
+    // The keyboard shortcuts that FlowWindow adds, written the way this
+    // computer shows them: the Command key symbol on a Mac, Ctrl elsewhere
     private static final String[][] KEYS = {
-        {"Cmd or Ctrl + Enter", "Press the blue button."},
-        {"Cmd or Ctrl + 1 to 4", "Open a step you have reached."},
+        {Parts.shortcut("Enter"), "Press the blue button."},
+        {Parts.shortcut("1 to 4"), "Open a step you have reached."},
         {"Esc", "Close this sheet."},
     };
 

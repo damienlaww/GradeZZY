@@ -1,23 +1,50 @@
 # GradeZZY
 
-An Auto Grading System for Java lab tests, built for CS102 at Singapore
-Management University. An instructor gives it a section's submission
-zips, the tester files and the score sheet. GradeZZY checks and repairs
-every submission, compiles and runs it against the testers with a time
-limit, works out the marks and fills in the score sheet.
+GradeZZY marks Java lab tests for you. It was built for CS102 at
+Singapore Management University.
 
-This README explains how to set GradeZZY up and run it on macOS and
-Windows, and then the **grading backend**: everything that runs without
-the window. The JavaFX window is a thin layer on top of it, and the
-console entry point (`sh run.sh console`) drives exactly the same
-backend. The window's packages, each teammate's part, the coding rules
-and the Java used beyond the CS102 syllabus are in
-`design/TEAM-GUIDE.md`.
+You give it three things:
+
+1. the students' zip files,
+2. the tester files (the small Java programs that test each answer),
+3. the score sheet downloaded from eLearn.
+
+GradeZZY then opens every zip, tidies up common mistakes (a folder with
+the wrong name, a file saved in the wrong place), compiles each answer,
+runs the testers with a time limit, adds up the marks and fills in the
+score sheet, ready to upload back to eLearn. Anything it is unsure
+about is shown to you to decide. It never changes the students'
+original files.
+
+![The Home tab: one card per section](media/readme/home.png)
+
+This README has two parts:
+
+- **Part 1, Using GradeZZY**, is for anyone marking with it. No
+  knowledge of the code is needed.
+- **Part 2, How it works inside**, is for developers and markers of the
+  project. It explains the design, every check and every setting.
 
 ## Contents
 
+**Part 1: Using GradeZZY**
+
+- [Words used in this guide](#words-used-in-this-guide)
+- [What you need](#what-you-need)
+- [Install and open GradeZZY](#install-and-open-gradezzy)
+- [Try it without any files](#try-it-without-any-files)
+- [Mark a lab test, step by step](#mark-a-lab-test-step-by-step)
+- [The other tabs](#the-other-tabs)
+- [Marking from the terminal](#marking-from-the-terminal)
+- [What GradeZZY checks for you](#what-gradezzy-checks-for-you)
+- [How marks are worked out](#how-marks-are-worked-out)
+- [Where your files go](#where-your-files-go)
+- [Common questions](#common-questions)
+
+**Part 2: How it works inside**
+
 - [Setup and run](#setup-and-run)
-  - [What you need](#what-you-need)
+  - [What the computer needs](#what-the-computer-needs)
   - [Get the code and the course files](#get-the-code-and-the-course-files)
   - [macOS](#macos)
   - [Windows](#windows)
@@ -25,7 +52,7 @@ and the Java used beyond the CS102 syllabus are in
   - [Running the checks in tests/](#running-the-checks-in-tests)
   - [Troubleshooting](#troubleshooting)
 - [Team, ownership and the CS102 syllabus table](#team-ownership-and-the-cs102-syllabus-table)
-- [What the backend does](#what-the-backend-does)
+- [How GradeZZY meets the brief](#how-gradezzy-meets-the-brief)
 - [Architecture](#architecture)
 - [One grading run, start to finish](#one-grading-run-start-to-finish)
 - [The ten pipeline stages](#the-ten-pipeline-stages)
@@ -43,11 +70,411 @@ and the Java used beyond the CS102 syllabus are in
 - [Configuration](#configuration)
 - [Libraries](#libraries)
 - [How the backend was tested](#how-the-backend-was-tested)
-- [AI attribution](#ai-attribution)
+
+**[AI use](#ai-use)**
+
+# Part 1: Using GradeZZY
+
+## Words used in this guide
+
+| Word | Meaning |
+|---|---|
+| **Module** | The course, such as `CS102`. |
+| **Section** | One class group of a module, such as `G1` or `G2`. You pick it each time you mark, because no file says which section a zip belongs to. |
+| **Assessment** | One lab test: its questions, its tester files and its starter files. You set it up once and reuse it for every section. |
+| **Submission** | One student's zip file, named after their username, such as `2023-2024-ping.lee.2023.zip`. |
+| **Tester file** | A Java program, one per question (`Q1aTester.java`), that runs the student's answer on some test cases. It prints `Passed` or `Failed` for each case and the total mark at the end. |
+| **Score sheet** | The CSV file from eLearn that lists the students of a section. GradeZZY reads the class list from it and writes the marks back into it. |
+| **Starter files** | The folder the students were given at the start of the test (`RenameToYourUsername`). Used to spot answers the student never changed. Optional. |
+| **Model answers** | Your own correct answers, laid out like the starter folder. Used for two extra checks. Optional. |
+| **Run** | One round of marking for one section. Every run is saved, so you can come back to it later. |
+| **Fix** | A change GradeZZY made to a copy of a submission so it can be marked, such as renaming a folder. You keep or reject each fix. |
+| **Flag** | Something GradeZZY wants you to look at, such as code that looks copied. A flag never changes a mark. |
+
+## What you need
+
+### On your computer
+
+- **Java 25 (JDK 25).** Check by typing `java -version` in a terminal.
+  It must say 25 or higher. If it does not, install JDK 25 first.
+- **Windows (64-bit) or macOS** (Apple Silicon or Intel; the Intel Mac
+  version has not been tested yet). Linux is not supported, because its
+  JavaFX files are not included.
+- Nothing else. Every library is already in the `lib/` folder.
+
+### From the course, for each lab test
+
+| File | Where it comes from | Needed? |
+|---|---|---|
+| The students' zip files | Downloaded from eLearn. A single bulk download zip, a folder of zips, or folders you unzipped yourself all work. | Yes |
+| The tester files | Written by the instructor: one `QxTester.java` per question, plus any data files the testers read (such as `personstester.txt`). | Yes, or type the test cases into GradeZZY instead |
+| The score sheet | The section's CSV score sheet exported from eLearn. | Yes |
+| The starter folder | The `RenameToYourUsername` folder given to the students. | Optional |
+| Model answers | Your own correct answers. | Optional |
+
+A student's zip is expected to look like this (one folder named after
+the username, one folder per question inside it):
+
+```text
+2023-2024-ping.lee.2023.zip
+  ping.lee.2023/
+    Q1/  Q1a.java  Q1b.java
+    Q2/  Q2a.java  Q2b.java
+    Q3/  Q3.java
+```
+
+Do not worry if some students got this wrong. GradeZZY fixes the usual
+mistakes for you (see [What GradeZZY checks for you](#what-gradezzy-checks-for-you)).
+
+The repository includes the sample testers (`samples/Tester-Files`) and
+a made-up section of 42 students to practise on (`samples/e2e`, score
+sheet `samples/e2e/roster-G4.csv`). The course's own files (the brief,
+the score sheet, the starter folder and the six sample submissions) are
+not in the repository; copy them into `samples/` from eLearn if you want
+to use them.
+
+## Install and open GradeZZY
+
+Open a terminal **in the `GradeZZY` folder** and type the two commands
+for your computer.
+
+**macOS** (Terminal):
+
+```sh
+sh compile.sh     # build GradeZZY (once, and again after any code change)
+sh run.sh         # open the window
+```
+
+**Windows** (Command Prompt):
+
+```bat
+compile.bat
+run.bat
+```
+
+In PowerShell (the default terminal in VS Code), type `.\compile.bat`
+and `.\run.bat` instead. Git Bash on Windows can use the `.sh` commands.
+Step-by-step JDK set-up for each system, every command and fixes for
+common errors are in [Setup and run](#setup-and-run).
+
+`compile` should finish with no errors. The first time the window
+opens, it offers a one-minute tour ("New to GradeZZY?"). Take it: it
+points at each part of the window. You can take it again at any time
+from **Help** (top right).
+
+## Try it without any files
+
+```sh
+sh run.sh --demo        # Windows: run.bat --demo
+```
+
+This opens the same window filled with made-up students, so you can
+click through every step safely without real student data.
+
+## Mark a lab test, step by step
+
+The window has five tabs along the top: **Home**, **Grading**,
+**Statistics**, **History** and **Settings**. Marking happens in
+**Grading**, which has four steps: **Set up**, **Grade**, **Review** and
+**Export**. A step you have not reached yet is greyed out.
+
+Keyboard shortcuts: **Ctrl+Enter** (Cmd+Enter on a Mac) presses the
+blue button, **Ctrl+1** to **Ctrl+4** opens a step, **Esc** closes a
+window or goes back.
+
+### Before the first section: describe the lab test (once)
+
+Each lab test is an **assessment**. Create it once; every section then
+reuses it.
+
+1. On **Home**, click **Manage assessments**, then **New assessment**.
+2. Type a **Name**, such as `Lab Test 1`.
+3. Under **Files**, choose the **Tester files** folder. GradeZZY reads
+   it and fills in the questions and their marks for you.
+4. Choose the **Starter files** folder (optional) and the **Model
+   answers** folder (optional).
+5. Check the **Questions** list: each row is a question id (`Q1a`), the
+   folder it lives in (`Q1`) and the file the student writes
+   (`Q1a.java`). The maximum mark comes from the tester.
+6. Click **Save**. In the list, click **Use** if it is not already
+   marked **In use**.
+
+![Editing an assessment](media/readme/assessment-editor.png)
+
+### Step 1: Set up
+
+Choose what you are marking and add the zip files.
+
+1. Under **Class**, pick the **Module**, **Section** and **Assessment**.
+2. Under **Submissions**, drag the zip files (or a whole folder) onto
+   the box, or click **choose files**. Each file gets a label:
+   - **Ready**: it will be marked.
+   - **Ready, check note**: it will be marked, but read the note.
+   - **Cannot be used**: it is skipped (for example a damaged zip).
+     Ask the student for a new copy.
+3. Under **Class files**, check that the **Score sheet** and **Tester
+   files** say **Ready**. Click **Change** to pick a different score
+   sheet. No tester files? Click **or type test cases** to type the
+   test cases into GradeZZY instead.
+4. Click **Start grading**. GradeZZY shows the questions and marks it
+   found and asks you to confirm them.
+
+![Set up: the class and the zip files](media/readme/set-up.png)
+
+![Set up: the class files and grading settings](media/readme/set-up-class-files.png)
+
+If **Start grading** is greyed out, the message beside it says why.
+Usually a zip file, the score sheet or the tester files is missing.
+
+If this section was marked before, GradeZZY asks whether to **Add to
+that run** (useful for late submissions) or **Start a new run**.
+
+### Step 2: Grade
+
+Watch the marks come in. Each student is unzipped, checked, compiled,
+tested and saved. A section of 42 students took under a minute on a
+recent laptop.
+
+- You can switch tabs, or start another section on Set up; marking
+  carries on in the background.
+- **Stop grading** pauses it. Students already marked are kept, and
+  **Resume** carries on later, even after closing GradeZZY.
+- When it finishes, click **Review results**.
+
+![Grade: marks appear as students finish](media/readme/grade.png)
+
+### Step 3: Review
+
+Check the results before you export. The table lists every student with
+their total and a status, such as **Graded**, **Timed out**, **Q2b did
+not compile** or **4 things to check**.
+
+- Use the filters at the top: **Needs a look** shows only the students
+  you still have to check.
+- Click a student to open their panel on the right. It shows each
+  question's mark and which test cases passed.
+- **Fixes** GradeZZY made (for example "The folder had the wrong name")
+  show what changed. Click **Keep fix** or **Reject fix**. Rejecting
+  marks the student again as they submitted it.
+- **Flags** (for example "may be hard-coded") are for you to judge.
+  Click **Mark as checked** once you have looked. Flags never change a
+  mark.
+- Click **Adjust** next to a question to change its mark by hand. A
+  reason is required, and the change can be undone.
+- **Open code** shows the student's file. **Grade this student again**
+  re-marks one student.
+- The **Errors** view groups students who lost marks the same way (for
+  example "Failed test 3"), so you can decide each mistake once. The
+  **Similarity** view lists students with very similar code, with
+  **Compare** to see them side by side.
+- **Keep all N fixes** and **Mark all N flags as checked** at the
+  bottom handle everything at once.
+
+When you are happy, click **Continue to export**.
+
+![Review: a student's marks and a fix to keep or reject](media/readme/review.png)
+
+### Step 4: Export
+
+Save the marks.
+
+1. Under **Who to export**, keep **Every student**, or pick **Only the
+   students I choose**.
+2. Tick any extra files you want: a JSON file with every question and
+   test (ticked by default), a list of the problems found, a report on
+   each student, the activity log, or the common mistakes.
+3. Click **Export score sheet**. The page shows where the files were
+   saved, with **Open folder**.
+
+The score sheet is the same file you gave GradeZZY, in exactly the same
+format, with each student's total filled in. Upload it to eLearn as it
+is. A student who was not marked (nothing submitted, or marking failed)
+is left blank so you notice; the page says how many.
+
+Then click **Grade another section** and repeat from Set up.
+
+## The other tabs
+
+- **Home**: one card per section showing how far it has got (Not
+  graded, Stopped, N to check, Graded, Exported) and the next thing to
+  do. You can drop zip files straight onto a section's card. A
+  **Next up** bar at the top suggests what to do next.
+- **Statistics**: average, median, spread, pass rate, a chart of the
+  marks, each question's pass rate, the tests failed most often and
+  the most common compile errors. **Compare sections** puts up to three
+  sections side by side.
+- **History**: every run ever made. **Open** looks at an old run,
+  **Resume** finishes a stopped one, **Restore** makes an earlier run
+  the current one. **Backups** saves and restores copies of all results.
+  **Activity** lists everything you did, with **Undo**.
+- **Settings**: modules and sections, export folders, time limits,
+  which checks are on, and more. Type in **Find a setting** to search.
+  Click **Save** to apply; changes apply from the next run. Every
+  setting is explained in [Configuration](#configuration).
+- **Help** (top right): what each tab does, the keyboard shortcuts,
+  where files are saved, and the tour.
+
+![Statistics for one section](media/readme/statistics.png)
+
+## Marking from the terminal
+
+You can also mark without the window. This is handy for a quick check.
+The terminal prints each student's total and problems, and the similar
+code pairs at the end; it does not export files (use the window for
+that).
+
+```sh
+sh run.sh console              # mark the folder set in config.properties
+sh run.sh console G2           # the same, for section G2
+sh run.sh console CS102 G2     # the same, for module CS102, section G2
+sh run.sh console --testers    # only check how strong each tester is
+```
+
+On Windows, use `run.bat` in place of `sh run.sh`. The folders it reads
+are the `paths.` settings in `config.properties`, such as
+`paths.submissions.dir` for the zip files (see
+[Configuration](#configuration)).
+
+Sample output:
+
+```text
+GradeZZY console, section CS102 G4
+Maximum marks from the testers: Q1a 3.0, Q1b 3.0, Q2a 5.0, Q2b 5.0, Q3 4.0; total 20.0.
+Grading 42 submission(s)...
+[10/42] fatimah.ali.2024: GRADED, total 20.0, 1 problem(s)
+       MISSING_WRAPPER_FOLDER: The question folders were at the top of the ZIP file instead of inside a folder named fatimah.ali.2024.
+[21/42] lakshmi.raj.2024: GRADED, total 17.0, 1 problem(s)
+       COMPILE_ERROR: Q1b did not compile: Q1b.java:17: error: ';' expected. The other questions were still graded.
+```
+
+## What GradeZZY checks for you
+
+Every student is checked in the same order. Problems with one student
+never stop the others.
+
+**Fixed for you** (on a copy; you keep or reject each fix on Review):
+
+- the top folder is missing, or not named after the username (for
+  example left as `RenameToYourUsername`);
+- question folders are one level too deep, or loose files have no
+  question folder;
+- a file or folder name has the wrong capitals (`q1a.java`), an extra
+  ending (`Q1a.java.txt`) or a copy number (`Q1a (1).java`);
+- a file sits in the wrong question folder;
+- the name and email in the file's header comment are blank (filled in
+  from the score sheet);
+- a file is saved in an encoding Java cannot read.
+
+**Flagged for you to look at** (marks are never changed):
+
+- an answer is the starter file, unchanged;
+- a method still holds only the starter code;
+- an answer looks hard-coded to the sample cases;
+- a file's header names a different student;
+- two students' code is very similar;
+- with model answers: an answer gives a different result from the
+  model answer on random inputs.
+
+**Reported** (cannot be fixed automatically):
+
+- a damaged or unsafe zip, a missing file, a student not on the score
+  sheet, two zips from the same student (the newest is marked), code
+  that does not compile, and a tester that crashed or ran too long.
+
+The full list, with the exact names GradeZZY uses, is in
+[Problems the backend reports](#problems-the-backend-reports).
+
+## How marks are worked out
+
+- Each question's mark comes from its tester: one test case passed
+  earns that case's marks, exactly as the tester's `score += ...`
+  lines say. The maximum for each question is read from the tester too.
+- Each question is compiled and tested on its own, so a mistake in Q1a
+  does not cost marks in Q2.
+- A question that does not compile gets 0. The others still count.
+- Each tester run has a time limit (10 seconds by default). If a test
+  case hangs, GradeZZY stops it, keeps the cases already passed, and
+  runs the tester again without the case that hung, so the cases after
+  it still earn marks. The student is flagged so you can check.
+- Only lines printed by the tester itself are counted. A student who
+  prints `Passed` from their own code gains nothing.
+- The total is the sum of the question marks. A question can never go
+  above its maximum.
+- Flags never change a mark. Only you do, with **Adjust** on Review.
+
+## Where your files go
+
+| What | Where (default) |
+|---|---|
+| Your original zip files | Never changed or moved. |
+| Copies GradeZZY unzips and fixes | `workspace/working/` |
+| Exported score sheets and reports | `workspace/output/` (each module or section can have its own folder, set in Settings) |
+| Saved runs, marks and decisions | `workspace/gradezzy.db` |
+| Backups of saved runs | `workspace/backup/` |
+| Saved assessments | `workspace/assessments/` |
+| All settings | `config.properties` |
+
+Export file names start with the run's id, the module and the section,
+such as `RUN-1794379114159-CS102-G4-...`.
+
+## Common questions
+
+**`java` is "not recognized", or GradeZZY will not start.**
+Install JDK 25 and open a new terminal. `java -version` must show 25 or
+higher.
+
+**PowerShell says the script "is not recognized".**
+Put `.\` in front: `.\run.bat`.
+
+**A student got 0. Why?**
+Open them on Review. The status and the panel say why: for example the
+file did not compile (often a `package` line at the top, which must be
+removed), the tester ran too long, the zip could not be opened, or
+nothing was submitted. You can **Adjust** the mark if you decide
+otherwise.
+
+**A student is "not on the score sheet".**
+Usually the zip name has a typo. In the student's panel, click
+**Match to ...** to link them to the right row. The marks then go into
+that row on export.
+
+**Some submissions came in late.**
+Add the late zips on Set up for the same section and choose **Add to
+that run**. Students marked before are marked again and the old total
+is kept in the activity log.
+
+**GradeZZY was closed while marking.**
+Every student is saved as soon as they are marked. Open **Home** or
+**History** and click **Resume**.
+
+**Can I mark two sections at the same time?**
+Yes. Start one, go back to **Set up**, choose another section and
+start it too.
+
+**The window looks broken after `sh compile.sh core`.**
+`core` builds only the grading part. Run `sh compile.sh` again before
+`sh run.sh`.
+
+**How do I start completely fresh?**
+`sh clean.sh` (Windows: `clean.bat`) empties `classes/` and deletes the
+`workspace/` folder. **This deletes every saved run, backup and saved
+assessment**, so export first.
+
+---
+
+# Part 2: How it works inside
+
+This part is for developers and for marking the project. It starts
+with setting GradeZZY up and running it on macOS and Windows, and then
+explains the grading backend: everything that runs without the window.
+The JavaFX window is a thin layer on top of it, and the terminal entry
+point (`sh run.sh console`) drives exactly the same backend. The
+window's packages, each teammate's part, the coding rules and the Java
+used beyond the CS102 syllabus are in `design/TEAM-GUIDE.md`.
 
 ## Setup and run
 
-### What you need
+### What the computer needs
 
 - **JDK 25** (Java Development Kit, not only a runtime), with `java` and
   `javac` on the PATH. `java -version` and `javac -version` must both
@@ -331,7 +758,7 @@ These live in `design/TEAM-GUIDE.md`, so there is one copy of each:
 - **Coding rules, the feature checklist and the steps before
   submission:** the last sections of that file.
 
-## What the backend does
+## How GradeZZY meets the brief
 
 Each requirement of the brief (section 4.1), and where it lives:
 
@@ -801,24 +1228,28 @@ have no built-in sandbox, and the console says so once per run. When
 naming the reason instead of getting 0. Testers run in English
 (`-Duser.language=en -Duser.country=US`).
 
-**Only the tester's own lines are believed.** The tester is started
-inside `TesterHarness`, which receives a secret token on standard input
-and replaces standard output with `TrustedPrintStream`. A line is marked
-with the token only when the tester printed it with no student method
-on the call stack (checked with `StackWalker`). Every other line is
-prefixed as student output, and `TesterOutputScoreParser` never counts
-it. A student who prints `Passed` gains nothing. Every `print`,
-`println` and `printf` of the tester is marked, whatever it prints (a
-`double`, an `int`, text, or a boxed number such as `Double`; any other
-object is not, since its `toString` may be student code). Text printed
-with `print` is marked once its line ends, or when the tester stops. A
-marked line longer than 1000 characters, such as a huge wrong answer the
-tester echoes, is cut, so the tester's later lines always fit in the
-output limit. A case header is `grading.test.header.marker` followed by
-a number (`Test 1: ...`, `Test1:`), so a banner such as `Testing
-compress` is not a case. A pass is a line that starts with
-`grading.pass.marker` (`Passed`, `Passed!`); the fail marker is checked
-first.
+**Only the tester's own lines are believed.** A student who prints
+`Passed` gains nothing:
+
+- The tester is started inside `TesterHarness`, which receives a secret
+  token on standard input and replaces standard output with
+  `TrustedPrintStream`.
+- A line is marked with the token only when the tester printed it with
+  no student method on the call stack (checked with `StackWalker`).
+  Every other line is prefixed as student output, and
+  `TesterOutputScoreParser` never counts it.
+- Every `print`, `println` and `printf` of the tester is marked,
+  whatever it prints (a `double`, an `int`, text, or a boxed number
+  such as `Double`; any other object is not, since its `toString` may
+  be student code). Text printed with `print` is marked once its line
+  ends, or when the tester stops.
+- A marked line longer than 1000 characters, such as a huge wrong
+  answer the tester echoes, is cut, so the tester's later lines always
+  fit in the output limit.
+- A case header is `grading.test.header.marker` followed by a number
+  (`Test 1: ...`, `Test1:`), so a banner such as `Testing compress` is
+  not a case. A pass is a line that starts with `grading.pass.marker`
+  (`Passed`, `Passed!`); the fail marker is checked first.
 
 **Tampering is undone.** Before each tester run, `ExecuteStage` puts
 back any compiled class or data file that changed since compiling, and
@@ -842,49 +1273,65 @@ flowchart TD
     F --> Q
 ```
 
-Each timeout adds a `TIMEOUT` problem saying which cases passed, which
-hung and which were never reached. An exception inside a case is
-printed by the tester and counted as a failed case. An error the tester
-cannot catch, such as a `StackOverflowError`, or static code in the
-student's class that throws while it loads, ends the whole run (exit
-code `TesterHarness.CRASH_EXIT_CODE`, after a marked line only the
-harness can print); that case is skipped and the tester run again, like
-a hang, and a `RUNTIME_ERROR` says so. A student's own `System.exit`,
-with any code including 3, is not run again. A run that ends early
-never prints the tester's total, so its `RUNTIME_ERROR` asks the
-instructor to read the output before accepting the passes. A tester
-that prints a case's header before the case's `try` block cannot skip
-that case: the skip stops the whole run, and the message says that case
-and the ones after it were not run and need checking by hand.
+What each kind of early end does:
 
-**Each case earns its own marks.** A run that timed out, crashed or
-ended early never printed its total, and a last line that is not a
-number cannot be read, so each passed case earns what its own
-`score += <number>;` line in the tester gives (`TesterMarks.readCaseMarks`):
-a case worth 0.5 counts as 0.5 and one worth 2 as 2. A skipped case
-never earns marks, even when a tester that expects an exception catches
-the skip and prints `Passed`. A finished run's printed total is kept
-only if it is not more than its passed cases earn, so a total that no
-case's verdict backs is never believed: student code can hide the
-tester's lines and set its score field by reflection. A total above
-what the passed cases earn is replaced by their marks and flagged. When
-no case printed a verdict at all, no case passed, so the question gets
-0; the run's "not fully recognised" flag says that the printed total
-could not be checked against any verdict, and that a tester which words
-its verdicts differently needs its "Passed line" and "Failed line" set
-in Settings (`grading.pass.marker`, `grading.fail.marker`).
-A total above the question's maximum is cut to it and flagged, because
-the maximum read from the tester may be wrong (for example a
-`score += 0.5` inside a helper called once per case). When the cases of
-a run with no total (unfinished, or whose last line is not a number)
-cannot be matched one for one to the tester's score lines, each pass
-gets the smallest mark a case is worth, and a `RUNTIME_ERROR` says so.
-A run that ends normally but whose last line is not a total, that
-printed no case, or whose cases have no verdict (as when student code
-replaces `System.out`, or the tester words its verdicts differently)
-gets a `RUNTIME_ERROR` saying the output was not fully recognised, so
-missing marks are checked by hand. None of these flags changes a mark
-by itself.
+- **Timeout.** Each timeout adds a `TIMEOUT` problem saying which cases
+  passed, which hung and which were never reached.
+- **Exception inside a case.** The tester prints it and the case
+  counts as failed.
+- **Crash.** An error the tester cannot catch, such as a
+  `StackOverflowError`, or static code in the student's class that
+  throws while it loads, ends the whole run (exit code
+  `TesterHarness.CRASH_EXIT_CODE`, after a marked line only the harness
+  can print). That case is skipped and the tester run again, like a
+  hang, and a `RUNTIME_ERROR` says so.
+- **`System.exit`.** A student's own `System.exit`, with any code
+  including 3, is not run again. A run that ends early never prints the
+  tester's total, so its `RUNTIME_ERROR` asks the instructor to read
+  the output before accepting the passes.
+- **Header printed outside `try`.** A tester that prints a case's
+  header before the case's `try` block cannot skip that case: the skip
+  stops the whole run, and the message says that case and the ones
+  after it were not run and need checking by hand.
+
+**Each case earns its own marks.** In short, a mark is only ever
+backed by a `Passed` line the tester printed itself:
+
+- **No total printed.** A run that timed out, crashed or ended early
+  never printed its total, and a last line that is not a number cannot
+  be read. So each passed case earns what its own `score += <number>;`
+  line in the tester gives (`TesterMarks.readCaseMarks`): a case worth
+  0.5 counts as 0.5 and one worth 2 as 2.
+- **Skipped cases.** A skipped case never earns marks, even when a
+  tester that expects an exception catches the skip and prints
+  `Passed`.
+- **Total checked against the cases.** A finished run's printed total
+  is kept only if it is not more than its passed cases earn, so a total
+  that no case's verdict backs is never believed: student code can hide
+  the tester's lines and set its score field by reflection. A total
+  above what the passed cases earn is replaced by their marks and
+  flagged.
+- **No verdicts at all.** When no case printed a verdict, no case
+  passed, so the question gets 0. The run's "not fully recognised" flag
+  says that the printed total could not be checked against any verdict,
+  and that a tester which words its verdicts differently needs its
+  "Passed line" and "Failed line" set in Settings
+  (`grading.pass.marker`, `grading.fail.marker`).
+- **Above the maximum.** A total above the question's maximum is cut to
+  it and flagged, because the maximum read from the tester may be wrong
+  (for example a `score += 0.5` inside a helper called once per case).
+- **Cases that cannot be matched.** When the cases of a run with no
+  total (unfinished, or whose last line is not a number) cannot be
+  matched one for one to the tester's score lines, each pass gets the
+  smallest mark a case is worth, and a `RUNTIME_ERROR` says so.
+- **Output not recognised.** A run that ends normally but whose last
+  line is not a total, that printed no case, or whose cases have no
+  verdict (as when student code replaces `System.out`, or the tester
+  words its verdicts differently) gets a `RUNTIME_ERROR` saying the
+  output was not fully recognised, so missing marks are checked by
+  hand.
+
+None of these flags changes a mark by itself.
 
 ### 8. Score and 9. Persist
 
@@ -1620,10 +2067,15 @@ used beyond the CS102 syllabus are listed in `design/TEAM-GUIDE.md`.
 - **Compile checks.** `sh compile.sh core` and `sh compile.sh` finish
   with no error or warning.
 
-## AI attribution
+# AI use
 
-To be filled in by the team.
+AI tools were used while building GradeZZY, in these ways:
 
-| Tool | Used for | By whom |
-|---|---|---|
-| | | |
+- **Creating the user interface.** AI was used to create the window
+  (the JavaFX screens in the `gradezzy.ui` package).
+- **Planning.** AI helped plan the features and the design.
+- **Debugging.** AI helped find and fix bugs.
+- **Suggestions.** AI suggested ideas and alternatives.
+- **Test cases.** AI was used to identify test cases, including edge
+  cases.
+- **Improving code.** AI was used to improve certain parts of the code.
